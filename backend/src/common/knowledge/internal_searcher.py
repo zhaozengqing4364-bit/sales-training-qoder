@@ -34,6 +34,66 @@ from common.knowledge_engine.config_repo import (
 )
 
 
+def _is_v1_realtime_knowledge_policy(tool_policy: dict[str, Any]) -> bool:
+    scope = tool_policy.get("knowledge_visibility_scope")
+    if not isinstance(scope, dict):
+        return False
+    return scope.get("consumer") == "realtime_customer"
+
+
+def _apply_v1_grounded_degradation(
+    payload: dict[str, Any],
+    *,
+    tool_policy: dict[str, Any],
+) -> dict[str, Any]:
+    if not _is_v1_realtime_knowledge_policy(tool_policy):
+        return payload
+
+    resolved = dict(payload)
+    diagnostics = resolved.get("_diagnostics")
+    status = (
+        str(diagnostics.get("status") or "")
+        if isinstance(diagnostics, dict)
+        else str(resolved.get("status") or "")
+    )
+    quality_flag = (
+        str(
+            tool_policy.get("knowledge_degradation_quality_flag")
+            or "knowledge_gap_degradation"
+        ).strip()
+        or "knowledge_gap_degradation"
+    )
+    existing_flags = resolved.get("quality_flags")
+    quality_flags = (
+        [str(item) for item in existing_flags if str(item).strip()]
+        if isinstance(existing_flags, list)
+        else []
+    )
+    degradation_statuses = {"no_kb_bound", "kb_not_ready", "search_failed", "miss"}
+    if status in degradation_statuses:
+        if quality_flag not in quality_flags:
+            quality_flags.append(quality_flag)
+        challenge = (
+            str(tool_policy.get("natural_degradation_challenge") or "").strip()
+            or "这个能力边界我不能替你们假设。你需要给出可验证材料或 PoC 指标，我们再判断是否适合。"
+        )
+        resolved["natural_customer_challenge"] = challenge
+        resolved["grounded_degradation"] = {
+            "reason": status,
+            "natural_customer_challenge": challenge,
+            "unsupported_product_assertion_allowed": False,
+        }
+        resolved["knowledge_timeout_count"] = int(
+            resolved.get("knowledge_timeout_count") or 0
+        ) + 1
+    else:
+        resolved["knowledge_timeout_count"] = int(
+            resolved.get("knowledge_timeout_count") or 0
+        )
+    resolved["quality_flags"] = quality_flags
+    return resolved
+
+
 async def search_internal_knowledge(
     *,
     arguments_obj: dict[str, Any],
@@ -68,9 +128,12 @@ async def search_internal_knowledge(
     query = normalize_query(arguments_obj)
     response_query = query
     kb_ids = normalize_knowledge_base_ids(effective_policy)
+    raw_tool_policy = effective_policy.get("tool_policy")
+    tool_policy: dict[str, Any] = (
+        raw_tool_policy if isinstance(raw_tool_policy, dict) else {}
+    )
     strict_kb_mode = bool(
-        isinstance(effective_policy.get("tool_policy"), dict)
-        and effective_policy.get("tool_policy", {}).get("require_kb_grounding", False)
+        tool_policy.get("require_kb_grounding", False)
     )
     rollout_mode = resolve_knowledge_answer_rollout_mode()
 
@@ -81,6 +144,7 @@ async def search_internal_knowledge(
         live_audit_run_id: str | None = None,
         shadow_audit_run_id: str | None = None,
     ) -> dict[str, Any]:
+        payload = _apply_v1_grounded_degradation(payload, tool_policy=tool_policy)
         return attach_rollout_diagnostics(
             payload,
             rollout_mode=rollout_mode,
@@ -145,9 +209,6 @@ async def search_internal_knowledge(
             path_mode="live" if rollout_mode == "enabled" else "compat",
         )
 
-    tool_policy = effective_policy.get("tool_policy")
-    if not isinstance(tool_policy, dict):
-        tool_policy = {}
     top_k, threshold, enable_hybrid, keyword_candidate_limit = resolve_retrieval_params(
         arguments_obj,
         tool_policy,

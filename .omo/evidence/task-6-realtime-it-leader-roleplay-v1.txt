@@ -1,0 +1,31 @@
+Task 6: Add permission-safe learner/admin report projection
+
+Scope implemented:
+- Extended backend/src/sales_bot/services/it_leader_roleplay_scoring.py instead of adding a parallel report service.
+- Added service-level role projection via build_permissioned_report_projection().
+- Learner projection returns only total_score, dimension_scores, suggestions, and learner-only evidence.
+- Admin/supervisor projection returns transcript, scoring_json, state_card, roleplay_contract_hash, ai_quality, scoring_confidence, quality_flags, and manual review fields.
+- Ops projection returns only quality_flags, redacted_logs, and metrics.
+- Unknown roles fail closed with reason_code=report_projection_role_denied.
+- Evidence validation remains learner-only and rejects ai_customer evidence.
+
+Files changed:
+- backend/src/sales_bot/services/it_leader_roleplay_scoring.py
+- backend/tests/unit/test_it_leader_roleplay_report_projection.py
+- .omo/evidence/task-6-realtime-it-leader-roleplay-v1.txt
+- .omo/plans/realtime-it-leader-roleplay-v1.md
+
+Validation:
+- cd backend && pytest tests/unit/test_it_leader_roleplay_report_projection.py -q --no-cov
+  Result: 5 passed, 1 warning (passlib crypt deprecation from dependency).
+- cd backend && pytest tests/unit/test_it_leader_roleplay_scoring.py -q --no-cov
+  Result: 5 passed, 1 warning (passlib crypt deprecation from dependency).
+- cd backend && pytest tests/unit/test_it_leader_roleplay_report_projection.py tests/unit/test_it_leader_roleplay_scoring.py -q --no-cov
+  Result: 10 passed, 1 warning (passlib crypt deprecation from dependency).
+- cd backend && ruff check src/sales_bot/services/it_leader_roleplay_scoring.py tests/unit/test_it_leader_roleplay_report_projection.py tests/unit/test_it_leader_roleplay_scoring.py
+  Result: All checks passed.
+
+Risks / follow-ups:
+- No API/UI/runtime path was changed; this is service-level projection only.
+- The scoring module is now larger than ideal, but the task explicitly preferred extending this existing projection surface and avoiding duplicate services.
+- The ops metrics/redacted logs are passive fields on the accepted report; later runtime integration must populate them from real observability data.

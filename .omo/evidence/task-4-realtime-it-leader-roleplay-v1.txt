@@ -1,0 +1,39 @@
+TODO 4: Wire v1 contract/state anchors into existing voice policy and instruction compiler
+
+Scope completed:
+- Reused VoiceRuntimePolicyService._compile_direct_practice_roleplay_contract as the direct-practice contract assembly point.
+- Added a minimal v1 enable switch through persona_policy:
+  - {"it_leader_roleplay_v1": {"enabled": true}}
+  - legacy-compatible flat flag also accepted: it_leader_roleplay_v1_enabled=true
+- When enabled, the voice policy snapshot now includes:
+  - roleplay_contract with contract_version=it_leader_roleplay_v1
+  - roleplay_contract_hash copied from the frozen contract audit payload
+  - session_state_card from the v1 default state card
+  - roleplay_phase_anchor as a short runtime anchor
+  - session_state_card_summary as a short state summary
+- VoiceInstructionCompiler now renders short v1 phase/state anchors from the snapshot.
+- Disabled path remains unchanged: no v1 phase anchor or state-card summary is added.
+
+Guardrails checked:
+- No new realtime handler.
+- No sales_trainer changes.
+- No DB fields or migrations.
+- No fallback to latest runtime assets.
+- Hot-path instructions receive only short phase/state anchors, not full scoring coach knowledge.
+
+Red checks:
+- cd backend && pytest tests/unit/test_voice_runtime_policy_service.py tests/unit/test_voice_instruction_compiler.py -q --no-cov
+  - Failed as expected before implementation:
+    - enabled voice policy did not contain contract_version=it_leader_roleplay_v1
+    - compiler did not render the v1 phase/state-card anchor section
+
+Final verification:
+- cd backend && pytest tests/unit/test_voice_runtime_policy_service.py tests/unit/test_voice_instruction_compiler.py -q --no-cov
+  - 46 passed, 1 warning
+  - Warning is existing passlib crypt deprecation from the environment.
+- cd backend && ruff check src/sales_bot/services/voice_runtime_policy.py src/sales_bot/services/voice_instruction_compiler.py tests/unit/test_voice_runtime_policy_service.py tests/unit/test_voice_instruction_compiler.py
+  - All checks passed.
+
+Residual risks:
+- The touched voice policy and compiler files are inherited oversized modules; this task kept the diff narrow instead of refactoring them.
+- The v1 state card is seeded into the snapshot only. Runtime async update/restore wiring is left for the later TODO that owns resilience and observability.

@@ -18,6 +18,11 @@ import pytest
 import sales_bot.websocket.stepfun_realtime_handler as stepfun_module
 from common.error_handling.result import Result
 from common.websocket.session_state_service import SessionStateSnapshot
+from sales_bot.websocket.components.stepfun_roleplay_runtime_helpers import (
+    V1_ROLEPLAY_RUNTIME_METRICS_KEY,
+    V1_ROLEPLAY_RUNTIME_STATE_KEY,
+    apply_roleplay_state_card_update_to_policy,
+)
 from sales_bot.websocket.realtime_feedback_arbiter import RealtimeFeedbackPacingState
 from sales_bot.websocket.stepfun_realtime_handler import (
     FunctionCallState,
@@ -2716,6 +2721,81 @@ async def test_persist_runtime_metrics_to_session_updates_snapshot_copy(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_persist_runtime_metrics_to_session_persists_roleplay_observability_snapshot(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-v1-persist"
+    handler._effective_policy = {
+        "roleplay_contract_hash": "sha256:frozen-contract",
+        "roleplay_contract": {
+            "contract_version": "it_leader_roleplay_v1",
+            "audit": {"contract_hash": "sha256:frozen-contract"},
+        },
+        "session_state_card": {
+            "schema_version": "session_state_card_v1",
+            "version": 4,
+            "sequence": 8,
+            "current_phase_id": "solution_credibility",
+            "customer_attitude": "谨慎，要求 PoC 指标",
+            "quality_flags": ["knowledge_gap_degradation"],
+        },
+        "runtime_metrics": {
+            "knowledge_retrieval": {
+                "attempt_count": 1,
+                "hit_query_count": 0,
+                "recent_attempts": [],
+            },
+            V1_ROLEPLAY_RUNTIME_METRICS_KEY: {
+                "knowledge_timeout_count": 1,
+                "quality_flags": ["knowledge_gap_degradation"],
+            },
+        },
+    }
+    original_snapshot = {
+        "voice_mode": "stepfun_realtime",
+        "roleplay_contract_hash": "sha256:frozen-contract",
+    }
+    session_obj = SimpleNamespace(voice_policy_snapshot=original_snapshot)
+
+    class DummyResult:
+        def scalar_one_or_none(self):
+            return session_obj
+
+    class DummyDb:
+        async def execute(self, _stmt):
+            return DummyResult()
+
+        async def commit(self):
+            return None
+
+    class DummyDbSessionContext:
+        def __init__(self):
+            self.db = DummyDb()
+
+        async def __aenter__(self):
+            return self.db
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(
+        stepfun_module, "AsyncSessionLocal", lambda: DummyDbSessionContext()
+    )
+
+    await handler._persist_runtime_metrics_to_session()
+
+    snapshot_metrics = session_obj.voice_policy_snapshot["runtime_metrics"][
+        V1_ROLEPLAY_RUNTIME_METRICS_KEY
+    ]
+    assert snapshot_metrics["roleplay_contract_hash"] == "sha256:frozen-contract"
+    assert snapshot_metrics["state_card_version"] == 4
+    assert snapshot_metrics["knowledge_timeout_count"] == 1
+    assert snapshot_metrics["quality_flags"] == ["knowledge_gap_degradation"]
+    assert session_obj.voice_policy_snapshot["session_state_card"]["version"] == 4
+
+
+@pytest.mark.asyncio
 async def test_record_knowledge_runtime_metric_passes_ledger_event_through_existing_persistence_path(
     monkeypatch,
 ):
@@ -2809,6 +2889,215 @@ async def test_record_knowledge_runtime_metric_keeps_warning_only_failure_surfac
     assert metrics["recent_attempts"][0]["status"] == "search_failed"
     warning_mock.assert_called_once()
     assert "Failed to record knowledge runtime metric" in warning_mock.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_reconnect_restores_roleplay_runtime_state_from_existing_snapshot() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-v1-reconnect"
+    handler._effective_policy = {
+        "roleplay_contract_hash": "sha256:frozen-contract",
+        "roleplay_contract": {
+            "contract_version": "it_leader_roleplay_v1",
+            "audit": {"contract_hash": "sha256:frozen-contract"},
+        },
+        "session_state_card": {
+            "schema_version": "session_state_card_v1",
+            "version": 1,
+            "sequence": 1,
+            "current_phase_id": "opening_intent",
+            "customer_attitude": "谨慎但愿意继续听",
+            "quality_flags": [],
+        },
+    }
+    handler._send_reconnection_success = AsyncMock()
+
+    snapshot = SessionStateSnapshot(
+        session_id="session-v1-reconnect",
+        scenario="sales",
+        turn_count=2,
+        session_status="in_progress",
+        ai_state="listening",
+        runtime_state={
+            V1_ROLEPLAY_RUNTIME_STATE_KEY: {
+                "roleplay_contract_hash": "sha256:frozen-contract",
+                "session_state_card": {
+                    "schema_version": "session_state_card_v1",
+                    "version": 3,
+                    "sequence": 7,
+                    "current_phase_id": "solution_credibility",
+                    "customer_attitude": "谨慎，要求 PoC 指标",
+                    "quality_flags": ["knowledge_gap_degradation"],
+                },
+            }
+        },
+        user_id="user-v1",
+    )
+
+    await handler._restore_session_state(snapshot)
+
+    restored_card = handler._effective_policy["session_state_card"]
+    assert restored_card["version"] == 3
+    assert restored_card["current_phase_id"] == "solution_credibility"
+    metrics = handler._effective_policy["runtime_metrics"][
+        V1_ROLEPLAY_RUNTIME_METRICS_KEY
+    ]
+    assert metrics["roleplay_contract_hash"] == "sha256:frozen-contract"
+    assert metrics["state_card_version"] == 3
+    assert metrics["quality_flags"] == ["knowledge_gap_degradation"]
+
+
+@pytest.mark.asyncio
+async def test_stale_roleplay_state_card_update_after_reconnect_is_ignored() -> None:
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "roleplay_contract_hash": "sha256:frozen-contract",
+        "roleplay_contract": {
+            "contract_version": "it_leader_roleplay_v1",
+            "audit": {"contract_hash": "sha256:frozen-contract"},
+        },
+        "session_state_card": {
+            "schema_version": "session_state_card_v1",
+            "version": 3,
+            "sequence": 7,
+            "current_phase_id": "solution_credibility",
+            "customer_attitude": "谨慎，要求 PoC 指标",
+            "quality_flags": ["knowledge_gap_degradation"],
+        },
+    }
+
+    result = apply_roleplay_state_card_update_to_policy(
+        handler._effective_policy,
+        {
+            "version": 2,
+            "sequence": 6,
+            "current_phase_id": "next_step_advancement",
+            "customer_attitude": "错误覆盖为认可",
+        },
+    )
+
+    assert result.status == "stale"
+    assert handler._effective_policy["session_state_card"]["version"] == 3
+    assert (
+        handler._effective_policy["session_state_card"]["customer_attitude"]
+        == "谨慎，要求 PoC 指标"
+    )
+
+
+@pytest.mark.asyncio
+async def test_knowledge_timeout_quality_flag_persists_into_roleplay_runtime_observability():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "roleplay_contract_hash": "sha256:frozen-contract",
+        "roleplay_contract": {
+            "contract_version": "it_leader_roleplay_v1",
+            "audit": {"contract_hash": "sha256:frozen-contract"},
+        },
+        "session_state_card": {
+            "schema_version": "session_state_card_v1",
+            "version": 1,
+            "sequence": 0,
+            "current_phase_id": "opening_intent",
+            "customer_attitude": "谨慎但愿意继续听",
+            "quality_flags": [],
+        },
+    }
+    handler._persist_runtime_metrics_to_session = AsyncMock()
+
+    await handler._record_knowledge_runtime_metric(
+        query="石犀平台 PoC 指标",
+        result_count=0,
+        status="search_failed",
+        knowledge_base_ids=["kb-product"],
+        error_message="[KB_TIMEOUT]",
+        retrieval_mode="vector",
+    )
+
+    metrics = handler._effective_policy["runtime_metrics"][
+        V1_ROLEPLAY_RUNTIME_METRICS_KEY
+    ]
+    assert metrics["knowledge_timeout_count"] == 1
+    assert metrics["quality_flags"] == ["knowledge_gap_degradation"]
+    assert metrics["roleplay_contract_hash"] == "sha256:frozen-contract"
+    handler._persist_runtime_metrics_to_session.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_blocking_roleplay_violation_marks_runtime_for_manual_review() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.turn_count = 4
+    handler._current_sales_stage_code = MagicMock(return_value="discovery")
+    handler._roleplay_visible_keys = MagicMock(return_value=["customer_background"])
+    handler._roleplay_disclosed_keys = MagicMock(return_value=[])
+    handler._roleplay_contract = MagicMock(
+        return_value={
+            "contract_version": "it_leader_roleplay_v1",
+            "audit": {"contract_hash": "sha256:frozen-contract"},
+        }
+    )
+    handler._effective_policy = {
+        "roleplay_contract_hash": "sha256:frozen-contract",
+        "roleplay_contract": {
+            "contract_version": "it_leader_roleplay_v1",
+            "audit": {"contract_hash": "sha256:frozen-contract"},
+        },
+        "session_state_card": {
+            "schema_version": "session_state_card_v1",
+            "version": 1,
+            "sequence": 0,
+            "current_phase_id": "opening_intent",
+            "customer_attitude": "谨慎但愿意继续听",
+            "quality_flags": [],
+        },
+    }
+
+    await handler._record_roleplay_compliance_decision(
+        {
+            "severity": "blocking",
+            "violation_code": "ROLEPLAY_HIDDEN_INFORMATION_LEAK",
+            "action": "cancel_stream",
+        },
+        response_id="resp-1",
+        action_override="cancel_stream",
+        count_violation=True,
+    )
+
+    metrics = handler._effective_policy["runtime_metrics"][
+        V1_ROLEPLAY_RUNTIME_METRICS_KEY
+    ]
+    assert metrics["blocking_violation_count"] == 1
+    assert metrics["violation_count"] == 1
+    assert metrics["manual_review_required"] is True
+    assert "blocking_violation_count:1" in metrics["quality_flags"]
+
+
+def test_v1_disabled_runtime_state_does_not_include_roleplay_observability() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-legacy"
+    handler._effective_policy = {
+        "runtime_metrics": {
+            "knowledge_retrieval": {
+                "attempt_count": 1,
+                "recent_attempts": [],
+            }
+        }
+    }
+
+    apply_roleplay_state_card_update_to_policy(
+        handler._effective_policy,
+        {
+            "version": 2,
+            "sequence": 2,
+            "current_phase_id": "solution_credibility",
+        },
+    )
+    snapshot = handler._create_state_snapshot()
+
+    assert V1_ROLEPLAY_RUNTIME_METRICS_KEY not in handler._effective_policy[
+        "runtime_metrics"
+    ]
+    runtime_state = snapshot.runtime_state or {}
+    assert V1_ROLEPLAY_RUNTIME_STATE_KEY not in runtime_state
 
 
 @pytest.mark.asyncio

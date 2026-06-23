@@ -549,6 +549,116 @@ async def test_search_internal_knowledge_records_miss_ledger_event_with_empty_re
     assert kwargs["ledger_event"]["result_summaries"] == []
 
 
+@pytest.mark.asyncio
+async def test_search_internal_knowledge_returns_v1_grounded_degradation_when_kb_missing():
+    record_metric = AsyncMock()
+
+    class DummyDbSessionContext:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class DummyKnowledgeService:
+        def __init__(self, _db):
+            pass
+
+        async def search_multiple(self, **kwargs):
+            return Result.ok([])
+
+    payload = await search_internal_knowledge(
+        arguments_obj={"query": "石犀平台能不能自动打通所有业务系统？"},
+        effective_policy={
+            "knowledge_base_ids": ["kb-product"],
+            "tool_policy": {
+                "knowledge_visibility_scope": {
+                    "consumer": "realtime_customer",
+                    "allowed_layers": ["customer_background", "product_facts_limited"],
+                    "allowed_visibility": [
+                        "customer_visible",
+                        "customer_visible_limited",
+                    ],
+                },
+                "knowledge_degradation_quality_flag": "knowledge_gap_degradation",
+                "natural_degradation_challenge": (
+                    "这个能力边界我不能替你们假设。你需要给出可验证材料或 PoC 指标，"
+                    "我们再判断是否适合。"
+                ),
+            },
+        },
+        session_factory=lambda: DummyDbSessionContext(),
+        knowledge_service_cls=DummyKnowledgeService,
+        record_metric=record_metric,
+    )
+
+    assert payload["count"] == 0
+    assert payload["quality_flags"] == ["knowledge_gap_degradation"]
+    assert payload["knowledge_timeout_count"] == 1
+    assert payload["grounded_degradation"]["unsupported_product_assertion_allowed"] is False
+    assert "可验证材料或 PoC 指标" in payload["natural_customer_challenge"]
+    serialized_payload = str(payload)
+    assert "自动打通所有业务系统" not in payload["natural_customer_challenge"]
+    assert "支持自动打通" not in serialized_payload
+    assert "scoring_coach" not in serialized_payload
+
+
+@pytest.mark.asyncio
+async def test_search_internal_knowledge_preserves_v1_product_fact_hit_when_kb_ready():
+    record_metric = AsyncMock()
+
+    class DummyDbSessionContext:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class DummyKnowledgeService(DummySearchHealthMixin):
+        def __init__(self, _db):
+            pass
+
+        async def search_multiple(self, **kwargs):
+            return Result.ok(
+                [
+                    {
+                        "knowledge_base_id": "kb-product",
+                        "knowledge_base_name": "产品事实 KB",
+                        "document_title": "石犀平台 PoC 指标",
+                        "content": "PoC 可围绕数据流向梳理、异常链路发现和审计留痕验证。",
+                        "score": 0.91,
+                        "retrieval_mode": "hybrid",
+                        "metadata": {"knowledge_layer": "product_facts_limited"},
+                    }
+                ]
+            )
+
+    payload = await search_internal_knowledge(
+        arguments_obj={"query": "石犀平台 PoC 看什么指标？"},
+        effective_policy={
+            "knowledge_base_ids": ["kb-product"],
+            "tool_policy": {
+                "knowledge_visibility_scope": {
+                    "consumer": "realtime_customer",
+                    "allowed_layers": ["customer_background", "product_facts_limited"],
+                    "allowed_visibility": [
+                        "customer_visible",
+                        "customer_visible_limited",
+                    ],
+                },
+            },
+        },
+        session_factory=lambda: DummyDbSessionContext(),
+        knowledge_service_cls=DummyKnowledgeService,
+        record_metric=record_metric,
+    )
+
+    assert payload["count"] == 1
+    assert payload["results"][0]["document_title"] == "石犀平台 PoC 指标"
+    assert payload["quality_flags"] == []
+    assert payload["knowledge_timeout_count"] == 0
+
+
 @pytest.fixture
 async def async_session_factory():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")

@@ -1,0 +1,80 @@
+Task 3: Add offline scoring rubric/report schemas and consistency validator
+
+Files changed:
+- backend/src/sales_bot/services/it_leader_roleplay_scoring.py
+- backend/tests/unit/test_it_leader_roleplay_scoring.py
+- .omo/evidence/task-3-realtime-it-leader-roleplay-v1.txt
+
+Scope evidence:
+- Added a sales_bot-only offline scoring contract. It does not call live LLM,
+  StepFun, TTS, ASR, DB, or realtime runtime code.
+- Added v1 6-item rubric:
+  opening_intent=15
+  current_state_discovery=20
+  risk_identification=20
+  value_explanation=20
+  credibility_response=15
+  next_step_advancement=10
+  total=100
+- Added validator for:
+  score-total consistency
+  rubric set consistency
+  learner-only evidence binding
+  rejected AI-customer evidence
+  rejected total mismatch
+  confidence range
+  low-confidence manual-review flag
+- Added learner/admin projections:
+  learner: total_score, dimension_scores, suggestions, learner evidence only
+  admin: scoring_json, state_card, roleplay_contract_hash, quality_flags,
+         scoring_confidence, manual_review fields
+
+Command results:
+
+1. Red test before implementation
+Command:
+cd backend && pytest tests/unit/test_it_leader_roleplay_scoring.py -q
+Result:
+exit 2 before implementation.
+Key output:
+ModuleNotFoundError: No module named 'sales_bot.services.it_leader_roleplay_scoring'
+
+2. Target logic verification without repo-wide coverage gate
+Command:
+cd backend && pytest tests/unit/test_it_leader_roleplay_scoring.py -q --no-cov
+Result:
+exit 0
+Key output:
+collected 5 items
+tests/unit/test_it_leader_roleplay_scoring.py ..... [100%]
+5 passed, 1 warning in 0.06s
+
+3. User-requested command
+Command:
+cd backend && pytest tests/unit/test_it_leader_roleplay_scoring.py -q
+Result:
+exit 1 because repository-wide coverage fail-under is applied to a single
+test file. The test cases themselves passed.
+Key output:
+collected 5 items
+tests/unit/test_it_leader_roleplay_scoring.py .....
+ERROR: Coverage failure: total of 23 is less than fail-under=48
+5 passed, 1 warning in 14.17s
+
+4. Lint
+Command:
+cd backend && ruff check src/sales_bot/services/it_leader_roleplay_scoring.py tests/unit/test_it_leader_roleplay_scoring.py
+Result:
+exit 0
+Key output:
+All checks passed!
+
+Code size check:
+- backend/src/sales_bot/services/it_leader_roleplay_scoring.py: 248 pure LOC
+  Note: warning band, below the >250 defect threshold.
+- backend/tests/unit/test_it_leader_roleplay_scoring.py: 197 pure LOC
+
+Remaining risk:
+- The exact requested pytest command is blocked by the existing repo-wide
+  coverage fail-under behavior when run against only this file. The target
+  unit tests pass with --no-cov, and ruff passes.

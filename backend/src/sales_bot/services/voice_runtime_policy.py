@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -33,6 +34,12 @@ from curriculum_practice.services.roleplay.situation_pack_repository import (
 from curriculum_practice.services.roleplay_contracts import (
     RoleplayContractCompileError,
     RoleplayContractCompiler,
+)
+from sales_bot.services.it_leader_roleplay_v1 import (
+    V1_SCENARIO_CODE,
+    get_default_state_card,
+    get_knowledge_visibility_rules,
+    get_roleplay_contract,
 )
 from sales_bot.services.voice_instruction_compiler import VoiceInstructionCompiler
 
@@ -119,6 +126,9 @@ DEFAULT_TOOL_POLICY: dict[str, Any] = {
     "transcript_normalization_lexicon": [],
     "retrieval_enable_rerank": True,
     "retrieval_rerank_top_k": 8,
+    "knowledge_visibility_scope": {},
+    "knowledge_degradation_quality_flag": "",
+    "natural_degradation_challenge": "",
 }
 
 DEPRECATED_RUNTIME_PROFILE_FIELDS = {"system_instruction_template"}
@@ -201,6 +211,159 @@ def _to_bool(value: Any, default: bool) -> bool:
         if lowered in {"false", "0", "no", "off"}:
             return False
     return default
+
+
+def _is_it_leader_roleplay_v1_enabled(persona_policy: dict[str, Any]) -> bool:
+    sample_policy = _as_dict(persona_policy.get("it_leader_roleplay_v1"))
+    if "enabled" in sample_policy:
+        return _to_bool(sample_policy.get("enabled"), False)
+    if "it_leader_roleplay_v1_enabled" in persona_policy:
+        return _to_bool(persona_policy.get("it_leader_roleplay_v1_enabled"), False)
+    return False
+
+
+def _is_it_leader_roleplay_v1_policy(policy: dict[str, Any]) -> bool:
+    roleplay_contract = _as_dict(policy.get("roleplay_contract"))
+    if roleplay_contract.get("contract_version") == "it_leader_roleplay_v1":
+        return True
+    persona_policy = _as_dict(policy.get("persona_policy"))
+    return _is_it_leader_roleplay_v1_enabled(persona_policy)
+
+
+def _v1_realtime_knowledge_scope() -> dict[str, Any]:
+    return {
+        "consumer": "realtime_customer",
+        "allowed_layers": ["customer_background", "product_facts_limited"],
+        "allowed_visibility": ["customer_visible", "customer_visible_limited"],
+    }
+
+
+def _v1_natural_degradation_challenge() -> str:
+    return (
+        "这个能力边界我不能替你们假设。你需要给出可验证材料或 PoC 指标，"
+        "我们再判断是否适合。"
+    )
+
+
+def _v1_visibility_rules_by_layer() -> dict[str, dict[str, Any]]:
+    rules = get_knowledge_visibility_rules()
+    layers = rules.get("layers")
+    if not isinstance(layers, list):
+        return {}
+    return {
+        str(layer.get("id")): layer
+        for layer in layers
+        if isinstance(layer, dict) and str(layer.get("id") or "").strip()
+    }
+
+
+def _v1_binding_kb_id(binding: dict[str, Any]) -> str:
+    for key in ("knowledge_base_id", "kb_id", "id"):
+        value = str(binding.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _v1_binding_is_realtime_visible(
+    binding: dict[str, Any],
+    *,
+    rules_by_layer: dict[str, dict[str, Any]],
+) -> bool:
+    if binding.get("realtime_customer_visible") is True:
+        return True
+    if binding.get("realtime_customer_visible") is False:
+        return False
+
+    allowed_consumers = binding.get("allowed_consumers")
+    if isinstance(allowed_consumers, list):
+        return "realtime_customer" in {str(item) for item in allowed_consumers}
+
+    layer_id = str(
+        binding.get("knowledge_layer")
+        or binding.get("layer")
+        or binding.get("layer_id")
+        or ""
+    ).strip()
+    visibility = str(binding.get("visibility") or "").strip()
+    if layer_id in rules_by_layer:
+        return rules_by_layer[layer_id].get("realtime_customer_visible") is True
+    if layer_id in {"customer_background", "product_facts_limited"}:
+        return True
+    return visibility in {"customer_visible", "customer_visible_limited"}
+
+
+def _resolve_v1_realtime_knowledge_base_ids(
+    knowledge_base_ids: list[str],
+    persona_policy: dict[str, Any],
+) -> tuple[list[str], list[str]]:
+    bindings_raw = persona_policy.get("knowledge_base_bindings")
+    if not isinstance(bindings_raw, list):
+        bindings_raw = persona_policy.get("knowledge_visibility_bindings")
+    if not isinstance(bindings_raw, list):
+        return knowledge_base_ids, []
+
+    allowed_ids: list[str] = []
+    omitted_ids: list[str] = []
+    rules_by_layer = _v1_visibility_rules_by_layer()
+    for item in bindings_raw:
+        if not isinstance(item, dict):
+            continue
+        kb_id = _v1_binding_kb_id(item)
+        if not kb_id:
+            continue
+        if _v1_binding_is_realtime_visible(item, rules_by_layer=rules_by_layer):
+            allowed_ids.append(kb_id)
+        else:
+            omitted_ids.append(kb_id)
+
+    if not allowed_ids and omitted_ids:
+        return [], list(dict.fromkeys(omitted_ids))
+    if not allowed_ids:
+        return knowledge_base_ids, []
+
+    visible = {kb_id for kb_id in allowed_ids}
+    filtered_ids = [kb_id for kb_id in knowledge_base_ids if kb_id in visible]
+    omitted_ids.extend(kb_id for kb_id in knowledge_base_ids if kb_id not in visible)
+    return list(dict.fromkeys(filtered_ids)), list(dict.fromkeys(omitted_ids))
+
+
+def _apply_v1_realtime_tool_policy(tool_policy: dict[str, Any]) -> dict[str, Any]:
+    resolved = dict(tool_policy)
+    resolved["knowledge_visibility_scope"] = _v1_realtime_knowledge_scope()
+    resolved["knowledge_degradation_quality_flag"] = "knowledge_gap_degradation"
+    resolved["natural_degradation_challenge"] = _v1_natural_degradation_challenge()
+    return resolved
+
+
+def _build_v1_roleplay_phase_anchor(contract: dict[str, Any]) -> str:
+    phase_model = _as_dict(contract.get("phase_model"))
+    raw_phases = phase_model.get("phases")
+    phase_items = raw_phases if isinstance(raw_phases, list) else []
+    phases = [phase for phase in phase_items if isinstance(phase, dict)]
+    current = phases[0] if phases else {}
+    phase_id = str(current.get("id") or "opening_intent")
+    phase_label = str(current.get("label") or "开场与来意")
+    pressure = str(current.get("customer_pressure") or "确认拜访目的").strip()
+    contract_hash = str(_as_dict(contract.get("audit")).get("contract_hash") or "")
+    return (
+        f"roleplay_contract_hash={contract_hash}；"
+        f"当前阶段 {phase_id}（{phase_label}）；"
+        f"阶段类型=roleplay_phase；销售阶段 authority=SalesStageCapability；"
+        f"客户下一轮压力={pressure}"
+    )
+
+
+def _summarize_v1_state_card(state_card: dict[str, Any]) -> str:
+    missing_actions = _as_list(state_card.get("learner_actions_missing"))
+    missing_summary = "、".join(missing_actions[:2]) if missing_actions else "无"
+    return (
+        f"state_card_version={state_card.get('version', 1)}；"
+        f"current_phase_id={state_card.get('current_phase_id', 'opening_intent')}；"
+        f"customer_attitude={state_card.get('customer_attitude', '')}；"
+        f"learner_actions_missing={missing_summary}；"
+        f"next_pressure={state_card.get('next_pressure', '')}"
+    )
 
 
 def _to_int(value: Any, default: int, minimum: int = 1) -> int:
@@ -831,7 +994,17 @@ class VoiceRuntimePolicyService:
                 source["knowledge_base_source"] = (
                     "agent_default_knowledge_base_ids_legacy_fallback"
                 )
+        if _is_it_leader_roleplay_v1_enabled(persona_policy):
+            knowledge_base_ids, omitted_kb_ids = _resolve_v1_realtime_knowledge_base_ids(
+                knowledge_base_ids,
+                persona_policy,
+            )
+            source["v1_knowledge_visibility_guard"] = "enabled"
+            if omitted_kb_ids:
+                source["v1_omitted_knowledge_base_ids"] = omitted_kb_ids
         tool_policy = self._normalize_tool_policy(_as_dict(policy.get("tool_policy")))
+        if _is_it_leader_roleplay_v1_enabled(persona_policy):
+            tool_policy = _apply_v1_realtime_tool_policy(tool_policy)
         has_bound_knowledge_base = bool(knowledge_base_ids)
         auto_require_kb_grounding = _is_true_env(
             "PERSONA_AUTO_REQUIRE_KB_GROUNDING_WHEN_BOUND",
@@ -884,6 +1057,19 @@ class VoiceRuntimePolicyService:
             )
         )
         policy["roleplay_contract"] = roleplay_contract
+        if roleplay_contract.get("contract_version") == "it_leader_roleplay_v1":
+            audit = _as_dict(roleplay_contract.get("audit"))
+            roleplay_contract_hash = str(audit.get("contract_hash") or "")
+            state_card = get_default_state_card()
+            policy["roleplay_contract_hash"] = roleplay_contract_hash
+            policy["session_state_card"] = state_card
+            policy["roleplay_phase_anchor"] = _build_v1_roleplay_phase_anchor(
+                roleplay_contract
+            )
+            policy["session_state_card_summary"] = _summarize_v1_state_card(
+                state_card
+            )
+            source["roleplay_sample"] = V1_SCENARIO_CODE
         if legacy_direct_fallback:
             source["legacy_direct_practice_fallback"] = True
         policy["role_anchor_text"] = self._compile_role_anchor_text(
@@ -954,14 +1140,14 @@ class VoiceRuntimePolicyService:
         actor_id: str,
         situation_packs: SituationPackRepository | None = None,
     ) -> tuple[dict[str, Any], bool]:
+        if _is_it_leader_roleplay_v1_enabled(resolve_persona_policy(persona)):
+            return get_roleplay_contract(), False
+
         compiler = RoleplayContractCompiler(situation_packs=situation_packs)
         try:
-            return (
-                compiler.compile_from_persona_sync(
-                    persona,
-                    actor_id=actor_id,
-                ),
-                False,
+            compiled = compiler.compile_from_persona_sync(
+                persona,
+                actor_id=actor_id,
             )
         except RoleplayContractCompileError as exc:
             logger.warning(
@@ -976,6 +1162,7 @@ class VoiceRuntimePolicyService:
                 ),
                 True,
             )
+        return compiled, False
 
     def build_stepfun_tools(
         self, effective_policy: dict[str, Any]
@@ -1013,31 +1200,45 @@ class VoiceRuntimePolicyService:
             )
 
         if tool_policy["enable_internal_retrieval"]:
+            function_payload: dict[str, Any] = {
+                "name": "search_internal_knowledge",
+                "description": "检索企业内部知识库内容，用于回答产品、流程、政策类问题。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "用户问题或检索关键词",
+                        },
+                        "top_k": {
+                            "type": "integer",
+                            "description": "返回条数，默认使用系统设置",
+                        },
+                        "metadata_filter": {
+                            "type": "object",
+                            "description": "按知识条目元数据过滤（可选，例如 product_line 或 region）",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            }
+            if _is_it_leader_roleplay_v1_policy(effective_policy):
+                function_payload["description"] = (
+                    "检索企业内部知识库内容；v1 实时客户只允许使用客户背景和"
+                    "有限产品事实，内部评分材料、标准答案和销售话术不得进入客户上下文。"
+                )
+                function_payload["options"] = {
+                    "knowledge_visibility_scope": _v1_realtime_knowledge_scope(),
+                    "on_missing_or_timeout": {
+                        "quality_flag": "knowledge_gap_degradation",
+                        "counter": "knowledge_timeout_count",
+                        "natural_customer_challenge": _v1_natural_degradation_challenge(),
+                    },
+                }
             tools.append(
                 {
                     "type": "function",
-                    "function": {
-                        "name": "search_internal_knowledge",
-                        "description": "检索企业内部知识库内容，用于回答产品、流程、政策类问题。",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": {
-                                    "type": "string",
-                                    "description": "用户问题或检索关键词",
-                                },
-                                "top_k": {
-                                    "type": "integer",
-                                    "description": "返回条数，默认使用系统设置",
-                                },
-                                "metadata_filter": {
-                                    "type": "object",
-                                    "description": "按知识条目元数据过滤（可选，例如 product_line 或 region）",
-                                },
-                            },
-                            "required": ["query"],
-                        },
-                    },
+                    "function": function_payload,
                 }
             )
         return tools
@@ -1238,6 +1439,17 @@ class VoiceRuntimePolicyService:
                 DEFAULT_TOOL_POLICY["retrieval_rerank_top_k"],
                 minimum=1,
             ),
+            "knowledge_visibility_scope": (
+                deepcopy(merged.get("knowledge_visibility_scope"))
+                if isinstance(merged.get("knowledge_visibility_scope"), dict)
+                else {}
+            ),
+            "knowledge_degradation_quality_flag": str(
+                merged.get("knowledge_degradation_quality_flag") or ""
+            ).strip(),
+            "natural_degradation_challenge": str(
+                merged.get("natural_degradation_challenge") or ""
+            ).strip(),
         }
 
     def _merge_knowledge_base_ids(

@@ -114,6 +114,10 @@ from sales_bot.websocket.components.stepfun_runtime_metrics_helpers import (
     apply_knowledge_runtime_metric,
     persist_runtime_metrics_to_session,
 )
+from sales_bot.websocket.components.stepfun_roleplay_runtime_helpers import (
+    build_roleplay_runtime_state_patch,
+    restore_roleplay_runtime_state,
+)
 from sales_bot.websocket.components.stepfun_tts_contracts import (
     DEFAULT_TTS_CHUNK_PROTOCOL_VERSION,
 )
@@ -691,6 +695,9 @@ class StepFunRealtimeSharedHandler(
             curriculum_patch = self._curriculum_stage_runtime.runtime_state_patch()
             if curriculum_patch:
                 runtime_state.update(copy.deepcopy(curriculum_patch))
+        roleplay_patch = build_roleplay_runtime_state_patch(self._effective_policy)
+        if roleplay_patch:
+            runtime_state.update(copy.deepcopy(roleplay_patch))
         runtime_state["reconnect_state"] = self._build_reconnect_state_payload()
 
         return SessionStateSnapshot(
@@ -707,6 +714,7 @@ class StepFunRealtimeSharedHandler(
         """Restore reconnect state using the StepFun connection mixin authority."""
         await super()._restore_session_state(state)
         runtime_state = state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        restore_roleplay_runtime_state(self._effective_policy, runtime_state)
         if self._curriculum_stage_runtime is not None:
             self._curriculum_stage_runtime.restore_runtime_state(runtime_state)
 

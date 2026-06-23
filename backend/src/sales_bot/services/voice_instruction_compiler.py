@@ -106,6 +106,12 @@ class VoiceInstructionCompiler:
         if roleplay_contract_section:
             sections.append(roleplay_contract_section)
 
+        roleplay_runtime_anchor_section = cls._build_roleplay_runtime_anchor_section(
+            policy
+        )
+        if roleplay_runtime_anchor_section:
+            sections.append(roleplay_runtime_anchor_section)
+
         customer_pressure_section = cls._build_customer_pressure_section(
             policy=policy,
             persona_policy=persona_policy,
@@ -248,6 +254,7 @@ class VoiceInstructionCompiler:
             return ""
 
         situation = cls._as_dict(contract.get("situation"))
+        scenario = cls._as_dict(contract.get("scenario"))
         relationship = cls._as_dict(contract.get("relationship_context"))
         visible_scope = cls._as_dict(contract.get("visible_information_scope"))
         sales_stage_policy = cls._as_dict(contract.get("sales_stage_policy"))
@@ -258,8 +265,20 @@ class VoiceInstructionCompiler:
             contract.get("behavior_rules_for_prompt_only")
         )
 
+        situation_label = str(
+            situation.get("label")
+            or situation.get("code")
+            or scenario.get("visit_type")
+            or ""
+        ).strip()
+        if scenario.get("product"):
+            situation_label = (
+                f"{situation_label} / {scenario.get('product')}"
+                if situation_label
+                else str(scenario.get("product"))
+            )
         lines = [
-            f"情景：{str(situation.get('label') or situation.get('code') or '').strip()}。",
+            f"情景：{situation_label}。",
             "关系史事实：" + cls._relationship_context_text(relationship),
             "销售阶段 authority 固定为 "
             + str(sales_stage_policy.get("stage_authority") or "SalesStageCapability")
@@ -267,7 +286,10 @@ class VoiceInstructionCompiler:
             "首轮只能使用这些业务字段："
             + cls._join_text_list(visible_scope.get("initial_visible_keys")),
             "默认隐藏字段不得主动披露："
-            + cls._join_text_list(visible_scope.get("hidden_by_default_keys")),
+            + cls._hidden_information_scope_text(
+                contract,
+                visible_scope.get("hidden_by_default_keys"),
+            ),
         ]
         if forbidden_patterns:
             lines.append("不得声称或暗示：" + "；".join(forbidden_patterns))
@@ -278,6 +300,27 @@ class VoiceInstructionCompiler:
             lines.extend(prompt_only_rules)
         lines.append("除非当前轮 instructions 明确新增可见字段，否则不要使用隐藏信息或编造历史互动。")
         return "【角色扮演合同】\n" + "\n".join(f"- {line}" for line in lines if line)
+
+    @classmethod
+    def _build_roleplay_runtime_anchor_section(cls, policy: dict[str, Any]) -> str:
+        phase_anchor = str(policy.get("roleplay_phase_anchor") or "").strip()
+        state_summary = str(policy.get("session_state_card_summary") or "").strip()
+        contract_hash = str(policy.get("roleplay_contract_hash") or "").strip()
+        if contract_hash and "roleplay_contract_hash=" not in phase_anchor:
+            phase_anchor = (
+                f"roleplay_contract_hash={contract_hash}；{phase_anchor}"
+                if phase_anchor
+                else f"roleplay_contract_hash={contract_hash}"
+            )
+        if not phase_anchor and not state_summary:
+            return ""
+
+        lines: list[str] = []
+        if phase_anchor:
+            lines.append(f"【v1阶段锚点】\n- {phase_anchor}")
+        if state_summary:
+            lines.append(f"【状态卡摘要】\n- {state_summary}")
+        return "\n\n".join(lines)
 
     @staticmethod
     def _relationship_context_text(relationship: dict[str, Any]) -> str:
@@ -300,6 +343,12 @@ class VoiceInstructionCompiler:
     def _join_text_list(cls, raw: Any) -> str:
         values = cls._normalize_text_list(raw)
         return "、".join(values) if values else "无"
+
+    @classmethod
+    def _hidden_information_scope_text(cls, contract: dict[str, Any], raw: Any) -> str:
+        if contract.get("contract_version") == "it_leader_roleplay_v1":
+            return "内部评分与培训材料、预算和决策链等仅供管理员或离线评估使用的材料"
+        return cls._join_text_list(raw)
 
     @staticmethod
     def _normalize_text_list(raw: Any) -> list[str]:

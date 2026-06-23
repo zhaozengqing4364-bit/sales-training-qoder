@@ -139,6 +139,9 @@ from sales_bot.websocket.components.stepfun_runtime_metrics_helpers import (
     apply_knowledge_runtime_metric,
     persist_runtime_metrics_to_session,
 )
+from sales_bot.websocket.components.stepfun_roleplay_runtime_helpers import (
+    restore_roleplay_runtime_state,
+)
 from sales_bot.websocket.components.stepfun_voice_selection import resolve_session_voice
 from sales_bot.websocket.components.stepfun_tool_helpers import (
     build_stepfun_tools_from_policy,
@@ -681,10 +684,9 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
                 curriculum_snapshot=self._curriculum_snapshot,
                 voice_policy_snapshot=getattr(session, "voice_policy_snapshot", None),
             )
-            runtime_state = (
-                getattr(session, "runtime_state", None)
-                if isinstance(getattr(session, "runtime_state", None), dict)
-                else {}
+            runtime_state_raw = getattr(session, "runtime_state", None)
+            runtime_state: dict[str, Any] = (
+                runtime_state_raw if isinstance(runtime_state_raw, dict) else {}
             )
             self._roleplay_disclosure_state = normalize_roleplay_disclosure_state(
                 contract,
@@ -730,6 +732,8 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
                 if self._curriculum_snapshot is None:
                     session_any.voice_policy_snapshot = self._effective_policy
                     await db.commit()
+            if isinstance(runtime_state, dict):
+                restore_roleplay_runtime_state(self._effective_policy, runtime_state)
 
             profile = self._apply_voice_runtime_profile(self._effective_policy)
             self._stepfun_input_audio_format = str(

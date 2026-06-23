@@ -1032,3 +1032,161 @@ async def test_resolve_effective_policy_includes_role_anchor_text(
     assert "制造业 CIO" in effective["role_anchor_text"]
     assert isinstance(effective.get("instruction_contract_hash"), str)
     assert "【角色锚】" not in effective["instructions"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_keeps_v1_disabled_without_phase_state_anchor(
+    test_db: AsyncSession,
+) -> None:
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="信息化负责人",
+        description="v1 disabled baseline",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是信息化负责人。",
+        persona_policy={
+            "system_prompt": "你是信息化负责人。",
+            "it_leader_roleplay_v1": {"enabled": False},
+        },
+    )
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="默认配置",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    test_db.add_all([persona, profile])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy(persona_id=persona.id)
+
+    assert effective["roleplay_contract"].get("contract_version") != (
+        "it_leader_roleplay_v1"
+    )
+    assert "roleplay_contract_hash" not in effective
+    assert "roleplay_phase_anchor" not in effective
+    assert "session_state_card_summary" not in effective
+    assert "【v1阶段锚点】" not in effective["instructions"]
+    assert "【状态卡摘要】" not in effective["instructions"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_includes_v1_contract_and_state_anchor_when_enabled(
+    test_db: AsyncSession,
+) -> None:
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="信息化负责人",
+        description="v1 enabled",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是国企信息化负责人。",
+        persona_policy={
+            "system_prompt": "你是国企信息化负责人。",
+            "it_leader_roleplay_v1": {"enabled": True},
+        },
+    )
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="默认配置",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    test_db.add_all([persona, profile])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy(persona_id=persona.id)
+
+    assert effective["roleplay_contract"]["contract_version"] == (
+        "it_leader_roleplay_v1"
+    )
+    assert effective["roleplay_contract_hash"] == effective["roleplay_contract"][
+        "audit"
+    ]["contract_hash"]
+    assert effective["session_state_card"]["current_phase_id"] == "opening_intent"
+    assert "开场与来意" in effective["roleplay_phase_anchor"]
+    assert "谨慎但愿意继续听" in effective["session_state_card_summary"]
+    assert "roleplay_contract_hash" in effective["instructions"]
+    assert effective["roleplay_contract_hash"] in effective["instructions"]
+    assert "【v1阶段锚点】" in effective["instructions"]
+    assert "【状态卡摘要】" in effective["instructions"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_omits_scorer_only_v1_kb_from_realtime_context(
+    test_db: AsyncSession,
+) -> None:
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="信息化负责人",
+        description="v1 scorer-only KB guard",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是国企信息化负责人。",
+        persona_policy={
+            "system_prompt": "你是国企信息化负责人。",
+            "it_leader_roleplay_v1": {"enabled": True},
+            "knowledge_base_ids": ["kb-customer", "kb-product", "kb-scorer"],
+            "knowledge_base_bindings": [
+                {
+                    "knowledge_base_id": "kb-customer",
+                    "visibility": "customer_visible",
+                },
+                {
+                    "knowledge_base_id": "kb-product",
+                    "visibility": "customer_visible_limited",
+                },
+                {
+                    "knowledge_base_id": "kb-scorer",
+                    "visibility": "scorer_admin_only",
+                },
+            ],
+        },
+    )
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="默认配置",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    test_db.add_all([persona, profile])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy(persona_id=persona.id)
+    tools = service.build_stepfun_tools(effective)
+
+    serialized_policy = str(effective["tool_policy"])
+    serialized_tools = str(tools)
+    assert effective["knowledge_base_ids"] == ["kb-customer", "kb-product"]
+    assert effective["source"]["v1_knowledge_visibility_guard"] == "enabled"
+    assert effective["source"]["v1_omitted_knowledge_base_ids"] == ["kb-scorer"]
+    assert "kb-scorer" not in serialized_policy
+    assert "kb-scorer" not in serialized_tools
+    assert "scoring_coach" not in serialized_policy
+    assert "standard_answers" not in serialized_policy
+    assert "scoring_coach" not in effective["instructions"]
+    assert "standard_answers" not in effective["instructions"]
+    assert tools[0]["function"]["options"]["knowledge_visibility_scope"] == {
+        "consumer": "realtime_customer",
+        "allowed_layers": ["customer_background", "product_facts_limited"],
+        "allowed_visibility": ["customer_visible", "customer_visible_limited"],
+    }

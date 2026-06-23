@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from curriculum_practice.services.roleplay.situation_pack_dto import SituationPackDTO
+from sales_bot.services.it_leader_roleplay_v1 import get_roleplay_contract
 from sales_bot.services.voice_instruction_compiler import (
     VoiceInstructionCompiler,
     enforce_question_limit,
@@ -370,6 +371,32 @@ def test_compile_base_contract_adds_question_triggered_disclosure_rules():
     assert "最多披露一个表层顾虑" in compiled.base_instructions
     assert "你还没了解我们现状，为什么认为适合" in compiled.base_instructions
     assert "每次只选择一个最关键的主问题" in compiled.base_instructions
+
+
+def test_compile_base_contract_adds_v1_phase_and_state_card_anchors_only():
+    contract = get_roleplay_contract()
+    contract_hash = contract["audit"]["contract_hash"]
+    policy = {
+        "roleplay_contract": contract,
+        "roleplay_contract_hash": contract_hash,
+        "roleplay_phase_anchor": (
+            "当前阶段 opening_intent（开场与来意）；目标：确认拜访目的。"
+        ),
+        "session_state_card_summary": (
+            "state_card_version=1；当前阶段=opening_intent；"
+            "客户态度=谨慎但愿意继续听；下一轮压力=追问拜访目的。"
+        ),
+    }
+
+    compiled = VoiceInstructionCompiler.compile_base_contract(policy=policy)
+
+    assert "【v1阶段锚点】" in compiled.base_instructions
+    assert "opening_intent" in compiled.base_instructions
+    assert "roleplay_contract_hash=" + contract_hash in compiled.base_instructions
+    assert "【状态卡摘要】" in compiled.base_instructions
+    assert "谨慎但愿意继续听" in compiled.base_instructions
+    assert "标准答案" not in compiled.base_instructions
+    assert "内部销售话术" not in compiled.base_instructions
 
 
 def test_enforce_question_limit_trims_extra_questions_without_appending_template_copy():

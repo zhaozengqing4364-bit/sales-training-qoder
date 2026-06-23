@@ -5,6 +5,32 @@ from __future__ import annotations
 from typing import Any
 
 
+def _is_it_leader_roleplay_v1_policy(effective_policy: dict[str, Any]) -> bool:
+    roleplay_contract = effective_policy.get("roleplay_contract")
+    if isinstance(roleplay_contract, dict):
+        return roleplay_contract.get("contract_version") == "it_leader_roleplay_v1"
+    persona_policy = effective_policy.get("persona_policy")
+    if not isinstance(persona_policy, dict):
+        return False
+    sample_policy = persona_policy.get("it_leader_roleplay_v1")
+    return isinstance(sample_policy, dict) and sample_policy.get("enabled") is True
+
+
+def _v1_realtime_knowledge_scope() -> dict[str, Any]:
+    return {
+        "consumer": "realtime_customer",
+        "allowed_layers": ["customer_background", "product_facts_limited"],
+        "allowed_visibility": ["customer_visible", "customer_visible_limited"],
+    }
+
+
+def _v1_natural_degradation_challenge() -> str:
+    return (
+        "这个能力边界我不能替你们假设。你需要给出可验证材料或 PoC 指标，"
+        "我们再判断是否适合。"
+    )
+
+
 def build_stepfun_tools_from_policy(
     effective_policy: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -66,31 +92,45 @@ def build_stepfun_tools_from_policy(
         )
 
     if enable_internal_retrieval:
+        function_payload: dict[str, Any] = {
+            "name": "search_internal_knowledge",
+            "description": "检索企业内部知识库，用于回答产品、流程和策略问题。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "用户问题或检索关键词",
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "返回条数（可选）",
+                    },
+                    "metadata_filter": {
+                        "type": "object",
+                        "description": "按知识条目元数据过滤（可选，例如 product_line 或 region）",
+                    },
+                },
+                "required": ["query"],
+            },
+        }
+        if _is_it_leader_roleplay_v1_policy(effective_policy):
+            function_payload["description"] = (
+                "检索企业内部知识库；v1 实时客户只允许使用客户背景和有限产品事实，"
+                "内部评分材料、标准答案和销售话术不得进入客户上下文。"
+            )
+            function_payload["options"] = {
+                "knowledge_visibility_scope": _v1_realtime_knowledge_scope(),
+                "on_missing_or_timeout": {
+                    "quality_flag": "knowledge_gap_degradation",
+                    "counter": "knowledge_timeout_count",
+                    "natural_customer_challenge": _v1_natural_degradation_challenge(),
+                },
+            }
         tools.append(
             {
                 "type": "function",
-                "function": {
-                    "name": "search_internal_knowledge",
-                    "description": "检索企业内部知识库，用于回答产品、流程和策略问题。",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "用户问题或检索关键词",
-                            },
-                            "top_k": {
-                                "type": "integer",
-                                "description": "返回条数（可选）",
-                            },
-                            "metadata_filter": {
-                                "type": "object",
-                                "description": "按知识条目元数据过滤（可选，例如 product_line 或 region）",
-                            },
-                        },
-                        "required": ["query"],
-                    },
-                },
+                "function": function_payload,
             }
         )
 
