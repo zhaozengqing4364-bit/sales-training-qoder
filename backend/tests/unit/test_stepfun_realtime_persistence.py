@@ -541,7 +541,7 @@ async def test_prepare_terminal_lifecycle_result_marks_stepfun_session_not_evalu
     logger_info = MagicMock()
 
     monkeypatch.setattr(
-        practice_service,
+        sales_practice_session_contributor,
         "_sync_sales_realtime_terminal_evidence",
         sync_evidence_mock,
     )
@@ -556,7 +556,7 @@ async def test_prepare_terminal_lifecycle_result_marks_stepfun_session_not_evalu
         cleanup_mock,
     )
     monkeypatch.setattr(
-        practice_service,
+        sales_practice_session_contributor,
         "ensure_effectiveness_snapshot",
         lambda current_session: current_session.effectiveness_snapshot,
     )

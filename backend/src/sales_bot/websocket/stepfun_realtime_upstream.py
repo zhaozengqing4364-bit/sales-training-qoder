@@ -1040,7 +1040,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 session_id=self.session_id,
                 error_message=extract_error_message(event),
             )
-        return recovered
+        return bool(recovered)
 
     async def sync_lifecycle_transition(
         self, transition: SessionLifecycleTransition
@@ -1776,6 +1776,8 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             turn_number=turn_number,
             evidence={"trace_id": get_trace_id()},
         )
+        if next_state == previous:
+            return
         self._roleplay_disclosure_state = next_state
         await self._persist_roleplay_disclosure_state()
 
@@ -2107,18 +2109,19 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                     transcript_length=len(transcript),
                 )
         if not transcript:
+            raw_transcript = event.get("transcript")
             self._log_latency_debug(
                 "transcription_completed_empty_text",
                 event_keys=sorted(str(key) for key in event.keys()),
-                transcript_shape=self._summarize_payload_shape(event.get("transcript")),
+                transcript_shape=self._summarize_payload_shape(raw_transcript),
                 transcript_string_length=(
-                    len(event.get("transcript"))
-                    if isinstance(event.get("transcript"), str)
+                    len(raw_transcript)
+                    if isinstance(raw_transcript, str)
                     else None
                 ),
                 transcript_blank=(
-                    not event.get("transcript").strip()
-                    if isinstance(event.get("transcript"), str)
+                    not raw_transcript.strip()
+                    if isinstance(raw_transcript, str)
                     else None
                 ),
                 item_keys=self._extract_dict_keys(event.get("item")),
