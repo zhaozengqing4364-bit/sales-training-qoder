@@ -118,7 +118,30 @@ Import 本身不是跨拓扑单事务回滚。回滚按资产类型处理：
 
 仅允许本地救援或历史 fixture 重建时显式使用 `--legacy-seed-unsafe`。运行该参数必须在变更记录中说明原因、影响范围和回滚路径。
 
-## 6. B1 Authority 启动前检查
+## 6. 双读观测启动
+
+staging 启动 SituationPack 双读观测时，先保持 B1 authority 关闭：
+
+```bash
+export SITUATION_PACK_DUAL_READ=true
+export SITUATION_PACK_READ_ORM=true
+export SITUATION_PACK_B1_AUTHORITY=false
+cd backend
+PYTHONPATH=src python scripts/start_situation_pack_dual_read_observation.py --apply --reason p0-dual-read-start
+```
+
+脚本通过条件：
+
+- `status` 为 `started` 或 `already_started`。
+- `latest_projection_sync.status == "ok"`。
+- `dual_read.lookup_count == dual_read.matched_count`。
+- `dual_read.mismatch_count == 0`。
+- `dual_read.authority == "phase_a"`。
+- `observation_started_at` 非空。
+
+脚本返回 `blocked` 或非 0 exit code 时，不得开启 `SITUATION_PACK_B1_AUTHORITY`。
+
+## 7. B1 Authority 启动前检查
 
 导入 Presales CIO 包不等于 B1 authority promotion。启用 `SITUATION_PACK_B1_AUTHORITY=true` 前必须满足：
 
