@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from sqlalchemy import select
@@ -36,7 +37,25 @@ class EntitySituationPackProjectionAdapter(SituationPackRepository):
         db: AsyncSession,
     ) -> EntitySituationPackProjectionAdapter:
         if settings.SITUATION_PACK_READ_ORM:
-            return await cls._from_orm(db)
+            adapter = await cls._from_orm(db)
+            resolution = await BusinessRuleConfigService(db).resolve_active_config(
+                ROLEPLAY_SITUATION_PACKS_KEY,
+                fallback_value=DEFAULT_ROLEPLAY_SITUATION_PACKS,
+                fallback_source="bundled_roleplay_situation_packs",
+            )
+            source_packs = _packs_from_projection_mirror(resolution.value)
+            return cls(
+                {
+                    code: replace(
+                        pack,
+                        initial_stage_hint=source.initial_stage_hint,
+                        stage_transition_notes=source.stage_transition_notes,
+                    )
+                    if (source := source_packs.get(code)) is not None
+                    else pack
+                    for code, pack in adapter._packs.items()
+                }
+            )
         resolution = await BusinessRuleConfigService(db).resolve_active_config(
             ROLEPLAY_SITUATION_PACKS_KEY,
             fallback_value=DEFAULT_ROLEPLAY_SITUATION_PACKS,

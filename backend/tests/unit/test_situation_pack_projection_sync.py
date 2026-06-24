@@ -179,6 +179,34 @@ async def test_entity_projection_adapter_reads_orm_when_flag_enabled(
 
 
 @pytest.mark.asyncio
+async def test_entity_projection_adapter_preserves_non_projected_hint_fields(
+    test_db,
+    monkeypatch,
+) -> None:
+    sync = SituationPackProjectionSyncService(test_db)
+    snapshot = _custom_snapshot(label_suffix="-ORM")
+    await sync.sync_from_ruleset_snapshot(snapshot)
+    await test_db.commit()
+
+    monkeypatch.setenv("SITUATION_PACK_READ_ORM", "true")
+    monkeypatch.setattr(
+        "curriculum_practice.services.roleplay.adapters.entity_projection_adapter.settings",
+        Settings(),
+    )
+
+    adapter = await EntitySituationPackProjectionAdapter.from_database(test_db)
+    pack = adapter.get_published("first_visit")
+    source = SituationPackDTO.from_ruleset_entry(
+        next(item for item in snapshot["packs"] if item["code"] == "first_visit")
+    )
+
+    assert pack is not None
+    assert pack.initial_stage_hint == source.initial_stage_hint
+    assert pack.stage_transition_notes == source.stage_transition_notes
+    assert situation_pack_content_hash(pack) == situation_pack_content_hash(source)
+
+
+@pytest.mark.asyncio
 async def test_entity_projection_adapter_defaults_to_config_mirror_not_orm(
     test_db,
     monkeypatch,
