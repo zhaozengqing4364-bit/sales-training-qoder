@@ -22,7 +22,6 @@ from agent.capabilities.sales_stage import SalesStageCapability
 from agent.models import Agent, Persona
 from agent.services.persona_policy import normalize_persona_policy
 from common.db.models import PracticeSession
-from common.db.session import AsyncSessionLocal
 from common.db.session_lifecycle import SessionLifecycleTransition
 from common.monitoring.logger import get_logger
 from presentation_coach.services.coach_service import PresentationCoachService
@@ -36,6 +35,17 @@ from presentation_coach.services.prompt_role_resolver import (
 )
 from presentation_coach.websocket.components import PresentationEventEmitter
 from prompt_templates.service import PromptTemplateService
+from sales_bot.websocket.components.stepfun_event_payloads import build_heartbeat_event
+from sales_bot.websocket.components.stepfun_helpers import (
+    extract_response_text,
+    extract_text_payload,
+)
+from sales_bot.websocket.components.stepfun_message_helpers import (
+    extract_analysis_patch_fields,
+    normalize_message_persistence_payload,
+    patch_existing_message_analysis,
+    save_stepfun_message,
+)
 from sales_bot.websocket.stepfun_realtime_handler import (
     TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS,
     StepFunRealtimeSharedHandler,
@@ -150,7 +160,7 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             self._presentation_ai_policy = None
             return
 
-        async with AsyncSessionLocal() as db:
+        async with self._db_session_factory() as db:
             policy_service = PresentationAIPolicyService(db)
             policy_result = (
                 await policy_service.resolve_effective_policy_for_session_result(
@@ -189,7 +199,7 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
                 "page_content": "",
             }
 
-        async with AsyncSessionLocal() as db:
+        async with self._db_session_factory() as db:
             coach_service = PresentationCoachService(db)
             result = await coach_service.get_current_page_requirements(
                 self.session_id,
@@ -256,6 +266,129 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
     async def _handle_page_change(self, page_number: int) -> None:
         self.current_page = max(1, page_number)
         await self._emit_current_page_context()
+
+    async def _send_status(self, ai_state: str) -> None:
+        self.ai_state = ai_state
+        await self._presentation_event_emitter.send_status(
+            ai_state=ai_state,
+            session_status=self.session_status,
+            turn_count=self.turn_count,
+            current_page=self.current_page,
+        )
+
+    async def _send_heartbeat(self) -> None:
+        await self.manager.send_json(
+            self.websocket,
+            build_heartbeat_event(),
+        )
+
+    async def _send_error(self, code: str, message: str) -> None:
+        self._record_runtime_error(code, message)
+        await self._presentation_event_emitter.send_error(
+            code=code,
+            message=message,
+            session_status=self.session_status,
+            ai_state=self.ai_state,
+            turn_count=self.turn_count,
+        )
+
+    async def _send_transcript(self, text: str, is_final: bool) -> None:
+        await self._presentation_event_emitter.send_transcript(
+            text=text,
+            is_final=is_final,
+        )
+
+    async def _handle_session_end(self) -> None:
+        await self._presentation_event_emitter.send_session_ended(
+            session_id=self.session_id,
+            session_status=self.session_status,
+            turn_count=self.turn_count,
+        )
+        self.running = False
+
+    def _resolve_user_turn_number_for_transcript(self) -> int:
+        if self._active_response is not None:
+            return max(1, self.turn_count)
+        return max(1, self.turn_count + 1)
+
+    @staticmethod
+    def _extract_response_text(response_done_event: dict[str, Any]) -> str:
+        return extract_response_text(response_done_event)
+
+    @staticmethod
+    def _extract_text_payload(data: dict[str, Any]) -> str:
+        return extract_text_payload(data)
+
+    async def _analyze_and_emit_sales_stage(
+        self,
+        *,
+        user_text: str,
+        turn_number: int,
+    ) -> str | None:
+        return None
+
+    def _append_sales_stage_context_message(
+        self,
+        *,
+        role: str,
+        content: str,
+        turn_number: int,
+    ) -> None:
+        return None
+
+    async def _persist_message(
+        self,
+        *,
+        turn_number: int,
+        role: str,
+        content: str,
+        sales_stage: str | None = None,
+        analysis_data: dict[str, Any] | None = None,
+    ) -> None:
+        if not self.session_id or not self.user_id:
+            return
+
+        normalized_payload = normalize_message_persistence_payload(
+            turn_number=turn_number,
+            content=content,
+            sales_stage=sales_stage,
+            analysis_data=analysis_data,
+        )
+        if normalized_payload is None:
+            return
+
+        normalized_turn, normalized_content, analysis_payload = normalized_payload
+        message_key = (normalized_turn, role, normalized_content)
+
+        if message_key in self._persisted_message_keys:
+            if analysis_payload:
+                patch_fields = extract_analysis_patch_fields(analysis_payload)
+                await patch_existing_message_analysis(
+                    session_id=self.session_id,
+                    turn_number=normalized_turn,
+                    role=role,
+                    content=normalized_content,
+                    sales_stage=patch_fields["sales_stage"],
+                    fuzzy_words=patch_fields["fuzzy_words"],
+                    score_snapshot=patch_fields["score_snapshot"],
+                    ai_feedback=patch_fields["ai_feedback"],
+                    transcript_metadata=patch_fields["transcript_metadata"],
+                    objection_ledger=patch_fields["objection_ledger"],
+                    db_lock=self._db_lock,
+                )
+            return
+
+        self._persisted_message_keys.add(message_key)
+        saved = await save_stepfun_message(
+            session_id=self.session_id,
+            turn_number=normalized_turn,
+            role=role,
+            content=normalized_content,
+            analysis_payload=analysis_payload,
+            db_lock=self._db_lock,
+        )
+        if not saved:
+            self._persisted_message_keys.discard(message_key)
 
     async def sync_lifecycle_transition(
         self,
@@ -421,7 +554,7 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         template_text: str | None = None
         scenario_id: str | None = None
         try:
-            async with AsyncSessionLocal() as db:
+            async with self._db_session_factory() as db:
                 if self.session_id:
                     session_result = await db.execute(
                         select(

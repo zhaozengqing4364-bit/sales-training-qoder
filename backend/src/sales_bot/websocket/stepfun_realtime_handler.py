@@ -837,10 +837,12 @@ class StepFunRealtimeSharedHandler(
                 or normalize_trace_id(payload.get("trace_id", ""))
                 or ""
             )
-            self.user_id = payload.get("user_id")
+            self.user_id = payload.get("user_id") or payload.get("sub")
         except (JWTError, RuntimeError, ValueError, OSError) as exc:
             logger.warning(f"Token verification failed: {exc}")
             set_trace_id(normalize_trace_id(trace_id) or "")
+            await websocket.close(code=4401, reason="unauthorized")
+            return
 
         existing_state_result = await self.state_service.get_state(session_id)
         existing_state = (
