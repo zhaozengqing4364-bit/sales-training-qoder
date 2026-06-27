@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端销售训练、权限、配置、审计和测试实施入口规范"}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "配置化、默认值、校验、fallback、审计治理要求"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误码、trace_id、fail-closed 和 API envelope 要求"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "审计、日志、trace_id、敏感信息处理要求"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试、lint、质量门禁要求"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端销售训练页面、API 和 UI 实施入口规范"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "后台页面 intent-based 路由、列表/详情/配置中心治理"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "前端 API DTO、snake_case、类型收口要求"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试、lint、可访问性质量门禁"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层数据流、契约和边界一致性思考"}
+{"file": ".trellis/tasks/06-27-newcomer-training-closed-loop-optimization-plan/research/audit-synthesis.md", "reason": "10 个 Agent 审计总账和用户决策"}

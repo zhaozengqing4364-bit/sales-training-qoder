@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端实现检查入口规范"}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "检查配置默认值、校验、fallback、审计是否符合治理"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查错误码、trace_id 和 fail-closed 语义"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查后端测试和质量门禁"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端实现检查入口规范"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "检查后台页面 intent、权限入口和列表治理"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查 API 类型和前后端 DTO 一致性"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "检查前端测试、a11y 和 lint"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查跨层数据流和契约边界"}
+{"file": ".trellis/tasks/06-27-newcomer-training-closed-loop-optimization-plan/research/audit-synthesis.md", "reason": "检查是否覆盖审计总账全部问题"}
