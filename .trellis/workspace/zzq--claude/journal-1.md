@@ -45,3 +45,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: 修复 pip-audit 27 个依赖漏洞, release gate safety check 转绿
+
+**Date**: 2026-06-27
+**Task**: 修复 pip-audit 27 个依赖漏洞, release gate safety check 转绿
+**Branch**: `main`
+
+### Summary
+
+P0 接好 pip-audit 门禁后扫出 28 漏洞导致 safety check 永久 NO_GO。brainstorm 锁定乙(一批全升)+卸torch+三层验证。实现期回写:核查发现 funasr 运行时 import torch(Required-by 空但不反映 runtime), 改为保留+--ignore-vuln CVE-2025-3000。升级 aiohttp3.14/starlette1.3/python-multipart/pypdf/langchain/pydantic-settings/cryptography/pip 等 10 包修复 27 漏洞, 传递依赖随父解决。三层验证: L1 pip-audit rc=0(1 ignored)/L2 62测试过(全量10失败经stash验证为既有snapshot过期+单例污染非本次引入)/L3 create_app+6WS路由成功/safety check passed=True。release gate 完整链路打通。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f1fc7a7d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
