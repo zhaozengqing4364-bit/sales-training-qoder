@@ -1,0 +1,2 @@
+{"file": ".trellis/tasks/06-27-fix-dependency-vulnerabilities-pip-audit-findings/prd.md", "reason": "三层验收标准 checklist 来源,逐条核对"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "质量门禁核对:依赖一致性、测试覆盖达标"}

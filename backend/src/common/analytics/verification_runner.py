@@ -1481,8 +1481,11 @@ class VerificationRunner:
         # "safety" to preserve the blocking-check contract name.
         audit_bin = self._resolve_scanner_executable("pip-audit")
         try:
+            # --ignore-vuln CVE-2025-3000: torch has no fix and funasr (ASR)
+            # imports torch at runtime — cannot uninstall. Explicitly ignored
+            # with documented reason; all other vulns must be fixed by upgrade.
             result = subprocess.run(
-                [audit_bin, "-f", "json"],
+                [audit_bin, "-f", "json", "--ignore-vuln", "CVE-2025-3000"],
                 cwd=self.backend_root,
                 capture_output=True,
                 text=True,
