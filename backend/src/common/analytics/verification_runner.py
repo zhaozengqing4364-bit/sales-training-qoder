@@ -2,17 +2,18 @@
 Release Verification Runner - Automated verification check execution
 
 Implements automated execution of release verification checks:
-- Unit tests with coverage
+- Unit Tests
+- Code Coverage
 - Integration tests
 - Performance tests (NFR metrics)
-- Contract tests (NFR19: 100% required)
+- API Contract Tests
 - Health checks (pre-deployment)
 - Security scans (bandit/safety)
 - Documentation updates validation
 
 References:
 - FR40: Release gate check results recording and tracking
-- NFR19: Contract test pass rate 100% required for release
+- NFR19: API Contract Tests pass rate 100% required for release
 - Constitution Principle II: Real-time priority <300ms
 """
 
@@ -20,7 +21,9 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
+import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
@@ -559,8 +562,8 @@ class VerificationRunner:
     async def _run_contract_tests(
         self, db: Any, release_candidate_id: str
     ) -> TestExecutionResultT:
-        """Run contract tests (NFR19: 100% required)"""
-        logger.info("Starting contract tests...")
+        """Run API Contract Tests (NFR19: 100% required)"""
+        logger.info("Starting API Contract Tests...")
 
         start_time = datetime.now(UTC)
         try:
@@ -580,7 +583,7 @@ class VerificationRunner:
             end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
-            # NFR19: Contract tests must be 100% passing
+            # NFR19: API Contract Tests must be 100% passing
             passed = result.returncode == 0
 
             # Update verification record
@@ -588,7 +591,7 @@ class VerificationRunner:
                 db=db,
                 release_candidate_id=release_candidate_id,
                 check_type="contract",
-                check_name="API Contract Tests (NFR19)",
+                check_name="API Contract Tests",
                 passed=passed,
                 duration_ms=duration_ms,
                 details={
@@ -600,7 +603,7 @@ class VerificationRunner:
             )
 
             logger.info(
-                f"Contract tests completed: passed={passed}, duration={duration_ms}ms"
+                f"API Contract Tests completed: passed={passed}, duration={duration_ms}ms"
             )
             return TestExecutionResult(
                 test_type="contract",
@@ -619,7 +622,7 @@ class VerificationRunner:
             )
 
         except subprocess.TimeoutExpired:
-            error_msg = "Contract tests timed out after 10 minutes"
+            error_msg = "API Contract Tests timed out after 10 minutes"
             logger.error(error_msg)
             return TestExecutionResult(
                 test_type="contract",
@@ -632,7 +635,7 @@ class VerificationRunner:
                 error_message=error_msg,
             )
         except Exception as e:
-            error_msg = f"Contract tests failed: {str(e)}"
+            error_msg = f"API Contract Tests failed: {str(e)}"
             logger.error(error_msg, exc_info=True)
             return TestExecutionResult(
                 test_type="contract",
@@ -976,7 +979,7 @@ class VerificationRunner:
         blocking_checks = {
             "Unit Tests",  # Core functionality
             "unit_tests",
-            "API Contract Tests (NFR19)",  # NFR19 requirement
+            "API Contract Tests",  # NFR19 requirement
             "contract_tests",
             "contract",
             "Integration Tests",  # Core functionality
@@ -1010,7 +1013,7 @@ class VerificationRunner:
             "unit_tests": "Unit Tests",
             "coverage": "Code Coverage",
             "integration_tests": "Integration Tests",
-            "contract_tests": "API Contract Tests (NFR19)",
+            "contract_tests": "API Contract Tests",
             "performance": "Performance Benchmarks",
             "health": "Health Checks",
             "security": "Security Checks",
@@ -1338,37 +1341,67 @@ class VerificationRunner:
                 error_message=error_msg,
             )
 
+    @staticmethod
+    def _resolve_scanner_executable(name: str) -> str:
+        """Resolve a release-gate scanner (bandit/safety) executable path.
+
+        ``subprocess.run([name, ...])`` relies on PATH lookup. When the scanner
+        is installed inside a project venv (``backend/venv/bin``) but that
+        directory is not on the inherited PATH — common both locally and in CI
+        steps that invoke ``backend/venv/bin/python`` directly — the call
+        raises FileNotFoundError even though the tool is installed.
+
+        Prefer the scanner that sits next to the running interpreter
+        (``sys.executable`` parent dir), then fall back to PATH via
+        ``shutil.which``. If neither resolves, return ``name`` unchanged so the
+        caller's FileNotFoundError handling stays the contract surface for
+        "tool missing" (preserves existing test_missing_*_scanner tests).
+        """
+        interpreter_bin = Path(sys.executable).parent
+        sibling = interpreter_bin / name
+        if sibling.exists():
+            return str(sibling)
+        resolved = shutil.which(name)
+        return resolved or name
+
+    @staticmethod
+    def _parse_bandit_issues(stdout: str) -> list[dict[str, Any]] | None:
+        """Parse bandit JSON output, tolerating progress-bar prefix.
+
+        bandit may emit a ``Working... ━━━`` progress line before the JSON even
+        with some output modes. Locate the first ``{`` and parse from there.
+        Returns None if no JSON could be parsed (signals scan-incomplete).
+        """
+        if not stdout:
+            return None
+        json_start = stdout.find("{")
+        if json_start == -1:
+            return None
+        try:
+            payload = json.loads(stdout[json_start:])
+        except json.JSONDecodeError:
+            return None
+        issues = payload.get("results", [])
+        return issues if isinstance(issues, list) else None
+
     async def _run_bandit_scan(self) -> tuple[str, SecurityCheckResultT]:
         """Run Bandit security scan"""
+        bandit_bin = self._resolve_scanner_executable("bandit")
         try:
+            # -q suppresses the progress bar that would otherwise prefix stdout
+            # and break JSON parsing. bandit exits non-zero on ANY finding (incl.
+            # LOW), so returncode is not a success signal — successful JSON
+            # parsing is.
             result = subprocess.run(
-                ["bandit", "-r", "src/", "-f", "json"],
+                [bandit_bin, "-r", "src/", "-f", "json", "-q"],
                 cwd=self.backend_root,
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 minutes
             )
 
-            if result.returncode == 0:
-                issues = json.loads(result.stdout).get("results", [])
-                high = sum(1 for i in issues if i.get("issue_severity") == "HIGH")
-                medium = sum(1 for i in issues if i.get("issue_severity") == "MEDIUM")
-                low = sum(1 for i in issues if i.get("issue_severity") == "LOW")
-
-                return (
-                    "bandit",
-                    SecurityCheckResult(
-                        check_type="bandit",
-                        passed=high == 0,  # Only pass if no HIGH severity issues
-                        issues_found=len(issues),
-                        high_severity=high,
-                        medium_severity=medium,
-                        low_severity=low,
-                        duration_ms=0,
-                        details={"issues_count": len(issues)},
-                    ),
-                )
-            else:
+            issues = self._parse_bandit_issues(result.stdout)
+            if issues is None:
                 return (
                     "bandit",
                     SecurityCheckResult(
@@ -1379,22 +1412,44 @@ class VerificationRunner:
                         medium_severity=0,
                         low_severity=0,
                         duration_ms=0,
-                        error_message="Bandit scan failed to complete",
+                        error_message=(
+                            "Bandit scan failed to complete: "
+                            f"returncode={result.returncode}, "
+                            f"stderr={result.stderr[:200]}"
+                        ),
                     ),
                 )
-        except FileNotFoundError:
-            # Bandit not installed, skip with warning
+
+            high = sum(1 for i in issues if i.get("issue_severity") == "HIGH")
+            medium = sum(1 for i in issues if i.get("issue_severity") == "MEDIUM")
+            low = sum(1 for i in issues if i.get("issue_severity") == "LOW")
+
             return (
                 "bandit",
                 SecurityCheckResult(
                     check_type="bandit",
-                    passed=True,  # Don't fail if tool not installed
-                    issues_found=0,
-                    high_severity=0,
+                    passed=high == 0,  # Only pass if no HIGH severity issues
+                    issues_found=len(issues),
+                    high_severity=high,
+                    medium_severity=medium,
+                    low_severity=low,
+                    duration_ms=0,
+                    details={"issues_count": len(issues)},
+                ),
+            )
+        except FileNotFoundError:
+            return (
+                "bandit",
+                SecurityCheckResult(
+                    check_type="bandit",
+                    passed=False,
+                    issues_found=1,
+                    high_severity=1,
                     medium_severity=0,
                     low_severity=0,
                     duration_ms=0,
-                    details={"skipped": "bandit not installed"},
+                    details={"tool_missing": "bandit"},
+                    error_message="bandit not installed",
                 ),
             )
         except Exception as e:
@@ -1413,43 +1468,30 @@ class VerificationRunner:
             )
 
     async def _run_safety_scan(self) -> tuple[str, SecurityCheckResultT]:
-        """Run Safety dependency vulnerability scan"""
+        """Run dependency vulnerability scan via pip-audit.
+
+        Replaces the deprecated ``safety check`` (deprecated 2024-06, and
+        ``safety scan`` requires login). pip-audit is PyPA-maintained, needs no
+        auth, and emits stable JSON:
+        ``{"dependencies": [{"name", "version", "vulns": [{"id", ...}]}]}``.
+        Any vulnerability blocks release (conservative: pip-audit does not
+        grade severity, so all findings count as high).
+        """
+        # _resolve_scanner_executable resolves "pip-audit"; check_type stays
+        # "safety" to preserve the blocking-check contract name.
+        audit_bin = self._resolve_scanner_executable("pip-audit")
         try:
             result = subprocess.run(
-                ["safety", "check", "--json"],
+                [audit_bin, "-f", "json"],
                 cwd=self.backend_root,
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 minutes
             )
 
-            if result.returncode == 0:
-                # Parse safety output for vulnerabilities
-                vulnerabilities: list[dict[str, Any]] = []
-                if result.stdout:
-                    # Safety output format varies, simplified parsing
-                    pass
-
-                return (
-                    "safety",
-                    SecurityCheckResult(
-                        check_type="safety",
-                        passed=len(vulnerabilities) == 0,
-                        issues_found=len(vulnerabilities),
-                        high_severity=sum(
-                            1 for v in vulnerabilities if v.get("severity") == "high"
-                        ),
-                        medium_severity=sum(
-                            1 for v in vulnerabilities if v.get("severity") == "medium"
-                        ),
-                        low_severity=sum(
-                            1 for v in vulnerabilities if v.get("severity") == "low"
-                        ),
-                        duration_ms=0,
-                        details={"vulnerabilities": vulnerabilities},
-                    ),
-                )
-            else:
+            # No stdout = scan did not run (bad args, crash). Must NOT be
+            # treated as "clean" — that would be a false pass. rc 2 = arg error.
+            if not result.stdout:
                 return (
                     "safety",
                     SecurityCheckResult(
@@ -1460,21 +1502,77 @@ class VerificationRunner:
                         medium_severity=0,
                         low_severity=0,
                         duration_ms=0,
-                        error_message="Safety scan failed to complete",
+                        error_message=(
+                            "pip-audit produced no output: "
+                            f"returncode={result.returncode}, "
+                            f"stderr={result.stderr[:200]}"
+                        ),
                     ),
                 )
+
+            vulnerabilities: list[dict[str, Any]] = []
+            try:
+                payload = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                return (
+                    "safety",
+                    SecurityCheckResult(
+                        check_type="safety",
+                        passed=False,
+                        issues_found=1,
+                        high_severity=0,
+                        medium_severity=0,
+                        low_severity=0,
+                        duration_ms=0,
+                        error_message="pip-audit JSON output could not be parsed",
+                    ),
+                )
+
+            if isinstance(payload, dict):
+                for dep in payload.get("dependencies", []):
+                    if not isinstance(dep, dict):
+                        continue
+                    for vuln in dep.get("vulns", []):
+                        if isinstance(vuln, dict):
+                            vulnerabilities.append(
+                                {
+                                    "package": dep.get("name", "unknown"),
+                                    "id": vuln.get("id", "unknown"),
+                                    "fix_versions": vuln.get("fix_versions", []),
+                                }
+                            )
+
+            # pip-audit: rc 0 = no vulns, 1 = vulns found. Successful parse =
+            # scan complete (regardless of rc). Vuln presence drives passed.
+            return (
+                "safety",
+                SecurityCheckResult(
+                    check_type="safety",
+                    passed=len(vulnerabilities) == 0,
+                    issues_found=len(vulnerabilities),
+                    high_severity=len(vulnerabilities),
+                    medium_severity=0,
+                    low_severity=0,
+                    duration_ms=0,
+                    details={
+                        "scanner": "pip-audit",
+                        "vulnerabilities": vulnerabilities,
+                    },
+                ),
+            )
         except FileNotFoundError:
             return (
                 "safety",
                 SecurityCheckResult(
                     check_type="safety",
-                    passed=True,  # Don't fail if tool not installed
-                    issues_found=0,
-                    high_severity=0,
+                    passed=False,
+                    issues_found=1,
+                    high_severity=1,
                     medium_severity=0,
                     low_severity=0,
                     duration_ms=0,
-                    details={"skipped": "safety not installed"},
+                    details={"tool_missing": "safety"},
+                    error_message="safety not installed",
                 ),
             )
         except Exception as e:

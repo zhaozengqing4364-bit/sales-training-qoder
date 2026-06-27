@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/06-27-fix-release-verification-bandit-safety-ci-gap/prd.md", "reason": "验收标准 checklist 来源,逐条核对"}
+{"file": "docs/api-contract/release-verification.md", "reason": "契约核对:security check 失败语义是否与文档一致"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "设计产物审计指南,检查 extras/契约测试是否满足审计要求"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "质量门禁核对:extras 是否进生产镜像、测试覆盖是否达标"}

@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/06-27-fix-release-verification-bandit-safety-ci-gap/prd.md", "reason": "本任务 PRD:甲+extras+契约测试的决策与验收标准,实现必读"}
+{"file": "docs/api-contract/release-verification.md", "reason": "release-verification 契约定义,bandit/safety 在 security check 中的语义与 NO_GO 触发条件"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量规范,extras 命名与测试要求需对齐"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Result[T] 与失败分类:tool_missing 硬失败属于 Terminal,需符合契约"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端 spec 索引,定位依赖管理与 pyproject 约定"}

@@ -4,14 +4,29 @@ version = "1.0.0"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "haystack-ai>=2.0.0",
-    "chromadb>=0.4.18",
+    # CVE-2026-45829 affects chromadb>=1.0.0 Python FastAPI server; keep below 1.0 until an upstream patch exists.
+    "chromadb>=0.4.18,<1.0.0",
     # Targeted pytest collection imports retrieval/auth modules directly.
     "websockets>=12.0",
     "prometheus-client>=0.19.0",
     "oss2>=2.19.1",
     "cos-python-sdk-v5>=1.9.37",
     "rank_bm25>=0.2.2",
-    "PyJWT[crypto]>=2.10.1",
+    "PyJWT[crypto]>=2.13.0",
+    "cryptography>=48.0.1",
+    "idna>=3.15",
+    "urllib3>=2.7.0",
+]
+
+# Release-gate tooling: security scanners required by verification_runner.
+# Install via `pip install -e ".[release-gate]"` in CI; NOT included in the
+# production image (backend/requirements.txt stays the runtime authority).
+[project.optional-dependencies]
+release-gate = [
+    "bandit>=1.7.7",
+    # safety's `check` is deprecated (2024-06) and `scan` requires login;
+    # pip-audit is PyPA-maintained, auth-free, stable JSON. See ADR/PRD.
+    "pip-audit>=2.7.0",
 ]
 
 [tool.ruff]

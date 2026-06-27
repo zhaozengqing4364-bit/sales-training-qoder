@@ -75,6 +75,12 @@ jobs:
           python -m venv backend/venv
           backend/venv/bin/pip install --upgrade pip
           backend/venv/bin/pip install -r backend/requirements.txt
+          # Release-gate security scanners (declared in backend/pyproject.toml
+          # [project.optional-dependencies] release-gate). verification_runner
+          # treats these as hard-fail when missing, so CI MUST install them.
+          # pip-audit replaces deprecated safety (check deprecated 2024-06;
+          # scan requires login). Install via extras to reuse version pins.
+          cd backend && venv/bin/pip install -e ".[release-gate]"
 
       - name: Install Playwright browser + system dependencies
         run: |

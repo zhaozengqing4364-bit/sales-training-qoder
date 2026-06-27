@@ -1007,7 +1007,8 @@ class DocumentProcessor:
                 if not image_bytes:
                     continue
 
-                image_hash = hashlib.md5(image_bytes).hexdigest()
+                # usedforsecurity=False: image dedup fingerprint, not cryptographic.
+                image_hash = hashlib.md5(image_bytes, usedforsecurity=False).hexdigest()
                 if image_hash in seen_images:
                     continue
                 seen_images.add(image_hash)

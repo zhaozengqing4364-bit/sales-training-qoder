@@ -6,6 +6,7 @@ Tests the automated verification check execution logic.
 
 from __future__ import annotations
 
+import json
 import sys
 from types import ModuleType
 from unittest.mock import AsyncMock, Mock, patch
@@ -16,6 +17,7 @@ from common.analytics.verification_runner import (
     QUALITY_GATE_THRESHOLDS,
     DocumentationCheckResult,
     HealthCheckResult,
+    SecurityCheckResult,
     TestExecutionResult,
     VerificationRunner,
 )
@@ -119,11 +121,11 @@ class TestParsePerformanceMetrics:
         """Test parsing empty output returns infinity values"""
         metrics = runner._parse_performance_metrics("")
 
-        assert metrics["end_to_end_p95_ms"] == float('inf')
-        assert metrics["asr_p95_ms"] == float('inf')
-        assert metrics["interruption_p95_ms"] == float('inf')
-        assert metrics["api_p95_ms"] == float('inf')
-        assert metrics["api_p99_ms"] == float('inf')
+        assert metrics["end_to_end_p95_ms"] == float("inf")
+        assert metrics["asr_p95_ms"] == float("inf")
+        assert metrics["interruption_p95_ms"] == float("inf")
+        assert metrics["api_p95_ms"] == float("inf")
+        assert metrics["api_p99_ms"] == float("inf")
 
 
 class TestQualityGateThresholds:
@@ -135,7 +137,7 @@ class TestQualityGateThresholds:
         assert QUALITY_GATE_THRESHOLDS["unit_test_coverage"] == 70.0
 
     def test_contract_test_pass_rate_threshold(self):
-        """Test contract test pass rate threshold (NFR19)"""
+        """Test API Contract Tests pass rate threshold (NFR19)"""
         assert "contract_test_pass_rate" in QUALITY_GATE_THRESHOLDS
         assert QUALITY_GATE_THRESHOLDS["contract_test_pass_rate"] == 100.0
 
@@ -161,24 +163,30 @@ class TestGenerateSummary:
     def test_all_passed_can_release(self, runner):
         """Test summary when all checks pass"""
         check_results = [
-            {"check_name": "Unit Tests", "result": TestExecutionResult(
-                test_type="unit_tests",
-                passed=True,
-                total_tests=10,
-                passed_tests=10,
-                failed_tests=0,
-                skipped_tests=0,
-                duration_ms=5000,
-            )},
-            {"check_name": "Contract Tests (NFR19)", "result": TestExecutionResult(
-                test_type="contract",
-                passed=True,
-                total_tests=5,
-                passed_tests=5,
-                failed_tests=0,
-                skipped_tests=0,
-                duration_ms=3000,
-            )},
+            {
+                "check_name": "Unit Tests",
+                "result": TestExecutionResult(
+                    test_type="unit_tests",
+                    passed=True,
+                    total_tests=10,
+                    passed_tests=10,
+                    failed_tests=0,
+                    skipped_tests=0,
+                    duration_ms=5000,
+                ),
+            },
+            {
+                "check_name": "API Contract Tests",
+                "result": TestExecutionResult(
+                    test_type="contract",
+                    passed=True,
+                    total_tests=5,
+                    passed_tests=5,
+                    failed_tests=0,
+                    skipped_tests=0,
+                    duration_ms=3000,
+                ),
+            },
         ]
 
         summary = runner._generate_summary(check_results)
@@ -191,15 +199,18 @@ class TestGenerateSummary:
     def test_blocking_failure_blocks_release(self, runner):
         """Test summary when blocking check fails"""
         check_results = [
-            {"check_name": "Unit Tests", "result": TestExecutionResult(
-                test_type="unit_tests",
-                passed=False,
-                total_tests=10,
-                passed_tests=8,
-                failed_tests=2,
-                skipped_tests=0,
-                duration_ms=5000,
-            )},
+            {
+                "check_name": "Unit Tests",
+                "result": TestExecutionResult(
+                    test_type="unit_tests",
+                    passed=False,
+                    total_tests=10,
+                    passed_tests=8,
+                    failed_tests=2,
+                    skipped_tests=0,
+                    duration_ms=5000,
+                ),
+            },
         ]
 
         summary = runner._generate_summary(check_results)
@@ -211,13 +222,16 @@ class TestGenerateSummary:
     def test_warning_allows_release(self, runner):
         """Test summary when non-blocking check fails"""
         check_results = [
-            {"check_name": "Documentation Update", "result": DocumentationCheckResult(
-                check_type="documentation",
-                passed=True,  # Non-blocking
-                up_to_date=False,
-                missing_sections=["README.md"],
-                duration_ms=1000,
-            )},
+            {
+                "check_name": "Documentation Update",
+                "result": DocumentationCheckResult(
+                    check_type="documentation",
+                    passed=True,  # Non-blocking
+                    up_to_date=False,
+                    missing_sections=["README.md"],
+                    duration_ms=1000,
+                ),
+            },
         ]
 
         summary = runner._generate_summary(check_results)
@@ -231,19 +245,34 @@ class TestGenerateSummary:
         """Test blocking check identification"""
         assert runner._is_blocking_check("Unit Tests") is True
         assert runner._is_blocking_check("Code Coverage") is False
-        assert runner._is_blocking_check("API Contract Tests (NFR19)") is True
+        assert runner._is_blocking_check("API Contract Tests") is True
         assert runner._is_blocking_check("Documentation Update") is False
 
     def test_core_and_additional_categorized(self, runner):
         """Test core vs additional check categorization"""
         check_results = [
-            {"check_name": "Unit Tests", "check_category": "core", "result": TestExecutionResult(
-                test_type="unit_tests", passed=True, total_tests=10, passed_tests=10,
-                failed_tests=0, skipped_tests=0, duration_ms=5000,
-            )},
-            {"check_name": "Health Checks", "check_category": "additional", "result": HealthCheckResult(
-                check_type="health", passed=True, duration_ms=1000,
-            )},
+            {
+                "check_name": "Unit Tests",
+                "check_category": "core",
+                "result": TestExecutionResult(
+                    test_type="unit_tests",
+                    passed=True,
+                    total_tests=10,
+                    passed_tests=10,
+                    failed_tests=0,
+                    skipped_tests=0,
+                    duration_ms=5000,
+                ),
+            },
+            {
+                "check_name": "Health Checks",
+                "check_category": "additional",
+                "result": HealthCheckResult(
+                    check_type="health",
+                    passed=True,
+                    duration_ms=1000,
+                ),
+            },
         ]
 
         summary = runner._generate_summary(check_results)
@@ -314,6 +343,7 @@ class TestHealthAndSecurityChecks:
     @pytest.mark.asyncio
     async def test_run_security_checks_aggregates_child_results(self, runner, mock_db):
         """Security check aggregation consumes direct child result tuples."""
+
         def passed_scan(name):
             return (
                 name,
@@ -349,7 +379,9 @@ class TestHealthAndSecurityChecks:
         runner._update_verification_record.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_release_readiness_child_failure_blocks_security_gate(self, runner, mock_db):
+    async def test_release_readiness_child_failure_blocks_security_gate(
+        self, runner, mock_db
+    ):
         """Phase 5 release readiness failures are blocking security failures."""
         passed = (
             "bandit",
@@ -387,6 +419,245 @@ class TestHealthAndSecurityChecks:
         assert result.passed is False
         assert result.high_severity == 1
         assert result.details["checks"][-1]["check_type"] == "release_readiness"
+
+    @pytest.mark.asyncio
+    async def test_missing_bandit_scanner_fails_security_check(self, runner):
+        with patch(
+            "common.analytics.verification_runner.subprocess.run",
+            side_effect=FileNotFoundError("bandit"),
+        ):
+            check_name, result = await runner._run_bandit_scan()
+
+        assert check_name == "bandit"
+        assert result.passed is False
+        assert result.issues_found == 1
+        assert "not installed" in (result.error_message or "")
+
+    @pytest.mark.asyncio
+    async def test_bandit_high_severity_fails_security_check(self, runner):
+        """bandit JSON with a HIGH issue → bandit check fails (NO_GO).
+
+        Guards the回写 (b) fix: returncode is NOT a success signal (bandit
+        exits non-zero on any finding incl. LOW), so a successful JSON parse =
+        scan complete and HIGH count drives passed. A HIGH finding must block.
+        """
+        completed = Mock()
+        completed.returncode = 1  # bandit exits non-zero on any finding
+        completed.stdout = json.dumps(
+            {
+                "results": [
+                    {
+                        "issue_severity": "HIGH",
+                        "test_id": "B608",
+                        "issue_text": "Possible SQL injection",
+                        "filename": "src/x.py",
+                        "line_number": 10,
+                    },
+                    {
+                        "issue_severity": "MEDIUM",
+                        "test_id": "B101",
+                        "issue_text": "assert usage",
+                        "filename": "tests/x.py",
+                        "line_number": 1,
+                    },
+                ]
+            }
+        )
+
+        with patch(
+            "common.analytics.verification_runner.subprocess.run",
+            return_value=completed,
+        ):
+            check_name, result = await runner._run_bandit_scan()
+
+        assert check_name == "bandit"
+        assert result.passed is False
+        assert result.high_severity == 1
+        assert result.medium_severity == 1
+        assert result.issues_found == 2
+
+    @pytest.mark.asyncio
+    async def test_bandit_no_high_severity_passes(self, runner):
+        """bandit JSON with only LOW/MEDIUM issues → bandit check passes.
+
+        This is the regression guard for回写 (b): previously bandit's non-zero
+        returncode (issued on any finding, incl. LOW) was misread as failure
+        even when HIGH=0. Successful JSON parse + HIGH=0 must equal passed.
+        """
+        completed = Mock()
+        completed.returncode = 1  # non-zero because LOW issues exist
+        completed.stdout = json.dumps(
+            {
+                "results": [
+                    {
+                        "issue_severity": "LOW",
+                        "test_id": "B101",
+                        "issue_text": "assert usage",
+                        "filename": "tests/x.py",
+                        "line_number": 1,
+                    }
+                ]
+            }
+        )
+
+        with patch(
+            "common.analytics.verification_runner.subprocess.run",
+            return_value=completed,
+        ):
+            check_name, result = await runner._run_bandit_scan()
+
+        assert check_name == "bandit"
+        assert result.passed is True
+        assert result.high_severity == 0
+        assert result.low_severity == 1
+
+    @pytest.mark.asyncio
+    async def test_bandit_progress_bar_prefix_is_tolerated(self, runner):
+        """bandit may emit a ``Working...`` progress line before JSON even
+        with some output paths. _parse_bandit_issues skips the non-JSON prefix
+        and parses from the first ``{``. Guards the回写 (b) stdout-pollution fix.
+        """
+        completed = Mock()
+        completed.returncode = 1
+        completed.stdout = (
+            "Working... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100%\n"
+            + json.dumps(
+                {
+                    "results": [
+                        {
+                            "issue_severity": "HIGH",
+                            "test_id": "B608",
+                            "issue_text": "SQL injection",
+                            "filename": "src/x.py",
+                            "line_number": 10,
+                        }
+                    ]
+                }
+            )
+        )
+
+        with patch(
+            "common.analytics.verification_runner.subprocess.run",
+            return_value=completed,
+        ):
+            check_name, result = await runner._run_bandit_scan()
+
+        assert check_name == "bandit"
+        assert result.passed is False
+        assert result.high_severity == 1
+
+    @pytest.mark.asyncio
+    async def test_missing_safety_scanner_fails_security_check(self, runner):
+        with patch(
+            "common.analytics.verification_runner.subprocess.run",
+            side_effect=FileNotFoundError("safety"),
+        ):
+            check_name, result = await runner._run_safety_scan()
+
+        assert check_name == "safety"
+        assert result.passed is False
+        assert result.issues_found == 1
+        assert "not installed" in (result.error_message or "")
+
+    @pytest.mark.asyncio
+    async def test_safety_json_vulnerabilities_fail_security_check(self, runner):
+        """pip-audit JSON with a vulnerability → safety check fails (NO_GO)."""
+        completed = Mock()
+        completed.returncode = 1  # pip-audit: 1 = vulnerabilities found
+        completed.stdout = (
+            '{"dependencies": [{"name": "aiohttp", "version": "3.13.5", '
+            '"vulns": [{"id": "CVE-2026-34993", "fix_versions": ["3.14.0"]}]}]}'
+        )
+
+        with patch(
+            "common.analytics.verification_runner.subprocess.run",
+            return_value=completed,
+        ):
+            check_name, result = await runner._run_safety_scan()
+
+        assert check_name == "safety"
+        assert result.passed is False
+        assert result.issues_found == 1
+        assert result.high_severity == 1
+        assert result.details["scanner"] == "pip-audit"
+
+    @pytest.mark.asyncio
+    async def test_safety_clean_audit_passes(self, runner):
+        """pip-audit JSON with no vulnerabilities → safety check passes."""
+        completed = Mock()
+        completed.returncode = 0  # pip-audit: 0 = no vulnerabilities
+        completed.stdout = (
+            '{"dependencies": [{"name": "aiohttp", "version": "3.14.0", "vulns": []}]}'
+        )
+
+        with patch(
+            "common.analytics.verification_runner.subprocess.run",
+            return_value=completed,
+        ):
+            check_name, result = await runner._run_safety_scan()
+
+        assert check_name == "safety"
+        assert result.passed is True
+        assert result.issues_found == 0
+
+    def test_security_high_severity_failure_blocks_release(self, runner):
+        """Contract: a HIGH-severity security finding (bandit/safety) must
+        propagate to the release-gate decision as NO_GO.
+
+        Guards against regression where security is silently downgraded to a
+        non-blocking warning — the release-gate tooling (bandit/safety) must
+        stay a hard gate when the tools are installed.
+        """
+        failed_security = SecurityCheckResult(
+            check_type="security",
+            passed=False,
+            issues_found=1,
+            high_severity=1,
+            medium_severity=0,
+            low_severity=0,
+            duration_ms=1,
+            error_message="bandit reported HIGH severity issue",
+        )
+        check_results = [
+            {
+                "check_name": "security",
+                "result": failed_security,
+                "check_category": "core",
+            },
+        ]
+
+        summary = runner._generate_summary(check_results)
+
+        assert summary["can_release"] is False
+        assert "security" in summary["blocking_failures"]
+        assert summary["blocking_failures"]  # non-empty
+
+    def test_security_pass_allows_release(self, runner):
+        """Contract mirror: when security checks pass, release is not blocked
+        by the security gate. Ensures the NO_GO assertion above is specific
+        to failure, not a structural artifact.
+        """
+        passed_security = SecurityCheckResult(
+            check_type="security",
+            passed=True,
+            issues_found=0,
+            high_severity=0,
+            medium_severity=0,
+            low_severity=0,
+            duration_ms=1,
+        )
+        check_results = [
+            {
+                "check_name": "security",
+                "result": passed_security,
+                "check_category": "core",
+            },
+        ]
+
+        summary = runner._generate_summary(check_results)
+
+        assert summary["can_release"] is True
+        assert "security" not in summary["blocking_failures"]
 
     @pytest.mark.asyncio
     async def test_database_health_uses_session_engine_export(
@@ -502,7 +773,5 @@ class TestDocumentationChecks:
         assert result.check_type == "documentation"
         assert result.passed is False
         assert result.up_to_date is False
-        assert result.details == {
-            "error": "Documentation checks failed: api docs boom"
-        }
+        assert result.details == {"error": "Documentation checks failed: api docs boom"}
         assert isinstance(result.duration_ms, int)

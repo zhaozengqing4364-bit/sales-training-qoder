@@ -45,7 +45,8 @@ class ResponseCache:
     def _generate_key(self, prefix: str, **kwargs: object) -> str:
         """Generate cache key from arguments"""
         key_data = f"{prefix}:{json.dumps(kwargs, sort_keys=True)}"
-        return hashlib.md5(key_data.encode()).hexdigest()
+        # usedforsecurity=False: cache-key fingerprint, not a cryptographic hash.
+        return hashlib.md5(key_data.encode(), usedforsecurity=False).hexdigest()
 
     def get(self, prefix: str, **kwargs: object) -> object | None:
         """

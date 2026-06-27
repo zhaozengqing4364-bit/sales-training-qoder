@@ -192,7 +192,8 @@ class RealtimeFeedbackArbiter:
             ensure_ascii=False,
             sort_keys=True,
         )
-        return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+        # usedforsecurity=False: feedback idempotency fingerprint, not cryptographic.
+        return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()
 
     def _normalize_turn_number(self, turn_number: int | None) -> int:
         if not isinstance(turn_number, int):
