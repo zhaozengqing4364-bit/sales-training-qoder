@@ -120,11 +120,15 @@ function isIgnorableResponse(response: Response): boolean {
 function isIgnorableFailedRequest(request: Request): boolean {
   const url = request.url();
   const errorText = request.failure()?.errorText;
-  const pathname = url.startsWith("http") ? new URL(url).pathname : "";
+  const parsedUrl = url.startsWith("http") ? new URL(url) : null;
+  const pathname = parsedUrl?.pathname || "";
   const normalizedPathname = pathname.replace(/^\/api\/v1(?=\/)/, "");
   const isNavigationAbort = errorText === "net::ERR_ABORTED";
+  const isNextRscNavigationAbort =
+    isNavigationAbort && parsedUrl?.searchParams.has("_rsc") === true;
   return (
     url.includes("_next/webpack-hmr") ||
+    isNextRscNavigationAbort ||
     (isNavigationAbort && pathname.startsWith("/__nextjs_font/")) ||
     (
       isNavigationAbort &&
