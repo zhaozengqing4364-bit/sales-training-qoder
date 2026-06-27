@@ -141,7 +141,7 @@ class TestReleaseVerificationFlow:
         assert summary.release_version == "v1.2.0"
         assert summary.release_candidate_id == "rc-1.2.0-001"
         assert summary.overall_status == "pending"
-        assert summary.total_checks == 5  # Default checks count
+        assert summary.total_checks == 6
 
     @pytest.mark.asyncio
     async def test_run_all_verification_checks(self, mock_db_session, runner):
@@ -252,7 +252,7 @@ class TestReleaseVerificationFlow:
 
         # Verify report structure
         assert report.summary is not None
-        assert len(report.checks) == 5  # Default checks
+        assert len(report.checks) == 6
         assert report.gate_status is not None
         assert isinstance(report.recommendations, list)
 
@@ -358,7 +358,7 @@ class TestQualityGateThresholds:
 
     @pytest.mark.asyncio
     async def test_contract_test_100_required(self, mock_db_session, runner):
-        """Test that contract tests must be 100% passing (NFR19)"""
+        """Test that API Contract Tests must be 100% passing (NFR19)"""
         # Create release candidate
         await release_verification_service.create_release_candidate(
             db=mock_db_session,
@@ -366,10 +366,10 @@ class TestQualityGateThresholds:
             release_candidate_id="rc-contract-test",
         )
 
-        # Mock contract tests not 100% passing
+        # Mock API Contract Tests not 100% passing
         with patch.object(runner, '_run_contract_tests', return_value=runner.TestExecutionResult(
             test_type="contract",
-            passed=False,  # Contract tests must pass
+            passed=False,  # API Contract Tests must pass
             total_tests=5,
             passed_tests=4,  # 80% pass rate - should fail
             failed_tests=1,
@@ -444,3 +444,56 @@ class TestQualityGateThresholds:
             "performance" in r.lower() or "threshold" in r.lower()
             for r in gate_status["warnings"]
         )
+
+    @pytest.mark.asyncio
+    async def test_security_failure_blocks_quality_gate_and_automated_decision(
+        self, mock_db_session, runner
+    ):
+        await release_verification_service.create_release_candidate(
+            db=mock_db_session,
+            release_version="v1.2.0",
+            release_candidate_id="rc-security-gate-test",
+        )
+
+        failed_security = SecurityCheckResult(
+            check_type="security",
+            passed=False,
+            issues_found=1,
+            high_severity=1,
+            medium_severity=0,
+            low_severity=0,
+            duration_ms=10,
+            error_message="bandit scanner missing",
+        )
+        with patch.object(
+            runner,
+            "_run_security_checks",
+            return_value=failed_security,
+        ):
+            await runner.run_all_checks(
+                db=mock_db_session,
+                release_candidate_id="rc-security-gate-test",
+            )
+
+        gate_result = await release_verification_service.check_quality_gate(
+            db=mock_db_session,
+            release_candidate_id="rc-security-gate-test",
+        )
+
+        assert gate_result.is_success
+        gate_status = gate_result.value
+        assert gate_status["gates"]["security"]["critical"] is True
+        assert gate_status["gates"]["security"]["status"] == "fail"
+        assert gate_status["can_release"] is False
+        assert any("security" in r.lower() for r in gate_status["blocking_failures"])
+
+        decision_result = await release_verification_service.make_automated_decision(
+            db=mock_db_session,
+            release_candidate_id="rc-security-gate-test",
+            finalized_by="test-user",
+        )
+
+        assert decision_result.is_success
+        decision = decision_result.value
+        assert decision.go_no_go_decision == "no_go"
+        assert "security" in (decision.decision_reason or "").lower()

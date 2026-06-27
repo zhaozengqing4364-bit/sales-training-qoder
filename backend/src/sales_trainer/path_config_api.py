@@ -27,6 +27,8 @@ from sales_trainer.schemas import (
     NewcomerPathConfigSaveRequest,
     NewcomerPathRevisionListResponse,
     NewcomerPathRevisionSummary,
+    NewcomerPathRollbackPreviewRequest,
+    NewcomerPathRollbackPreviewResponse,
 )
 from sales_trainer.services.path_config_models import SalesTrainerPathConfigError
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
@@ -185,6 +187,48 @@ async def list_path_config_revisions(
     ]
     return success_response(
         NewcomerPathRevisionListResponse(items=items, total=len(items))
+    )
+
+
+@newcomer_admin_path_config_router.post(
+    "/path-config/rollback/preview",
+    response_model=None,
+)
+async def preview_path_config_rollback(
+    payload: NewcomerPathRollbackPreviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if error := _require_manager(current_user):
+        return error
+    service = SalesTrainerPathConfigService(db)
+    trace_id = get_trace_id()
+    try:
+        changed_high_risk = await changed_ai_coach_high_risk_fields_for_rollback(
+            db,
+            payload.revision_id,
+        )
+        if changed_high_risk and not can_manage_sales_trainer_prompts(current_user):
+            return _api_error(
+                "[PERMISSION_DENIED]",
+                status_code=403,
+                message=(
+                    "无权预览回滚以下 AI 教练高风险字段："
+                    + ", ".join(sorted(changed_high_risk))
+                ),
+                trace_id=trace_id,
+            )
+        preview = await service.rollback_preview(payload.revision_id)
+    except SalesTrainerPathConfigError as exc:
+        return _api_error(
+            exc.code,
+            status_code=exc.status_code,
+            message=exc.message,
+            trace_id=trace_id,
+        )
+    return success_response(
+        NewcomerPathRollbackPreviewResponse.model_validate(preview).model_dump(),
+        trace_id=trace_id,
     )
 
 

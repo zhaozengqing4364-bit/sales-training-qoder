@@ -151,10 +151,12 @@ RuntimeSnapshotService.build_for_session(
 - **职责**：冻结 PracticeTemplate、所有引用内容资产、rubric、运行时配置为 `curriculum_snapshot`。
 - **流程**：
   1. 校验 template 为 published。
-  2. 解析所有引用资产（content_assets、rubric、runtime、llm_nodes）。
+  2. 解析所有引用资产（content_assets、rubric、runtime、llm_nodes），优先使用 `published_asset_refs` 中的发布期冻结引用。
   3. 逐资产校验 published 状态和 hash 完整性。
   4. 构建规范化 snapshot JSON。
   5. 计算 snapshot_hash（排除自身字段）。
+- **冻结范围**：PracticeTemplate、CaseItem、RoleProfile、LearningContent、ExaminerAgent、ExaminerAgent.question_source_ids 对应的 TestBank Question、ScoringRuleset、SituationPack 以及 child stage template 的同类引用。
+- **兼容规则**：缺少 ConfigBundle `source_config_version_id` 的 legacy SituationPack ref 不可声明可重建 snapshot，只能以 `content_hash` 校验当前 published pack；不得写入半截治理来源字段。
 - **失败码**：`template_unpublished`、`asset_unpublished`、`asset_hash_mismatch`、`rubric_missing`、`voice_policy_unavailable`、`prompt_contract_missing`。
 - **唯一入口原则**：这是进入 StepFun、EvaluationRun 和 TrainingReportSnapshot 的唯一课程化 snapshot 生成入口。其他模块不得自行构造 snapshot。
 

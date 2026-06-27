@@ -71,14 +71,26 @@ class SalesTrainerPathConfigService:
             source = "unit_backfill"
         else:
             path = payload_from_revision(active)
+        legacy_snapshot_only = active is None
         return {
             "source": source,
+            "fallback_reason": "active_revision_missing" if active is None else None,
+            "legacy_snapshot_only": legacy_snapshot_only,
+            "management_entry": "/admin/newcomer-training/path-config",
+            "permission": "sales_trainer.manage_modules",
             "path": path.model_dump(mode="json"),
             "active_revision_id": str(active.revision_id) if active else None,
             "active_revision_no": active.revision_no if active else None,
+            "active_revision_snapshot": self._revisions.snapshot(active),
             "working_revision_id": str(working.revision_id) if working else None,
             "working_revision_no": working.revision_no if working else None,
             "has_unpublished_revision": working is not None,
+            "diagnostics": self._diagnostics(
+                source=source,
+                legacy_snapshot_only=legacy_snapshot_only,
+                active=active,
+                working=working,
+            ),
         }
 
     async def active_projection(self) -> PathProjection | None:
@@ -212,6 +224,8 @@ class SalesTrainerPathConfigService:
                 actor=actor,
                 reason=reason,
                 trace_id=trace_id,
+                expected_resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+                expected_logical_id=NEWCOMER_PATH_LOGICAL_ID,
             )
         except SalesTrainerAssetRevisionError as exc:
             raise SalesTrainerPathConfigError(
@@ -232,6 +246,55 @@ class SalesTrainerPathConfigService:
         await self._db.commit()
         return result
 
+    async def rollback_preview(self, revision_id: str) -> dict[str, Any]:
+        active = await self._revisions.active_revision(
+            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+            logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        )
+        revision = await get_path_revision(self._revisions, revision_id)
+        if revision.status != "published":
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_PATH_REVISION_NOT_ROLLBACKABLE]",
+                "只能预览回滚到已发布的新人训练路径修订。",
+                409,
+            )
+        active_revision_id = str(active.revision_id) if active else None
+        target_revision_id = str(revision.revision_id)
+        return {
+            "action": "newcomer_path_config.rollback",
+            "permission": "sales_trainer.manage_modules",
+            "requires_reason": True,
+            "requires_trace_id": True,
+            "future_only": True,
+            "target_revision_id": target_revision_id,
+            "target_revision_no": revision.revision_no,
+            "target_revision_status": revision.status,
+            "impact_scope": {
+                "active_revision_id": active_revision_id,
+                "target_revision_id": target_revision_id,
+                "will_change_active_revision": active_revision_id != target_revision_id,
+                "future_learner_paths_changed": active_revision_id != target_revision_id,
+                "historical_attempts_changed": False,
+                "historical_submissions_changed": False,
+                "historical_regrade_required": False,
+            },
+            "before_snapshot": self._revisions.snapshot(active),
+            "after_snapshot": self._revisions.snapshot(revision),
+            "audit_event": {
+                "action": "newcomer_path_config.rollback",
+                "target_type": "newcomer_path_config",
+                "target_id": NEWCOMER_PATH_LOGICAL_ID,
+                "required_fields": [
+                    "actor_id",
+                    "reason",
+                    "trace_id",
+                    "before_revision_id",
+                    "after_revision_id",
+                    "impact_scope",
+                ],
+            },
+        }
+
     async def list_revisions(self) -> list[dict[str, Any]]:
         revisions = await self._revisions.list_revisions(
             resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
@@ -243,6 +306,63 @@ class SalesTrainerPathConfigService:
         )
         active_id = str(active.revision_id) if active else None
         return [revision_summary(revision, active_id) for revision in revisions]
+
+    def _diagnostics(
+        self,
+        *,
+        source: str,
+        legacy_snapshot_only: bool,
+        active: SalesTrainerAssetRevision | None,
+        working: SalesTrainerAssetRevision | None,
+    ) -> dict[str, Any]:
+        return {
+            "surface_key": NEWCOMER_PATH_LOGICAL_ID,
+            "resource_type": NEWCOMER_PATH_RESOURCE_TYPE,
+            "source": source,
+            "legacy_snapshot_only": legacy_snapshot_only,
+            "management_entry": "/admin/newcomer-training/path-config",
+            "permission_policy": {
+                "view": "sales_trainer.manage_modules",
+                "save": "sales_trainer.manage_modules",
+                "publish": "sales_trainer.manage_modules",
+                "rollback": "sales_trainer.manage_modules",
+                "high_risk_ai_coach": "sales_trainer.manage_prompts",
+                "regrade": "sales_trainer.regrade_history",
+            },
+            "active_revision": revision_summary(active, str(active.revision_id))
+            if active
+            else None,
+            "working_revision": revision_summary(
+                working,
+                str(active.revision_id) if active else None,
+            )
+            if working
+            else None,
+            "high_risk_actions": {
+                "publish": {
+                    "requires_reason": True,
+                    "requires_trace_id": True,
+                    "audit_action": "newcomer_path_config.publish",
+                    "impact_scope": "future_learners_only",
+                },
+                "rollback": {
+                    "requires_reason": True,
+                    "requires_trace_id": True,
+                    "audit_action": "newcomer_path_config.rollback",
+                    "impact_scope": "future_learners_only",
+                    "preview_endpoint": (
+                        "/api/v1/admin/newcomer-training/path-config/rollback/preview"
+                    ),
+                },
+                "regrade": {
+                    "requires_reason": True,
+                    "requires_trace_id": True,
+                    "audit_action": "historical_regrade.completed",
+                    "impact_scope": "append_only_history",
+                    "history_overwrite": False,
+                },
+            },
+        }
 
     async def _backfill_payload(self) -> NewcomerPathConfigPayload:
         backfill_units = await load_published_path_units(self._db)

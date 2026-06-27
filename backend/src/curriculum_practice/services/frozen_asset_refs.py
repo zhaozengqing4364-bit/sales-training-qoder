@@ -35,6 +35,8 @@ def parse_published_asset_refs(
         return {}
     parsed: dict[str, PublishedAssetRef] = {}
     for key, payload in raw.items():
+        if key == "examiner_question_refs":
+            continue
         if not isinstance(payload, dict):
             continue
         parsed[str(key)] = PublishedAssetRefSchema.model_validate(payload).to_dataclass()

@@ -23,6 +23,9 @@ from admin.api.permissions import (
     require_admin_permission,
 )
 from common.analytics.release_verification_service import (
+    CheckType as ReleaseCheckType,
+)
+from common.analytics.release_verification_service import (
     release_verification_service,
 )
 from common.db.models import User
@@ -45,7 +48,7 @@ class CreateReleaseCandidateRequest(BaseModel):
 class VerificationCheckInput(BaseModel):
     """Input for a verification check"""
 
-    check_type: Literal["migration", "contract", "performance", "manual"]
+    check_type: ReleaseCheckType
     check_name: str
     check_description: str | None = None
 
@@ -102,10 +105,12 @@ async def create_release_candidate(
     Create a new release candidate with verification checks
 
     Creates a release candidate with default or custom verification checks:
-    - Migration check
-    - Contract tests (NFR19: 100% required)
-    - Performance benchmarks
-    - Manual checklist
+    - Unit Tests
+    - Code Coverage
+    - Integration Tests
+    - API Contract Tests
+    - Performance Benchmarks
+    - Security Vulnerability Scan
     """
     logger.info(
         "Creating release candidate",
@@ -368,15 +373,18 @@ async def run_automated_verification(
     Run automated verification checks for a release candidate
 
     This endpoint triggers the full automated verification pipeline:
-    1. Unit tests with coverage
-    2. Integration tests
-    3. Contract tests (NFR19: 100% required)
-    4. Performance benchmarks
+    1. Unit Tests
+    2. Code Coverage
+    3. Integration Tests
+    4. API Contract Tests
+    5. Performance Benchmarks
+    6. Security Vulnerability Scan
 
     Quality Gates:
     - Code coverage is recorded as a release ledger item
-    - Contract tests 100% pass rate
-    - Performance: P95 latency < 300ms
+    - API Contract Tests 100% pass rate
+    - Performance Benchmarks: P95 latency < 300ms
+    - Security Vulnerability Scan must be clean
     - scripts/critical-quality-gate.sh evidence is the release-blocking authority
 
     Returns:
@@ -469,7 +477,7 @@ async def make_automated_decision(
 
     Automatically determines if a release candidate should proceed:
     - GO: All quality gates pass, no blocking failures
-    - NO_GO: Critical gates fail (contract tests, unit/integration, security)
+    - NO_GO: Critical gates fail (API Contract Tests, unit/integration, security)
     - CONDITIONAL: Non-critical gates fail but release may proceed with warning
 
     Note: All verification checks must be complete before making decision

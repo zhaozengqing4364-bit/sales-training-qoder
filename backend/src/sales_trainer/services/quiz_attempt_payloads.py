@@ -88,6 +88,14 @@ def _serialize_answer(answer: SalesTrainerQuizAnswer) -> dict[str, Any]:
         "answer_payload": _answer_value(answer.answer_payload),
         "question_title": _answer_snapshot_value(answer.answer_payload, "title"),
         "question_stem": _answer_snapshot_value(answer.answer_payload, "stem"),
+        "question_revision_id": _answer_snapshot_value(
+            answer.answer_payload,
+            "question_revision_id",
+        ),
+        "question_payload_hash": _answer_snapshot_value(
+            answer.answer_payload,
+            "question_payload_hash",
+        ),
         "options": _answer_snapshot_list(answer.answer_payload, "options"),
         "correct_answer": _answer_snapshot_value(
             answer.answer_payload,

@@ -187,6 +187,14 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     )
     assert backfill_response.status_code == 200
     assert backfill_response.json()["data"]["source"] == "unit_backfill"
+    assert backfill_response.json()["data"]["fallback_reason"] == "active_revision_missing"
+    assert backfill_response.json()["data"]["legacy_snapshot_only"] is True
+    diagnostics = backfill_response.json()["data"]["diagnostics"]
+    assert diagnostics["surface_key"] == NEWCOMER_PATH_LOGICAL_ID
+    assert diagnostics["permission_policy"]["rollback"] == (
+        "sales_trainer.manage_modules"
+    )
+    assert diagnostics["high_risk_actions"]["regrade"]["history_overwrite"] is False
 
     save_first_response = await async_client.put(
         "/api/v1/admin/newcomer-training/path-config",
@@ -216,6 +224,11 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     )
     assert publish_first_response.status_code == 200
     first_revision_id = publish_first_response.json()["data"]["active_revision_id"]
+    assert publish_first_response.json()["data"]["fallback_reason"] is None
+    assert publish_first_response.json()["data"]["legacy_snapshot_only"] is False
+    assert publish_first_response.json()["data"]["active_revision_snapshot"][
+        "revision_id"
+    ] == first_revision_id
 
     save_second_response = await async_client.put(
         "/api/v1/admin/newcomer-training/path-config",
@@ -253,6 +266,27 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     )
     assert revisions_response.status_code == 200
     assert revisions_response.json()["data"]["total"] == 2
+
+    preview_response = await async_client.post(
+        "/api/v1/admin/newcomer-training/path-config/rollback/preview",
+        headers=_auth_headers(admin),
+        json={"revision_id": first_revision_id},
+    )
+    assert preview_response.status_code == 200
+    preview = preview_response.json()["data"]
+    assert preview["action"] == "newcomer_path_config.rollback"
+    assert preview["permission"] == "sales_trainer.manage_modules"
+    assert preview["requires_reason"] is True
+    assert preview["requires_trace_id"] is True
+    assert preview["future_only"] is True
+    assert preview["impact_scope"]["future_learner_paths_changed"] is True
+    assert preview["impact_scope"]["historical_attempts_changed"] is False
+    assert preview["impact_scope"]["historical_regrade_required"] is False
+    assert preview["before_snapshot"]["revision_id"] == publish_second_response.json()[
+        "data"
+    ]["active_revision_id"]
+    assert preview["after_snapshot"]["revision_id"] == first_revision_id
+    assert "impact_scope" in preview["audit_event"]["required_fields"]
 
     rollback_response = await async_client.post(
         "/api/v1/admin/newcomer-training/path-config/rollback",
@@ -422,6 +456,16 @@ async def test_should_reject_ai_coach_high_risk_rollback_for_content_admin(
         json={"reason": "第二版生效"},
     )
     assert publish_second_response.status_code == 200, publish_second_response.text
+
+    preview_response = await async_client.post(
+        "/api/v1/admin/newcomer-training/path-config/rollback/preview",
+        headers=_auth_headers(content_admin),
+        json={"revision_id": first_revision_id},
+    )
+    assert preview_response.status_code == 403
+    preview_body = preview_response.json()
+    assert preview_body["error"] == "[PERMISSION_DENIED]"
+    assert "prompt_template_id" in preview_body["message"]
 
     response = await async_client.post(
         "/api/v1/admin/newcomer-training/path-config/rollback",

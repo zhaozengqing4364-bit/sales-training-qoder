@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -58,7 +59,7 @@ class SalesTrainerAssetRevisionService:
                 logical_id=logical_id,
             ),
             status="working",
-            payload_json=payload,
+            payload_json=deepcopy(payload),
             payload_hash=_payload_hash(payload),
             change_class=change_class,
             source_revision_id=source_revision_id,
@@ -89,7 +90,7 @@ class SalesTrainerAssetRevisionService:
                 logical_id=logical_id,
             ),
             status="published",
-            payload_json=payload,
+            payload_json=deepcopy(payload),
             payload_hash=_payload_hash(payload),
             change_class=change_class,
             reason=reason,
@@ -178,11 +179,21 @@ class SalesTrainerAssetRevisionService:
         actor: User,
         reason: str,
         trace_id: str | None = None,
+        expected_resource_type: str | None = None,
+        expected_logical_id: str | None = None,
     ) -> AssetPublishResult:
         if revision.status != "published":
             raise SalesTrainerAssetRevisionError(
                 "[ASSET_REVISION_NOT_ROLLBACKABLE]",
                 "只能回滚到已发布修订。",
+            )
+        if (
+            expected_resource_type is not None
+            and revision.resource_type != expected_resource_type
+        ) or (expected_logical_id is not None and revision.logical_id != expected_logical_id):
+            raise SalesTrainerAssetRevisionError(
+                "[ASSET_REVISION_TARGET_MISMATCH]",
+                "回滚目标与当前资产不匹配。",
             )
         previous_revision_id = await self._activate(
             revision,
@@ -203,6 +214,11 @@ class SalesTrainerAssetRevisionService:
         reason: str | None = None,
         trace_id: str | None = None,
     ) -> AssetPublishResult:
+        if revision.status != "working":
+            raise SalesTrainerAssetRevisionError(
+                "[ASSET_REVISION_NOT_PUBLISHABLE]",
+                "只能发布工作修订。",
+            )
         _set_orm_field(revision, "status", "published")
         _set_orm_field(revision, "published_by", str(actor.user_id))
         _set_orm_field(revision, "published_at", datetime.now(UTC))
@@ -280,6 +296,30 @@ class SalesTrainerAssetRevisionService:
             _set_orm_field(active_ref, "activated_at", datetime.now(UTC))
         await self._db.flush()
         return previous_revision_id
+
+    @staticmethod
+    def snapshot(row: SalesTrainerAssetRevision | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        created_at = getattr(row, "created_at", None)
+        published_at = getattr(row, "published_at", None)
+        return {
+            "revision_id": row.revision_id,
+            "resource_type": row.resource_type,
+            "logical_id": row.logical_id,
+            "revision_no": row.revision_no,
+            "status": row.status,
+            "payload_hash": row.payload_hash,
+            "payload": deepcopy(row.payload_json),
+            "change_class": row.change_class,
+            "source_revision_id": row.source_revision_id,
+            "reason": row.reason,
+            "trace_id": row.trace_id,
+            "created_by": row.created_by,
+            "published_by": row.published_by,
+            "created_at": created_at.isoformat() if created_at else None,
+            "published_at": published_at.isoformat() if published_at else None,
+        }
 
 
 def _set_orm_field(row: object, name: str, value: object) -> None:

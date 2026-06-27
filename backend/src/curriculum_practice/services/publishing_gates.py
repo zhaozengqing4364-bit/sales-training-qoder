@@ -246,7 +246,7 @@ class PublishingGateService:
         candidate: PracticeTemplatePublishCandidate,
         *,
         resolved_at: str | None = None,
-    ) -> dict[str, dict[str, Any]]:
+    ) -> dict[str, Any]:
         if self._situation_packs is None:
             raise ValueError("SituationPackRepository is required to freeze published refs.")
         return await build_published_asset_refs(

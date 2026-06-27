@@ -175,6 +175,41 @@ interface NewcomerTrainingPathModuleConfig {
 - 非法 `module_type`、未知 `completion_rule`、重复 `module_key`、重复 `order_index` 或绑定不存在时，后台保存/发布返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` 并写操作日志。
 - 配置读取失败或配置缺失时 learner 不展示伪成功；返回空路径、诊断错误或 disabled 模块，由 UI 显示可配置空状态。
 
+## 发布治理修订契约
+
+新人训练路径的可配置内容采用统一发布治理语言。第一阶段允许保留 `sales_trainer` 现有表和兼容 API，但新增或改造的写路径必须向以下语义收敛：
+
+| 字段 / 概念 | 契约 |
+|---|---|
+| `logical_id` | 业务对象稳定身份，例如路径配置、商务技巧考卷、题目、评分标准或文章绑定。 |
+| `revision_id` | 不可变内容修订。已发布 revision 的 payload 不允许原地修改。 |
+| `working_revision_id` | 管理员保存修改后生成的待发布修订。保存不影响 learner。 |
+| `active_revision_id` | 当前只对未来 learner 请求生效的修订指针。发布和回滚只移动该指针。 |
+| `binding_revision` | 模块绑定文章/考卷/材料、考卷绑定题目等引用关系的修订。 |
+| `snapshot` | attempt、audio submission、score result 创建时冻结的内容副本。 |
+| `legacy_snapshot_only` | 旧历史记录无法可靠回填 revision lineage 时的显式标记。 |
+| `audit_event` | 发布、回滚、归档、绑定变更、重评必须记录 actor、action、target、before、after、reason、trace_id 和影响范围。 |
+| `regrade_run` | 高风险历史重评动作。发布或回滚不得自动改写历史成绩。 |
+
+### Future-only 规则
+
+- 编辑已发布对象时，API 必须返回 working revision 或等价待发布对象，不得直接覆盖 active revision payload。
+- 发布新 revision 后，只影响新创建的 path view、paper attempt、audio submission、score result 或 AI Coach session。
+- 回滚只移动 `active_revision_id` 指针，只影响未来请求。
+- 历史 attempt/submission/result/session 只读取创建时冻结的 snapshot 或 revision refs；不得从 latest asset 重新拼装展示。
+- 对只有历史 snapshot、没有 revision refs 的记录，响应应标记 `legacy_snapshot_only=true`，不得伪造 revision。
+
+### 高风险动作
+
+以下字段或动作必须被视为高风险，不允许通过配置降级：
+
+- 正确答案、分值、通过线、题目 AI 评分 prompt。
+- 音频评分 prompt、评分维度、模型、重试/超时策略。
+- 路径模块绑定、考卷题目组成、学习内容绑定。
+- 历史重评、批量回滚、归档仍被 active 配置引用的资产。
+
+高风险发布必须返回影响范围预览；高风险重评必须走独立 `regrade_run`，写入 before/after、reason、trace_id，并保留原始结果。
+
 ### AI Coach 模块配置
 
 `modules[].ai_coach` 是商务技巧 AI 教练的可选配置。它只控制 chatbot 训练模式，不替代固定试卷考试、后端评分记录或掌握状态聚合。
@@ -254,7 +289,78 @@ Learner 工作台 UI 配置：
 | `GET` | `/api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config` | 读取模块 AI 教练配置 | `sales_trainer.manage_modules` |
 | `PUT` | `/api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config` | 保存 AI 教练配置到路径待发布修订 | 普通字段 `sales_trainer.manage_modules`；高风险字段和 Prompt 绑定 `sales_trainer.manage_prompts` |
 | `POST` | `/api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config/publish` | 发布包含 AI 教练配置的路径修订 | `sales_trainer.manage_modules`；若待发布修订涉及高风险字段还需 `sales_trainer.manage_prompts` |
+| `POST` | `/api/v1/admin/newcomer-training/path-config/rollback/preview` | 预览路径修订回滚影响范围，不移动 active pointer | `sales_trainer.manage_modules`；若涉及 AI 教练高风险字段还需 `sales_trainer.manage_prompts` |
 | `POST` | `/api/v1/admin/newcomer-training/path-config/rollback` | 回滚路径修订，包含 AI 教练配置回滚 | `sales_trainer.manage_modules`；若回滚涉及高风险字段还需 `sales_trainer.manage_prompts` |
+
+`GET/PUT/POST /api/v1/admin/newcomer-training/path-config*` 的 `data` 必须包含治理诊断字段：
+
+```typescript
+interface NewcomerPathConfigResponse {
+  source: "active_revision" | "unit_backfill";
+  fallback_reason?: "active_revision_missing" | null;
+  legacy_snapshot_only: boolean;
+  management_entry: "/admin/newcomer-training/path-config";
+  permission: "sales_trainer.manage_modules";
+  path: NewcomerPathConfigPayload;
+  active_revision_id?: string | null;
+  active_revision_no?: number | null;
+  active_revision_snapshot?: Record<string, unknown> | null;
+  working_revision_id?: string | null;
+  working_revision_no?: number | null;
+  has_unpublished_revision: boolean;
+  diagnostics: {
+    surface_key: "newcomer_training_path_v1";
+    resource_type: "sales_trainer_newcomer_path_config";
+    permission_policy: {
+      view: "sales_trainer.manage_modules";
+      save: "sales_trainer.manage_modules";
+      publish: "sales_trainer.manage_modules";
+      rollback: "sales_trainer.manage_modules";
+      high_risk_ai_coach: "sales_trainer.manage_prompts";
+      regrade: "sales_trainer.regrade_history";
+    };
+    high_risk_actions: {
+      publish: { requires_reason: true; requires_trace_id: true; audit_action: "newcomer_path_config.publish"; impact_scope: "future_learners_only" };
+      rollback: { requires_reason: true; requires_trace_id: true; audit_action: "newcomer_path_config.rollback"; impact_scope: "future_learners_only"; preview_endpoint: "/api/v1/admin/newcomer-training/path-config/rollback/preview" };
+      regrade: { requires_reason: true; requires_trace_id: true; audit_action: "historical_regrade.completed"; impact_scope: "append_only_history"; history_overwrite: false };
+    };
+  };
+}
+```
+
+无 active revision 时允许从旧 `SalesTrainerUnit.config.path` 生成兼容读面，但必须返回 `source="unit_backfill"`、`legacy_snapshot_only=true`、`fallback_reason="active_revision_missing"`，且 `active_revision_snapshot=null`。一旦发布路径配置，管理端与学员端均以 active revision 为真源，返回 `legacy_snapshot_only=false`，不得再从最新 unit 配置重新拼接已发布路径。
+
+回滚预览 Response:
+
+```typescript
+interface NewcomerPathRollbackPreviewResponse {
+  action: "newcomer_path_config.rollback";
+  permission: "sales_trainer.manage_modules";
+  requires_reason: true;
+  requires_trace_id: true;
+  future_only: true;
+  target_revision_id: string;
+  target_revision_no: number;
+  target_revision_status: "published";
+  impact_scope: {
+    active_revision_id?: string | null;
+    target_revision_id: string;
+    will_change_active_revision: boolean;
+    future_learner_paths_changed: boolean;
+    historical_attempts_changed: false;
+    historical_submissions_changed: false;
+    historical_regrade_required: false;
+  };
+  before_snapshot?: Record<string, unknown> | null;
+  after_snapshot: Record<string, unknown>;
+  audit_event: {
+    action: "newcomer_path_config.rollback";
+    target_type: "newcomer_path_config";
+    target_id: "newcomer_training_path_v1";
+    required_fields: Array<"actor_id" | "reason" | "trace_id" | "before_revision_id" | "after_revision_id" | "impact_scope">;
+  };
+}
+```
 
 Learner AI 教练会话路由：
 
@@ -605,6 +711,10 @@ interface QuizAnswer {
   question_id: string;
   question_type: QuestionType;
   answer_payload: unknown;
+  question_title?: string | null;
+  question_stem?: string | null;
+  question_revision_id?: string | null;
+  question_payload_hash?: string | null;
   attempt_context?: Record<string, unknown> | null;
   is_correct?: boolean | null;
   score?: number | null;
@@ -640,6 +750,9 @@ interface ExamPaperQuestion {
   question_id: string;
   order_index: number;
   points: number;
+  question_revision_id?: string | null;
+  question_payload_hash?: string | null;
+  legacy_snapshot_only?: boolean | null;
   question_type?: QuestionType;
   title?: string | null;
   stem?: string | null;
@@ -981,7 +1094,7 @@ Response `data`: `ExamPaper`
 
 ### `POST /api/v1/sales-trainer/paper-attempts`
 
-提交已发布考卷答案。服务端按 `paper_id` 找到考卷 active revision 和兼容 quiz 执行单元并复用当前题型评分逻辑。`answers[].question_id` 必须属于该考卷当前 active revision，额外题目返回 `[QUIZ_ANSWER_QUESTION_NOT_IN_UNIT]`；缺少任一题答案、单选/判断为空、多选为空或简答为空时返回 422 `[QUIZ_ANSWER_INCOMPLETE]`，message 固定为 `请完成全部题目后再提交。`，不得创建 attempt、不得评分。如果当前新人训练路径把该考卷或 backing unit 绑定为 `article_exam`，提交前必须完成当前绑定文章的全部章节阅读；未完成返回 403 `[NEWCOMER_ARTICLE_PROGRESS_REQUIRED]`，不得进入评分。提交成功后，attempt 必须记录当时的 `paper_revision_id`；answer payload 必须冻结题目快照和 `attempt_context`，其中包含提交时命中的 `path_key`、`path_revision_id`、`path_revision_no`、`module_key`、`paper_revision_id`。旧数据无法可靠匹配路径修订时返回 `legacy_snapshot_only=true`，不得从最新路径配置伪造历史 revision。简答题 AI 批改依赖外部模型配置；外部模型鉴权、连接、超时或重试失败时，服务端必须保存本次提交与答案快照，返回 `status="submitted"`、简答题 `score=null`，不得因批改服务不可用让整张考卷提交失败。
+提交已发布考卷答案。服务端按 `paper_id` 找到考卷 active revision 和兼容 quiz 执行单元并复用当前题型评分逻辑。`answers[].question_id` 必须属于该考卷当前 active revision，额外题目返回 `[QUIZ_ANSWER_QUESTION_NOT_IN_UNIT]`；缺少任一题答案、单选/判断为空、多选为空或简答为空时返回 422 `[QUIZ_ANSWER_INCOMPLETE]`，message 固定为 `请完成全部题目后再提交。`，不得创建 attempt、不得评分。如果当前新人训练路径把该考卷或 backing unit 绑定为 `article_exam`，提交前必须完成当前绑定文章的全部章节阅读；未完成返回 403 `[NEWCOMER_ARTICLE_PROGRESS_REQUIRED]`，不得进入评分。提交成功后，attempt 必须记录当时的 `paper_revision_id`；answer payload 必须冻结题目快照、`question_revision_id` 或 legacy `question_payload_hash`，以及 `attempt_context`，其中包含提交时命中的 `path_key`、`path_revision_id`、`path_revision_no`、`module_key`、`paper_revision_id`。旧数据无法可靠匹配路径修订时返回 `legacy_snapshot_only=true`，不得从最新路径配置伪造历史 revision。简答题 AI 批改依赖外部模型配置；外部模型鉴权、连接、超时或重试失败时，服务端必须保存本次提交与答案快照，返回 `status="submitted"`、简答题 `score=null`，不得因批改服务不可用让整张考卷提交失败。
 
 Request:
 

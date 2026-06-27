@@ -9,7 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
-from common.db.models import PracticeSession, Presentation, Scenario, ScoringRuleset
+from common.db.models import (
+    PracticeSession,
+    Presentation,
+    Scenario,
+    ScoringRuleset,
+    User,
+)
 from common.knowledge.models import KnowledgeBase
 from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.schemas import (
@@ -129,6 +135,16 @@ async def _create_published_template(
     scenario_type: str = "sales",
     mode: str = "customer_roleplay",
 ) -> PracticeTemplate:
+    actor = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"curriculum-publisher-{uuid.uuid4()}",
+        email=f"curriculum-publisher-{uuid.uuid4()}@example.com",
+        name="Curriculum Publisher",
+        role="admin",
+        is_active=True,
+    )
+    db.add(actor)
+    await db.flush()
     case_item_id = None
     if mode == "customer_roleplay":
         case_item = await _create_published_case_item(db)
@@ -151,7 +167,7 @@ async def _create_published_template(
     await db.commit()
     published, decision = await PracticeTemplateService(db).publish_template(
         template,
-        actor_id=None,
+        actor_id=str(actor.user_id),
     )
     assert decision.can_publish is True
     assert published is not None

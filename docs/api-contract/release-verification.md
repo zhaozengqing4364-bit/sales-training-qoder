@@ -29,7 +29,27 @@ interface ReleaseCandidateSummary {
 interface VerificationRecord {
   id: string;
   release_candidate_id: string;
-  check_type: 'migration' | 'contract' | 'performance' | 'manual';
+  check_type:
+    | 'unit_tests'
+    | 'coverage'
+    | 'integration_tests'
+    | 'contract'
+    | 'performance'
+    | 'health'
+    | 'security'
+    | 'documentation'
+    | 'migration'
+    | 'manual'
+    | 'api'
+    | 'database'
+    | 'websocket'
+    | 'external_deps'
+    | 'bandit'
+    | 'safety'
+    | 'secrets'
+    | 'api_contract'
+    | 'readme'
+    | 'deployment';
   check_name: string;
   status: 'pending' | 'passed' | 'failed' | 'skipped';
   passed: boolean;

@@ -5,7 +5,7 @@ Implements FR40: Release gate check results recording and tracking
 
 References:
 - Requirements: FR40
-- NFR19: Contract test pass rate 100% required for release
+- NFR19: API Contract Tests pass rate 100% required for release
 - Constitution Principles:
   - I. NO ERROR POPUPS - Graceful degradation
   - VII. Observability - Structured logging with trace_id
@@ -216,6 +216,11 @@ class ReleaseVerificationService:
             check_type="performance",
             check_name="Performance Benchmarks",
             check_description="Verify latency and throughput meet NFR thresholds",
+        ),
+        VerificationCheckInput(
+            check_type="security",
+            check_name="Security Vulnerability Scan",
+            check_description="Verify release security checks pass",
         ),
     ]
 
@@ -684,14 +689,14 @@ class ReleaseVerificationService:
         if pending_checks > 0:
             recommendations.append(f"Complete {pending_checks} pending check(s)")
 
-        # Contract tests must be 100% (NFR19)
+        # API Contract Tests must be 100% (NFR19)
         contract_checks = [c for c in checks if _orm_str(c, "check_type") == "contract"]
         failed_contracts = [
             c for c in contract_checks if _orm_str(c, "status") == "failed"
         ]
         if failed_contracts:
             recommendations.append(
-                "CRITICAL: Contract tests must pass 100% (NFR19) before release"
+                "CRITICAL: API Contract Tests must pass 100% (NFR19) before release"
             )
 
         # Performance checks
@@ -827,7 +832,7 @@ class ReleaseVerificationService:
                     "current_value": None,
                 },
                 "contract": {
-                    "name": "API Contract Tests (NFR19)",
+                    "name": "API Contract Tests",
                     "threshold": 100.0,
                     "unit": "%",
                     "critical": True,  # NFR19 requires 100%
@@ -838,6 +843,14 @@ class ReleaseVerificationService:
                     "name": "Performance Benchmarks",
                     "threshold": 300.0,
                     "unit": "ms",
+                    "critical": True,
+                    "status": "pending",
+                    "current_value": None,
+                },
+                "security": {
+                    "name": "Security Vulnerability Scan",
+                    "threshold": 0,
+                    "unit": "issues",
                     "critical": True,
                     "status": "pending",
                     "current_value": None,
@@ -876,7 +889,7 @@ class ReleaseVerificationService:
 
                     if gate_key == "contract":
                         blocking_failures.append(
-                            "Contract tests failed - NFR19 requires 100% pass rate"
+                            "API Contract Tests failed - NFR19 requires 100% pass rate"
                         )
                     elif gate_key == "coverage":
                         warnings.append(
@@ -890,6 +903,10 @@ class ReleaseVerificationService:
                     elif gate_key == "performance":
                         warnings.append(
                             "Performance benchmarks did not meet NFR thresholds"
+                        )
+                    elif gate_key == "security":
+                        blocking_failures.append(
+                            "Security checks failed - release requires clean security scan"
                         )
 
                 elif check_status == "pending":

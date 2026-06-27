@@ -41,6 +41,7 @@ _ASSET_ID_KEYS: dict[str, str] = {
     "learning_content": "learning_content_id",
     "scoring_ruleset": "ruleset_id",
     "examiner_agent": "examiner_agent_id",
+    "question_item": "question_id",
 }
 
 _REF_KEYS: dict[str, str] = {
@@ -67,7 +68,7 @@ async def build_published_asset_refs(
     situation_packs: SituationPackRepository,
     situation_pack_config: BusinessRuleResolution | None = None,
     resolved_at: str | None = None,
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, Any]:
     """Freeze publish-time asset pointers after publish gates pass."""
     resolved_at_value = resolved_at or datetime.now(UTC).isoformat()
     refs: dict[str, PublishedAssetRef] = {}
@@ -90,6 +91,7 @@ async def build_published_asset_refs(
         resolved_at=resolved_at_value,
     )
 
+    examiner_agent: dict[str, Any] | None = None
     optional_refs = (
         ("case_item", candidate.case_item_id),
         ("role_profile", candidate.role_profile_id),
@@ -100,10 +102,19 @@ async def build_published_asset_refs(
         if not asset_id:
             continue
         reference = await _require_reference(reference_reader, asset_type, asset_id)
+        if asset_type == "examiner_agent":
+            examiner_agent = reference
         ref_key = _REF_KEYS[asset_type]
         refs[ref_key] = _entity_published_ref(
             asset_type,
             reference,
+            resolved_at=resolved_at_value,
+        )
+    extra_refs: dict[str, Any] = {}
+    if examiner_agent is not None:
+        extra_refs["examiner_question_refs"] = await _examiner_question_refs(
+            examiner_agent,
+            reference_reader=reference_reader,
             resolved_at=resolved_at_value,
         )
 
@@ -123,7 +134,10 @@ async def build_published_asset_refs(
         resolved_at=resolved_at_value,
     )
 
-    return {key: ref.to_schema().model_dump() for key, ref in refs.items()}
+    return {
+        **{key: ref.to_schema().model_dump() for key, ref in refs.items()},
+        **extra_refs,
+    }
 
 
 async def resolve_template_situation_pack_code(
@@ -203,12 +217,15 @@ def _situation_pack_published_ref(
     source_snapshot_hash = (
         stable_hash(config.value) if config is not None and config.value else None
     )
-    if not config_id or not config_version_id or not source_snapshot_hash:
-        raise PublishedAssetRefBuildError(
-            "situation_pack_config_version_missing",
-            "Published SituationPack refs require source_config_id, "
-            "source_config_version_id, and source_snapshot_hash.",
-        )
+    source_bundle_key = None
+    snapshot_selector = None
+    if config_id and config_version_id and source_snapshot_hash:
+        source_bundle_key = ROLEPLAY_SITUATION_PACKS_KEY
+        snapshot_selector = f"packs[code={code}]"
+    else:
+        config_id = None
+        config_version_id = None
+        source_snapshot_hash = None
     return PublishedAssetRef(
         asset_type="situation_pack",
         asset_id=None,
@@ -216,13 +233,35 @@ def _situation_pack_published_ref(
         version=str(pack.version),
         content_hash=situation_pack_content_hash(pack),
         snapshot_label=PUBLISHED_SNAPSHOT_LABEL,
-        source_bundle_key=ROLEPLAY_SITUATION_PACKS_KEY,
+        source_bundle_key=source_bundle_key,
         source_config_version_id=config_version_id,
         source_config_id=config_id,
-        snapshot_selector=f"packs[code={code}]",
+        snapshot_selector=snapshot_selector,
         source_snapshot_hash=source_snapshot_hash,
         resolved_at=resolved_at,
     )
+
+
+async def _examiner_question_refs(
+    examiner_agent: dict[str, Any],
+    *,
+    reference_reader: ReferenceReader,
+    resolved_at: str,
+) -> dict[str, dict[str, Any]]:
+    refs: dict[str, dict[str, Any]] = {}
+    for question_id in examiner_agent.get("question_source_ids", []) or []:
+        question_id_text = str(question_id)
+        question = await _require_reference(
+            reference_reader,
+            "question_item",
+            question_id_text,
+        )
+        refs[question_id_text] = _entity_published_ref(
+            "question_item",
+            question,
+            resolved_at=resolved_at,
+        ).to_schema().model_dump()
+    return refs
 
 
 async def _require_reference(

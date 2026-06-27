@@ -12,6 +12,7 @@ from curriculum_practice.schemas import (
     CurriculumTrainingTaskRef,
     CurriculumVersionRef,
     PublishedAssetRef,
+    PublishedAssetRefSchema,
     PublishedTemplateRef,
     ReferenceReader,
     TemplateStageSnapshot,
@@ -104,9 +105,9 @@ class RuntimeSnapshotService:
             id=str(training_task_ref["id"]),
             scenario_type=str(training_task_ref["scenario_type"]),
         )
-        published_asset_refs = parse_published_asset_refs(
-            template_data.get("published_asset_refs")
-        )
+        published_asset_refs_raw = template_data.get("published_asset_refs")
+        published_asset_refs = parse_published_asset_refs(published_asset_refs_raw)
+        examiner_question_refs = _parse_examiner_question_refs(published_asset_refs_raw)
         frozen_situation_pack = await self._resolve_frozen_situation_pack(
             published_asset_refs
         )
@@ -149,6 +150,7 @@ class RuntimeSnapshotService:
                 await self._examiner_content_refs(
                     str(template_data["examiner_agent_id"]),
                     published_asset_refs.get("examiner_agent_ref"),
+                    examiner_question_refs,
                 )
             )
         role_profile_data = None
@@ -296,6 +298,13 @@ class RuntimeSnapshotService:
             child_template = _as_dict(
                 await self._read_reference("practice_template", child_template_id)
             )
+            child_published_asset_refs_raw = child_template.get("published_asset_refs")
+            child_published_asset_refs = parse_published_asset_refs(
+                child_published_asset_refs_raw
+            )
+            child_examiner_question_refs = _parse_examiner_question_refs(
+                child_published_asset_refs_raw
+            )
             if child_template.get("status") != "published":
                 raise RuntimeSnapshotBuildError(
                     "template_unpublished",
@@ -313,12 +322,18 @@ class RuntimeSnapshotService:
             ]
             if child_template.get("case_item_id"):
                 child_content_assets.append(
-                    await self._case_item_ref(str(child_template["case_item_id"]))
+                    await self._frozen_or_live_ref(
+                        "case_item",
+                        str(child_template["case_item_id"]),
+                        child_published_asset_refs.get("case_item_ref"),
+                    )
                 )
             if child_template.get("examiner_agent_id"):
                 child_content_assets.extend(
                     await self._examiner_content_refs(
-                        str(child_template["examiner_agent_id"])
+                        str(child_template["examiner_agent_id"]),
+                        child_published_asset_refs.get("examiner_agent_ref"),
+                        child_examiner_question_refs,
                     )
                 )
             child_role_profile_data = None
@@ -329,7 +344,12 @@ class RuntimeSnapshotService:
                     )
                 )
                 child_content_assets.append(
-                    self._asset_refs.role_profile_ref_from_data(child_role_profile_data)
+                    await self._frozen_or_live_ref(
+                        "role_profile",
+                        str(child_template["role_profile_id"]),
+                        child_published_asset_refs.get("role_profile_ref"),
+                        role_profile_data=child_role_profile_data,
+                    )
                 )
             snapshots[stage_key] = TemplateStageSnapshot(
                 template_ref=CurriculumVersionRef(
@@ -346,7 +366,11 @@ class RuntimeSnapshotService:
                     ),
                 },
                 content_assets=child_content_assets,
-                rubric=await self._rubric_ref(str(child_template["scoring_ruleset_id"])),
+                rubric=await self._frozen_or_live_ref(
+                    "scoring_ruleset",
+                    str(child_template["scoring_ruleset_id"]),
+                    child_published_asset_refs.get("scoring_ruleset_ref"),
+                ),
                 runtime=child_runtime,
             )
         return snapshots
@@ -405,6 +429,7 @@ class RuntimeSnapshotService:
         self,
         asset_id: str,
         frozen_ref: PublishedAssetRef | None = None,
+        frozen_question_refs: dict[str, PublishedAssetRef] | None = None,
     ) -> list[CurriculumVersionRef]:
         examiner_ref = await self._frozen_or_live_ref(
             "examiner_agent",
@@ -414,7 +439,15 @@ class RuntimeSnapshotService:
         examiner_agent = _as_dict(await self._read_reference("examiner_agent", asset_id))
         refs = [examiner_ref]
         for question_id in examiner_agent.get("question_source_ids", []) or []:
-            refs.append(await self._asset_refs.version_ref("question_item", str(question_id)))
+            question_id_text = str(question_id)
+            frozen_question_ref = (frozen_question_refs or {}).get(question_id_text)
+            refs.append(
+                await self._frozen_or_live_ref(
+                    "question_item",
+                    question_id_text,
+                    frozen_question_ref,
+                )
+            )
         return refs
 
     async def _question_item_ref(self, asset_id: str) -> CurriculumVersionRef:
@@ -474,6 +507,24 @@ class RuntimeSnapshotService:
 
 def _as_dict(value: object | None) -> dict[str, Any]:
     return as_reference_dict(value)
+
+
+def _parse_examiner_question_refs(
+    raw: object | None,
+) -> dict[str, PublishedAssetRef]:
+    if not isinstance(raw, dict):
+        return {}
+    raw_question_refs = raw.get("examiner_question_refs")
+    if not isinstance(raw_question_refs, dict):
+        return {}
+    parsed: dict[str, PublishedAssetRef] = {}
+    for question_id, payload in raw_question_refs.items():
+        if not isinstance(payload, dict):
+            continue
+        parsed[str(question_id)] = PublishedAssetRefSchema.model_validate(
+            payload
+        ).to_dataclass()
+    return parsed
 
 
 def _minimal_template_runtime_payload(

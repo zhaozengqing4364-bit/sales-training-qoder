@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from curriculum_practice.models import PracticeTemplate
+from curriculum_practice.schemas import PublishedAssetRefSchema
 from curriculum_practice.services.frozen_asset_refs import parse_published_asset_refs
 
 ASSET_RESOLUTION_DIRECT_PRACTICE_LIVE = "direct_practice_live"
@@ -45,18 +46,45 @@ def published_asset_refs_summary(
     refs = parse_published_asset_refs(published_asset_refs)
     summary: dict[str, dict[str, Any]] = {}
     for key, ref in refs.items():
-        summary[key] = {
-            "asset_type": ref.asset_type,
-            "asset_id": ref.asset_id,
-            "asset_code": ref.asset_code,
-            "version": ref.version,
-            "content_hash": ref.content_hash,
-            "snapshot_label": ref.snapshot_label,
-            "reconstructible_from_snapshot": ref.can_reconstruct_from_snapshot(),
-            "source_bundle_key": ref.source_bundle_key,
-            "source_config_version_id": ref.source_config_version_id,
-            "snapshot_selector": ref.snapshot_selector,
-        }
+        summary[key] = _published_asset_ref_summary(ref)
+    question_refs = _published_examiner_question_refs_summary(published_asset_refs)
+    if question_refs:
+        summary["examiner_question_refs"] = question_refs
+    return summary
+
+
+def _published_asset_ref_summary(ref: object) -> dict[str, Any]:
+    return {
+        "asset_type": ref.asset_type,
+        "asset_id": ref.asset_id,
+        "asset_code": ref.asset_code,
+        "version": ref.version,
+        "content_hash": ref.content_hash,
+        "snapshot_label": ref.snapshot_label,
+        "reconstructible_from_snapshot": ref.can_reconstruct_from_snapshot(),
+        "source_bundle_key": ref.source_bundle_key,
+        "source_config_version_id": ref.source_config_version_id,
+        "snapshot_selector": ref.snapshot_selector,
+        "logical_id": ref.logical_id,
+        "revision_id": ref.revision_id,
+        "revision_no": ref.revision_no,
+    }
+
+
+def _published_examiner_question_refs_summary(
+    published_asset_refs: object | None,
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(published_asset_refs, dict):
+        return {}
+    raw_question_refs = published_asset_refs.get("examiner_question_refs")
+    if not isinstance(raw_question_refs, dict):
+        return {}
+    summary: dict[str, dict[str, Any]] = {}
+    for question_id, payload in raw_question_refs.items():
+        if not isinstance(payload, dict):
+            continue
+        ref = PublishedAssetRefSchema.model_validate(payload).to_dataclass()
+        summary[str(question_id)] = _published_asset_ref_summary(ref)
     return summary
 
 

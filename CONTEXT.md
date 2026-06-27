@@ -53,6 +53,32 @@
 
 ---
 
+## 发布治理修订模型 (Governed Revision Model)
+
+**定义**：面向新人训练路径、课程闭环、题库、学习内容、Prompt、评分规则和可配置运行时资产的统一治理语言。它解决“已发布后不可自然编辑、只能复制草稿和手动换绑”的管理体验问题，同时保证历史考试、录音、评分和会话快照不被未来发布污染。
+
+| 术语 | 含义 |
+|------|------|
+| `logical_id` | 业务对象的稳定身份，例如“商务技巧考卷”或“新人训练路径配置”。 |
+| `revision_id` | 一次不可变内容修订的身份。已发布 revision 不允许原地改 payload。 |
+| `active_revision` | 当前只对未来请求生效的 revision 指针。发布或回滚只移动该指针。 |
+| `working_revision` | 管理员保存修改后生成、尚未发布的待发布 revision。 |
+| `snapshot` | attempt、submission、session、result 创建时冻结的运行时内容副本。 |
+| `binding_revision` | 模块绑定文章、考卷绑定题目、模板绑定案例等引用关系的修订。 |
+| `audit_event` | 记录 actor、action、target、before、after、reason、trace_id 和影响范围的审计事件。 |
+| `regrade_run` | 对历史记录执行重新评分的高风险显式动作；不得由发布自动触发。 |
+
+**未来生效规则**：编辑、发布、回滚只影响新学员、新 attempt、新 submission 或新 session。已有记录只能读取创建时冻结的 `snapshot` 或 revision refs；缺少 lineage 的旧数据标记为 `legacy_snapshot_only`，不得伪造 revision。
+
+**高风险字段**：正确答案、分值、通过线、AI 评分 Prompt、评分规则、运行时模型、可见/隐藏信息策略必须被视为高风险。配置不能把这些字段降级为低风险。
+
+**禁止**：
+- 不得直接更新已发布 revision payload。
+- 不得让历史 attempt、submission、score result 或 `curriculum_snapshot` 从 latest asset 重新拼装展示。
+- 不得把 regrade 和 rollback 混为一谈；rollback 只影响未来，regrade 才能生成新的历史评分结果。
+
+---
+
 ## 角色 (Persona)
 
 **定义**：平台级 AI 对话人格，是实时 WebSocket 对练中角色提示词、知识库绑定与行为策略的 **source of truth**。

@@ -101,6 +101,17 @@ def _reference_reader() -> object:
             "status": "published",
             "version": 4,
             "content_hash": "sha256:examiner-1",
+            "question_source_ids": ["question-1"],
+        },
+        ("question_item", "question-1"): {
+            "question_id": "question-1",
+            "logical_id": "question-1",
+            "revision_id": "question-revision-1",
+            "revision_no": 11,
+            "status": "published",
+            "version": 5,
+            "content_hash": "sha256:question-1",
+            "safety_flagged": False,
         },
     }
 
@@ -180,6 +191,7 @@ async def test_should_build_non_empty_published_asset_refs_with_matching_hashes(
         "learning_content_ref",
         "scoring_ruleset_ref",
         "examiner_agent_ref",
+        "examiner_question_refs",
         "situation_pack_ref",
     }
     assert refs["persona_ref"] == _expected_entity_ref(
@@ -201,6 +213,9 @@ async def test_should_build_non_empty_published_asset_refs_with_matching_hashes(
     assert refs["examiner_agent_ref"]["content_hash"] == "sha256:examiner-1"
     assert refs["examiner_agent_ref"]["revision_id"] == "examiner-revision-1"
     assert refs["examiner_agent_ref"]["revision_no"] == 10
+    assert refs["examiner_question_refs"]["question-1"]["content_hash"] == "sha256:question-1"
+    assert refs["examiner_question_refs"]["question-1"]["revision_id"] == "question-revision-1"
+    assert refs["examiner_question_refs"]["question-1"]["revision_no"] == 11
     assert refs["scoring_ruleset_ref"]["content_hash"] == stable_hash(
         reader("scoring_ruleset", "ruleset-1")
     )
@@ -225,8 +240,51 @@ async def test_should_build_non_empty_published_asset_refs_with_matching_hashes(
     restored = {
         key: PublishedAssetRefSchema.model_validate(payload).to_dataclass()
         for key, payload in refs.items()
+        if key != "examiner_question_refs"
     }
     assert restored["situation_pack_ref"].can_reconstruct_from_snapshot() is True
+    restored_question_refs = {
+        key: PublishedAssetRefSchema.model_validate(payload).to_dataclass()
+        for key, payload in refs["examiner_question_refs"].items()
+    }
+    assert restored_question_refs["question-1"].asset_type == "question_item"
+
+
+@pytest.mark.asyncio
+async def test_should_build_legacy_situation_pack_ref_when_config_resolution_is_missing() -> None:
+    resolved_at = datetime(2026, 5, 27, 10, 0, tzinfo=UTC).isoformat()
+    pack = _situation_repo().get_published("first_visit")
+    assert pack is not None
+
+    refs = await build_published_asset_refs(
+        _candidate(),
+        reference_reader=_reference_reader(),
+        situation_packs=_situation_repo(),
+        situation_pack_config=None,
+        resolved_at=resolved_at,
+    )
+
+    assert refs["situation_pack_ref"] == {
+        "asset_type": "situation_pack",
+        "asset_id": None,
+        "asset_code": "first_visit",
+        "version": "v1",
+        "content_hash": situation_pack_content_hash(pack),
+        "snapshot_label": "published",
+        "source_bundle_key": None,
+        "source_config_version_id": None,
+        "source_config_id": None,
+        "snapshot_selector": None,
+        "source_snapshot_hash": None,
+        "resolved_at": resolved_at,
+        "logical_id": None,
+        "revision_id": None,
+        "revision_no": None,
+    }
+    restored = PublishedAssetRefSchema.model_validate(
+        refs["situation_pack_ref"]
+    ).to_dataclass()
+    assert restored.can_reconstruct_from_snapshot() is False
 
 
 @pytest.mark.asyncio

@@ -145,7 +145,12 @@ async def test_should_backfill_path_config_from_published_unit_when_no_revision(
     config = await SalesTrainerPathConfigService(test_db).get_config()
 
     assert config["source"] == "unit_backfill"
+    assert config["fallback_reason"] == "active_revision_missing"
+    assert config["legacy_snapshot_only"] is True
+    assert config["management_entry"] == "/admin/newcomer-training/path-config"
+    assert config["permission"] == "sales_trainer.manage_modules"
     assert config["active_revision_id"] is None
+    assert config["active_revision_snapshot"] is None
     assert config["path"]["title"] == "新人训练路径"
     assert config["path"]["modules"][0]["title"] == "商务技巧"
     assert config["path"]["modules"][0]["target_unit_id"] == unit.unit_id
@@ -301,11 +306,21 @@ async def test_should_expose_active_revision_module_identity_to_learner_path(
         _payload(unit_id=unit.unit_id, title="商务技巧路径配置"),
         actor=admin,
     )
-    await service.publish_config(actor=admin, reason="路径 active revision 生效")
+    publish_result = await service.publish_config(actor=admin, reason="路径 active revision 生效")
+    config = await service.get_config()
 
     paths = await SalesTrainerPathService(test_db).list_paths_for_user(str(admin.user_id))
     level = paths[0]["levels"][0]
 
+    assert config["source"] == "active_revision"
+    assert config["fallback_reason"] is None
+    assert config["legacy_snapshot_only"] is False
+    assert config["active_revision_snapshot"]["revision_id"] == str(
+        publish_result.revision.revision_id
+    )
+    assert config["active_revision_snapshot"]["payload"]["modules"][0]["module_key"] == (
+        "business_skills"
+    )
     assert paths[0]["path_revision_id"] is not None
     assert paths[0]["path_revision_no"] == 1
     assert level["module_key"] == "business_skills"

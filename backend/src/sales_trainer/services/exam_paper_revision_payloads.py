@@ -14,6 +14,7 @@ from sales_trainer.services.question_bank import (
     QUESTION_RESOURCE_TYPE,
     question_lifecycle_snapshot,
 )
+from sales_trainer.services.question_bank.payloads import question_payload_hash
 
 
 async def freeze_paper_question_revisions(
@@ -192,6 +193,8 @@ def _points(value: object) -> int:
 
 
 def _legacy_question_payload_hash(question: QuestionItem | None) -> str | None:
-    if question is None or question.content_hash is None:
+    if question is None:
         return None
-    return str(question.content_hash)
+    if question.content_hash is not None:
+        return str(question.content_hash)
+    return question_payload_hash(question_lifecycle_snapshot(question))

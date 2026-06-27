@@ -498,8 +498,11 @@ async def test_should_reject_publishing_audio_path_without_effective_prompt(
 
     with pytest.raises(SalesTrainerPathConfigError) as exc:
         await path_service.publish_config(actor=admin, reason="应拒绝")
+    config_after_reject = await path_service.get_config()
 
     assert exc.value.code == "[NEWCOMER_MODULE_BINDING_MISSING]"
+    assert config_after_reject["active_revision_id"] is None
+    assert config_after_reject["has_unpublished_revision"] is True
 
 
 @pytest.mark.asyncio
@@ -543,8 +546,11 @@ async def test_should_reject_audio_group_without_duration_options(
 
     with pytest.raises(SalesTrainerPathConfigError) as exc:
         await path_service.publish_config(actor=admin, reason="应拒绝")
+    config_after_reject = await path_service.get_config()
 
     assert exc.value.code == "[NEWCOMER_MODULE_BINDING_MISSING]"
+    assert config_after_reject["active_revision_id"] is None
+    assert config_after_reject["has_unpublished_revision"] is True
 
 
 @pytest.mark.asyncio

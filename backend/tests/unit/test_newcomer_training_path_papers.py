@@ -185,12 +185,12 @@ async def test_should_create_publish_and_fetch_paper_with_ordered_questions(
     assert first_binding["question_id"] == first.question_id
     assert first_binding["question_revision_id"] is None
     assert first_binding["question_revision_no"] is None
-    assert first_binding["question_payload_hash"] is None
+    assert _is_payload_hash(first_binding["question_payload_hash"])
     assert first_binding["legacy_snapshot_only"] is True
     assert first_binding["question_snapshot"]["title"] == "见客户前准备"
     assert second_binding["question_id"] == second.question_id
     assert second_binding["question_revision_id"] is None
-    assert second_binding["question_payload_hash"] is None
+    assert _is_payload_hash(second_binding["question_payload_hash"])
     assert second_binding["legacy_snapshot_only"] is True
     assert second_binding["question_snapshot"]["title"] == "商务礼仪"
     assert serialized["paper_key"] == "business-skills-entry"
@@ -576,7 +576,7 @@ async def test_should_edit_published_paper_as_future_revision_without_polluting_
     assert working_revision.source_revision_id == initial_revision.revision_id
     assert working_binding["question_id"] == new_question.question_id
     assert working_binding["question_revision_id"] is None
-    assert working_binding["question_payload_hash"] is None
+    assert _is_payload_hash(working_binding["question_payload_hash"])
     assert working_binding["legacy_snapshot_only"] is True
     assert working_binding["question_snapshot"]["title"] == "新题"
 
@@ -593,6 +593,78 @@ async def test_should_edit_published_paper_as_future_revision_without_polluting_
     assert old_attempt_answer["score"] == 10
     assert serialized_old_attempt["paper_id"] == published.paper_id
     assert serialized_old_attempt["paper_title"] == "商务技巧正式考卷"
+
+
+@pytest.mark.asyncio
+async def test_should_score_attempt_from_paper_question_snapshot_after_question_changes(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    category = QuestionCategory(
+        category_id="business-paper-question-snapshot-category",
+        name="商务技巧题目快照",
+        order_index=1,
+        usage_scope="sales_trainer",
+    )
+    question = _question(
+        "business-question-snapshot-1",
+        category_id=category.category_id,
+        title="发布时题目",
+        correct_answer="A",
+    )
+    test_db.add_all([admin, learner, category, question])
+    await test_db.commit()
+
+    service = ExamPaperService(test_db)
+    paper = await service.create_paper(
+        ExamPaperCreate(
+            paper_key="business-question-snapshot-paper",
+            title="商务技巧题目快照考卷",
+            module_key="business_skills",
+            pass_threshold=10,
+            questions=[
+                ExamPaperQuestionBinding(
+                    question_id=question.question_id,
+                    order_index=1,
+                    points=10,
+                )
+            ],
+        ),
+        actor=admin,
+    )
+    published = await service.publish_paper(paper.paper_id, actor=admin)
+    published_revision = await _latest_paper_revision(test_db, published.paper_id)
+    published_binding = _paper_question_binding(published_revision)
+
+    question.title = "题库后来改名"
+    question.scoring_criteria = {
+        **question.scoring_criteria,
+        "correct_answer": "B",
+    }
+    await test_db.commit()
+
+    attempt = await service.submit_paper_attempt(
+        PaperAttemptCreate(
+            paper_id=published.paper_id,
+            answers=[
+                QuizAnswerSubmit(
+                    question_id=question.question_id,
+                    answer_payload="A",
+                )
+            ],
+        ),
+        actor=learner,
+    )
+    serialized = await service.serialize_attempt(attempt)
+    answer = _first_attempt_answer(serialized)
+
+    assert answer["question_title"] == "发布时题目"
+    assert answer["correct_answer"] == "A"
+    assert answer["score"] == 10
+    assert answer["question_revision_id"] is None
+    assert answer["question_payload_hash"] == published_binding["question_payload_hash"]
+    assert _is_payload_hash(answer["question_payload_hash"])
 
 
 @pytest.mark.asyncio
@@ -1029,3 +1101,7 @@ def _optional_str(value: object) -> str | None:
 
 def _optional_int(value: object) -> int | None:
     return value if isinstance(value, int) else None
+
+
+def _is_payload_hash(value: object) -> bool:
+    return isinstance(value, str) and value.startswith("sha256:")

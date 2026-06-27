@@ -83,9 +83,9 @@ async def _create_candidate(
     if not use_default_checks:
         payload["checks"] = [
             {
-                "check_type": "migration",
-                "check_name": "Migration check",
-                "check_description": "Migration smoke contract check",
+                "check_type": "security",
+                "check_name": "Security check",
+                "check_description": "Security smoke contract check",
             },
             {
                 "check_type": "contract",
@@ -232,7 +232,7 @@ async def test_release_verification_candidate_list_latest_report_and_update_cont
     report = _assert_success_envelope(report_response.json())
     assert report["summary"]["release_candidate_id"] == rc_id
     assert len(report["checks"]) == 2
-    assert "migration" in report["gate_status"]
+    assert "security" in report["gate_status"]
     assert isinstance(report["recommendations"], list)
 
     record_id = (await _record_ids(test_db, rc_id))[0]
@@ -251,6 +251,40 @@ async def test_release_verification_candidate_list_latest_report_and_update_cont
     assert updated["record_id"] == record_id
     assert updated["status"] == "passed"
     assert updated["passed"] is True
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_release_verification_default_checks_contract(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+) -> None:
+    rc_id = f"rc-default-{uuid.uuid4().hex[:8]}"
+    await _create_candidate(
+        async_client,
+        admin_headers,
+        release_candidate_id=rc_id,
+        use_default_checks=True,
+    )
+
+    report_response = await async_client.get(
+        f"{BASE_PATH}/candidates/{rc_id}/report",
+        headers=admin_headers,
+    )
+
+    assert report_response.status_code == 200
+    report = _assert_success_envelope(report_response.json())
+    assert [
+        (check["check_type"], check["check_name"])
+        for check in report["checks"]
+    ] == [
+        ("unit_tests", "Unit Tests"),
+        ("coverage", "Code Coverage"),
+        ("integration_tests", "Integration Tests"),
+        ("contract", "API Contract Tests"),
+        ("performance", "Performance Benchmarks"),
+        ("security", "Security Vulnerability Scan"),
+    ]
 
 
 @pytest.mark.contract

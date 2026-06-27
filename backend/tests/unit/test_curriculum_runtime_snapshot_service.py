@@ -37,6 +37,61 @@ def _published_template() -> dict[str, object]:
     }
 
 
+def _published_ref_payload(
+    *,
+    asset_type: str,
+    asset_id: str,
+    version: str,
+    content_hash: str,
+    resolved_at: str = "2026-05-27T10:00:00+00:00",
+    revision_id: str | None = None,
+    revision_no: int | None = None,
+) -> dict[str, object]:
+    return {
+        "asset_type": asset_type,
+        "asset_id": asset_id,
+        "asset_code": None,
+        "version": version,
+        "content_hash": content_hash,
+        "snapshot_label": "published",
+        "source_bundle_key": None,
+        "source_config_version_id": None,
+        "source_config_id": None,
+        "snapshot_selector": None,
+        "source_snapshot_hash": None,
+        "resolved_at": resolved_at,
+        "logical_id": asset_id if revision_id else None,
+        "revision_id": revision_id,
+        "revision_no": revision_no,
+    }
+
+
+def _published_refs_with_examiner_questions(
+    *,
+    question_hash: str = "sha256:question-hash",
+) -> dict[str, object]:
+    return {
+        "examiner_agent_ref": _published_ref_payload(
+            asset_type="examiner_agent",
+            asset_id="examiner-1",
+            version="1",
+            content_hash="sha256:examiner-hash",
+            revision_id="examiner-revision-1",
+            revision_no=1,
+        ),
+        "examiner_question_refs": {
+            "question-1": _published_ref_payload(
+                asset_type="question_item",
+                asset_id="question-1",
+                version="1",
+                content_hash=question_hash,
+                revision_id="question-revision-1",
+                revision_no=1,
+            ),
+        },
+    }
+
+
 def _reference_reader(asset_type: str, asset_id: str) -> object | None:
     references: dict[tuple[str, str], object] = {
         ("practice_template", "template-1"): _published_template(),
@@ -504,3 +559,55 @@ async def test_should_reject_safety_flagged_question_with_unified_reason() -> No
         )
 
     assert exc_info.value.reason_code == "question_item_unpublished"
+
+
+@pytest.mark.asyncio
+async def test_should_use_published_question_refs_for_examiner_agent_runtime_snapshot() -> None:
+    def reference_reader(asset_type: str, asset_id: str) -> object | None:
+        if (asset_type, asset_id) == ("practice_template", "template-1"):
+            return _published_template() | {
+                "examiner_agent_id": "examiner-1",
+                "published_asset_refs": _published_refs_with_examiner_questions(),
+            }
+        return _reference_reader(asset_type, asset_id)
+
+    snapshot = await RuntimeSnapshotService(reference_reader=reference_reader).build_for_session(
+        template_ref=_published_template_ref(),
+        training_task_ref={"id": "task-1", "scenario_type": "sales"},
+        actor_id="actor-1",
+    )
+
+    question_ref = next(
+        ref for ref in snapshot.content_assets if ref.asset_type == "question_item"
+    )
+    assert question_ref.asset_id == "question-1"
+    assert question_ref.version == "1"
+    assert question_ref.hash == "sha256:question-hash"
+    assert snapshot.asset_resolution is not None
+    published_refs = snapshot.asset_resolution["published_asset_refs"]
+    assert isinstance(published_refs, dict)
+    assert published_refs["examiner_question_refs"]["question-1"]["revision_id"] == (
+        "question-revision-1"
+    )
+
+
+@pytest.mark.asyncio
+async def test_should_reject_examiner_question_when_frozen_ref_hash_is_stale() -> None:
+    def reference_reader(asset_type: str, asset_id: str) -> object | None:
+        if (asset_type, asset_id) == ("practice_template", "template-1"):
+            return _published_template() | {
+                "examiner_agent_id": "examiner-1",
+                "published_asset_refs": _published_refs_with_examiner_questions(
+                    question_hash="sha256:stale-question-hash",
+                ),
+            }
+        return _reference_reader(asset_type, asset_id)
+
+    with pytest.raises(RuntimeSnapshotBuildError) as exc_info:
+        await RuntimeSnapshotService(reference_reader=reference_reader).build_for_session(
+            template_ref=_published_template_ref(),
+            training_task_ref={"id": "task-1", "scenario_type": "sales"},
+            actor_id="actor-1",
+        )
+
+    assert exc_info.value.reason_code == "asset_hash_mismatch"

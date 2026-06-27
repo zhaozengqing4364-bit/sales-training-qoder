@@ -1244,6 +1244,27 @@ class NewcomerPathConfigActionRequest(BaseModel):
     revision_id: str | None = Field(None, min_length=1, max_length=36)
 
 
+class NewcomerPathRollbackPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    revision_id: str = Field(..., min_length=1, max_length=36)
+
+
+class NewcomerPathRollbackPreviewResponse(BaseModel):
+    action: Literal["newcomer_path_config.rollback"]
+    permission: Literal["sales_trainer.manage_modules"]
+    requires_reason: bool
+    requires_trace_id: bool
+    future_only: bool
+    target_revision_id: str
+    target_revision_no: int
+    target_revision_status: Literal["working", "published", "archived"]
+    impact_scope: dict[str, Any]
+    before_snapshot: dict[str, Any] | None = None
+    after_snapshot: dict[str, Any]
+    audit_event: dict[str, Any]
+
+
 class NewcomerPathRevisionSummary(BaseModel):
     revision_id: str
     revision_no: int
@@ -1270,12 +1291,18 @@ class NewcomerPathRevisionSummary(BaseModel):
 
 class NewcomerPathConfigResponse(BaseModel):
     source: Literal["active_revision", "unit_backfill"]
+    fallback_reason: str | None = None
+    legacy_snapshot_only: bool = False
+    management_entry: str = "/admin/newcomer-training/path-config"
+    permission: str = "sales_trainer.manage_modules"
     path: NewcomerPathConfigPayload
     active_revision_id: str | None = None
     active_revision_no: int | None = None
+    active_revision_snapshot: dict[str, Any] | None = None
     working_revision_id: str | None = None
     working_revision_no: int | None = None
     has_unpublished_revision: bool = False
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
 
 
 class NewcomerPathRevisionListResponse(BaseModel):
@@ -1304,6 +1331,8 @@ class QuizAnswerResponse(BaseModel):
     answer_payload: Any
     question_title: str | None = None
     question_stem: str | None = None
+    question_revision_id: str | None = None
+    question_payload_hash: str | None = None
     options: list[dict[str, Any]] = Field(default_factory=list)
     correct_answer: Any = None
     reference_answer: str | None = None
@@ -1373,6 +1402,9 @@ class ExamPaperQuestionResponse(BaseModel):
     question_id: str
     order_index: int
     points: int
+    question_revision_id: str | None = None
+    question_payload_hash: str | None = None
+    legacy_snapshot_only: bool | None = None
     question_type: QuestionType | None = None
     title: str | None = None
     stem: str | None = None

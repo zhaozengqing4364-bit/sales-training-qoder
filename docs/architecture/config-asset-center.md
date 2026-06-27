@@ -724,11 +724,15 @@ ALTER TABLE practice_templates
   --   "persona_ref": { ... PublishedAssetRef },
   --   "situation_pack_ref": { ... PublishedAssetRef },
   --   "case_item_ref": { ... PublishedAssetRef },
+  --   "examiner_agent_ref": { ... PublishedAssetRef },
+  --   "examiner_question_refs": {
+  --     "question_id": { ... PublishedAssetRef }
+  --   },
   --   ...
   -- }
 ```
 
-**注意**：`published_asset_refs` 是发布时的快照产物，由 publish gate 自动生成，不可手动编辑。
+**注意**：`published_asset_refs` 是发布时的快照产物，由 publish gate 自动生成，不可手动编辑。`examiner_question_refs` 是按 examiner agent 的 `question_source_ids` 冻结的嵌套引用，运行时不得重新读取 latest 题目版本。若 SituationPack 来自 legacy/default 仓库且没有 `source_config_version_id`，只允许生成 hash-only ref；运行时必须用当前 published pack 校验 `content_hash`，不得伪造半截 ConfigBundle 来源字段。
 
 ### 5.4 编译期读取
 
@@ -743,7 +747,9 @@ ALTER TABLE practice_templates
     │     → 校验 content_hash
     │     → 重建 RoleplayContract（不读 mutable row，不读 latest entity）
     ├─ 如果 frozen ref 存在但无 snapshot（旧模板兼容）：
-    │     → 尝试从 published_asset_refs 重建；若字段缺失则 fallback 到 latest entity
+    │     → 用 published_asset_refs 中的 version/hash/revision lineage 校验当前 published entity
+    │     → ExaminerAgent.question_source_ids 必须优先使用 examiner_question_refs 中的题目 frozen ref
+    │     → 若字段缺失才 fallback 到 latest entity，并记录 legacy warning
     ├─ 如果不存在 frozen ref（legacy 模板）：
     │     → fallback 到编辑期引用（legacy 兼容，记录 warning）
     └─ 产出 policy["roleplay_contract"] + policy["instructions"]
