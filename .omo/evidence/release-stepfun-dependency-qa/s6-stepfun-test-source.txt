@@ -1,0 +1,425 @@
+**backend/tests/unit/test_presentation_stepfun_realtime_handler.py** — 423 lines, 22 symbols · no other indexed file depends on it
+
+1	"""Unit tests for presentation StepFun realtime handler parity behavior."""
+2	
+3	from __future__ import annotations
+4	
+5	import json
+6	from types import SimpleNamespace
+7	from unittest.mock import AsyncMock, Mock, patch
+8	
+9	import pytest
+10	
+11	from common.error_handling.result import Result
+12	from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
+13	    PresentationStepFunRealtimeHandler,
+14	)
+15	from sales_bot.websocket.stepfun_realtime_handler import (
+16	    StepFunRealtimeHandler,
+17	    StepFunRealtimeSharedHandler,
+18	)
+19	from sales_bot.websocket.stepfun_realtime_sales_stage import (
+20	    StepFunRealtimeSalesStageMixin,
+21	)
+22	
+23	
+24	@pytest.fixture
+25	def handler() -> PresentationStepFunRealtimeHandler:
+26	    instance = PresentationStepFunRealtimeHandler()
+27	    instance.session_id = "session-presentation-stepfun-001"
+28	    instance.websocket = Mock()
+29	    return instance
+30	
+31	
+32	def test_presentation_stepfun_handler_forwards_collaborator_factories():
+33	    transport = SimpleNamespace()
+34	
+35	    def db_session_factory():
+36	        raise AssertionError("factory should only be stored during construction")
+37	
+38	    def knowledge_service_factory(_db):
+39	        raise AssertionError("factory should only be stored during construction")
+40	
+41	    handler = PresentationStepFunRealtimeHandler(
+42	        stepfun_transport=transport,
+43	        db_session_factory=db_session_factory,
+44	        knowledge_service_factory=knowledge_service_factory,
+45	    )
+46	
+47	    assert handler._stepfun_transport is transport
+48	    assert handler._db_session_factory is db_session_factory
+49	    assert handler._knowledge_service_factory is knowledge_service_factory
+50	    assert handler.scenario == "presentation"
+51	    assert handler.session_scenario_type == "presentation"
+52	
+53	
+54	def test_presentation_stepfun_handler_does_not_inherit_sales_stage_mixin():
+55	    assert isinstance(StepFunRealtimeHandler(), StepFunRealtimeSalesStageMixin)
+56	    assert not isinstance(
+57	        PresentationStepFunRealtimeHandler(),
+58	        StepFunRealtimeSalesStageMixin,
+59	    )
+60	
+61	
+62	@pytest.mark.asyncio
+63	async def test_handle_client_text_routes_page_change(handler):
+64	    handler._handle_page_change = AsyncMock()
+65	
+66	    await handler._handle_client_text(
+67	        json.dumps({"type": "page_change", "data": {"page_number": 3}})
+68	    )
+69	
+70	    handler._handle_page_change.assert_awaited_once_with(3)
+71	
+72	
+73	@pytest.mark.asyncio
+74	async def test_handle_client_text_control_start_emits_page_context(handler):
+75	    handler._emit_current_page_context = AsyncMock()
+76	    handler.session_status = "in_progress"
+77	
+78	    with patch.object(
+79	        StepFunRealtimeSharedHandler,
+80	        "_handle_client_text",
+81	        new=AsyncMock(),
+82	    ) as super_handle:
+83	        await handler._handle_client_text(
+84	            json.dumps({"type": "control", "data": {"action": "start"}})
+85	        )
+86	
+87	    super_handle.assert_awaited_once()
+88	    handler._emit_current_page_context.assert_awaited_once()
+89	
+90	
+91	@pytest.mark.asyncio
+92	async def test_emit_current_page_context_uses_presentation_event_contract(handler):
+93	    handler.current_page = 2
+94	    handler._load_page_requirements = AsyncMock(
+95	        return_value={
+96	            "required_points": ["客户痛点", "业务价值"],
+97	            "forbidden_words": ["大概"],
+98	            "total_pages": 8,
+99	            "page_content": "第二页内容",
+100	        }
+101	    )
+102	    handler._initialize_page_feedback = AsyncMock()
+103	    handler._presentation_event_emitter.send_page_context = AsyncMock()
+104	
+105	    await handler._emit_current_page_context()
+106	
+107	    handler._initialize_page_feedback.assert_awaited_once()
+108	    handler._presentation_event_emitter.send_page_context.assert_awaited_once_with(
+109	        page_number=2,
+110	        requirements={
+111	            "required_points": ["客户痛点", "业务价值"],
+112	            "forbidden_words": ["大概"],
+113	            "total_pages": 8,
+114	            "page_content": "第二页内容",
+115	        },
+116	        session_status=handler.session_status,
+117	        turn_count=handler.turn_count,
+118	        session_id=handler.session_id,
+119	    )
+120	
+121	
+122	@pytest.mark.asyncio
+123	async def test_send_status_uses_presentation_event_contract(handler):
+124	    handler.current_page = 2
+125	    handler.session_status = "in_progress"
+126	    handler.turn_count = 3
+127	    handler._presentation_event_emitter.send_status = AsyncMock()
+128	
+129	    await handler._send_status("listening")
+130	
+131	    assert handler.ai_state == "listening"
+132	    handler._presentation_event_emitter.send_status.assert_awaited_once_with(
+133	        ai_state="listening",
+134	        session_status="in_progress",
+135	        turn_count=3,
+136	        current_page=2,
+137	    )
+138	
+139	
+140	@pytest.mark.asyncio
+141	async def test_send_error_uses_presentation_event_contract(handler):
+142	    handler.session_status = "in_progress"
+143	    handler.ai_state = "listening"
+144	    handler.turn_count = 3
+145	    handler._record_runtime_error = Mock()
+146	    handler._presentation_event_emitter.send_error = AsyncMock()
+147	
+148	    await handler._send_error("[STEPFUN_UPSTREAM_ERROR]", "上游连接失败")
+149	
+150	    handler._record_runtime_error.assert_called_once_with(
+151	        "[STEPFUN_UPSTREAM_ERROR]",
+152	        "上游连接失败",
+153	    )
+154	    handler._presentation_event_emitter.send_error.assert_awaited_once_with(
+155	        code="[STEPFUN_UPSTREAM_ERROR]",
+156	        message="上游连接失败",
+157	        session_status="in_progress",
+158	        ai_state="listening",
+159	        turn_count=3,
+160	    )
+161	
+162	
+163	@pytest.mark.asyncio
+164	async def test_send_heartbeat_uses_stepfun_envelope(handler):
+165	    handler.manager.send_json = AsyncMock()
+166	
+167	    await handler._send_heartbeat()
+168	
+169	    handler.manager.send_json.assert_awaited_once()
+170	    websocket, payload = handler.manager.send_json.await_args.args
+171	    assert websocket is handler.websocket
+172	    assert payload["type"] == "heartbeat"
+173	
+174	
+175	@pytest.mark.asyncio
+176	async def test_send_transcript_uses_presentation_event_contract(handler):
+177	    handler._presentation_event_emitter.send_transcript = AsyncMock()
+178	
+179	    await handler._send_transcript("最终转写", is_final=True)
+180	
+181	    handler._presentation_event_emitter.send_transcript.assert_awaited_once_with(
+182	        text="最终转写",
+183	        is_final=True,
+184	    )
+185	
+186	
+187	@pytest.mark.asyncio
+188	async def test_handle_session_end_uses_presentation_event_contract(handler):
+189	    handler.session_status = "completed"
+190	    handler.turn_count = 2
+191	    handler.running = True
+192	    handler._presentation_event_emitter.send_session_ended = AsyncMock()
+193	
+194	    await handler._handle_session_end()
+195	
+196	    handler._presentation_event_emitter.send_session_ended.assert_awaited_once_with(
+197	        session_id=handler.session_id,
+198	        session_status="completed",
+199	        turn_count=2,
+200	    )
+201	    assert handler.running is False
+202	
+203	
+204	@pytest.mark.asyncio
+205	async def test_persist_message_uses_stepfun_message_storage_helper(handler):
+206	    with patch(
+207	        "presentation_coach.websocket.presentation_stepfun_realtime_handler.save_stepfun_message",
+208	        new=AsyncMock(return_value=True),
+209	    ) as save_message:
+210	        await handler._persist_message(
+211	            turn_number=1,
+212	            role="user",
+213	            content="  讲业务目标  ",
+214	            analysis_data={"transcript_metadata": {"page_number": 2}},
+215	        )
+216	
+217	    save_message.assert_awaited_once()
+218	    assert save_message.await_args.kwargs["session_id"] == handler.session_id
+219	    assert save_message.await_args.kwargs["turn_number"] == 1
+220	    assert save_message.await_args.kwargs["role"] == "user"
+221	    assert save_message.await_args.kwargs["content"] == "讲业务目标"
+222	    assert save_message.await_args.kwargs["analysis_payload"]["transcript_metadata"] == {
+223	        "page_number": 2
+224	    }
+225	
+226	
+227	@pytest.mark.asyncio
+228	async def test_persist_message_skips_blank_content(handler):
+229	    with patch(
+230	        "presentation_coach.websocket.presentation_stepfun_realtime_handler.save_stepfun_message",
+231	        new=AsyncMock(),
+232	    ) as save_message:
+233	        await handler._persist_message(
+234	            turn_number=1,
+235	            role="assistant",
+236	            content="   ",
+237	        )
+238	
+239	    save_message.assert_not_awaited()
+240	
+241	
+242	def test_resolve_user_turn_number_matches_stepfun_transcript_timing(handler):
+243	    handler.turn_count = 0
+244	    handler._active_response = None
+245	
+246	    assert handler._resolve_user_turn_number_for_transcript() == 1
+247	
+248	    handler.turn_count = 2
+249	    handler._active_response = SimpleNamespace()
+250	
+251	    assert handler._resolve_user_turn_number_for_transcript() == 2
+252	
+253	
+254	def test_extract_response_text_uses_stepfun_response_contract(handler):
+255	    assert (
+256	        handler._extract_response_text(
+257	            {
+258	                "response": {
+259	                        "output": [
+260	                            {
+261	                                "type": "message",
+262	                                "content": [
+263	                                    {
+264	                                        "type": "output_text",
+265	                                        "text": "请继续保持逐页证据链。",
+266	                                }
+267	                            ]
+268	                        }
+269	                    ]
+270	                }
+271	            }
+272	        )
+273	        == "请继续保持逐页证据链。"
+274	    )
+275	
+276	
+277	def test_sales_stage_context_append_is_noop_for_presentation(handler):
+278	    handler._sales_stage_context = None
+279	
+280	    assert (
+281	        handler._append_sales_stage_context_message(
+282	            role="assistant",
+283	            content="presentation response",
+284	            turn_number=1,
+285	        )
+286	        is None
+287	    )
+288	    assert handler._sales_stage_context is None
+289	
+290	
+291	@pytest.mark.asyncio
+292	async def test_sync_lifecycle_transition_start_emits_page_context(handler):
+293	    handler._emit_current_page_context = AsyncMock()
+294	
+295	    transition = SimpleNamespace(
+296	        action="start",
+297	        to_status="in_progress",
+298	        ai_state="listening",
+299	        scenario_type="presentation",
+300	    )
+301	
+302	    await handler.sync_lifecycle_transition(transition)
+303	
+304	    assert handler.session_status == "in_progress"
+305	    assert handler.ai_state == "listening"
+306	    handler._emit_current_page_context.assert_awaited_once()
+307	
+308	
+309	@pytest.mark.asyncio
+310	async def test_evaluate_presentation_feedback_interrupt_path(handler):
+311	    feedback = SimpleNamespace(
+312	        point_results=[
+313	            SimpleNamespace(
+314	                point_id="session-presentation-stepfun-001:1",
+315	                is_covered=True,
+316	                point_content="客户痛点",
+317	            )
+318	        ],
+319	        forbidden_matches=[
+320	            SimpleNamespace(word="大概", suggestion="请改为明确数字或范围")
+321	        ],
+322	        should_interrupt=True,
+323	        interruption_reason="forbidden_word",
+324	        interruption_message="请避免模糊表达",
+325	    )
+326	    handler.feedback_service.check_transcript = AsyncMock(return_value=Result.ok(feedback))
+327	    handler._load_page_requirements = AsyncMock(
+328	        return_value={
+329	            "required_points": ["客户痛点"],
+330	            "forbidden_words": ["大概"],
+331	        }
+332	    )
+333	    handler._resolve_interruption_guidance = AsyncMock(return_value="请避免模糊表达")
+334	    handler._presentation_event_emitter.send_point_updates = AsyncMock()
+335	    handler._presentation_event_emitter.send_forbidden_word_alert = AsyncMock()
+336	    handler._presentation_event_emitter.send_feedback = AsyncMock()
+337	    handler._presentation_event_emitter.send_interruption = AsyncMock()
+338	    handler._handle_interrupt = AsyncMock()
+339	    handler._send_status = AsyncMock()
+340	
+341	    interrupted = await handler._evaluate_presentation_feedback("这段表达有点模糊")
+342	
+343	    assert interrupted is True
+344	    handler._handle_interrupt.assert_awaited_once_with("forbidden_word")
+345	    handler._resolve_interruption_guidance.assert_awaited_once()
+346	    handler._presentation_event_emitter.send_point_updates.assert_awaited_once()
+347	    handler._presentation_event_emitter.send_forbidden_word_alert.assert_awaited_once()
+348	    handler._presentation_event_emitter.send_feedback.assert_awaited_once()
+349	    handler._presentation_event_emitter.send_interruption.assert_awaited_once()
+350	    handler._send_status.assert_awaited_once_with("listening")
+351	
+352	
+353	@pytest.mark.asyncio
+354	async def test_transcription_completed_interrupt_short_circuits_response_creation(handler):
+355	    handler._resolve_user_turn_number_for_transcript = Mock(return_value=1)
+356	    handler._send_transcript = AsyncMock()
+357	    handler._persist_message = AsyncMock()
+358	    handler._load_page_requirements = AsyncMock(
+359	        return_value={
+360	            "required_points": [],
+361	            "forbidden_words": [],
+362	            "total_pages": 1,
+363	            "page_content": "",
+364	        }
+365	    )
+366	    handler._initialize_page_feedback = AsyncMock()
+367	    handler._evaluate_presentation_feedback = AsyncMock(return_value=True)
+368	    handler._cancel_pending_response_after_commit = AsyncMock()
+369	    handler._prepare_grounding_context = AsyncMock()
+370	    handler._create_response_from_pending_commit = AsyncMock()
+371	
+372	    await handler._handle_upstream_transcription_completed(
+373	        {"transcript": "这段转写触发了中断"}
+374	    )
+375	
+376	    handler._cancel_pending_response_after_commit.assert_awaited_once()
+377	    handler._prepare_grounding_context.assert_not_awaited()
+378	    handler._create_response_from_pending_commit.assert_not_awaited()
+379	
+380	
+381	@pytest.mark.asyncio
+382	async def test_transcription_completed_applies_transcript_normalization(handler):
+383	    handler.current_page = 4
+384	    handler._effective_policy = {
+385	        "tool_policy": {
+386	            "transcript_normalization_enabled": True,
+387	            "transcript_normalization_lexicon": [
+388	                {
+389	                    "canonical_term": "石犀",
+390	                    "aliases": ["石溪"],
+391	                    "scope": "global",
+392	                    "replace_on_final_only": True,
+393	                }
+394	            ],
+395	        }
+396	    }
+397	    handler._resolve_user_turn_number_for_transcript = Mock(return_value=1)
+398	    handler._send_transcript = AsyncMock()
+399	    handler._persist_message = AsyncMock()
+400	    handler._load_page_requirements = AsyncMock(
+401	        return_value={
+402	            "required_points": [],
+403	            "forbidden_words": [],
+404	            "total_pages": 1,
+405	            "page_content": "",
+406	        }
+407	    )
+408	    handler._initialize_page_feedback = AsyncMock()
+409	    handler._evaluate_presentation_feedback = AsyncMock(return_value=False)
+410	    handler._prepare_grounding_context = AsyncMock()
+411	    handler._create_response_from_pending_commit = AsyncMock()
+412	
+413	    await handler._handle_upstream_transcription_completed(
+414	        {"transcript": "这页重点介绍石溪平台"}
+415	    )
+416	
+417	    handler._send_transcript.assert_awaited_once_with("这页重点介绍石犀平台", is_final=True)
+418	    persisted_kwargs = handler._persist_message.await_args.kwargs
+419	    assert persisted_kwargs["content"] == "这页重点介绍石犀平台"
+420	    assert persisted_kwargs["analysis_data"]["transcript_metadata"]["raw_text"] == "这页重点介绍石溪平台"
+421	    assert persisted_kwargs["analysis_data"]["transcript_metadata"]["page_number"] == handler.current_page
+422	    handler._prepare_grounding_context.assert_awaited_once_with("这页重点介绍石犀平台")
+423	

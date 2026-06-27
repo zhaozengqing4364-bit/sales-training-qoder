@@ -1,0 +1,6 @@
+Surface: backend migration graph CLI
+Invocation: cd backend && alembic heads
+Expected: command exits 0 and prints migration head(s).
+
+20260616_086 (head)
+exit_code=0

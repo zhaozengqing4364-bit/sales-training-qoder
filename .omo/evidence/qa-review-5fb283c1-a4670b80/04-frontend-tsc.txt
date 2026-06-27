@@ -1,0 +1,5 @@
+Surface: frontend TypeScript CLI
+Invocation: cd web && npx tsc --noEmit
+Expected: command exits 0 with no TypeScript errors.
+
+exit_code=0

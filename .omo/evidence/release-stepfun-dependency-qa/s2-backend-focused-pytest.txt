@@ -1,0 +1,28 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/zhaozengqing/github/销售训练qoder/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, asyncio-1.4.0, hydra-core-1.3.2, langsmith-0.8.5, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 59 items
+
+tests/integration/test_release_gate.py ...........                       [ 18%]
+tests/unit/test_verification_runner.py .............................     [ 67%]
+tests/unit/test_presentation_stepfun_realtime_handler.py ............... [ 93%]
+....                                                                     [100%]
+
+=============================== warnings summary ===============================
+venv/lib/python3.14/site-packages/chromadb/telemetry/opentelemetry/__init__.py:128
+  /Users/zhaozengqing/github/销售训练qoder/backend/venv/lib/python3.14/site-packages/chromadb/telemetry/opentelemetry/__init__.py:128: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    if asyncio.iscoroutinefunction(f):
+
+src/common/analytics/verification_runner.py:59
+  /Users/zhaozengqing/github/销售训练qoder/backend/src/common/analytics/verification_runner.py:59: PytestCollectionWarning: cannot collect test class 'TestExecutionResult' because it has a __init__ constructor (from: tests/integration/test_release_gate.py)
+    @dataclass
+
+src/common/analytics/verification_runner.py:59
+  /Users/zhaozengqing/github/销售训练qoder/backend/src/common/analytics/verification_runner.py:59: PytestCollectionWarning: cannot collect test class 'TestExecutionResult' because it has a __init__ constructor (from: tests/unit/test_verification_runner.py)
+    @dataclass
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 59 passed, 3 warnings in 2.78s ========================

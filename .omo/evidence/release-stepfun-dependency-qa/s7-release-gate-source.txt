@@ -1,0 +1,605 @@
+## Exploration: release_verification_service check_quality_gate make_automated_decision security critical blocking_failures can_release
+
+Found 209 symbols across 63 files.
+
+### Blast radius — what depends on these (update/verify before editing)
+
+- `make_automated_decision` (backend/src/common/analytics/release_verification_service.py:968) — 2 callers; tests: `backend/tests/integration/test_release_gate.py`
+- `SecurityCheckResult` (backend/src/common/analytics/verification_runner.py:101) — 8 callers in `backend/src/common/analytics/verification_runner.py`; tests: `backend/tests/integration/test_release_gate.py`
+- `release_verification_service` (backend/src/common/analytics/release_verification_service.py:1083) — 1 caller; tests: `backend/tests/integration/test_release_gate.py`
+- `check_quality_gate` (backend/src/common/analytics/release_verification_service.py:766) — 6 callers in `backend/src/common/analytics/release_verification_service.py`; tests: `backend/tests/integration/test_release_gate.py`
+
+### Relationships
+
+**calls:**
+- make_automated_decision → info
+- delete_model_config → execute
+- delete_model_config → get_trace_id
+- delete_model_config → info
+- delete_model_config → error
+- update_user → execute
+- update_user → info
+- get_agent_stats → info
+- get_agent_stats → get_agent_stats
+- suspend_user → execute
+- ... and 457 more
+
+**instantiates:**
+- _run_security_checks → SecurityCheckResult
+- _run_bandit_scan → SecurityCheckResult
+- _run_safety_scan → SecurityCheckResult
+- _run_secrets_scan → SecurityCheckResult
+- _run_release_readiness_check → SecurityCheckResult
+- runner → SecurityCheckResult
+
+**references:**
+- upload_document → process_document_background
+- _column_exists → check
+- test_security_failure_blocks_quality_gate_and_automated_decision → runner
+
+### Source Code
+
+> The code below is the **verbatim, current on-disk source** of these files — re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.
+
+#### backend/src/common/analytics/release_verification_service.py — _orm_str(calls), fail(calls), calls(calls), execute(calls), Result(instantiates), _resolve_scalar_one_or_none(calls), error(calls), _orm_int(calls), _set_orm_field(calls), VerificationCheckInput(instantiates), +27 more
+
+```python
+188	
+189	    # Default check templates for a new release candidate
+190	    DEFAULT_CHECKS: list[VerificationCheckInput] = [
+191	        VerificationCheckInput(
+192	            check_type="unit_tests",
+193	            check_name="Unit Tests",
+194	            check_description="Verify unit test suite passes",
+195	        ),
+196	        VerificationCheckInput(
+197	            check_type="coverage",
+198	            check_name="Code Coverage",
+199	            check_description=(
+200	                "Record coverage for the release ledger; shell quality gate evidence is "
+201	                "the release-blocking authority."
+202	            ),
+203	            gate_level="warning",
+204	        ),
+205	        VerificationCheckInput(
+206	            check_type="integration_tests",
+207	            check_name="Integration Tests",
+208	            check_description="Verify integration test suite passes",
+209	        ),
+210	        VerificationCheckInput(
+211	            check_type="contract",
+212	            check_name="API Contract Tests",
+213	            check_description="Verify all API contracts pass (NFR19: 100% required)",
+214	        ),
+215	        VerificationCheckInput(
+216	            check_type="performance",
+217	            check_name="Performance Benchmarks",
+218	            check_description="Verify latency and throughput meet NFR thresholds",
+219	        ),
+220	        VerificationCheckInput(
+221	            check_type="security",
+222	            check_name="Security Vulnerability Scan",
+223	            check_description="Verify release security checks pass",
+224	        ),
+225	    ]
+226	
+227	    async def _resolve_scalar_one_or_none(self, query_result: Any) -> Any | None:
+228	        """Resolve SQLAlchemy scalar result while tolerating async mocks in tests."""
+229	        scalar_getter = getattr(query_result, "scalar_one_or_none", None)
+230	        if not callable(scalar_getter):
+231	            return None
+232	
+233	        value = scalar_getter()
+234	        if inspect.isawaitable(value):
+235	            value = await value
+236	
+237	        if isinstance(value, Mock):
+238	            return None
+239	
+240	        return value
+241	
+242	    async def create_release_candidate(
+243	        self,
+244	        db: AsyncSession,
+245	        release_version: str,
+246	        release_candidate_id: str,
+247	        checks: list[VerificationCheckInput] | None = None,
+248	        created_by: str | None = None,
+249	    ) -> Result[VerificationSummaryView]:
+250	        """
+251	        Create a new release candidate with default verification checks
+252	
+253	        Args:
+254	            db: Database session
+255	            release_version: Version string (e.g., "v1.2.0")
+256	            release_candidate_id: Unique identifier for the RC
+257	            checks: Optional custom checks (defaults used if not provided)
+258	            created_by: User ID of creator
+259	
+260	        Returns:
+261	            Result containing VerificationSummaryView or error
+262	        """
+263	        try:
+264	            # Check if RC already exists
+265	            existing = await db.execute(
+266	                select(ReleaseVerificationSummary).where(
+267	                    ReleaseVerificationSummary.release_candidate_id
+268	                    == release_candidate_id
+269	                )
+270	            )
+271	            if await self._resolve_scalar_one_or_none(existing):
+272	                return Result.fail(fallback="[RC_ALREADY_EXISTS]")
+273	
+274	            # Create summary
+275	            check_list = checks or self.DEFAULT_CHECKS
+276	            summary = ReleaseVerificationSummary(
+277	                summary_id=str(uuid.uuid4()),
+278	                release_version=release_version,
+279	                release_candidate_id=release_candidate_id,
+280	                total_checks=len(check_list),
+281	                pending_checks=len(check_list),
+282	                overall_status="pending",
+283	            )
+284	            db.add(summary)
+285	
+286	            # Create check records
+287	            for check in check_list:
+288	                record = ReleaseVerificationRecord(
+289	                    record_id=str(uuid.uuid4()),
+290	                    release_version=release_version,
+291	                    release_candidate_id=release_candidate_id,
+292	                    check_type=check.check_type,
+293	                    check_name=check.check_name,
+294	                    check_description=check.check_description,
+295	                    status=check.status,
+296	                    passed=False,
+297	                    details=check.details,
+298	                )
+299	                db.add(record)
+300	
+301	            await db.commit()
+302	            await db.refresh(summary)
+303	
+304	            logger.info(
+305	                "Created release candidate verification",
+306	                extra={
+307	                    "release_version": release_version,
+308	                    "release_candidate_id": release_candidate_id,
+309	                    "total_checks": len(check_list),
+310	                    "created_by": created_by,
+311	                },
+312	            )
+313	
+314	            return Result(value=self._summary_to_view(summary))
+315	
+316	        except SQLAlchemyError as e:
+317	            logger.error(
+318	                "Failed to create release candidate",
+319	                extra={"error": str(e)},
+320	                exc_info=True,
+321	            )
+322	            await db.rollback()
+323	            return Result.fail(fallback="[CREATE_RC_FAILED]")
+324	
+325	    async def update_check_result(
+326	        self,
+327	        db: AsyncSession,
+328	        record_id: str,
+329	        status: CheckStatus,
+330	        passed: bool,
+331	        details: dict[str, Any] | None = None,
+332	        error_message: str | None = None,
+333	        duration_ms: int | None = None,
+334	        executed_by: str | None = None,
+335	    ) -> Result[VerificationRecordView]:
+336	        """
+337	        Update a verification check result
+338	
+339	        Args:
+340	            db: Database session
+341	            record_id: ID of the verification record
+342	            status: New status
+343	            passed: Whether the check passed
+344	            details: Additional check data
+345	            error_message: Error message if failed
+346	            duration_ms: Duration of check execution
+347	            executed_by: User ID of executor
+348	
+349	        Returns:
+350	            Result containing updated VerificationRecordView or error
+351	        """
+352	        try:
+353	            result = await db.execute(
+354	                select(ReleaseVerificationRecord).where(
+355	                    ReleaseVerificationRecord.record_id == record_id
+356	                )
+357	            )
+358	            record = await self._resolve_scalar_one_or_none(result)
+359	
+360	            if not record:
+361	                return Result.fail(fallback="[RECORD_NOT_FOUND]")
+362	
+363	            # Update record
+364	            old_status = record.status
+365	            record.status = status
+366	            record.passed = passed
+367	            record.details = details or record.details
+368	            record.error_message = error_message
+369	            record.duration_ms = duration_ms
+370	            record.executed_by = executed_by
+371	            record.executed_at = datetime.now(UTC)
+372	            record.updated_at = datetime.now(UTC)
+373	
+374	            # Update summary counts
+375	            await self._update_summary_counts(
+376	                db, record.release_candidate_id, old_status, status
+377	            )
+378	
+379	            await db.commit()
+380	            await db.refresh(record)
+381	
+382	            logger.info(
+383	                "Updated verification check result",
+384	                extra={
+385	                    "record_id": record_id,
+386	                    "status": status,
+387	                    "passed": passed,
+388	                    "executed_by": executed_by,
+389	                },
+390	            )
+391	
+392	            return Result(value=self._record_to_view(record))
+393	
+394	        except SQLAlchemyError as e:
+395	            logger.error(
+396	                "Failed to update check result",
+397	                extra={"record_id": record_id, "error": str(e)},
+398	                exc_info=True,
+399	            )
+400	            await db.rollback()
+401	            return Result.fail(fallback="[UPDATE_CHECK_FAILED]")
+402	
+403	    async def make_go_no_go_decision(
+404	        self,
+405	        db: AsyncSession,
+406	        release_candidate_id: str,
+407	        decision: GoNoGoDecision,
+408	        reason: str,
+409	        finalized_by: str,
+410	    ) -> Result[VerificationSummaryView]:
+411	        """
+412	        Make a go/no-go decision for a release candidate
+413	
+414	        Args:
+415	            db: Database session
+416	            release_candidate_id: ID of the release candidate
+417	            decision: go, no_go, or conditional
+418	            reason: Reason for the decision
+419	            finalized_by: User ID making the decision
+420	
+421	        Returns:
+422	            Result containing updated VerificationSummaryView or error
+423	        """
+424	        try:
+425	            result = await db.execute(
+426	                select(ReleaseVerificationSummary).where(
+427	                    ReleaseVerificationSummary.release_candidate_id
+428	                    == release_candidate_id
+429	                )
+430	            )
+431	            summary = await self._resolve_scalar_one_or_none(result)
+432	
+433	            if not summary:
+434	                return Result.fail(fallback="[SUMMARY_NOT_FOUND]")
+435	
+436	            # Check if all required checks are complete
+437	            if summary.pending_checks > 0:
+438	                return Result.fail(fallback="[PENDING_CHECKS_EXIST]")
+439	
+440	            summary.go_no_go_decision = decision
+441	            summary.decision_reason = reason
+442	            summary.finalized_at = datetime.now(UTC)
+443	            summary.finalized_by = finalized_by
+444	            summary.updated_at = datetime.now(UTC)
+445	
+446	            # Set overall status based on decision
+447	            if decision == "go":
+448	                summary.overall_status = "passed"
+449	            elif decision == "no_go":
+450	                summary.overall_status = "failed"
+451	            else:
+452	                summary.overall_status = "passed"  # Conditional is still a pass
+453	
+454	            await db.commit()
+455	            await db.refresh(summary)
+456	
+457	            logger.info(
+458	                "Made go/no-go decision",
+459	                extra={
+460	                    "release_candidate_id": release_candidate_id,
+461	                    "decision": decision,
+462	                    "finalized_by": finalized_by,
+463	                },
+464	            )
+465	
+466	            return Result(value=self._summary_to_view(summary))
+467	
+468	        except SQLAlchemyError as e:
+469	            logger.error(
+470	                "Failed to make go/no-go decision",
+471	                extra={"release_candidate_id": release_candidate_id, "error": str(e)},
+472	                exc_info=True,
+473	            )
+474	            await db.rollback()
+475	            return Result.fail(fallback="[DECISION_FAILED]")
+476	
+477	    async def get_verification_report(
+478	        self,
+479	        db: AsyncSession,
+480	        release_candidate_id: str,
+481	    ) -> Result[ReleaseVerificationReport]:
+482	        """
+483	        Get complete verification report for a release candidate
+484	
+485	        Args:
+486	            db: Database session
+487	            release_candidate_id: ID of the release candidate
+488	
+489	        Returns:
+490	            Result containing ReleaseVerificationReport or error
+491	        """
+492	        try:
+493	            # Get summary
+494	            summary_result = await db.execute(
+495	                select(ReleaseVerificationSummary).where(
+496	                    ReleaseVerificationSummary.release_candidate_id
+497	                    == release_candidate_id
+498	                )
+499	            )
+500	            summary = await self._resolve_scalar_one_or_none(summary_result)
+501	
+502	            if not summary:
+503	                return Result.fail(fallback="[SUMMARY_NOT_FOUND]")
+504	
+505	            # Get all checks
+506	            checks_result = await db.execute(
+507	                select(ReleaseVerificationRecord)
+508	                .where(
+509	                    ReleaseVerificationRecord.release_candidate_id
+510	                    == release_candidate_id
+511	                )
+512	                .order_by(ReleaseVerificationRecord.created_at)
+513	            )
+514	            checks = list(checks_result.scalars().all())
+515	
+516	            # Build gate status summary
+517	            gate_status: dict[str, dict[str, Any]] = {}
+518	            for check in checks:
+519	                check_type = _orm_str(check, "check_type")
+520	                check_status = _orm_str(check, "status")
+521	                if check_type not in gate_status:
+522	                    gate_status[check_type] = {
+523	                        "total": 0,
+524	                        "passed": 0,
+525	                        "failed": 0,
+526	                        "pending": 0,
+527	                    }
+528	                gate_status[check_type]["total"] += 1
+529	                if check_status == "passed":
+530	                    gate_status[check_type]["passed"] += 1
+531	                elif check_status == "failed":
+532	                    gate_status[check_type]["failed"] += 1
+533	                elif check_status == "pending":
+534	                    gate_status[check_type]["pending"] += 1
+535	
+536	            # Generate recommendations
+537	            recommendations = self._generate_recommendations(summary, checks)
+538	
+539	            report = ReleaseVerificationReport(
+540	                summary=self._summary_to_view(summary),
+541	                checks=[self._record_to_view(c) for c in checks],
+542	                gate_status=gate_status,
+543	                recommendations=recommendations,
+544	            )
+545	
+546	            return Result(value=report)
+547	
+548	        except SQLAlchemyError as e:
+549	            logger.error(
+550	                "Failed to get verification report",
+551	                extra={"release_candidate_id": release_candidate_id, "error": str(e)},
+552	                exc_info=True,
+553	            )
+554	            return Result.fail(fallback="[REPORT_FAILED]")
+555	
+556	    async def list_release_candidates(
+557	        self,
+558	        db: AsyncSession,
+559	        status: CheckStatus | None = None,
+560	        limit: int = 20,
+561	        offset: int = 0,
+562	    ) -> Result[list[VerificationSummaryView]]:
+563	        """
+564	        List release candidates with optional status filter
+565	
+566	        Args:
+567	            db: Database session
+568	            status: Optional status filter
+569	            limit: Max items to return
+570	            offset: Pagination offset
+571	
+572	        Returns:
+573	            Result containing list of VerificationSummaryView or error
+574	        """
+575	        try:
+576	            query = select(ReleaseVerificationSummary).order_by(
+577	                ReleaseVerificationSummary.created_at.desc()
+578	            )
+579	
+580	            if status:
+581	                query = query.where(ReleaseVerificationSummary.overall_status == status)
+582	
+583	            query = query.limit(limit).offset(offset)
+584	
+585	            result = await db.execute(query)
+586	            summaries = result.scalars().all()
+587	
+588	            return Result(value=[self._summary_to_view(s) for s in summaries])
+589	
+590	        except SQLAlchemyError as e:
+591	            logger.error(
+592	                "Failed to list release candidates",
+593	                extra={"error": str(e)},
+594	                exc_info=True,
+595	            )
+596	            return Result.fail(fallback="[LIST_FAILED]")
+597	
+598	    async def get_latest_release_candidate(
+599	        self,
+600	        db: AsyncSession,
+601	    ) -> Result[VerificationSummaryView | None]:
+602	        """
+603	        Get the latest release candidate
+604	
+605	        Returns:
+606	            Result containing VerificationSummaryView or None or error
+607	        """
+608	        try:
+609	            result = await db.execute(
+610	                select(ReleaseVerificationSummary)
+611	                .order_by(ReleaseVerificationSummary.created_at.desc())
+612	                .limit(1)
+613	            )
+614	            summary = await self._resolve_scalar_one_or_none(result)
+615	
+616	            if summary:
+617	                return Result(value=self._summary_to_view(summary))
+618	            return Result(value=None)
+619	
+620	        except SQLAlchemyError as e:
+621	            logger.error(
+622	                "Failed to get latest release candidate",
+623	                extra={"error": str(e)},
+624	                exc_info=True,
+625	            )
+626	            return Result.fail(fallback="[GET_LATEST_FAILED]")
+627	
+628	    async def _update_summary_counts(
+629	        self,
+630	        db: AsyncSession,
+631	        release_candidate_id: str,
+632	        old_status: str,
+633	        new_status: str,
+634	    ) -> None:
+635	        """Update summary counts when a check status changes"""
+636	        result = await db.execute(
+637	            select(ReleaseVerificationSummary).where(
+638	                ReleaseVerificationSummary.release_candidate_id == release_candidate_id
+639	            )
+640	        )
+641	        summary = await self._resolve_scalar_one_or_none(result)
+642	
+643	        if summary:
+644	            # Decrement old status count
+645	            if old_status == "pending":
+646	                summary.pending_checks = max(0, summary.pending_checks - 1)
+647	            elif old_status == "passed":
+648	                summary.passed_checks = max(0, summary.passed_checks - 1)
+649	            elif old_status == "failed":
+650	                summary.failed_checks = max(0, summary.failed_checks - 1)
+651	            elif old_status == "skipped":
+652	                summary.skipped_checks = max(0, summary.skipped_checks - 1)
+653	
+654	            # Increment new status count
+655	            if new_status == "pending":
+656	                summary.pending_checks += 1
+657	            elif new_status == "passed":
+658	                summary.passed_checks += 1
+659	            elif new_status == "failed":
+660	                summary.failed_checks += 1
+661	            elif new_status == "skipped":
+662	                summary.skipped_checks += 1
+663	
+664	            # Update overall status
+665	            if summary.failed_checks > 0:
+666	                summary.overall_status = "failed"
+667	            elif summary.pending_checks == 0:
+668	                summary.overall_status = "passed"
+669	
+670	            summary.updated_at = datetime.now(UTC)
+671	
+672	    def _generate_recommendations(
+673	        self,
+674	        summary: ReleaseVerificationSummary,
+675	        checks: list[ReleaseVerificationRecord],
+676	    ) -> list[str]:
+677	        """Generate recommendations based on verification results"""
+678	        recommendations = []
+679	
+680	        # Check for failed items
+681	        failed_checks = [c for c in checks if _orm_str(c, "status") == "failed"]
+682	        if failed_checks:
+683	            recommendations.append(
+684	                f"Address {len(failed_checks)} failed check(s) before proceeding"
+685	            )
+686	
+687	        # Check for pending items
+688	        pending_checks = _orm_int(summary, "pending_checks")
+689	        if pending_checks > 0:
+690	            recommendations.append(f"Complete {pending_checks} pending check(s)")
+691	
+692	        # Contract tests must be 100% (NFR19)
+693	        contract_checks = [c for c in checks if _orm_str(c, "check_type") == "contract"]
+694	        failed_contracts = [
+695	            c for c in contract_checks if _orm_str(c, "status") == "failed"
+696	        ]
+697	        if failed_contracts:
+698	            recommendations.append(
+699	                "CRITICAL: Contract tests must pass 100% (NFR19) before release"
+700	            )
+701	
+702	        # Performance checks
+703	        perf_checks = [c for c in checks if _orm_str(c, "check_type") == "performance"]
+704	        failed_perf = [c for c in perf_checks if _orm_str(c, "status") == "failed"]
+705	        if failed_perf:
+706	            recommendations.append(
+707	                "Review performance benchmarks to ensure NFR thresholds are met"
+708	            )
+709	
+710	        # If all passed
+711	        if _orm_int(summary, "passed_checks") == _orm_int(summary, "total_checks"):
+712	            recommendations.append("All checks passed - ready for go decision")
+713	
+714	        return recommendations
+715	
+716	    def _record_to_view(
+717	        self, record: ReleaseVerificationRecord
+718	    ) -> VerificationRecordView:
+719	        """Convert model to view"""
+720	        executed_at = _orm_datetime(record, "executed_at")
+721	        created_at = _orm_datetime(record, "created_at")
+722	        updated_at = _orm_datetime(record, "updated_at")
+723	        return VerificationRecordView(
+724	            record_id=_orm_str(record, "record_id"),
+725	            release_version=_orm_str(record, "release_version"),
+726	            release_candidate_id=_orm_str(record, "release_candidate_id"),
+727	            check_type=_orm_str(record, "check_type"),
+728	            check_name=_orm_str(record, "check_name"),
+729	            check_description=_orm_optional_str(record, "check_description"),
+730	            status=_orm_str(record, "status"),
+731	            passed=_orm_bool(record, "passed"),
+732	            details=_orm_dict(record, "details"),
+733	            error_message=_orm_optional_str(record, "error_message"),
+734	            executed_by=_orm_optional_str(record, "executed_by"),
+735	            executed_at=executed_at.isoformat() if executed_at else None,
+736	            duration_ms=_orm_field(record, "duration_ms"),
+737	            created_at=created_at.isoformat() if created_at else "",
+738	            updated_at=updated_at.isoformat() if updated_at else "",
+739	        )
+740	
+741	    def _summary_to_view(
+742	        self, summary: ReleaseVerificationSummary
+743	    ) -> VerificationSummaryView:
+744	        """Convert model to view"""
+
+... (output truncated to budget; the source above is complete and verbatim — treat it as already Read. For any area not covered, run another codegraph_explore with the specific names — do NOT Read these files.)

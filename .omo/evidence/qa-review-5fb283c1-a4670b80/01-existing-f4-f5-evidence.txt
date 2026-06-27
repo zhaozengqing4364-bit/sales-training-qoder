@@ -1,0 +1,224 @@
+Surface: existing evidence files
+Invocation: sed -n 1,220p .omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md .omo/evidence/project-governance-refactor/f5-manual-qa.md .omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt .omo/ulw-loop/evidence/phase-7-quality-gate.json
+Expected: existing evidence is readable; if it records release/manual gate red, review must fail unless rerun disproves it.
+
+# F4 Critical Quality Gate
+
+Date: 2026-06-20
+
+## Command
+
+- `bash scripts/critical-quality-gate.sh`
+
+## Result
+
+Failed.
+
+The gate started the local smoke stack, completed the early checks, and stopped the stack on failure.
+
+Passed phases:
+
+- Secret hygiene scan: passed, `93 files scanned`.
+- Smoke stack bootstrap: passed.
+- Alembic upgrade during smoke bootstrap: passed.
+- Web typecheck: passed.
+- Vitest with coverage: passed, `16 passed (16)`, `161 passed (161)`.
+- Playwright smoke E2E partial result: `7 passed`, `2 failed`.
+
+Failed phase:
+
+- Playwright smoke E2E.
+
+Failed tests:
+
+- `tests/e2e/smoke.spec.ts:352` - `practice session smoke`
+  - Failure: `page.goto` timed out after `30000ms`.
+  - Important observation: the Playwright page snapshot shows the practice page reached the connected state with visible `已连接`, `进行中`, and `销售对练`, so the app route rendered but the navigation did not reach the default `load` wait condition.
+  - Evidence:
+    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-practice-session-smoke-chromium/error-context.md`
+    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-practice-session-smoke-chromium/trace.zip`
+    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-practice-session-smoke-chromium/test-failed-1.png`
+
+- `tests/e2e/smoke.spec.ts:432` - `support runtime smoke`
+  - Failure: after login, `page` remained at `http://localhost:3445/login`; expected `/`.
+  - Backend log observation: the matching login request was accepted and logged as `User logged in`, so the failure is on the frontend route/session/navigation side rather than an auth API rejection.
+  - Evidence:
+    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-support-runtime-smoke-chromium/error-context.md`
+    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-support-runtime-smoke-chromium/trace.zip`
+    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-support-runtime-smoke-chromium/test-failed-1.png`
+
+## Root-Cause Classification
+
+Classified as a quality-gate infrastructure/runtime red light, not a proven Task 1-24 functional regression.
+
+Observed evidence:
+
+- Backend logs show practice session creation, WebSocket acceptance, StepFun realtime handler selection, and lifecycle transitions for the failed practice session.
+- Backend logs do not show a corresponding `500`, traceback, permission denial, or auth rejection for these two failures.
+- Frontend logs show repeated Turbopack HMR/internal errors and a fatal Turbopack panic:
+  - `Resource path "src/app/(dashboard)/page.tsx" needs to be on project filesystem "web"`.
+  - `Module ... client-segment.js ... was instantiated ... but the module factory is not available`.
+  - A Next panic file was reported under `/var/folders/.../next-panic-4eea2f090c9978ce27b0eb0946a8b5e5.log`.
+- `web/tests/e2e/smoke.spec.ts` has an unrelated pre-existing working-tree diff. This verification wave did not modify or stage that file.
+
+## Release Decision
+
+Do not claim release readiness.
+
+The release candidate gate is executed and red. The next owner should either:
+
+- stabilize the smoke frontend server by running the gate against a non-Turbopack dev server or production build, then rerun `bash scripts/critical-quality-gate.sh`; or
+- explicitly accept this as an external environment/toolchain failure with separate release approval.
+# F5 Manual QA Surface
+
+Date: 2026-06-20
+
+## Mode
+
+External manual gate required.
+
+## Preconditions
+
+The F4 quality gate did bootstrap a local smoke stack and seeded the smoke admin user, but the Playwright smoke phase failed due frontend dev-server/runtime instability before this verification wave could rely on browser state for the plan's manual admin and learner routes.
+
+## Planned Routes
+
+- `/admin/sales-trainer/paths`
+- `/admin/sales-trainer/operation-logs`
+- `/sales-trainer/business-skills`
+- `/sales-trainer/business-skills/coach`
+
+## Executed
+
+Not executed as a release-valid manual QA pass.
+
+Reason:
+
+- F4 failed in Playwright smoke before the release candidate gate completed.
+- Frontend logs include Turbopack HMR/internal failures and a Turbopack fatal panic.
+- The manual QA preconditions require a stable full app stack with seeded admin and learner users. The available smoke stack was not stable enough to treat the route checks as release evidence.
+
+## Partial Browser Evidence From F4
+
+The F4 smoke run did exercise browser paths and produced these results:
+
+- Passed: unauthenticated learning path redirect.
+- Passed: login smoke.
+- Passed: dashboard smoke.
+- Passed: training entry smoke.
+- Failed: practice session smoke.
+- Passed: report smoke.
+- Passed: replay smoke.
+- Passed: admin analytics smoke.
+- Failed: support runtime smoke.
+
+Evidence is stored under:
+
+- `.sisyphus/evidence/task-9-quality-gate.txt`
+- `.sisyphus/evidence/task-9-test-results/`
+- `.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md`
+
+## Release Decision
+
+Do not claim release readiness.
+
+Manual QA for the planned admin/learner sales-trainer routes remains required after the F4 quality gate is green or explicitly waived by release owners.
+
+[2026-06-20 20:46:07] Secret hygiene scan
+Running secret hygiene scan...
+Secret hygiene scan passed (90 files scanned)
+Secret hygiene scan report: /Users/zhaozengqing/github/销售训练qoder/.sisyphus/evidence/secret-scan-report.json
+
+[2026-06-20 20:46:07] [quality-gate] Ensuring database schema is current before smoke bootstrap and Playwright
+[2026-06-20 20:46:07] 使用 smoke 启动约定拉起本地全栈环境
+[2026-06-20 20:46:07] 准备释放端口：3444,3445
+[2026-06-20 20:46:07] PostgreSQL 端口 5432 已可用。
+[2026-06-20 20:46:07] Redis 端口 6379 已可用。
+[2026-06-20 20:46:08] 启动 Backend (端口 3444)，Python: /Users/zhaozengqing/github/销售训练qoder/backend/.venv/bin/python，稳定模式（无 --reload），LOG_LEVEL=INFO
+[2026-06-20 20:46:11] Backend 已启动：http://localhost:3444
+[2026-06-20 20:46:11] 启动 Frontend (端口 3445)...
+[2026-06-20 20:46:12] Frontend 已启动：http://localhost:3445
+
+✅ 一键开发环境启动完成（纯本机模式，无 Docker）
+
+- Frontend: http://localhost:3445
+- Backend API: http://localhost:3444/api/v1
+- Backend Docs: http://localhost:3444/docs
+- Backend reload: 关闭（稳定模式，适合语音 WebSocket）
+- DATABASE_URL: postgresql+asyncpg://postgres:***@localhost:5432/ai_practice
+- REDIS_URL: redis://127.0.0.1:6379/0
+
+日志文件：
+- /Users/zhaozengqing/github/销售训练qoder/.dev/logs/backend.log
+- /Users/zhaozengqing/github/销售训练qoder/.dev/logs/frontend.log
+
+常用命令：
+- 查看后端日志：tail -f /Users/zhaozengqing/github/销售训练qoder/.dev/logs/backend.log
+- 查看前端日志：tail -f /Users/zhaozengqing/github/销售训练qoder/.dev/logs/frontend.log
+- 一键停止：bash /Users/zhaozengqing/github/销售训练qoder/scripts/dev-stop.sh
+[2026-06-20 20:46:12] [smoke] Running alembic upgrade head before bootstrap...
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+[updated] user_id=d8f258f0-7ab8-4dd8-9996-ffb1f1593186 email=admin@qoder.ai role=admin wechat_user_id=local_admin
+SMOKE_REPORT_SESSION_ID=07b54805-5313-4537-b014-f929043d776e
+SMOKE_REPORT_PATH=/practice/07b54805-5313-4537-b014-f929043d776e/report
+SMOKE_REPLAY_PATH=/practice/07b54805-5313-4537-b014-f929043d776e/replay
+
+✅ Smoke baseline 已就绪
+
+- Frontend: http://localhost:3445
+- Backend health: http://localhost:3444/health
+- Smoke admin: admin@qoder.ai
+- Smoke password: **REDACTED**
+- Smoke report route: /practice/07b54805-5313-4537-b014-f929043d776e/report
+- Smoke replay route: /practice/07b54805-5313-4537-b014-f929043d776e/replay
+- 停止命令: bash /Users/zhaozengqing/github/销售训练qoder/scripts/dev-smoke-stop.sh
+
+[2026-06-20 20:46:21] Web typecheck
+
+[2026-06-20 20:46:24] Vitest
+
+ RUN  v4.1.4 /Users/zhaozengqing/github/销售训练qoder/web
+      Coverage enabled with v8
+
+
+ Test Files  16 passed (16)
+      Tests  161 passed (161)
+   Start at  20:46:25
+   Duration  24.73s (transform 1.06s, setup 0ms, import 4.59s, tests 10.18s, environment 6.11s)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   52.96 |    51.38 |   47.32 |   54.95 |                   
+ ...p/(auth)/login |    77.5 |    60.29 |   86.66 |   77.21 |                   
+  page.tsx         |    77.5 |    60.29 |   86.66 |   77.21 | ...70,175,184,312 
+ ...pp/(dashboard) |   83.79 |    74.58 |   87.32 |   89.76 |                   
+  error.tsx        |      80 |       50 |   66.66 |      80 | 49                
+  page.tsx         |   83.85 |    74.75 |   88.23 |   89.95 | ...5,629-718,1012 
+ ...upport/runtime |   93.25 |    75.39 |     100 |   95.29 |                   
+  page.tsx         |   93.25 |    75.39 |     100 |   95.29 | 30,225,244,248    
+ ...ce/[sessionId] |   72.11 |     67.5 |   66.19 |   72.45 |                   
+  ...iceHeader.tsx |   73.33 |       75 |      50 |   73.33 | 98-210            
+  page.tsx         |   73.25 |    67.34 |   68.42 |    73.7 | ...,969,1167,1310 
+  ...te-machine.ts |    64.1 |       60 |    62.5 |    64.1 | ...60,88-94,98-99 
+ ...sionId]/replay |   84.74 |    70.54 |    92.5 |   86.04 |                   
+  page.tsx         |   84.74 |    70.54 |    92.5 |   86.04 | ...1186,1207,1526 
+ ...sionId]/report |   79.89 |    71.38 |   86.18 |   81.53 |                   
+  page.tsx         |   79.84 |    71.38 |   85.95 |   81.51 | ...2555,3292-3302 
+  ...eport-data.ts |   82.35 |      100 |     100 |   82.35 | 36-38             
+ web/src/app/admin |      80 |      100 |   66.66 |      80 |                   
+  error.tsx        |      80 |      100 |   66.66 |      80 | 37                
+ ...dmin/analytics |    82.3 |    75.12 |    92.3 |   83.48 |                   
+  page.tsx         |    82.3 |    75.12 |    92.3 |   83.48 | ...72,186,304,318 
+ ...es/_components |   82.32 |    65.93 |   91.89 |   85.78 |                   
+  ...rule-page.tsx |   82.32 |    65.93 |   91.89 |   85.78 | ...84,318,350-407 
+ ...s-combinations |   77.16 |    61.71 |   96.29 |   78.43 |                   
+  page.tsx         |   77.16 |    61.71 |   96.29 |   78.43 | ...46,261,335-338 
+ ...min/governance |   88.15 |    63.94 |   88.23 |   91.78 |                   
+  page.tsx         |   88.15 |    63.94 |   88.23 |   91.78 | ...78,106,373,552 
+ ...oring-rulesets |   77.72 |    66.46 |    77.5 |   80.71 |                   
+  page.tsx         |   77.72 |    66.46 |    77.5 |   80.71 | ...12-415,432-446 
+ ...admin/settings |   39.37 |    35.09 |   35.78 |   41.59 |                   
+  page.tsx         |   39.37 |    35.09 |   35.78 |   41.59 | ...1093,1110-1305 

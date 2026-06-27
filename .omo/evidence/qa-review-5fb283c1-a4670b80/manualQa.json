@@ -1,0 +1,92 @@
+{
+  "surfaceEvidence": [
+    {
+      "scenarioId": "S1",
+      "criterionRef": "P0-release-gate-existing-evidence",
+      "surface": "existing evidence files",
+      "exactInvocation": "sed -n '1,220p' .omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md .omo/evidence/project-governance-refactor/f5-manual-qa.md .omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt .omo/ulw-loop/evidence/phase-7-quality-gate.json",
+      "verdict": "FAIL",
+      "artifactRefs": ["A1", "A8"]
+    },
+    {
+      "scenarioId": "S2",
+      "criterionRef": "P0-backend-migration-head",
+      "surface": "backend CLI",
+      "exactInvocation": "cd backend && alembic heads",
+      "verdict": "PASS",
+      "artifactRefs": ["A2"]
+    },
+    {
+      "scenarioId": "S3",
+      "criterionRef": "P0-backend-runtime-dependency-contract",
+      "surface": "backend pytest CLI",
+      "exactInvocation": "cd backend && venv/bin/python -m pytest tests/unit/test_runtime_dependency_contract.py --no-cov -q",
+      "verdict": "PASS",
+      "artifactRefs": ["A3"]
+    },
+    {
+      "scenarioId": "S4",
+      "criterionRef": "P0-frontend-typescript",
+      "surface": "frontend TypeScript CLI",
+      "exactInvocation": "cd web && npx tsc --noEmit",
+      "verdict": "PASS",
+      "artifactRefs": ["A4"]
+    },
+    {
+      "scenarioId": "S5",
+      "criterionRef": "P0-frontend-targeted-vitest",
+      "surface": "frontend vitest CLI",
+      "exactInvocation": "cd web && npx vitest run src/lib/sales-trainer/routes.test.ts src/lib/api/client-domains.test.ts src/lib/api/newcomer-training.test.ts src/lib/api/sales-trainer.test.ts src/app/admin/sales-trainer/paths/page.test.tsx src/app/admin/sales-trainer/paths/page-audio-bindings.test.tsx src/app/admin/sales-trainer/paths/page-business-bindings.test.tsx",
+      "verdict": "PASS",
+      "artifactRefs": ["A5"]
+    },
+    {
+      "scenarioId": "S6",
+      "criterionRef": "P0-full-critical-quality-gate",
+      "surface": "release gate CLI",
+      "exactInvocation": "bash scripts/critical-quality-gate.sh",
+      "verdict": "FAIL",
+      "artifactRefs": ["A6", "A7", "A9"]
+    }
+  ],
+  "adversarialCases": [
+    {
+      "scenarioId": "ADV1",
+      "criterionRef": "release/manual gate cannot be inferred green from partial unit checks",
+      "adversarialClass": "partial green masking red release gate",
+      "expectedBehavior": "QA lane must fail when full release gate or manual gate is red, even if backend/frontend targeted checks pass.",
+      "verdict": "FAIL_CONFIRMED",
+      "artifactRefs": ["A1", "A6", "A8"]
+    },
+    {
+      "scenarioId": "ADV2",
+      "criterionRef": "secret/PII redaction",
+      "adversarialClass": "sensitive evidence leakage",
+      "expectedBehavior": "Evidence excerpts must not expose raw credentials or tokens.",
+      "verdict": "PASS",
+      "artifactRefs": ["A10"]
+    },
+    {
+      "scenarioId": "ADV3",
+      "criterionRef": "toolchain compatibility for release gate",
+      "adversarialClass": "environment interpreter mismatch",
+      "expectedBehavior": "Release gate should either run under the supported interpreter or fail visibly before release.",
+      "verdict": "FAIL_CONFIRMED",
+      "artifactRefs": ["A6", "A7", "A9"]
+    }
+  ],
+  "artifactRefs": [
+    {"id": "A0", "kind": "notepad", "description": "QA lane notepad with tier and skill decisions.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/notepad.md"},
+    {"id": "A1", "kind": "transcript", "description": "Existing F4/F5 evidence inspected, redacted.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/01-existing-f4-f5-evidence.txt"},
+    {"id": "A2", "kind": "transcript", "description": "Backend alembic heads output.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/02-backend-alembic-heads.txt"},
+    {"id": "A3", "kind": "transcript", "description": "Backend runtime dependency contract pytest output.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/03-backend-runtime-dependency-contract.txt"},
+    {"id": "A4", "kind": "transcript", "description": "Frontend TypeScript check output.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/04-frontend-tsc.txt"},
+    {"id": "A5", "kind": "transcript", "description": "Frontend targeted vitest output.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/05-frontend-targeted-vitest.txt"},
+    {"id": "A6", "kind": "transcript", "description": "Current full critical quality gate failure output.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/06-critical-quality-gate.txt"},
+    {"id": "A7", "kind": "inspection", "description": "Critical gate script/interpreter inspection.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/07-critical-gate-script-inspection.txt"},
+    {"id": "A8", "kind": "excerpt", "description": "Existing F4/F5 failure excerpts, redacted.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/08-existing-f4-f5-failure-excerpts.txt"},
+    {"id": "A9", "kind": "environment", "description": "Python interpreter version used by current gate invocation.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/09-python-version.txt"},
+    {"id": "A10", "kind": "audit", "description": "Redaction audit for this QA evidence directory.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/10-redaction-audit.txt"},
+    {"id": "A11", "kind": "matrix", "description": "manualQa matrix JSON.", "path": ".omo/evidence/qa-review-5fb283c1-a4670b80/manualQa.json"}
+  ]
+}

@@ -1,0 +1,62 @@
+Surface: existing F4/F5 failure excerpt
+Invocation: grep -nE "FAIL|failed|timeout|Playwright|practice|support|release|manual|not release-valid|exit|Error" .omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md .omo/evidence/project-governance-refactor/f5-manual-qa.md .omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt .omo/ulw-loop/evidence/phase-7-quality-gate.json
+Expected: records the previously known release/manual gate failures without exposing secrets.
+
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:22:- Playwright smoke E2E partial result: `7 passed`, `2 failed`.
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:26:- Playwright smoke E2E.
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:30:- `tests/e2e/smoke.spec.ts:352` - `practice session smoke`
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:32:  - Important observation: the Playwright page snapshot shows the practice page reached the connected state with visible `已连接`, `进行中`, and `销售对练`, so the app route rendered but the navigation did not reach the default `load` wait condition.
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:34:    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-practice-session-smoke-chromium/error-context.md`
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:35:    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-practice-session-smoke-chromium/trace.zip`
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:36:    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-practice-session-smoke-chromium/test-failed-1.png`
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:38:- `tests/e2e/smoke.spec.ts:432` - `support runtime smoke`
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:42:    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-support-runtime-smoke-chromium/error-context.md`
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:43:    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-support-runtime-smoke-chromium/trace.zip`
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:44:    - `.sisyphus/evidence/task-9-test-results/smoke-full-stack-smoke-baseline-support-runtime-smoke-chromium/test-failed-1.png`
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:52:- Backend logs show practice session creation, WebSocket acceptance, StepFun realtime handler selection, and lifecycle transitions for the failed practice session.
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:62:Do not claim release readiness.
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:64:The release candidate gate is executed and red. The next owner should either:
+.omo/evidence/project-governance-refactor/quality-gate/f4-critical-quality-gate.md:67:- explicitly accept this as an external environment/toolchain failure with separate release approval.
+.omo/evidence/project-governance-refactor/f5-manual-qa.md:7:External manual gate required.
+.omo/evidence/project-governance-refactor/f5-manual-qa.md:11:The F4 quality gate did bootstrap a local smoke stack and seeded the smoke admin user, but the Playwright smoke phase failed due frontend dev-server/runtime instability before this verification wave could rely on browser state for the plan's manual admin and learner routes.
+.omo/evidence/project-governance-refactor/f5-manual-qa.md:22:Not executed as a release-valid manual QA pass.
+.omo/evidence/project-governance-refactor/f5-manual-qa.md:26:- F4 failed in Playwright smoke before the release candidate gate completed.
+.omo/evidence/project-governance-refactor/f5-manual-qa.md:28:- The manual QA preconditions require a stable full app stack with seeded admin and learner users. The available smoke stack was not stable enough to treat the route checks as release evidence.
+.omo/evidence/project-governance-refactor/f5-manual-qa.md:38:- Failed: practice session smoke.
+.omo/evidence/project-governance-refactor/f5-manual-qa.md:42:- Failed: support runtime smoke.
+.omo/evidence/project-governance-refactor/f5-manual-qa.md:52:Do not claim release readiness.
+.omo/evidence/project-governance-refactor/f5-manual-qa.md:54:Manual QA for the planned admin/learner sales-trainer routes remains required after the F4 quality gate is green or explicitly waived by release owners.
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:7:[2026-06-20 20:46:07] [quality-gate] Ensuring database schema is current before smoke bootstrap and Playwright
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:23:- DATABASE_URL: postgresql+asyncpg://postgres:***@localhost:5432/ai_practice
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:39:SMOKE_REPORT_PATH=/practice/07b54805-5313-4537-b014-f929043d776e/report
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:40:SMOKE_REPLAY_PATH=/practice/07b54805-5313-4537-b014-f929043d776e/replay
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:48:- Smoke report route: /practice/07b54805-5313-4537-b014-f929043d776e/report
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:49:- Smoke replay route: /practice/07b54805-5313-4537-b014-f929043d776e/replay
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:113: ...nents/practice |    87.5 |    83.33 |     100 |    87.5 |                   
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:149:  practice.ts      |   14.28 |      100 |    8.33 |   14.28 | 40-41,58-107      
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:158: ...rc/lib/support |     100 |       50 |     100 |     100 |                   
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:169:[2026-06-20 20:46:50] Playwright smoke E2E
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:181:  ✓  5 [chromium] › tests/e2e/smoke.spec.ts:352:7 › full-stack smoke baseline › practice session smoke (16.1s)
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:185:  ✓  9 [chromium] › tests/e2e/smoke.spec.ts:432:7 › full-stack smoke baseline › support runtime smoke (22.4s)
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:189:[2026-06-20 20:48:18] Playwright presentation Phase 4 E2E
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:208:- DATABASE_URL: postgresql+asyncpg://postgres:***@localhost:5432/ai_practice
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:224:SMOKE_REPORT_PATH=/practice/07b54805-5313-4537-b014-f929043d776e/report
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:225:SMOKE_REPLAY_PATH=/practice/07b54805-5313-4537-b014-f929043d776e/replay
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:233:- Smoke report route: /practice/07b54805-5313-4537-b014-f929043d776e/report
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:234:- Smoke replay route: /practice/07b54805-5313-4537-b014-f929043d776e/replay
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:248:[2026-06-20 20:48:45] Playwright sales Phase 4 E2E
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:267:- DATABASE_URL: postgresql+asyncpg://postgres:***@localhost:5432/ai_practice
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:283:SMOKE_REPORT_PATH=/practice/07b54805-5313-4537-b014-f929043d776e/report
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:284:SMOKE_REPLAY_PATH=/practice/07b54805-5313-4537-b014-f929043d776e/replay
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:292:- Smoke report route: /practice/07b54805-5313-4537-b014-f929043d776e/report
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:293:- Smoke replay route: /practice/07b54805-5313-4537-b014-f929043d776e/replay
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:306:[2026-06-20 20:49:05] Backend tests: auth + history/report/replay + admin analytics + support runtime + business rules + model config + release verification
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:318:tests/integration/test_support_runtime_api.py ........                   [ 46%]
+.omo/ulw-loop/evidence/phase-7-critical-quality-gate.txt:320:tests/contract/test_release_verification_contract.py ........            [ 70%]
+.omo/ulw-loop/evidence/phase-7-quality-gate.json:10:  "manualQa": {
+.omo/ulw-loop/evidence/phase-7-quality-gate.json:53:        "invocation": "Playwright admin path-config desktop/mobile screenshots",
+.omo/ulw-loop/evidence/phase-7-quality-gate.json:158:        "description": "Full critical quality gate transcript with secret scan, Vitest, Playwright smoke/E2E, backend release gate, backend smoke regression, and cleanup receipt.",
+.omo/ulw-loop/evidence/phase-7-quality-gate.json:230:        "description": "G008 manual QA approval report.",
+.omo/ulw-loop/evidence/phase-7-quality-gate.json:270:      "cd backend && .venv/bin/python -m pytest tests/unit/test_sales_trainer_asset_revision_service.py tests/unit/test_newcomer_training_path_config_revision.py tests/integration/test_newcomer_training_path_config_api.py tests/integration/test_newcomer_training_path_regrade_api.py tests/integration/test_newcomer_training_path_audio_regrade_api.py tests/unit/test_newcomer_training_path_papers.py tests/unit/test_newcomer_training_path_audio_lineage.py tests/unit/test_curriculum_runtime_snapshot_service.py tests/integration/test_curriculum_practice_session_snapshot.py tests/unit/test_practice_template_published_asset_refs.py tests/unit/common/test_alembic_migration_graph.py --no-cov -q",
+.omo/ulw-loop/evidence/phase-7-quality-gate.json:282:    "originalIntent": "Execute all ULW aggregate task plans G001-G008 for unified published governance revision, newcomer training path governance, runtime snapshot alignment, permission/audit/diagnostics/rollback/regrade, and final release gate evidence.",
+.omo/ulw-loop/evidence/phase-7-quality-gate.json:283:    "desiredOutcome": "Backend, frontend, HTTP/browser/manual surface, boundary cases, regression paths, code review, manual QA, gate review, artifact integrity, and critical quality gate all have traceable passing evidence.",

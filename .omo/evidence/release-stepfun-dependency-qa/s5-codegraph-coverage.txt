@@ -1,0 +1,551 @@
+## Dynamic-dispatch links among your symbols
+(synthesized — the indirect hops grep/Read would reconstruct; the `@file:line` is the wiring site)
+
+- RealtimeFeedback → GlassCard   [dynamic: renders <GlassCard>]
+- RealtimeFeedback → FeedbackItem   [dynamic: renders <FeedbackItem>]
+
+## Dynamic boundaries (the static path ends at runtime dispatch)
+
+- `verify_openapi_parity` (backend/src/common/analytics/release_readiness.py:260) — dynamic import: `yaml = importlib.import_module("yaml")`
+
+> These sites choose their call target at runtime (registry / bus / reflection) — the site shown IS where the flow continues. To follow it, run codegraph_explore or codegraph_node on a candidate; source for the sites above is included below.
+
+> Full source for these symbols is below — the call flow among them, followed by their bodies.
+## Exploration: release gate StepFun realtime tests blocking persistence parity
+
+Found 208 symbols across 27 files.
+
+### Blast radius — what depends on these (update/verify before editing)
+
+- `StepFunRealtimeHandler` (backend/src/sales_bot/websocket/stepfun_realtime_handler.py:1156) — 3 callers in `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`; tests: `backend/tests/unit/test_presentation_stepfun_realtime_handler.py`
+- `StepFunRealtimeStateBase` (backend/src/sales_bot/websocket/stepfun_realtime_state.py:26) — 6 callers in `backend/src/sales_bot/websocket/stepfun_realtime_connection.py`, `backend/src/sales_bot/websocket/stepfun_realtime_feedback.py`, `backend/src/sales_bot/websocket/stepfun_realtime_policy.py`, `backend/src/sales_bot/websocket/stepfun_realtime_sales_stage.py` +2 more; ⚠️ no covering tests found
+- `StepFunRealtimePolicyMixin` (backend/src/sales_bot/websocket/stepfun_realtime_policy.py:214) — 1 caller in `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`; ⚠️ no covering tests found
+
+### Relationships
+
+**extends:**
+- StepFunRealtimeHandler → StepFunRealtimeSalesStageMixin
+- StepFunRealtimeSalesStageMixin → StepFunRealtimeStateBase
+- StepFunRealtimeStateBase → BaseWebSocketHandler
+- StepFunRealtimeHandler → StepFunRealtimeSharedHandler
+- StepFunRealtimeSharedHandler → StepFunRealtimeConnectionMixin
+- StepFunRealtimeSharedHandler → StepFunRealtimePolicyMixin
+- StepFunRealtimeSharedHandler → StepFunRealtimeUpstreamMixin
+- StepFunRealtimeSharedHandler → StepFunRealtimeFeedbackMixin
+- StepFunRealtimePolicyMixin → StepFunRealtimeStateBase
+- StepFunRealtimeFeedbackMixin → StepFunRealtimeStateBase
+- ... and 8 more
+
+**calls:**
+- test_create_release_candidate → create_release_candidate
+- test_coverage_threshold_is_report_item_when_shell_gate_is_authority → create_release_candidate
+- test_should_await_default_on_connect_after_connection_setup_before_receive_loop → handle_connection
+- _persist_emotion_signals → execute
+- info → info
+- test_run_all_verification_checks → create_release_candidate
+- test_run_all_verification_checks → run_all_checks
+- _roleplay_turn_instruction_context → _roleplay_contract
+- _roleplay_turn_instruction_context → _current_sales_stage_code
+- _handle_session_end → _cancel_pending_response_after_commit
+- ... and 268 more
+
+**references:**
+- test_run_all_verification_checks → mock_db_session
+- test_security_failure_blocks_quality_gate_and_automated_decision → mock_db_session
+- test_security_failure_blocks_quality_gate_and_automated_decision → runner
+- test_make_automated_decision → mock_db_session
+- test_coverage_threshold_is_report_item_when_shell_gate_is_authority → mock_db_session
+- test_coverage_threshold_is_report_item_when_shell_gate_is_authority → runner
+- test_quality_gate_blocks_on_critical_failure → mock_db_session
+- test_quality_gate_blocks_on_critical_failure → runner
+- test_check_quality_gate_status → mock_db_session
+- test_quality_gate_allows_with_warnings → mock_db_session
+- ... and 7 more
+
+### Source Code
+
+> The code below is the **verbatim, current on-disk source** of these files — re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.
+
+#### backend/tests/integration/test_release_gate.py — create_release_candidate(calls), mock_db_session(references), run_all_checks(calls), instantiates(instantiates), runner(references), check_quality_gate(calls), SecurityCheckResult(instantiates), make_automated_decision(calls), mock_db_session(function), runner(function), +14 more
+
+```python
+25	
+26	
+27	@pytest.fixture
+28	async def mock_db_session(test_db):
+29	    """Use real test DB session for release gate integration tests."""
+30	    yield test_db
+31	
+32	
+33	@pytest.fixture
+34	def runner():
+35	    """VerificationRunner instance with lightweight check stubs for deterministic tests."""
+36	    runner = VerificationRunner()
+37	
+38	    runner._run_unit_tests = AsyncMock(return_value=TestExecutionResult(
+39	        test_type="unit_tests",
+40	        passed=True,
+41	        total_tests=10,
+42	        passed_tests=10,
+43	        failed_tests=0,
+44	        skipped_tests=0,
+45	        duration_ms=10,
+46	    ))
+47	    runner._load_coverage_report = lambda: runner.CoverageReport(
+48	        coverage_percentage=85.0,
+49	        covered_lines=850,
+50	        total_lines=1000,
+51	        missing_lines=150,
+52	        by_module={},
+53	    )
+54	    runner._run_integration_tests = AsyncMock(return_value=TestExecutionResult(
+55	        test_type="integration_tests",
+56	        passed=True,
+57	        total_tests=8,
+58	        passed_tests=8,
+59	        failed_tests=0,
+60	        skipped_tests=0,
+61	        duration_ms=10,
+62	    ))
+63	    runner._run_contract_tests = AsyncMock(return_value=TestExecutionResult(
+64	        test_type="contract",
+65	        passed=True,
+66	        total_tests=6,
+67	        passed_tests=6,
+68	        failed_tests=0,
+69	        skipped_tests=0,
+70	        duration_ms=10,
+71	    ))
+72	    runner._run_performance_tests = AsyncMock(return_value=TestExecutionResult(
+73	        test_type="performance",
+74	        passed=True,
+75	        total_tests=1,
+76	        passed_tests=1,
+77	        failed_tests=0,
+78	        skipped_tests=0,
+79	        duration_ms=10,
+80	        performance_metrics={
+81	            "end_to_end_p95_ms": 180.0,
+82	            "asr_p95_ms": 120.0,
+83	            "interruption_p95_ms": 80.0,
+84	            "api_p95_ms": 60.0,
+85	            "api_p99_ms": 140.0,
+86	        },
+87	    ))
+88	    runner._run_health_checks = AsyncMock(return_value=HealthCheckResult(
+89	        check_type="health",
+90	        passed=True,
+91	        duration_ms=10,
+92	        details={},
+93	    ))
+94	    runner._run_security_checks = AsyncMock(return_value=SecurityCheckResult(
+95	        check_type="security",
+96	        passed=True,
+97	        issues_found=0,
+98	        high_severity=0,
+99	        medium_severity=0,
+100	        low_severity=0,
+101	        duration_ms=10,
+102	    ))
+103	    runner._run_release_readiness_check = AsyncMock(return_value=(
+104	        "release_readiness",
+105	        SecurityCheckResult(
+106	            check_type="release_readiness",
+107	            passed=True,
+108	            issues_found=0,
+109	            high_severity=0,
+110	            medium_severity=0,
+111	            low_severity=0,
+112	            duration_ms=10,
+113	        ),
+114	    ))
+115	    runner._run_documentation_checks = AsyncMock(return_value=DocumentationCheckResult(
+116	        check_type="documentation",
+117	        passed=True,
+118	        up_to_date=True,
+119	        missing_sections=[],
+120	        duration_ms=10,
+121	    ))
+122	
+123	    return runner
+124	
+125	
+126	class TestReleaseVerificationFlow:
+127	    """Test the complete release verification flow"""
+128	
+129	    @pytest.mark.asyncio
+130	    async def test_create_release_candidate(self, mock_db_session):
+131	        """Test creating a new release candidate"""
+132	        result = await release_verification_service.create_release_candidate(
+133	            db=mock_db_session,
+134	            release_version="v1.2.0",
+135	            release_candidate_id="rc-1.2.0-001",
+136	            created_by="test-user",
+137	        )
+138	
+139	        assert result.is_success
+140	        summary = result.value
+141	        assert summary.release_version == "v1.2.0"
+142	        assert summary.release_candidate_id == "rc-1.2.0-001"
+143	        assert summary.overall_status == "pending"
+144	        assert summary.total_checks == 6
+145	
+146	    @pytest.mark.asyncio
+147	    async def test_run_all_verification_checks(self, mock_db_session, runner):
+148	        """Test running all verification checks"""
+149	        # First create release candidate
+150	        await release_verification_service.create_release_candidate(
+151	            db=mock_db_session,
+152	            release_version="v1.2.0",
+153	            release_candidate_id="rc-test-001",
+154	        )
+155	
+156	        # Run all checks
+157	        result = await runner.run_all_checks(
+158	            db=mock_db_session,
+159	            release_candidate_id="rc-test-001",
+160	        )
+161	
+162	        assert result.is_success
+163	        summary = result.value
+164	
+165	        # Check that all check types were executed
+166	        check_names = [c["check_name"] for c in summary["checks"]]
+167	        assert "unit_tests" in check_names
+168	        assert "coverage" in check_names
+169	        assert "integration_tests" in check_names
+170	        assert "contract_tests" in check_names
+171	        assert "performance" in check_names
+172	        assert "health" in check_names
+173	        assert "security" in check_names
+174	        assert "documentation" in check_names
+175	
+176	    @pytest.mark.asyncio
+177	    async def test_quality_gate_blocks_on_critical_failure(self, mock_db_session, runner):
+178	        """Test that quality gate blocks on critical failures"""
+179	        # Create release candidate
+180	        await release_verification_service.create_release_candidate(
+181	            db=mock_db_session,
+182	            release_version="v1.2.0",
+183	            release_candidate_id="rc-gate-test",
+184	        )
+185	
+186	        # Mock unit tests to fail (blocking)
+187	        with patch.object(runner, '_run_unit_tests', return_value=runner.TestExecutionResult(
+188	            test_type="unit_tests",
+189	            passed=False,
+190	            total_tests=10,
+191	            passed_tests=8,
+192	            failed_tests=2,
+193	            skipped_tests=0,
+194	            duration_ms=5000,
+195	        )):
+196	            result = await runner.run_all_checks(
+197	                db=mock_db_session,
+198	                release_candidate_id="rc-gate-test",
+199	            )
+200	
+201	        # Check summary shows blocking failure
+202	        summary = result.value["summary"]
+203	        assert summary["can_release"] is False
+204	        assert "unit_tests" in summary["blocking_failures"]
+205	
+206	    @pytest.mark.asyncio
+207	    async def test_quality_gate_allows_with_warnings(self, mock_db_session, runner):
+208	        """Test that quality gate allows release with non-blocking warnings"""
+209	        # Create release candidate
+210	        await release_verification_service.create_release_candidate(
+211	            db=mock_db_session,
+212	            release_version="v1.2.0",
+213	            release_candidate_id="rc-warning-test",
+214	        )
+215	
+216	        # Mock documentation check to fail (non-blocking)
+217	        with patch.object(runner, '_run_documentation_checks', return_value=runner.DocumentationCheckResult(
+218	            check_type="documentation",
+219	            passed=True,
+220	            up_to_date=False,
+221	            missing_sections=["README.md"],
+222	            duration_ms=1000,
+223	        )):
+224	            result = await runner.run_all_checks(
+225	                db=mock_db_session,
+226	                release_candidate_id="rc-warning-test",
+227	            )
+228	
+229	        # Check summary allows release (warnings don't block)
+230	        summary = result.value["summary"]
+231	        assert summary["can_release"] is True
+232	        assert "documentation" in summary["warnings"]
+233	
+234	    @pytest.mark.asyncio
+235	    async def test_get_verification_report(self, mock_db_session):
+236	        """Test getting complete verification report"""
+237	        # Create release candidate
+238	        await release_verification_service.create_release_candidate(
+239	            db=mock_db_session,
+240	            release_version="v1.2.0",
+241	            release_candidate_id="rc-report-test",
+242	        )
+243	
+244	        # Get report
+245	        result = await release_verification_service.get_verification_report(
+246	            db=mock_db_session,
+247	            release_candidate_id="rc-report-test",
+248	        )
+249	
+250	        assert result.is_success
+251	        report = result.value
+252	
+253	        # Verify report structure
+254	        assert report.summary is not None
+255	        assert len(report.checks) == 6
+256	        assert report.gate_status is not None
+257	        assert isinstance(report.recommendations, list)
+258	
+259	    @pytest.mark.asyncio
+260	    async def test_check_quality_gate_status(self, mock_db_session):
+261	        """Test quality gate status checking"""
+262	        # Create release candidate with some checks run
+263	        await release_verification_service.create_release_candidate(
+264	            db=mock_db_session,
+265	            release_version="v1.2.0",
+266	            release_candidate_id="rc-gate-status-test",
+267	        )
+268	
+269	        # Check quality gate
+270	        result = await release_verification_service.check_quality_gate(
+271	            db=mock_db_session,
+272	            release_candidate_id="rc-gate-status-test",
+273	        )
+274	
+275	        assert result.is_success
+276	        gate_status = result.value
+277	
+278	        # Verify gate status structure
+279	        assert "overall_status" in gate_status
+280	        assert "gates" in gate_status
+281	        assert "blocking_failures" in gate_status
+282	        assert "warnings" in gate_status
+283	        assert "can_release" in gate_status
+284	        assert "recommendations" in gate_status
+285	
+286	    @pytest.mark.asyncio
+287	    async def test_make_automated_decision(self, mock_db_session, runner):
+288	        """Test automated go/no-go decision making"""
+289	        # Create release candidate
+290	        await release_verification_service.create_release_candidate(
+291	            db=mock_db_session,
+292	            release_version="v1.2.0",
+293	            release_candidate_id="rc-auto-decision-test",
+294	        )
+295	
+296	        # Complete checks so automated decision can be made
+297	        await runner.run_all_checks(
+298	            db=mock_db_session,
+299	            release_candidate_id="rc-auto-decision-test",
+300	        )
+301	
+302	        # Make automated decision
+303	        result = await release_verification_service.make_automated_decision(
+304	            db=mock_db_session,
+305	            release_candidate_id="rc-auto-decision-test",
+306	            finalized_by="test-user",
+307	        )
+308	
+309	        assert result.is_success
+310	        decision = result.value
+311	
+312	        # Verify decision was made
+313	        assert decision.go_no_go_decision in ["go", "no_go", "conditional"]
+314	        assert decision.finalized_by == "test-user"
+315	        assert decision.finalized_at is not None
+316	
+317	
+318	class TestQualityGateThresholds:
+319	    """Test quality gate threshold enforcement"""
+320	
+321	    @pytest.mark.asyncio
+322	    async def test_coverage_threshold_is_report_item_when_shell_gate_is_authority(
+323	        self, mock_db_session, runner
+324	    ):
+325	        # Create release candidate
+326	        await release_verification_service.create_release_candidate(
+327	            db=mock_db_session,
+328	            release_version="v1.2.0",
+329	            release_candidate_id="rc-coverage-test",
+330	        )
+331	
+332	        # Mock coverage below threshold
+333	        with patch.object(runner, '_load_coverage_report', return_value=runner.CoverageReport(
+334	            coverage_percentage=65.0,  # Below 70% threshold
+335	            covered_lines=650,
+336	            total_lines=1000,
+337	            missing_lines=350,
+338	            by_module={},
+339	        )):
+340	            await runner.run_all_checks(
+341	                db=mock_db_session,
+342	                release_candidate_id="rc-coverage-test",
+343	            )
+344	
+345	        # Check quality gate status
+346	        gate_result = await release_verification_service.check_quality_gate(
+347	            db=mock_db_session,
+348	            release_candidate_id="rc-coverage-test",
+349	        )
+350	
+351	        assert gate_result.is_success
+352	        gate_status = gate_result.value
+353	
+354	        assert gate_status["gates"]["coverage"]["status"] == "fail"
+355	        assert gate_status["gates"]["coverage"]["critical"] is False
+356	        assert gate_status["can_release"] is True
+357	        assert any("coverage" in r.lower() for r in gate_status["warnings"])
+358	
+359	    @pytest.mark.asyncio
+360	    async def test_contract_test_100_required(self, mock_db_session, runner):
+361	        """Test that contract tests must be 100% passing (NFR19)"""
+362	        # Create release candidate
+363	        await release_verification_service.create_release_candidate(
+364	            db=mock_db_session,
+365	            release_version="v1.2.0",
+366	            release_candidate_id="rc-contract-test",
+367	        )
+368	
+369	        # Mock contract tests not 100% passing
+370	        with patch.object(runner, '_run_contract_tests', return_value=runner.TestExecutionResult(
+371	            test_type="contract",
+372	            passed=False,  # Contract tests must pass
+373	            total_tests=5,
+374	            passed_tests=4,  # 80% pass rate - should fail
+375	            failed_tests=1,
+376	            skipped_tests=0,
+377	            duration_ms=3000,
+378	        )):
+379	            await runner.run_all_checks(
+380	                db=mock_db_session,
+381	                release_candidate_id="rc-contract-test",
+382	            )
+383	
+384	        # Check quality gate status
+385	        gate_result = await release_verification_service.check_quality_gate(
+386	            db=mock_db_session,
+387	            release_candidate_id="rc-contract-test",
+388	        )
+389	
+390	        assert gate_result.is_success
+391	        gate_status = gate_result.value
+392	
+393	        # Verify contract gate is marked as blocking
+394	        assert gate_status["gates"]["contract"]["critical"] is True
+395	        assert gate_status["can_release"] is False
+396	        assert any("contract" in r.lower() for r in gate_status["blocking_failures"])
+397	
+398	    @pytest.mark.asyncio
+399	    async def test_performance_p95_threshold_blocks(self, mock_db_session, runner):
+400	        """Test that performance P95 > 300ms blocks release (NFR1)"""
+401	        # Create release candidate
+402	        await release_verification_service.create_release_candidate(
+403	            db=mock_db_session,
+404	            release_version="v1.2.0",
+405	            release_candidate_id="rc-perf-test",
+406	        )
+407	
+408	        # Mock performance metrics above threshold
+409	        with patch.object(runner, '_run_performance_tests', return_value=runner.TestExecutionResult(
+410	            test_type="performance",
+411	            passed=False,  # Failed due to threshold
+412	            total_tests=1,
+413	            passed_tests=0,
+414	            failed_tests=1,
+415	            skipped_tests=0,
+416	            duration_ms=5000,
+417	            performance_metrics={
+418	                "end_to_end_p95_ms": 350.0,  # Above 300ms threshold (NFR1)
+419	                "asr_p95_ms": 180.0,
+420	                "interruption_p95_ms": 85.0,
+421	                "api_p95_ms": 95.0,
+422	                "api_p99_ms": 180.0,
+423	            },
+424	            test_output="End-to-End P95: 350ms",
+425	        )):
+426	            await runner.run_all_checks(
+427	                db=mock_db_session,
+428	                release_candidate_id="rc-perf-test",
+429	            )
+430	
+431	        # Check quality gate status
+432	        gate_result = await release_verification_service.check_quality_gate(
+433	            db=mock_db_session,
+434	            release_candidate_id="rc-perf-test",
+435	        )
+436	
+437	        assert gate_result.is_success
+438	        gate_status = gate_result.value
+439	
+440	        # Verify performance gate failed
+441	        assert gate_status["gates"]["performance"]["status"] == "fail"
+442	        assert gate_status["can_release"] is False
+443	        assert any(
+444	            "performance" in r.lower() or "threshold" in r.lower()
+445	            for r in gate_status["warnings"]
+446	        )
+447	
+448	    @pytest.mark.asyncio
+449	    async def test_security_failure_blocks_quality_gate_and_automated_decision(
+450	        self, mock_db_session, runner
+451	    ):
+452	        await release_verification_service.create_release_candidate(
+453	            db=mock_db_session,
+454	            release_version="v1.2.0",
+455	            release_candidate_id="rc-security-gate-test",
+456	        )
+457	
+458	        failed_security = SecurityCheckResult(
+459	            check_type="security",
+460	            passed=False,
+461	            issues_found=1,
+462	            high_severity=1,
+463	            medium_severity=0,
+464	            low_severity=0,
+465	            duration_ms=10,
+466	            error_message="bandit scanner missing",
+467	        )
+468	        with patch.object(
+469	            runner,
+470	            "_run_security_checks",
+471	            return_value=failed_security,
+472	        ):
+473	            await runner.run_all_checks(
+474	                db=mock_db_session,
+475	                release_candidate_id="rc-security-gate-test",
+476	            )
+477	
+478	        gate_result = await release_verification_service.check_quality_gate(
+479	            db=mock_db_session,
+480	            release_candidate_id="rc-security-gate-test",
+481	        )
+482	
+483	        assert gate_result.is_success
+484	        gate_status = gate_result.value
+485	        assert gate_status["gates"]["security"]["critical"] is True
+486	        assert gate_status["gates"]["security"]["status"] == "fail"
+487	        assert gate_status["can_release"] is False
+488	        assert any("security" in r.lower() for r in gate_status["blocking_failures"])
+489	
+490	        decision_result = await release_verification_service.make_automated_decision(
+491	            db=mock_db_session,
+492	            release_candidate_id="rc-security-gate-test",
+493	            finalized_by="test-user",
+494	        )
+495	
+496	        assert decision_result.is_success
+497	        decision = decision_result.value
+498	        assert decision.go_no_go_decision == "no_go"
+499	        assert "security" in (decision.decision_reason or "").lower()
+500	
+```
+
+
+... (output truncated to budget; the source above is complete and verbatim — treat it as already Read. For any area not covered, run another codegraph_explore with the specific names — do NOT Read these files.)
