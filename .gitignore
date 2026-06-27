@@ -214,3 +214,11 @@ symphony-workspaces/
 symphony-log/
 symphony-logs/
 .gstack/
+
+# .omo agent workflow — ignore runtime/ephemeral state, keep audit trail.
+# Tracked (committed): drafts/, plans/, evidence/, ultraresearch/.
+# Ignored (local only): boulder.json, start-work/, teams/, ulw-loop/.
+.omo/boulder.json
+.omo/start-work/
+.omo/teams/
+.omo/ulw-loop/
