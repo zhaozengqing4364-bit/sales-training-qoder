@@ -78,3 +78,37 @@ P0 接好 pip-audit 门禁后扫出 28 漏洞导致 safety check 永久 NO_GO。
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: P2 dual-read ADR 记债 + P3 WebSocket 三风险面调查报告
+
+**Date**: 2026-06-27
+**Task**: P2 dual-read ADR 记债 + P3 WebSocket 三风险面调查报告
+**Branch**: `main`
+
+### Summary
+
+丁方案收尾。P2 记债:新建 ADR 2026-06-27 记录 dual-read 观察窗开关默认关→审计从未运行→B1 零mismatch承诺可被静默满足(靠缺席证明安全),锁定B1启用前置条件a-d含新增隐性条件c(审计须在运行),不改代码,Future Work标注硬前置校验+发布时即时比对。P3 先调查后决策:派trellis-research产report.md,三风险面均有真实缺陷证据(R1 unregister按id删不校验handler误删新连接/R2重连无锁无版本号双恢复+进程重启半恢复/R3 send_json吞错35处调用致turn错位),均🟡偶发非阻断,建议建P1修复任务优先级R3>R1>R2。按丁方案修复任务留作P1候选下次再说,未建。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6165ef9a` | (see git log) |
+| `4a3f0526` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
