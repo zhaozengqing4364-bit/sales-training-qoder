@@ -3,7 +3,7 @@ import type { SalesTrainerPath, SalesTrainerPathLevel, SalesTrainerUnit } from "
 export const NEW_SELLER_MODULES_PATH_KEY = "new_seller_modules_v1";
 export const NEWCOMER_TRAINING_PATH_KEY = "newcomer_training_path_v1";
 export const MODULE_SUGGESTED_ORDER_HINT =
-    "建议顺序：PPT讲解录音 → 商务技巧。电梯演讲和实时对练暂不开放。";
+    "建议顺序：PPT讲解录音 → 商务技巧 → 金字塔演讲；真实语音对练按准入条件开放。";
 
 export function filterPathsForHome(paths: SalesTrainerPath[]): SalesTrainerPath[] {
     const newcomerPath = paths.find((path) => path.path_key === NEWCOMER_TRAINING_PATH_KEY);
@@ -18,8 +18,10 @@ export function filterPathsForHome(paths: SalesTrainerPath[]): SalesTrainerPath[
 }
 
 export function isThreeModulePath(path: SalesTrainerPath): boolean {
-    return path.path_key === NEWCOMER_TRAINING_PATH_KEY
-        || path.path_key === NEW_SELLER_MODULES_PATH_KEY;
+    return (
+        path.path_key === NEWCOMER_TRAINING_PATH_KEY ||
+        path.path_key === NEW_SELLER_MODULES_PATH_KEY
+    );
 }
 
 export interface ModuleAudioOption {
@@ -81,7 +83,12 @@ function titleFor(enriched: EnrichedLevel, fallback: string): string {
 }
 
 function descriptionFor(enriched: EnrichedLevel, fallback: string): string {
-    return enriched.level.level_description ?? enriched.level.description ?? enriched.unit?.description ?? fallback;
+    return (
+        enriched.level.level_description ??
+        enriched.level.description ??
+        enriched.unit?.description ??
+        fallback
+    );
 }
 
 function actionLabelFor(enriched: EnrichedLevel, fallback: string): string {
@@ -118,7 +125,10 @@ function buildPptView(enriched: EnrichedLevel): SalesTrainerModuleView {
     return {
         key: "ppt",
         title: titleFor(enriched, "PPT讲解录音"),
-        description: descriptionFor(enriched, "学习新人训练路径 PPT 讲解要点后上传录音，由 AI 转写并评分。"),
+        description: descriptionFor(
+            enriched,
+            "学习新人训练路径 PPT 讲解要点后上传录音，由 AI 转写并评分。",
+        ),
         orderLabel: orderLabelFor(enriched.level),
         primaryActionLabel: actionLabelFor(enriched, "上传 PPT 讲解录音"),
         pptUploadHref: disabled ? null : enriched.level.target_path,
@@ -159,8 +169,11 @@ function buildElevatorPitchView(enrichedLevels: EnrichedLevel[]): SalesTrainerMo
     const disabled = isDisabled(first, false);
     return {
         key: "elevator_pitch",
-        title: titleFor(first, "电梯演讲"),
-        description: descriptionFor(first, "选择后台配置的时长上传 PPT 演讲录音，获取转写与评分反馈。"),
+        title: titleFor(first, "金字塔演讲"),
+        description: descriptionFor(
+            first,
+            "选择后台配置的时长上传金字塔演讲录音，获取转写与评分反馈。",
+        ),
         orderLabel: orderLabelFor(first.level),
         primaryActionLabel: actionLabelFor(first, "选择演讲时长"),
         pptUploadHref: null,
@@ -184,7 +197,10 @@ function buildRealtimePlaceholderView(enriched: EnrichedLevel): SalesTrainerModu
     return {
         key: "realtime_practice",
         title: titleFor(enriched, "实时对练"),
-        description: descriptionFor(enriched, "调用现有机器人系统进行客户模拟对练，当前迭代仅展示占位，不启动实时会话。"),
+        description: descriptionFor(
+            enriched,
+            "调用现有机器人系统进行客户模拟对练，当前迭代仅展示占位，不启动实时会话。",
+        ),
         orderLabel: orderLabelFor(enriched.level),
         primaryActionLabel: null,
         pptUploadHref: null,
@@ -200,7 +216,9 @@ function buildRealtimePlaceholderView(enriched: EnrichedLevel): SalesTrainerModu
 
 function buildConfiguredModuleViews(enrichedLevels: EnrichedLevel[]): SalesTrainerModuleView[] {
     const views: SalesTrainerModuleView[] = [];
-    const elevatorLevels = enrichedLevels.filter((item) => viewKeyFor(moduleKeyFor(item)) === "elevator_pitch");
+    const elevatorLevels = enrichedLevels.filter(
+        (item) => viewKeyFor(moduleKeyFor(item)) === "elevator_pitch",
+    );
     let didAddElevator = false;
 
     for (const item of enrichedLevels) {

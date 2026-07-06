@@ -37,12 +37,20 @@ from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
 from sales_trainer.services.audio_submission_service import AudioSubmissionService
+from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
     NEWCOMER_PATH_RESOURCE_TYPE,
     payload_from_revision,
 )
 from sales_trainer.services.quiz_service import QuizService
+from sales_trainer.services.readiness_state import (
+    READINESS_DOSSIER_TARGET_TYPE,
+    REVIEW_ACTION_CREATED,
+    capability_label,
+    module_capability_keys,
+    unique_non_empty,
+)
 from sales_trainer.services.training_record_lineage import (
     TrainingRecordLineageFields,
     training_record_lineage_fields,
@@ -135,6 +143,7 @@ class JourneyModule:
     completion_rule: str
     target_unit_id: str | None
     target_unit_ids: tuple[str, ...] = ()
+    capability_keys: tuple[str, ...] = ()
     learning_content_id: str | None = None
     exam_paper_id: str | None = None
     learning_unit_keys: tuple[str, ...] = ()
@@ -421,6 +430,10 @@ class TrainingJourneyService:
         overall = self._overall_progress(module_payloads)
         diagnostics = self._journey_diagnostics(path_payload.enabled, modules)
         training_stage = self._journey_stage(module_payloads, path_payload.enabled)
+        retraining_requests = await self._retraining_requests(
+            learner_id=str(learner.user_id),
+            modules=module_payloads,
+        )
         return {
             "journey_id": (
                 f"{learner.user_id}:{path_payload.path_key}:{active.revision_id}"
@@ -439,6 +452,7 @@ class TrainingJourneyService:
             "training_stage": training_stage,
             "modules": module_payloads,
             "overall_progress": overall,
+            "retraining_requests": retraining_requests,
             "diagnostics": diagnostics,
             "generated_at": datetime.now(UTC),
         }
@@ -525,6 +539,7 @@ class TrainingJourneyService:
             completion_rule=module.completion_rule,
             target_unit_id=module.target_unit_id,
             target_unit_ids=self._target_unit_ids(module),
+            capability_keys=tuple(module.capability_keys),
             learning_content_id=module.learning_content_id,
             exam_paper_id=module.exam_paper_id,
             learning_unit_keys=tuple(
@@ -588,6 +603,7 @@ class TrainingJourneyService:
             completion_rule="passed",
             target_unit_id=None,
             target_unit_ids=(),
+            capability_keys=tuple(module.capability_keys),
             learning_content_id=module.learning_content_id,
             exam_paper_id=module.exam_paper_id,
             learning_unit_keys=tuple(
@@ -1187,6 +1203,7 @@ class TrainingJourneyService:
             "order_index": module.order_index,
             "target_unit_id": module.target_unit_id,
             "target_unit_ids": list(module.target_unit_ids),
+            "capability_keys": list(module.capability_keys),
             "learning_content_id": module.learning_content_id,
             "exam_paper_id": module.exam_paper_id,
             "enabled": module.enabled,
@@ -1260,6 +1277,62 @@ class TrainingJourneyService:
         module: JourneyModule,
         status: TrainingStage,
     ) -> dict[str, Any] | None:
+        if module.kind == "audio_submission":
+            target_path = _module_practice_path(module)
+            action_key = (
+                "retry_audio_submission"
+                if status in {"scored", "passed", "failed", "needs_remediation"}
+                else "start_audio_submission"
+            )
+            if module.locked or target_path is None:
+                return {
+                    "action_key": action_key,
+                    "label": "上传录音",
+                    "target_path": target_path,
+                    "disabled": True,
+                    "disabled_reason": module.block_reason or "该录音训练暂不可用。",
+                }
+            return {
+                "action_key": action_key,
+                "label": "重新上传录音"
+                if action_key == "retry_audio_submission"
+                else "上传录音",
+                "target_path": target_path,
+                "disabled": False,
+                "disabled_reason": None,
+            }
+        if module.kind == "quiz_attempt":
+            target_path = _module_practice_path(module)
+            action_key = (
+                "retry_quiz_attempt"
+                if status in {"scored", "passed", "failed", "needs_remediation"}
+                else "start_quiz_attempt"
+            )
+            default_label = (
+                "重新学习并答题"
+                if module.base_module_key == "business_skills"
+                else "重新答题"
+            )
+            start_label = (
+                "学习并答题"
+                if module.base_module_key == "business_skills"
+                else "开始答题"
+            )
+            if module.locked or target_path is None:
+                return {
+                    "action_key": action_key,
+                    "label": start_label,
+                    "target_path": target_path,
+                    "disabled": True,
+                    "disabled_reason": module.block_reason or "该答题训练暂不可用。",
+                }
+            return {
+                "action_key": action_key,
+                "label": default_label if action_key == "retry_quiz_attempt" else start_label,
+                "target_path": target_path,
+                "disabled": False,
+                "disabled_reason": None,
+            }
         if module.kind == "ai_coach":
             target_path = (
                 "/sales-trainer/business-skills/coach"
@@ -1305,6 +1378,67 @@ class TrainingJourneyService:
                 "disabled_reason": None,
             }
         return None
+
+    async def _retraining_requests(
+        self,
+        *,
+        learner_id: str,
+        modules: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        logs, _ = await OperationLogService(self._db).list_logs(
+            target_type=READINESS_DOSSIER_TARGET_TYPE,
+            target_id=learner_id,
+            limit=20,
+        )
+        requests: list[dict[str, Any]] = []
+        for log in logs:
+            if log.action != REVIEW_ACTION_CREATED:
+                continue
+            metadata: dict[str, Any] = (
+                log.metadata_json if isinstance(log.metadata_json, dict) else {}
+            )
+            decision = str(metadata.get("decision") or "")
+            if decision != "require_retraining":
+                if requests:
+                    break
+                return []
+            task_value = metadata.get("retraining_task")
+            if not isinstance(task_value, dict):
+                continue
+            task: dict[str, Any] = task_value
+            capability_keys = unique_non_empty(metadata.get("capability_keys") or [])
+            evidence_ids = unique_non_empty(metadata.get("source_evidence_ids") or [])
+            target_modules = _retraining_target_modules(
+                modules,
+                evidence_ids=evidence_ids,
+                capability_keys=capability_keys,
+            )
+            primary_target_path = next(
+                (
+                    str(item["target_path"])
+                    for item in target_modules
+                    if item.get("target_path") and not item.get("disabled")
+                ),
+                None,
+            )
+            requests.append(
+                {
+                    "request_id": str(log.log_id),
+                    "task_id": str(task.get("task_id") or log.log_id),
+                    "status": str(task.get("status") or "pending"),
+                    "reason": metadata.get("reason"),
+                    "capability_keys": capability_keys,
+                    "capability_labels": [
+                        capability_label(capability_key)
+                        for capability_key in capability_keys
+                    ],
+                    "source_evidence_count": len(evidence_ids),
+                    "target_modules": target_modules,
+                    "primary_target_path": primary_target_path,
+                    "created_at": log.created_at,
+                }
+            )
+        return requests
 
     @staticmethod
     def _audio_stage(
@@ -2374,6 +2508,111 @@ def _normalise_filter_value(value: str | None) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _module_practice_path(module: JourneyModule) -> str | None:
+    target_unit_id = module.target_unit_id or next(iter(module.target_unit_ids), None)
+    if module.kind == "audio_submission" and target_unit_id:
+        return f"/sales-trainer/audio/{target_unit_id}"
+    if module.kind == "quiz_attempt":
+        if module.base_module_key == "business_skills":
+            if target_unit_id:
+                return (
+                    "/sales-trainer/business-skills"
+                    f"?unitId={target_unit_id}"
+                )
+            return "/sales-trainer/business-skills"
+        if target_unit_id:
+            return f"/sales-trainer/quiz/{target_unit_id}"
+    return None
+
+
+def _retraining_target_modules(
+    modules: list[dict[str, Any]],
+    *,
+    evidence_ids: list[str],
+    capability_keys: list[str],
+) -> list[dict[str, Any]]:
+    evidence_set = set(evidence_ids)
+    capability_set = set(capability_keys)
+    evidence_matched = [
+        module
+        for module in modules
+        if _module_matches_retraining_evidence(module, evidence_set)
+    ]
+    evidence_keys = {
+        (str(module.get("kind") or ""), str(module.get("module_key") or ""))
+        for module in evidence_matched
+    }
+    capability_matched = [
+        module
+        for module in modules
+        if (
+            str(module.get("kind") or ""),
+            str(module.get("module_key") or ""),
+        )
+        not in evidence_keys
+        and _module_matches_retraining_capability(module, capability_set)
+    ]
+    matched = evidence_matched + capability_matched
+    deduped: dict[tuple[str, str], dict[str, Any]] = {}
+    for module in matched:
+        key = (str(module.get("kind") or ""), str(module.get("module_key") or ""))
+        deduped.setdefault(key, module)
+    return [
+        _retraining_target_module_payload(module)
+        for module in sorted(
+            deduped.values(),
+            key=lambda item: int(item.get("order_index") or 0),
+        )
+    ]
+
+
+def _module_matches_retraining_evidence(
+    module: dict[str, Any],
+    evidence_ids: set[str],
+) -> bool:
+    if not evidence_ids:
+        return False
+    outcomes = list(module.get("outcome_history") or [])
+    latest = module.get("latest_outcome")
+    if isinstance(latest, dict):
+        outcomes.append(latest)
+    for outcome in outcomes:
+        if not isinstance(outcome, dict):
+            continue
+        record_type = str(outcome.get("record_type") or "")
+        record_id = str(outcome.get("source_record_id") or "")
+        if record_type and record_id and f"{record_type}:{record_id}" in evidence_ids:
+            return True
+    return False
+
+
+def _module_matches_retraining_capability(
+    module: dict[str, Any],
+    capability_keys: set[str],
+) -> bool:
+    if not capability_keys:
+        return False
+    return bool(capability_keys.intersection(module_capability_keys(module)))
+
+
+def _retraining_target_module_payload(module: dict[str, Any]) -> dict[str, Any]:
+    next_action_value = module.get("next_action")
+    next_action: dict[str, Any] = (
+        next_action_value if isinstance(next_action_value, dict) else {}
+    )
+    return {
+        "module_key": module.get("module_key"),
+        "title": module.get("title") or module.get("display_name"),
+        "kind": module.get("kind"),
+        "module_type": module.get("module_type"),
+        "status": module.get("status") or module.get("stage"),
+        "action_label": next_action.get("label"),
+        "target_path": next_action.get("target_path"),
+        "disabled": bool(next_action.get("disabled")) if next_action else True,
+        "disabled_reason": next_action.get("disabled_reason") if next_action else None,
+    }
 
 
 def _rate(numerator: int, denominator: int) -> float | None:

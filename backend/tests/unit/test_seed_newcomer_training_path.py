@@ -91,17 +91,35 @@ async def test_seed_newcomer_training_path_is_idempotent(
     active_payload = NewcomerPathConfigPayload.model_validate(
         active_revision.payload_json
     )
+    module_capability_keys = {
+        module.module_key: module.capability_keys for module in active_payload.modules
+    }
+    for module_key, capability_keys in (
+        seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE.items()
+    ):
+        if module_key in module_capability_keys:
+            assert module_capability_keys[module_key] == capability_keys
     elevator_module = next(
         module
         for module in active_payload.modules
         if module.module_key == "elevator_pitch"
     )
-    assert elevator_module.enabled is False
-    assert elevator_module.scoring_prompt_id is None
-    assert [option.duration_minutes for option in elevator_module.duration_options] == list(
-        seed_module.ELEVATOR_DURATION_OPTIONS
-    )
+    assert elevator_module.enabled is True
+    assert elevator_module.title == "第3关：金字塔演讲"
+    assert elevator_module.completion_rule == "passed"
+    assert elevator_module.scoring_prompt_id
+    assert [
+        option.duration_minutes for option in elevator_module.duration_options
+    ] == list(seed_module.ELEVATOR_DURATION_OPTIONS)
     assert all(option.target_unit_id for option in elevator_module.duration_options)
+    elevator_prompt = await test_db.get(
+        SalesTrainerAudioScorePrompt,
+        elevator_module.scoring_prompt_id,
+    )
+    assert elevator_prompt is not None
+    assert elevator_prompt.status == "published"
+    assert elevator_prompt.purpose == "elevator_pitch"
+    assert len(elevator_prompt.learner_rubric["criteria"]) == 5
 
     paper_count = await test_db.scalar(
         select(func.count())
@@ -208,6 +226,11 @@ async def test_seed_newcomer_training_path_is_idempotent(
     path_service = SalesTrainerPathConfigService(test_db)
     current_path = await path_service.get_config()
     business_module = _business_module(current_path["path"])
+    assert business_module.capability_keys == (
+        seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE[
+            seed_module.BUSINESS_SKILLS_MODULE_KEY
+        ]
+    )
     assert len(business_module.learning_units) == 7
     assert business_module.learning_units[0].unit_key == "trust_foundation"
     assert business_module.learning_units[-1].source_chapter_orders == [8]
@@ -228,6 +251,9 @@ async def test_seed_newcomer_training_path_is_idempotent(
     )
     ppt_audio = ppt_unit.config["audio"]
     assert ppt_unit.config["path"]["completion_rule"] == "passed"
+    assert ppt_unit.config["path"]["capability_keys"] == (
+        seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE["ppt_explanation"]
+    )
     assert ppt_audio["purpose"] == "ppt_pitch"
     assert ppt_audio["scoring_prompt_id"]
     ppt_prompt = await test_db.get(
@@ -256,6 +282,96 @@ async def test_seed_newcomer_training_path_is_idempotent(
     assert ppt_version is not None
     assert ppt_version.status == "published"
     assert ppt_version.content_type == "text/markdown"
+
+    elevator_units = (
+        (
+            await test_db.execute(
+                select(SalesTrainerUnit)
+                .where(
+                    SalesTrainerUnit.config["path"]["module_key"].as_string()
+                    == "elevator_pitch",
+                    SalesTrainerUnit.unit_type == "audio_scoring",
+                )
+                .order_by(SalesTrainerUnit.name.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(elevator_units) == len(seed_module.ELEVATOR_DURATION_OPTIONS)
+    for unit in elevator_units:
+        assert unit.config["path"]["enabled"] is True
+        assert unit.config["path"]["completion_rule"] == "passed"
+        assert unit.config["path"]["capability_keys"] == (
+            seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE["elevator_pitch"]
+        )
+        assert unit.config["audio"]["purpose"] == "elevator_pitch"
+        assert (
+            unit.config["audio"]["scoring_prompt_id"]
+            == elevator_module.scoring_prompt_id
+        )
+
+
+@pytest.mark.asyncio
+async def test_seed_newcomer_training_path_archives_legacy_elevator_units(
+    test_db: AsyncSession,
+) -> None:
+    seed_module = _load_seed_module()
+    legacy_ids: list[str] = []
+    for duration_minutes in seed_module.ELEVATOR_DURATION_OPTIONS:
+        legacy_id = seed_module._uuid()
+        legacy_ids.append(legacy_id)
+        test_db.add(
+            SalesTrainerUnit(
+                unit_id=legacy_id,
+                name=f"电梯演讲 · {duration_minutes} 分钟",
+                description="旧版电梯演讲占位单元。",
+                unit_type="audio_scoring",
+                status="published",
+                config={
+                    "audio": {"purpose": "elevator_pitch", "pass_threshold": 70},
+                    "path": {
+                        "path_key": seed_module.PATH_KEY,
+                        "module_key": "elevator_pitch",
+                        "module_type": "audio_scoring_group",
+                        "enabled": False,
+                    },
+                    "duration_minutes": duration_minutes,
+                },
+            )
+        )
+    await test_db.flush()
+
+    await seed_module.seed(test_db)
+
+    legacy_units = (
+        (
+            await test_db.execute(
+                select(SalesTrainerUnit).where(SalesTrainerUnit.unit_id.in_(legacy_ids))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert {unit.status for unit in legacy_units} == {"archived"}
+    active_revision = await SalesTrainerAssetRevisionService(test_db).active_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+    )
+    assert active_revision is not None
+    active_payload = NewcomerPathConfigPayload.model_validate(
+        active_revision.payload_json
+    )
+    elevator_module = next(
+        module
+        for module in active_payload.modules
+        if module.module_key == "elevator_pitch"
+    )
+    target_unit_ids = [
+        option.target_unit_id for option in elevator_module.duration_options
+    ]
+    assert not set(target_unit_ids).intersection(legacy_ids)
+    assert len(target_unit_ids) == len(set(target_unit_ids))
 
 
 @pytest.mark.asyncio
@@ -547,11 +663,7 @@ async def test_seed_newcomer_training_path_syncs_seed_account_passwords(
         seed_module.MANAGER_EMAIL,
     ):
         user = (
-            (
-                await test_db.execute(
-                    select(User).where(User.email == email)
-                )
-            )
+            (await test_db.execute(select(User).where(User.email == email)))
             .scalars()
             .one()
         )

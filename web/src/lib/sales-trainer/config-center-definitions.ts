@@ -19,10 +19,11 @@ export const MODULE_DEFINITIONS = [
     },
     {
         moduleKey: "elevator_pitch",
-        title: "电梯演讲",
+        title: "金字塔演讲",
         orderLabel: "第三关",
         description: "配置多个录音时长选项，学员选择时长后上传演讲录音。",
-        remediationHref: "/admin/sales-trainer/materials?module=elevator_pitch&purpose=elevator_pitch",
+        remediationHref:
+            "/admin/sales-trainer/materials?module=elevator_pitch&purpose=elevator_pitch",
         learnerPreview: "选择后台配置的演讲时长，上传录音并查看 AI 评分。",
     },
     {

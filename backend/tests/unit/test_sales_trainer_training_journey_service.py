@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.business_rules.service import BusinessRuleConfigService
@@ -22,7 +23,10 @@ from sales_trainer.models import (
     SalesTrainerUnit,
 )
 from sales_trainer.regrade_models import SalesTrainerRegradeRun
-from sales_trainer.schemas import SalesTrainerTrainingRecordResponse
+from sales_trainer.schemas import (
+    SalesTrainerTrainingRecordResponse,
+    TrainingJourneyResponse,
+)
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
@@ -31,11 +35,17 @@ from sales_trainer.services.learner_unit_access import (
     require_learner_active_path_module_access,
     require_learner_active_path_unit_access,
 )
+from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
     NEWCOMER_PATH_RESOURCE_TYPE,
 )
 from sales_trainer.services.path_service import SalesTrainerPathService
+from sales_trainer.services.readiness_state import (
+    READINESS_CONTRACT_VERSION,
+    READINESS_DOSSIER_TARGET_TYPE,
+    REVIEW_ACTION_CREATED,
+)
 from sales_trainer.services.training_journey_service import (
     TrainingJourneyError,
     TrainingJourneyService,
@@ -505,11 +515,25 @@ async def test_should_aggregate_audio_quiz_and_ai_coach_from_active_revision(
         == "audio_submission"
     )
     assert modules[("audio_submission", "ppt_explanation")]["passed"] is True
+    assert modules[("audio_submission", "ppt_explanation")]["next_action"] == {
+        "action_key": "retry_audio_submission",
+        "label": "重新上传录音",
+        "target_path": f"/sales-trainer/audio/{audio_unit_id}",
+        "disabled": False,
+        "disabled_reason": None,
+    }
     assert (
         modules[("quiz_attempt", "business_skills")]["latest_outcome"]["record_type"]
         == "quiz_attempt"
     )
     assert modules[("quiz_attempt", "business_skills")]["passed"] is True
+    assert modules[("quiz_attempt", "business_skills")]["next_action"] == {
+        "action_key": "retry_quiz_attempt",
+        "label": "重新学习并答题",
+        "target_path": f"/sales-trainer/business-skills?unitId={quiz_unit_id}",
+        "disabled": False,
+        "disabled_reason": None,
+    }
     assert (
         modules[("quiz_attempt", "business_skills")]["target_unit_id"] == quiz_unit_id
     )
@@ -552,6 +576,109 @@ async def test_should_aggregate_audio_quiz_and_ai_coach_from_active_revision(
         "disabled": True,
         "disabled_reason": "等待 runtime binding 接入。",
     }
+
+
+@pytest.mark.asyncio
+async def test_should_project_readiness_retraining_request_to_learner_journey(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    audio_unit_id = str(uuid.uuid4())
+    quiz_unit_id = str(uuid.uuid4())
+    test_db.add_all(
+        [
+            admin,
+            learner,
+            _unit(audio_unit_id, unit_type="audio_scoring", name="PPT 讲解"),
+            _unit(quiz_unit_id, unit_type="quiz", name="商务技巧"),
+        ]
+    )
+    await test_db.commit()
+    revision_id = await _publish_path(
+        test_db,
+        actor=admin,
+        audio_unit_id=audio_unit_id,
+        quiz_unit_id=quiz_unit_id,
+    )
+    await _seed_training_records(
+        test_db,
+        learner=learner,
+        revision_id=revision_id,
+        audio_unit_id=audio_unit_id,
+        quiz_unit_id=quiz_unit_id,
+    )
+    ai_session = await test_db.scalar(
+        select(SalesTrainerAiCoachSession).where(
+            SalesTrainerAiCoachSession.user_id == str(learner.user_id)
+        )
+    )
+    assert ai_session is not None
+
+    await OperationLogService(test_db).record(
+        actor=admin,
+        action=REVIEW_ACTION_CREATED,
+        target_type=READINESS_DOSSIER_TARGET_TYPE,
+        target_id=str(learner.user_id),
+        metadata={
+            "contract_version": READINESS_CONTRACT_VERSION,
+            "decision": "require_retraining",
+            "decision_label": "要求重练",
+            "reason": "商务礼仪表达还需要再练一次。",
+            "capability_keys": ["business_etiquette"],
+            "source_evidence_ids": [f"ai_coach_session:{ai_session.session_id}"],
+            "retraining_task": {
+                "task_id": "retraining-task-1",
+                "status": "pending",
+                "source": "operation_log",
+                "capability_keys": ["business_etiquette"],
+                "source_evidence_ids": [f"ai_coach_session:{ai_session.session_id}"],
+                "target_learner_id": str(learner.user_id),
+            },
+            "state_storage": "operation_log",
+        },
+    )
+    await test_db.commit()
+
+    journey = await TrainingJourneyService(test_db).get_learner_journey(
+        str(learner.user_id),
+        viewer=learner,
+    )
+    response = TrainingJourneyResponse.model_validate(journey)
+
+    assert len(response.retraining_requests) == 1
+    request = response.retraining_requests[0]
+    assert request.reason == "商务礼仪表达还需要再练一次。"
+    assert request.capability_labels == ["商务礼仪与职业表达"]
+    assert request.source_evidence_count == 1
+    assert request.primary_target_path == "/sales-trainer/business-skills/coach"
+    assert request.target_modules[0].module_key == "business_skills"
+    assert request.target_modules[0].kind == "ai_coach"
+    assert request.target_modules[0].target_path == "/sales-trainer/business-skills/coach"
+
+    await OperationLogService(test_db).record(
+        actor=admin,
+        action=REVIEW_ACTION_CREATED,
+        target_type=READINESS_DOSSIER_TARGET_TYPE,
+        target_id=str(learner.user_id),
+        metadata={
+            "contract_version": READINESS_CONTRACT_VERSION,
+            "decision": "approve",
+            "decision_label": "确认达标",
+            "reason": "补练后已确认达标。",
+            "capability_keys": ["business_etiquette"],
+            "source_evidence_ids": [f"ai_coach_session:{ai_session.session_id}"],
+            "retraining_task": None,
+            "state_storage": "operation_log",
+        },
+    )
+    await test_db.commit()
+
+    approved_journey = await TrainingJourneyService(test_db).get_learner_journey(
+        str(learner.user_id),
+        viewer=learner,
+    )
+    assert approved_journey["retraining_requests"] == []
 
 
 @pytest.mark.asyncio

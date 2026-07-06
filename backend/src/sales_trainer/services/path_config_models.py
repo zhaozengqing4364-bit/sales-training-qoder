@@ -17,6 +17,7 @@ from sales_trainer.schemas import (
 )
 from sales_trainer.services.asset_revision_service import AssetChangeClass
 from sales_trainer.services.path_config_audio_refs import audio_refs_from_unit
+from sales_trainer.services.readiness_state import CAPABILITY_KEYS
 
 PathModuleBindingRef = tuple[Any, ...]
 
@@ -126,6 +127,16 @@ def validate_path_payload_for_write(payload: NewcomerPathConfigPayload) -> None:
                 ),
                 422,
             )
+        unknown_capability_keys = sorted(set(module.capability_keys) - CAPABILITY_KEYS)
+        if unknown_capability_keys:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_PATH_CONFIG_INVALID]",
+                (
+                    f"模块 {module.title} 使用了未纳入新人达标档案能力模型的能力项："
+                    f"{', '.join(unknown_capability_keys)}。"
+                ),
+                422,
+            )
         if module.module_key in seen_module_keys:
             raise SalesTrainerPathConfigError(
                 "[NEWCOMER_PATH_CONFIG_INVALID]",
@@ -177,6 +188,7 @@ def module_from_unit(
         scoring_prompt_id=config.scoring_prompt_id or audio_refs.scoring_prompt_id,
         disabled_reason=config.disabled_reason,
         unlock_after_unit_ids=config.unlock_after_unit_ids,
+        capability_keys=config.capability_keys,
         learner_level_required=config.learner_level_required,
         completion_rule=config.completion_rule,
         primary_action_label=config.primary_action_label,
@@ -237,6 +249,7 @@ def path_config_from_module(
         scoring_prompt_id=module.scoring_prompt_id,
         disabled_reason=module.disabled_reason,
         unlock_after_unit_ids=module.unlock_after_unit_ids,
+        capability_keys=module.capability_keys,
         learner_level_required=module.learner_level_required,
         completion_rule=module.completion_rule,
         primary_action_label=module.primary_action_label,
@@ -313,6 +326,7 @@ def _module_refs(payload: NewcomerPathConfigPayload) -> list[PathModuleBindingRe
             module.material_id,
             module.material_version_id,
             module.scoring_prompt_id,
+            tuple(module.capability_keys),
             _stable_runtime_binding(module.runtime_binding),
             tuple(
                 (

@@ -3,6 +3,7 @@ import {
     BarChart3,
     BookOpen,
     Bot,
+    ClipboardCheck,
     ClipboardList,
     Eye,
     FileText,
@@ -103,6 +104,12 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
         icon: ListChecks,
         href: "/admin/sales-trainer/training-records",
     },
+    readiness: {
+        key: "readiness",
+        label: "达标验收",
+        icon: ClipboardCheck,
+        href: "/admin/sales-trainer/readiness",
+    },
     audioSubmissions: {
         key: "audioSubmissions",
         label: "学员录音",
@@ -148,6 +155,7 @@ export const SALES_TRAINER_ADMIN_CONTENT_NAV_ITEMS = [
 ] as const satisfies readonly SalesTrainerAdminRouteItem[];
 
 export const SALES_TRAINER_ADMIN_RECORD_NAV_ITEMS = [
+    SALES_TRAINER_ADMIN_ROUTES.readiness,
     SALES_TRAINER_ADMIN_ROUTES.trainingRecords,
     SALES_TRAINER_ADMIN_ROUTES.audioSubmissions,
     SALES_TRAINER_ADMIN_ROUTES.scoreResults,
@@ -248,15 +256,15 @@ export function filterSalesTrainerAdminRouteItemsForCapabilities(
     if (capabilities.capabilities.admin_full_access) {
         return [...items];
     }
-    const allowedHrefs = salesTrainerAdminItemsForCapabilities(capabilities)
-        .map((item) => item.href);
+    const allowedHrefs = salesTrainerAdminItemsForCapabilities(capabilities).map(
+        (item) => item.href,
+    );
     return items.filter((item) =>
-        allowedHrefs.some((href) =>
-            item.href === href
-            || (
-                href !== SALES_TRAINER_ADMIN_ROUTES.workbench.href
-                && item.href.startsWith(`${href}/`)
-            ),
+        allowedHrefs.some(
+            (href) =>
+                item.href === href ||
+                (href !== SALES_TRAINER_ADMIN_ROUTES.workbench.href &&
+                    item.href.startsWith(`${href}/`)),
         ),
     );
 }
@@ -271,22 +279,19 @@ export function isSalesTrainerAdminPathAllowedForCapabilities(
     if (capabilities.capabilities.admin_full_access) {
         return true;
     }
-    const visibleRouteAllowed = salesTrainerAdminItemsForCapabilities(capabilities)
-        .some((item) =>
-            currentPath === item.href
-            || (
-                item.href !== SALES_TRAINER_ADMIN_ROUTES.workbench.href
-                && currentPath.startsWith(`${item.href}/`)
-            ),
-        );
+    const visibleRouteAllowed = salesTrainerAdminItemsForCapabilities(capabilities).some(
+        (item) =>
+            currentPath === item.href ||
+            (item.href !== SALES_TRAINER_ADMIN_ROUTES.workbench.href &&
+                currentPath.startsWith(`${item.href}/`)),
+    );
     if (visibleRouteAllowed) {
         return true;
     }
-    return SALES_TRAINER_ADMIN_CAPABILITY_ACCESS_ROOTS.some((entry) =>
-        capabilities.capabilities[entry.capability]
-        && entry.roots.some((root) =>
-            currentPath === root || currentPath.startsWith(`${root}/`),
-        ),
+    return SALES_TRAINER_ADMIN_CAPABILITY_ACCESS_ROOTS.some(
+        (entry) =>
+            capabilities.capabilities[entry.capability] &&
+            entry.roots.some((root) => currentPath === root || currentPath.startsWith(`${root}/`)),
     );
 }
 
@@ -390,6 +395,11 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
         items: [SALES_TRAINER_ADMIN_ROUTES.trainingRecords],
     },
     {
+        root: "/admin/sales-trainer/readiness",
+        label: "达标验收",
+        items: [SALES_TRAINER_ADMIN_ROUTES.readiness],
+    },
+    {
         root: "/admin/sales-trainer/audio-submissions",
         label: "学员录音",
         items: [
@@ -437,15 +447,11 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
     },
 ] as const;
 
-export const SALES_TRAINER_ADMIN_WORKBENCH_LINKS =
-    SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS
-        .filter((group) => group.root !== "/admin/sales-trainer")
-        .map((group) => group.items[0]);
+export const SALES_TRAINER_ADMIN_WORKBENCH_LINKS = SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS.filter(
+    (group) => group.root !== "/admin/sales-trainer",
+).map((group) => group.items[0]);
 
-export function isSalesTrainerAdminPathInGroup(
-    currentPath: string,
-    root: string,
-): boolean {
+export function isSalesTrainerAdminPathInGroup(currentPath: string, root: string): boolean {
     if (root === "/admin/sales-trainer") {
         return currentPath === root;
     }
@@ -455,14 +461,14 @@ export function isSalesTrainerAdminPathInGroup(
 export function getSalesTrainerAdminContextNavGroup(
     currentPath: string,
 ): SalesTrainerAdminContextNavGroup {
-    return SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS.find((group) =>
-        (group.roots ?? [group.root]).some((root) =>
-            isSalesTrainerAdminPathInGroup(currentPath, root),
-        ),
-    )
-        ?? SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS[
-            SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS.length - 1
-        ];
+    return (
+        SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS.find((group) =>
+            (group.roots ?? [group.root]).some((root) =>
+                isSalesTrainerAdminPathInGroup(currentPath, root),
+            ),
+        ) ??
+        SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS[SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS.length - 1]
+    );
 }
 
 export function getSalesTrainerAdminContextNavGroupForCapabilities(
@@ -472,9 +478,6 @@ export function getSalesTrainerAdminContextNavGroupForCapabilities(
     const group = getSalesTrainerAdminContextNavGroup(currentPath);
     return {
         ...group,
-        items: filterSalesTrainerAdminRouteItemsForCapabilities(
-            group.items,
-            capabilities,
-        ),
+        items: filterSalesTrainerAdminRouteItemsForCapabilities(group.items, capabilities),
     };
 }

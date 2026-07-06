@@ -274,3 +274,20 @@ record.status = "published"
 ```
 
 Stable lookup keys make the script safe to rerun and easy to verify.
+
+### Common Mistake: Renaming Seed-Managed Units Without Archiving Legacy Rows
+
+When a seed script changes the operator-facing name of a stable logical unit
+(`module_key`, `purpose`, `paper_key`, etc.), do not rely on the new display
+name as the only lookup key. Existing installations may already contain the old
+row, and backfilled path payloads can then see duplicate duration options or
+duplicate module bindings.
+
+Required behavior:
+
+- Archive or migrate legacy rows that share the same stable logical key before
+  deriving active path payloads.
+- Add a regression test that starts with the legacy row and asserts the active
+  revision references only the new/current rows.
+- Keep historical submissions safe by changing future active config only; do
+  not rewrite old score snapshots.

@@ -9,16 +9,17 @@ interface MaterialSetupGuideProps {
     readonly moduleKey: string | null;
 }
 
-const MODULE_COPY: Readonly<Record<string, { readonly title: string; readonly pathHref: string }>> = {
-    ppt_explanation: {
-        title: "PPT 讲解录音材料配置",
-        pathHref: "/admin/sales-trainer/paths?module=ppt_explanation",
-    },
-    elevator_pitch: {
-        title: "电梯演讲材料配置",
-        pathHref: "/admin/sales-trainer/paths?module=elevator_pitch",
-    },
-};
+const MODULE_COPY: Readonly<Record<string, { readonly title: string; readonly pathHref: string }>> =
+    {
+        ppt_explanation: {
+            title: "PPT 讲解录音材料配置",
+            pathHref: "/admin/sales-trainer/paths?module=ppt_explanation",
+        },
+        elevator_pitch: {
+            title: "金字塔演讲材料配置",
+            pathHref: "/admin/sales-trainer/paths?module=elevator_pitch",
+        },
+    };
 
 export function MaterialSetupGuide({ moduleKey }: MaterialSetupGuideProps) {
     const copy = moduleKey ? MODULE_COPY[moduleKey] : undefined;
@@ -35,14 +36,21 @@ export function MaterialSetupGuide({ moduleKey }: MaterialSetupGuideProps) {
                 </p>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
-                <StepCard title="1. 新建材料主档" detail="先创建长期材料档案，例如公司主胶片或电梯演讲模板。" />
-                <StepCard title="2. 上传文件生成材料版本" detail="选择 PPT 或文档，系统自动记录文件名、大小和存储位置，先生成草稿版本。" />
-                <StepCard title="3. 回到路径配置中心发布绑定" detail="在对应关卡选择已发布材料，保存为待发布修订并发布生效。" />
+                <StepCard
+                    title="1. 新建材料主档"
+                    detail="先创建长期材料档案，例如公司主胶片或金字塔演讲模板。"
+                />
+                <StepCard
+                    title="2. 上传文件生成材料版本"
+                    detail="选择 PPT 或文档，系统自动记录文件名、大小和存储位置，先生成草稿版本。"
+                />
+                <StepCard
+                    title="3. 回到路径配置中心发布绑定"
+                    detail="在对应关卡选择已发布材料，保存为待发布修订并发布生效。"
+                />
             </div>
             <Button asChild variant="outline" className="rounded-full">
-                <Link href={copy.pathHref}>
-                    去路径配置中心发布绑定
-                </Link>
+                <Link href={copy.pathHref}>去路径配置中心发布绑定</Link>
             </Button>
         </GlassCard>
     );

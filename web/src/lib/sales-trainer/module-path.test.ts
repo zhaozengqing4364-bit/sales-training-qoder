@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { NewcomerTrainingModuleType, SalesTrainerPath, SalesTrainerPathLevel, SalesTrainerUnit } from "@/lib/api/types";
+import type {
+    NewcomerTrainingModuleType,
+    SalesTrainerPath,
+    SalesTrainerPathLevel,
+    SalesTrainerUnit,
+} from "@/lib/api/types";
 
 import {
     NEWCOMER_TRAINING_PATH_KEY,
@@ -35,7 +40,10 @@ function level(overrides: Partial<SalesTrainerPathLevel>): SalesTrainerPathLevel
     };
 }
 
-function path(levels: SalesTrainerPathLevel[], pathKey = NEW_SELLER_MODULES_PATH_KEY): SalesTrainerPath {
+function path(
+    levels: SalesTrainerPathLevel[],
+    pathKey = NEW_SELLER_MODULES_PATH_KEY,
+): SalesTrainerPath {
     return {
         path_key: pathKey,
         title: "新人训练路径",
@@ -65,7 +73,10 @@ function unitWithPath(
         unit_id: unitId,
         name: unitId,
         description: null,
-        unit_type: moduleType === "article_exam" || moduleType === "realtime_placeholder" ? "quiz" : "audio_scoring",
+        unit_type:
+            moduleType === "article_exam" || moduleType === "realtime_placeholder"
+                ? "quiz"
+                : "audio_scoring",
         config: { path: { module_key: moduleKey, module_type: moduleType, ...pathConfig } },
         status: "published",
         created_by: null,
@@ -104,10 +115,21 @@ describe("module-path", () => {
 
     it("fails closed when an older module path has no backend module keys", () => {
         const legacyPath = path([
-            level({ unit_id: "u1", order_index: 1, level_title: "PPT", target_path: "/sales-trainer/audio/u1" }),
-            level({ unit_id: "u2", unit_type: "quiz", order_index: 2, level_title: "商务", target_path: "/sales-trainer/business-skills" }),
-            level({ unit_id: "u3", order_index: 3, level_title: "电梯演讲 · 5 分钟" }),
-            level({ unit_id: "u4", order_index: 4, level_title: "电梯演讲 · 10 分钟" }),
+            level({
+                unit_id: "u1",
+                order_index: 1,
+                level_title: "PPT",
+                target_path: "/sales-trainer/audio/u1",
+            }),
+            level({
+                unit_id: "u2",
+                unit_type: "quiz",
+                order_index: 2,
+                level_title: "商务",
+                target_path: "/sales-trainer/business-skills",
+            }),
+            level({ unit_id: "u3", order_index: 3, level_title: "金字塔演讲 · 5 分钟" }),
+            level({ unit_id: "u4", order_index: 4, level_title: "金字塔演讲 · 10 分钟" }),
         ]);
 
         const views = buildModuleViews(legacyPath, new Map<string, SalesTrainerUnit>());
@@ -116,10 +138,24 @@ describe("module-path", () => {
     });
 
     it("does not render hardcoded modules for newcomer path without backend module keys", () => {
-        const newcomerPath = path([
-            level({ unit_id: "u1", order_index: 1, level_title: "PPT", target_path: "/sales-trainer/audio/u1" }),
-            level({ unit_id: "u2", unit_type: "quiz", order_index: 2, level_title: "商务", target_path: "/sales-trainer/business-skills" }),
-        ], NEWCOMER_TRAINING_PATH_KEY);
+        const newcomerPath = path(
+            [
+                level({
+                    unit_id: "u1",
+                    order_index: 1,
+                    level_title: "PPT",
+                    target_path: "/sales-trainer/audio/u1",
+                }),
+                level({
+                    unit_id: "u2",
+                    unit_type: "quiz",
+                    order_index: 2,
+                    level_title: "商务",
+                    target_path: "/sales-trainer/business-skills",
+                }),
+            ],
+            NEWCOMER_TRAINING_PATH_KEY,
+        );
 
         const views = buildModuleViews(newcomerPath, new Map<string, SalesTrainerUnit>());
 
@@ -205,10 +241,7 @@ describe("module-path", () => {
             ],
         ]);
 
-        const views = buildModuleViews(
-            path([activeLevel], NEWCOMER_TRAINING_PATH_KEY),
-            unitsById,
-        );
+        const views = buildModuleViews(path([activeLevel], NEWCOMER_TRAINING_PATH_KEY), unitsById);
 
         expect(views).toHaveLength(1);
         expect(views[0]).toMatchObject({
@@ -236,10 +269,7 @@ describe("module-path", () => {
             ],
         ]);
 
-        const views = buildModuleViews(
-            path([legacyLevel], NEWCOMER_TRAINING_PATH_KEY),
-            unitsById,
-        );
+        const views = buildModuleViews(path([legacyLevel], NEWCOMER_TRAINING_PATH_KEY), unitsById);
 
         expect(views).toEqual([]);
     });
@@ -265,14 +295,14 @@ describe("module-path", () => {
             level({
                 unit_id: "pitch-10",
                 order_index: 30,
-                level_title: "电梯演讲 · 10 分钟",
+                level_title: "金字塔演讲 · 10 分钟",
                 module_key: "elevator_pitch",
                 module_type: "audio_scoring_group",
             }),
             level({
                 unit_id: "pitch-20",
                 order_index: 40,
-                level_title: "电梯演讲 · 20 分钟",
+                level_title: "金字塔演讲 · 20 分钟",
                 module_key: "elevator_pitch",
                 module_type: "audio_scoring_group",
             }),
@@ -301,10 +331,18 @@ describe("module-path", () => {
 
         const views = buildModuleViews(path(levels, NEWCOMER_TRAINING_PATH_KEY), unitsById);
 
-        expect(views.map((view) => view.key)).toEqual(["business_skills", "ppt", "elevator_pitch", "realtime_practice"]);
+        expect(views.map((view) => view.key)).toEqual([
+            "business_skills",
+            "ppt",
+            "elevator_pitch",
+            "realtime_practice",
+        ]);
         expect(views[0].hubUnitId).toBe("business-unit");
         expect(views[1].pptUploadHref).toBe("/sales-trainer/audio/ppt-unit");
-        expect(views[2].audioOptions.map((option) => option.durationLabel)).toEqual(["10 分钟", "20 分钟"]);
+        expect(views[2].audioOptions.map((option) => option.durationLabel)).toEqual([
+            "10 分钟",
+            "20 分钟",
+        ]);
         expect(views[3].disabledReason).toBe("后端配置占位，不开放实时对练");
     });
 });

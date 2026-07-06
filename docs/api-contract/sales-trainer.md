@@ -248,7 +248,7 @@ StepAudio 2.5 provider migration 语义：
 |---|---|---|---|---|---|---|---|---|
 | `ppt_explanation` | `PPT 讲解录音` | `"audio_scoring"` | `true` | `passed` | `target_unit_id`、已发布材料、已发布评分提示词 | admin 新人训练路径模块/材料/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_materials`、`sales_trainer.manage_prompts` | `newcomer_module.ppt_explanation.*` |
 | `business_skills` | `商务技巧` | `"article_exam"` | `true` | `passed` | `learning_content_id`、`exam_paper_id` | admin 新人训练路径文章绑定/考卷管理 | `sales_trainer.manage_modules`、`sales_trainer.manage_papers`、`learning_content.manage` | `newcomer_module.business_skills.*` |
-| `elevator_pitch` | `电梯演讲` | `"audio_scoring_group"` | `false` | `scored` | 默认不开放；后台启用前需补齐材料、`duration_options[].target_unit_id` 和已发布评分提示词 | admin 新人训练路径模块/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_prompts` | `newcomer_module.elevator_pitch.*` |
+| `elevator_pitch` | `金字塔演讲` | `"audio_scoring_group"` | `true` | `passed` | `duration_options[].target_unit_id`、已发布评分提示词；材料可按企业训练包选配 | admin 新人训练路径模块/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_prompts` | `newcomer_module.elevator_pitch.*` |
 | `realtime_roleplay` | `实时对练` | `"realtime_roleplay"` | `false` | `submitted` | `runtime_binding`、provider readiness、已发布 runtime config、权限策略、outcome projection、rollback policy | admin 新人训练路径模块配置 + 运行时健康页 | `sales_trainer.manage_modules`、`sales_trainer.view_settings` | `newcomer_module.realtime_roleplay.*` |
 | `realtime_roleplay_placeholder` | `实时对练（旧占位）` | `"realtime_placeholder"` | `false` | `submitted` | 仅兼容历史 disabled 配置；不得作为新的 active revision 正式模块发布 | admin 新人训练路径模块配置 | `sales_trainer.manage_modules` | `newcomer_module.realtime_placeholder.*` |
 
@@ -958,6 +958,9 @@ TrainingJourney 是新人训练 learner 首页、模块详情、训练记录、�
 | `GET` | `/api/v1/admin/sales-trainer/journeys` | 管理端 journey 列表，支持部门、训练阶段、模块、学员等级筛选；学员等级由 `sales_trainer.learner_level.policy` 投影生成 | `sales_trainer.view_records` / `sales_trainer.view_global_records` |
 | `GET` | `/api/v1/admin/sales-trainer/journeys/analytics` | 管理端 journey 聚合分析，返回完成漏斗、模块通过率、历史趋势、学员等级分布、角色 scope 分布、风险学员和 realtime additive observation 诊断聚合；支持按训练阶段、模块、学员等级和角色等级过滤 | `sales_trainer.view_records` / `sales_trainer.view_global_records` |
 | `GET` | `/api/v1/admin/sales-trainer/journeys/{learner_id}` | 单个学员 journey 详情和历史证据 | 部门范围或全局记录权限 |
+| `GET` | `/api/v1/admin/sales-trainer/readiness/workbench` | 达标验收工作台，按待复核、未达标、需重练、已达标、配置异常、训练中分组 | `sales_trainer.view_records` / `sales_trainer.view_global_records` |
+| `GET` | `/api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}` | 单个新人训练达标档案，聚合训练提交证据、AI/规则初评、复核动作、重练任务和 realtime gate | 部门范围或全局记录权限 |
+| `POST` | `/api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}/review-actions` | 创建复核动作：确认达标、要求重练或标记人工跟进；动作写入操作日志并作为当前 V0.9 状态源 | 培训负责人 / 全局记录管理员 |
 
 `GET /api/v1/admin/sales-trainer/journeys` query:
 
@@ -1111,6 +1114,223 @@ interface TrainingJourneyAnalyticsResponse {
 - `weakness_heatmap` 当前由后端基于同一批 Journey module outcome 派生，暴露原始 `risk_count/risk_rate/status_counts/pass_rate/average_score`；风险等级阈值不是本契约的一部分，前端不得本地发明高/中/低业务分层。
 - `trend_data` 由后端基于同一批 Journey module outcome 的 `completed_at/submitted_at` 按日聚合，暴露 outcome 事件数、通过事件数、风险事件数、活跃学员数、通过率和平均分；前端不得从单次快照本地反推趋势。
 
+### 训练达标档案 Readiness Dossier
+
+Readiness Dossier 是“每个新人都有一份可信训练达标档案”的 V0.9 聚合读面。它不替代 TrainingJourney、训练记录、素材快照或操作日志；它负责把这些证据按验收任务翻译成：练过什么、提交了什么证据、AI/规则按什么结果初评、哪些能力达标/未达标、是否复核、没达标后是否要求重练。
+
+```typescript
+type ReadinessDossierStatus =
+  | "not_started"
+  | "in_training"
+  | "ai_evaluating"
+  | "needs_remediation"
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "manual_follow_up"
+  | "blocked_by_config";
+
+type ReadinessReviewDecision =
+  | "approve"
+  | "require_retraining"
+  | "mark_manual_follow_up";
+
+type ReadinessWorkbenchGroupKey =
+  | "pending_review"
+  | "not_passed"
+  | "needs_retraining"
+  | "approved"
+  | "config_exception"
+  | "in_training";
+
+interface ReadinessWorkbenchResponse {
+  contract_version: "readiness_dossier_v1";
+  generated_at: string;
+  groups: Record<ReadinessWorkbenchGroupKey, {
+    group_key: ReadinessWorkbenchGroupKey;
+    label: string;
+    count: number;
+    items: Array<{
+      learner: { learner_id: string; name?: string | null; department?: string | null };
+      status: ReadinessDossierStatus;
+      status_label: string;
+      status_reason: string;
+      weak_capability_keys: string[];
+      weak_capability_labels: string[];
+      evidence_count: number;
+      latest_review_action?: ReadinessDossierReviewAction | null;
+      next_action?: ReadinessDossierNextAction | null;
+      target_path?: string | null;
+    }>;
+  }>;
+  summary: {
+    learner_count: number;
+    loaded_learner_count: number;
+    pending_review_count: number;
+    not_passed_count: number;
+    needs_retraining_count: number;
+    approved_count: number;
+    config_exception_count: number;
+    in_training_count: number;
+  };
+  filters: { department?: string | null; limit: number; offset: number };
+}
+
+interface ReadinessDossierResponse {
+  contract_version: "readiness_dossier_v1";
+  learner: { learner_id: string; name?: string | null; department?: string | null };
+  path: {
+    path_key?: string | null;
+    path_revision_id?: string | null;
+    path_revision_no?: number | null;
+    source?: string | null;
+  };
+  status: ReadinessDossierStatus;
+  status_label: string;
+  status_reason: string;
+  summary: {
+    total_modules: number;
+    completed_modules: number;
+    passed_modules: number;
+    failed_modules: number;
+    needs_remediation_modules: number;
+    evidence_count: number;
+    review_action_count: number;
+    weak_capability_count: number;
+    retraining_task_count: number;
+    completed_retraining_task_count: number;
+    review_state_source: "operation_log";
+  };
+  modules: Array<{
+    module_key?: string | null;
+    title?: string | null;
+    kind?: string | null;
+    module_type?: string | null;
+    status?: string | null;
+    passed?: boolean | null;
+    score?: number | null;
+    max_score?: number | null;
+    required?: boolean | null;
+    completion_satisfied?: boolean | null;
+    locked?: boolean | null;
+    block_reason?: string | null;
+    capability_keys: string[];
+    evidence_ids: string[];
+    next_action?: { label?: string | null; target_path?: string | null; disabled: boolean; disabled_reason?: string | null } | null;
+  }>;
+  competencies: Array<{
+    capability_key: string;
+    display_name: string;
+    status: "not_trained" | "ai_passed" | "ai_failed" | "needs_retraining" | "pending_review" | "approved" | "rejected" | "blocked_by_config";
+    score?: number | null;
+    max_score?: number | null;
+    weak: boolean;
+    evidence_ids: string[];
+    latest_evidence_id?: string | null;
+    review_decision?: string | null;
+    reason?: string | null;
+  }>;
+  evidence: Array<{
+    evidence_id: string;
+    evidence_type: string;
+    source_record_id: string;
+    record_type: string;
+    module_key?: string | null;
+    module_title?: string | null;
+    capability_keys: string[];
+    status?: string | null;
+    score?: number | null;
+    max_score?: number | null;
+    passed?: boolean | null;
+    submitted_at?: string | null;
+    completed_at?: string | null;
+    target_path?: string | null;
+    material_snapshot?: Record<string, unknown> | null;
+    scoring_snapshot?: Record<string, unknown> | null;
+    task_brief_snapshot?: Record<string, unknown> | null;
+    snapshot_ref?: Record<string, unknown> | null;
+    result_summary?: string | null;
+  }>;
+  review_actions: ReadinessDossierReviewAction[];
+  latest_review_action?: ReadinessDossierReviewAction | null;
+  retraining_tasks: ReadinessDossierRetrainingTask[];
+  realtime_gate: {
+    module_key?: string | null;
+    status?: string | null;
+    locked: boolean;
+    reason?: string | null;
+    training_gate_status: ReadinessDossierStatus;
+    provider_readiness?: Record<string, unknown> | null;
+  };
+  diagnostics: TrainingJourneyDiagnostic[];
+  next_actions: ReadinessDossierNextAction[];
+  generated_at: string;
+}
+
+interface ReadinessDossierRetrainingTaskComparison {
+  before_evidence_ids: string[];
+  after_evidence_ids: string[];
+  after_status?: string | null;
+  after_passed?: boolean | null;
+  after_score?: number | null;
+  after_max_score?: number | null;
+}
+
+interface ReadinessDossierRetrainingTask {
+  task_id: string;
+  status: "pending" | "in_progress" | "completed" | string;
+  source?: "operation_log" | string | null;
+  capability_keys: string[];
+  source_evidence_ids: string[];
+  target_learner_id?: string | null;
+  completed_at?: string | null;
+  completed_evidence_ids?: string[];
+  comparison?: ReadinessDossierRetrainingTaskComparison | null;
+}
+
+interface ReadinessDossierReviewAction {
+  action_id: string;
+  audit_log_id: string;
+  decision: ReadinessReviewDecision;
+  decision_label: string;
+  reason?: string | null;
+  capability_keys: string[];
+  source_evidence_ids: string[];
+  reviewer_id?: string | null;
+  reviewer_role?: string | null;
+  created_at: string;
+  retraining_task?: ReadinessDossierRetrainingTask | null;
+  state_storage: "operation_log";
+}
+
+interface ReadinessDossierReviewActionCreateRequest {
+  decision: ReadinessReviewDecision;
+  reason: string;
+  capability_keys?: string[];
+  source_evidence_ids?: string[];
+}
+
+interface ReadinessDossierNextAction {
+  action_key: string;
+  label: string;
+  target_path?: string | null;
+  primary: boolean;
+  capability_keys: string[];
+}
+```
+
+语义约束：
+
+- `readiness_dossier_v1` 第一版为 read-model 聚合；复核状态与重练任务当前采用 `SalesTrainerOperationLog` append-only 存储，`state_storage="operation_log"` 必须显式返回。未来如果迁移到专表，旧日志仍是审计真源。
+- `pending_review` 表示前置关键训练证据已齐且 AI/规则初评通过，但尚未人工确认；它不是自动达标。
+- `approved` 只能由有复核权限的人工动作产生。`approve` 仅允许在档案状态为 `pending_review` 且 `summary.evidence_count>0` 时提交；未完成训练、证据为空、仍在 AI 评分、需重练或人工跟进时必须返回 `[READINESS_DOSSIER_NOT_READY]`，存在非 realtime 配置阻断时必须返回 `[READINESS_DOSSIER_CONFIG_BLOCKED]`。
+- `require_retraining` 必须生成可追踪 `retraining_task` 元数据；任务处于 `pending` 或 `in_progress` 时在 workbench 归入 `needs_retraining` 分组，不得只写一段备注。
+- 新人被要求重练后，如产生晚于该复核动作且匹配相关能力项/证据来源的新证据，`retraining_task.status` 必须更新为 `in_progress`（新证据仍在评分）或 `completed`（新证据已可判定）。`completed` 后工作台不再继续归入 `needs_retraining`，而是按新证据回到 `pending_review` 或 `not_passed`；`comparison` 必须给出前后证据数量和重练后通过/得分状态，管理页面只展示用户语言，不展示 raw evidence id。
+- realtime 对练是下一阶段 gate：realtime provider 或 runtime binding 异常不得覆盖前置训练档案的达标判断，但 `realtime_gate.locked` 必须解释下一阶段是否仍不可进入。
+- `evidence[]` 只展示已授权 scope 内的训练证据，且必须保留材料、评分、任务简报或 path revision 的可追溯快照引用；普通管理页面不得展示 Prompt 原文、模型密钥、trace raw payload。
+- `competencies[]` 第一版能力项采用固定代码集合；每个训练模块覆盖哪些固定能力项由 `newcomer_path.modules[].capability_keys` 配置和 active revision 快照决定。缺失旧数据可使用后端兼容映射，但新增/发布配置不得依赖前端按模块名推断能力项。通过线、评分结果、模块启停、题库、材料和 AI Coach 行为必须继续来自后台配置与训练记录，不得由前端写死。
+- `source_evidence_ids` 和 `capability_keys` 如传入未知值，后端必须返回 typed error；省略时后端可以基于当前档案选择默认证据和能力项。
+
 ```typescript
 type LearnerLevelSource =
   | "user_profile"
@@ -1213,7 +1433,14 @@ interface ModuleProgress {
     terminal: boolean;
   }>;
   next_action?: {
-    action_key: "start_ai_coach" | "continue_ai_coach" | "start_realtime_roleplay";
+    action_key:
+      | "start_audio_submission"
+      | "retry_audio_submission"
+      | "start_quiz_attempt"
+      | "retry_quiz_attempt"
+      | "start_ai_coach"
+      | "continue_ai_coach"
+      | "start_realtime_roleplay";
     label: string;
     target_path?: string | null;
     disabled: boolean;
@@ -1221,6 +1448,29 @@ interface ModuleProgress {
   } | null;
   latest_outcome?: ModuleOutcome | null;
   outcome_history: ModuleOutcome[];
+}
+
+interface TrainingJourneyRetrainingRequest {
+  request_id: string; // 稳定 key；普通 learner UI 不展示
+  task_id: string; // 重练任务内部追踪 key；普通 learner UI 不展示
+  status: string;
+  reason?: string | null;
+  capability_keys: string[]; // 稳定能力 key；UI 优先展示 capability_labels
+  capability_labels: string[];
+  source_evidence_count: number;
+  target_modules: Array<{
+    module_key?: string | null;
+    title?: string | null;
+    kind?: string | null;
+    module_type?: string | null;
+    status?: string | null;
+    action_label?: string | null;
+    target_path?: string | null;
+    disabled: boolean;
+    disabled_reason?: string | null;
+  }>;
+  primary_target_path?: string | null;
+  created_at: string;
 }
 
 interface TrainingJourney {
@@ -1245,6 +1495,7 @@ interface TrainingJourney {
     failed_modules: number;
     needs_remediation_modules: number;
   };
+  retraining_requests: TrainingJourneyRetrainingRequest[];
   diagnostics: Array<{
     code: string;
     message: string;
@@ -1265,6 +1516,8 @@ interface TrainingJourney {
 - `completion_satisfied` 表示该模块的完成规则是否满足，独立于考核通过语义。`completion_rule="passed"` 必须 `passed=true`；`completion_rule="submitted"` 只要求有受治理的 outcome 记录。前端不得用本地规则重算该字段。
 - `ModuleOutcome` 必须覆盖录音、普通试卷、商务礼仪小测、AI Coach、realtime、补救、重评。历史展示 snapshot-first：优先读取记录创建时冻结的 snapshot/revision refs；旧数据只能标记 `legacy_snapshot_only=true`，不得从 latest active revision 伪造历史解释。
 - 重评必须以 append-only `ModuleOutcome(record_type="regrade", snapshot_ref.snapshot_type="regrade_snapshot")` 进入对应 audio/quiz 模块的 `outcome_history`。`source_record_id` 指向被重评的原始训练记录，`evidence.record_id` 指向 `sales_trainer_regrade_runs.run_id`；原始 audio/quiz outcome 必须继续保留在 history 中，不得被重评结果覆盖或改写。重评失败或 `after_snapshot.error_code` 存在时 outcome 为 `error_terminal`，成功重评分数按 `after_snapshot.total_score/max_score/passed` 投影。
+- `retraining_requests[]` 是管理员达标复核动作对 learner 端的只读投影。来源仍是 `ReadinessDossier` 的 operation-log-backed review state，但 learner UI 只能展示用户语言：补练能力、负责人原因、关联证据数量、可进入的训练模块和入口；不得展示 `operation_log`、审计日志 ID、raw evidence id、Prompt、trace 或模型调试字段。若复核引用了具体证据，`target_modules` 必须优先定位产生该证据的模块；能力项匹配只作为补充。
+- PPT 录音、商务技巧考卷、AI Coach 和 realtime 模块都必须通过 `modules[].next_action` 暴露 learner 入口或锁定原因；前端不得回退读取 `/paths`/catalog 来拼接入口。
 - AI Coach 是首版完整闭环必过模块。若 active revision 声明 `require_ai_coach=true`，TrainingJourney 必须返回 AI Coach `ModuleProgress` 和达标 outcome；缺 Prompt、坏配置或模型不可用必须返回 typed terminal/transient 状态，不得静默默认通过。
 - realtime outcome 只能来自 runtime binding 的 outcome projection。`sales_trainer` 不直接消费 WebSocket 中间态作为通过依据，不从前端连接状态推断完成。
 - 首版 outcome projection 从 completed practice session 的 `voice_policy_snapshot.external_binding` 读取冻结路径上下文，并把结果写入 `ModuleOutcome(record_type="realtime_roleplay_session", snapshot_ref.snapshot_type="runtime_outcome_snapshot")`。分数可来自 runtime 写回的会话分数字段；未定义通过阈值时 `passed` 必须保持 `null`，不得把“完成实时会话”伪装成“通过考核”。
@@ -3231,6 +3484,9 @@ interface AudioScorePromptRollbackRequest {
 | `GET` | `/api/v1/admin/sales-trainer/training-records/audio/{submission_id}` | 录音训练记录详情兼容入口；内部委托统一详情接口 |
 | `GET` | `/api/v1/admin/sales-trainer/training-records/realtime-roleplay/{session_id}/observations` | 实时对练角色一致性旁路观测，只读返回 `roleplay_observation_v1` 记录；复用训练记录查看权限与部门 scope |
 | `GET` | `/api/v1/admin/sales-trainer/manager-dashboard` | 阶段 2 管理者看板，聚合完成率、通过率、风险学员、弱项维度和干预建议 |
+| `GET` | `/api/v1/admin/sales-trainer/readiness/workbench` | 达标验收工作台，按验收状态分组聚合学员 |
+| `GET` | `/api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}` | 单个学员训练达标档案，聚合证据、能力项、复核记录和下一阶段 gate |
+| `POST` | `/api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}/review-actions` | 创建复核动作并写入操作日志，支持确认达标、要求重练和人工跟进 |
 
 Response `data`:
 
@@ -4144,7 +4400,8 @@ interface OperationLogListResponse {
 | `newcomer_path.modules[].target_unit_id(s)` | 无 | learner 模块入口、完成状态聚合 | admin 新人训练路径配置 | 必须指向已发布训练单元；缺失返回 `[NEWCOMER_MODULE_BINDING_MISSING]` |
 | `newcomer_path.modules[].learning_content_id` | 无 | 商务技巧文章入口 | admin 新人训练路径文章绑定 | 必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` |
 | `newcomer_path.modules[].exam_paper_id` | 无 | 商务技巧考卷入口 | admin 新人训练路径考卷管理 | 必须指向已发布考卷；缺失或草稿返回 `[PAPER_NOT_PUBLISHED]` |
-| `newcomer_path.modules[].duration_options` | `10/20/30` 分钟可由 seed 初始化 | 电梯演讲模块入口 | admin 新人训练路径配置 | 每项必须有正数时长和已发布音频单元；非法返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` |
+| `newcomer_path.modules[].duration_options` | `10/20/30` 分钟可由 seed 初始化 | 金字塔演讲模块入口 | admin 新人训练路径配置 | 每项必须有正数时长和已发布音频单元；非法返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` |
+| `newcomer_path.modules[].capability_keys` | seed 写入 V0.9 固定新人能力 key | 达标档案 evidence/competency 映射、重练目标模块匹配、workbench 弱项归因 | admin 新人训练路径配置 | 必须命中 V0.9 固定能力模型且不得重复；发布配置非法返回 `[NEWCOMER_PATH_CONFIG_INVALID]`；缺失旧数据只允许后端兼容映射，不得由前端按标题推断 |
 | `newcomer_path.modules[].learner_level_required` | 空数组 | 模块内容可见性、Journey 状态、learner `/paths` 展示和直链 unit/audio/quiz 授权 | admin 新人训练路径配置 + `sales_trainer.learner_level.policy` | 空数组表示所有学员等级可见；非空时必须匹配 `TrainingJourney.learner_level.level_key`，不匹配返回 locked/disabled 与 `[NEWCOMER_LEARNER_LEVEL_NOT_ALLOWED]`，不得仅靠前端隐藏 |
 | `newcomer_path.modules[].runtime_binding` | `null` | realtime 模块入口、TrainingJourney outcome projection、发布校验 | admin 新人训练路径配置 + 运行时健康页 | `module_type="realtime_roleplay"` 且 enabled 时必填；必须引用可用 runtime descriptor、已发布 runtime config、provider readiness snapshot、权限策略、failure policy 和 rollback policy；非法返回 `[NEWCOMER_REALTIME_BINDING_INVALID]` |
 | `newcomer_path.modules[].runtime_binding.provider_readiness_snapshot` | 无 | realtime 发布前校验和 learner 入口预检 | 运行时健康页 / support runtime status | `ready=false` 时发布预览必须提示影响范围；learner 入口返回 `[NEWCOMER_REALTIME_PROVIDER_NOT_READY]`，不得自动降级为 placeholder 成功 |
@@ -4174,6 +4431,8 @@ interface OperationLogListResponse {
 
 | 日期 | 变更 | 说明 |
 |---|---|---|
+| 2026-07-06 | 收紧达标档案确认与模块能力映射契约 | `approve` 只能在 `pending_review` 且有证据时提交；`newcomer_path.modules[].capability_keys` 成为达标档案能力映射配置源 |
+| 2026-07-06 | 新增 V0.9 训练达标档案与达标验收工作台契约 | `/readiness/workbench`、`/readiness/dossiers/{learner_id}`、`/review-actions` 聚合 journey、训练记录和 operation log；复核动作采用 operation-log-backed 状态 |
 | 2026-07-03 | 冻结 StepFun roleplay compliance record-only 契约 | `roleplay_observation_v1` 全局 `record_only`，current turn `main_chain_effect=none`；next-turn soft steering 非阻断且可审计；旧同步 cancel/regenerate/repair audio 退役，恢复阻断必须另起 ADR |
 | 2026-07-02 | 同步 StepAudio 2.5 安全/迁移契约 | 明确 provider migration apply/rollback、secret 不入库不入日志、legacy fallback 只读、observation 对象级授权 |
 | 2026-07-02 | 新增实时角色一致性旁路观测契约 | `roleplay_observation_v1` 固定 record-only（旧称 `observe_only`）/ `main_chain_effect=none`，admin endpoint 只读展示，不阻断 StepAudio 2.5 realtime |

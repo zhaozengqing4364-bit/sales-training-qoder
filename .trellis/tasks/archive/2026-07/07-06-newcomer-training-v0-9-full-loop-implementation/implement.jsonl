@@ -1,0 +1,8 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端总体约束与验证命令"}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "训练路径、评分和准入策略的配置治理约束"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试和类型检查要求"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端总体约束与验证命令"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "管理端页面和工作台体验约束"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "API 类型与 snake_case 契约约束"}
+{"file": ".trellis/tasks/07-06-newcomer-training-v0-9-full-loop-implementation/research/codebase-context.md", "reason": "本任务代码现状调查"}

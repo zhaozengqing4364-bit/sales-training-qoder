@@ -585,6 +585,45 @@ async def test_should_reject_non_admin_from_sales_trainer_admin_api(
 
 
 @pytest.mark.asyncio
+async def test_should_allow_training_manager_to_reach_readiness_review_scope_guard(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SALES_TRAINER_MANAGER_ROLES", raising=False)
+    manager = _user("support", department="华东销售")
+    learner = _user("user", department="华东销售")
+    test_db.add_all([manager, learner])
+    await test_db.commit()
+
+    manager_response = await async_client.post(
+        "/api/v1/admin/sales-trainer/readiness/dossiers/missing-learner/review-actions",
+        headers=_auth_headers(manager),
+        json={
+            "decision": "mark_manual_follow_up",
+            "reason": "测试权限应先进入对象级校验。",
+            "capability_keys": [],
+            "source_evidence_ids": [],
+        },
+    )
+    learner_response = await async_client.post(
+        f"/api/v1/admin/sales-trainer/readiness/dossiers/{manager.user_id}/review-actions",
+        headers=_auth_headers(learner),
+        json={
+            "decision": "mark_manual_follow_up",
+            "reason": "普通学员不能复核。",
+            "capability_keys": [],
+            "source_evidence_ids": [],
+        },
+    )
+
+    assert manager_response.status_code == 404
+    assert manager_response.json()["error"] == "[TRAINING_RECORD_NOT_FOUND]"
+    assert learner_response.status_code == 403
+    assert learner_response.json()["error"] == "[ROLE_REQUIRED]"
+
+
+@pytest.mark.asyncio
 async def test_should_scope_sales_trainer_manager_to_same_department(
     async_client: AsyncClient,
     test_db: AsyncSession,

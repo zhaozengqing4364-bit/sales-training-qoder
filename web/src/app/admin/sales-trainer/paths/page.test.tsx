@@ -153,7 +153,7 @@ describe("SalesTrainerPathsPage", () => {
         expect(screen.getByText("当前生效版本 v2")).toBeTruthy();
         expect(screen.getByText("路径级发布配置")).toBeTruthy();
         expect(screen.getByText("第三关")).toBeTruthy();
-        expect(screen.getByText("电梯演讲")).toBeTruthy();
+        expect(screen.getByText("金字塔演讲")).toBeTruthy();
         expect(screen.getByText("第四关")).toBeTruthy();
         expect(screen.getByText("实时对练占位")).toBeTruthy();
         expect(screen.getByText("学习文章：见客户前商务礼仪（1 节）")).toBeTruthy();
@@ -168,14 +168,24 @@ describe("SalesTrainerPathsPage", () => {
         expect(screen.getAllByRole("link", { name: "选择材料版本" })[0].getAttribute("href")).toBe(
             "/admin/sales-trainer/paths?module=ppt_explanation",
         );
-        expect(screen.getAllByRole("link", { name: "选择材料版本" })[0].querySelector("button")).toBeNull();
+        expect(
+            screen.getAllByRole("link", { name: "选择材料版本" })[0].querySelector("button"),
+        ).toBeNull();
         expect(screen.getByRole("link", { name: "选择 PPT 材料" }).getAttribute("href")).toBe(
             "/admin/sales-trainer/materials?module=ppt_explanation&purpose=ppt_pitch",
         );
-        expect(screen.getByRole("link", { name: "选择 PPT 材料" }).querySelector("button")).toBeNull();
-        expect(screen.getByRole("link", { name: "配置商务技巧文章" }).getAttribute("href")).toBe("/admin/sales-trainer/articles");
-        expect(screen.getByRole("link", { name: "查看配置健康" }).getAttribute("href")).toBe("/admin/sales-trainer/settings");
-        expect(screen.getByRole("link", { name: "查看配置健康" }).querySelector("button")).toBeNull();
+        expect(
+            screen.getByRole("link", { name: "选择 PPT 材料" }).querySelector("button"),
+        ).toBeNull();
+        expect(screen.getByRole("link", { name: "配置商务技巧文章" }).getAttribute("href")).toBe(
+            "/admin/sales-trainer/articles",
+        );
+        expect(screen.getByRole("link", { name: "查看配置健康" }).getAttribute("href")).toBe(
+            "/admin/sales-trainer/settings",
+        );
+        expect(
+            screen.getByRole("link", { name: "查看配置健康" }).querySelector("button"),
+        ).toBeNull();
         expect(screen.getByText(/编辑会保存为新的待发布修订/)).toBeTruthy();
         expect(screen.getByLabelText("本次变更说明")).toBeTruthy();
         expect(screen.queryByText(/复制为新草稿/)).toBeNull();
@@ -198,10 +208,12 @@ describe("SalesTrainerPathsPage", () => {
             ...defaultPathConfigResponse(),
             path: {
                 ...defaultPathConfigResponse().path,
-                modules: [{
-                    ...defaultPathConfigResponse().path.modules[0],
-                    learning_content_id: "missing-content",
-                }],
+                modules: [
+                    {
+                        ...defaultPathConfigResponse().path.modules[0],
+                        learning_content_id: "missing-content",
+                    },
+                ],
             },
         });
 
@@ -210,7 +222,11 @@ describe("SalesTrainerPathsPage", () => {
         expect(await screen.findByRole("heading", { name: "新人训练路径配置中心" })).toBeTruthy();
         expect(await screen.findByText("第一关")).toBeTruthy();
         expect(screen.getByText("商务技巧新修订")).toBeTruthy();
-        expect(screen.getByText("商务技巧文章绑定状态读取失败：当前路径配置绑定的商务技巧文章不在内容列表中：missing-content")).toBeTruthy();
+        expect(
+            screen.getByText(
+                "商务技巧文章绑定状态读取失败：当前路径配置绑定的商务技巧文章不在内容列表中：missing-content",
+            ),
+        ).toBeTruthy();
         expect(screen.queryByText("缺少已发布商务技巧学习文章绑定。")).toBeNull();
         expect(screen.getByRole("link", { name: "配置商务技巧文章" }).getAttribute("href")).toBe(
             "/admin/sales-trainer/articles",
@@ -239,7 +255,10 @@ describe("SalesTrainerPathsPage", () => {
 
         render(<SalesTrainerPathsPage />);
 
-        expect(await screen.findByRole("button", { name: "保存当前配置为新修订" })).toHaveProperty("disabled", true);
+        expect(await screen.findByRole("button", { name: "保存当前配置为新修订" })).toHaveProperty(
+            "disabled",
+            true,
+        );
         expect(screen.getByRole("button", { name: "发布并生效" })).toHaveProperty("disabled", true);
     });
 
@@ -258,7 +277,9 @@ describe("SalesTrainerPathsPage", () => {
                 reason: "发布试运行后的路径配置",
             });
         });
-        expect(await screen.findByText("路径配置已发布生效；历史学员记录不会被改写。")).toBeTruthy();
+        expect(
+            await screen.findByText("路径配置已发布生效；历史学员记录不会被改写。"),
+        ).toBeTruthy();
     });
 
     it("shows publish preview impact when a working revision exists", async () => {
@@ -282,7 +303,9 @@ describe("SalesTrainerPathsPage", () => {
 
         expect(await screen.findByRole("heading", { name: "新人训练路径配置中心" })).toBeTruthy();
         expect(await screen.findByText(/发布预览失败/)).toBeTruthy();
-        expect(screen.getAllByText(/\[NEWCOMER_REALTIME_PROVIDER_NOT_READY\] provider 未就绪/).length).toBeGreaterThan(0);
+        expect(
+            screen.getAllByText(/\[NEWCOMER_REALTIME_PROVIDER_NOT_READY\] provider 未就绪/).length,
+        ).toBeGreaterThan(0);
     });
 
     it("rolls back a non-active path revision through the future-only rollback API", async () => {

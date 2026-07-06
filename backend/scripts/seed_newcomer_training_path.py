@@ -117,6 +117,34 @@ BASELINE_REALTIME_MODULE_KEYS = {
     "realtime_roleplay",
     "realtime_roleplay_placeholder",
 }
+READINESS_CAPABILITY_KEYS_BY_MODULE = {
+    "ppt_explanation": [
+        "expression_clarity",
+        "structured_presentation",
+        "product_understanding",
+    ],
+    "business_skills": [
+        "business_etiquette",
+        "customer_perspective",
+        "needs_discovery",
+        "objection_handling",
+    ],
+    "elevator_pitch": [
+        "expression_clarity",
+        "structured_presentation",
+        "customer_perspective",
+    ],
+    "realtime_roleplay": [
+        "needs_discovery",
+        "objection_handling",
+        "customer_perspective",
+    ],
+    "realtime_roleplay_placeholder": [
+        "needs_discovery",
+        "objection_handling",
+        "customer_perspective",
+    ],
+}
 BUSINESS_SKILLS_MODULE_KEY = "business_skills"
 BUSINESS_SKILLS_PAPER_KEY = "newcomer_business_skills_paper_v1"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -135,7 +163,7 @@ PPT_MATERIAL_VERSION_LABEL = "v2026.06"
 PPT_MATERIAL_SOURCE_FILE = (
     REPO_ROOT / "docs" / "content" / "ppt-explanation-training-material.md"
 )
-ELEVATOR_PROMPT_NAME = "电梯演讲录音评分"
+ELEVATOR_PROMPT_NAME = "金字塔演讲录音评分"
 ELEVATOR_DURATION_OPTIONS = (10, 20, 30)
 AI_COACH_PROMPT_NAME = "新人训练路径商务技巧 AI 对话教练生成 v1"
 AI_COACH_PROMPT_CATEGORY = "sales_trainer_ai_coach"
@@ -243,6 +271,8 @@ PPT_E2E_AUDIO_TRANSCRIPT_TEXT = (
     "客户可以先做旁路扫描，再基于分类分级、API 风险监测、"
     "一键防护和溯源审计形成可落地的试点方案。"
 )
+PYRAMID_E2E_AUDIO_FILENAME = "newcomer-pyramid-speech-e2e.wav"
+PYRAMID_E2E_AUDIO_SOURCE_PAGE = "newcomer_pyramid_speech_e2e_seed"
 AI_COACH_E2E_TRACE_ID = "newcomer_closed_loop_e2e_ai_coach_seed_v1"
 AI_COACH_REAL_PROVIDER_MODEL_CONFIG_NAME = "新人训练路径 AI Coach 真实 Provider"
 FRESH_E2E_RUN_ID_ENV = "NEWCOMER_E2E_FRESH_RUN_ID"
@@ -252,7 +282,11 @@ REALTIME_E2E_LOCAL_RUNTIME_DESCRIPTOR_ID = "newcomer-realtime-phase4-local"
 REALTIME_E2E_REAL_RUNTIME_DESCRIPTOR_ID = "newcomer-realtime-stepfun-real"
 REALTIME_E2E_LOCAL_RUNTIME_CONFIG_REVISION_ID = "phase4-local-provider-v1"
 REALTIME_E2E_REAL_RUNTIME_CONFIG_REVISION_ID = "stepfun-realtime-provider-v1"
-SEED_PASSWORD_ENV_KEYS = ("NEWCOMER_E2E_PASSWORD", "SMOKE_ADMIN_PASSWORD", "AUTH_SHARED_PASSWORD")
+SEED_PASSWORD_ENV_KEYS = (
+    "NEWCOMER_E2E_PASSWORD",
+    "SMOKE_ADMIN_PASSWORD",
+    "AUTH_SHARED_PASSWORD",
+)
 SEED_DEFAULT_PASSWORD = "change-me"
 
 ModelT = TypeVar("ModelT")
@@ -289,11 +323,31 @@ class _SeedAudioScoringService:
             strengths=["覆盖主胶片主线", "能提出旁路扫描和试点下一步"],
             improvements=["可补充一个行业案例强化可信度"],
             dimension_scores={
-                "ppt_structure": {"score": 23, "max_score": 25, "comment": "覆盖关键结构"},
-                "business_accuracy": {"score": 22, "max_score": 25, "comment": "能力表达准确"},
-                "customer_value": {"score": 18, "max_score": 20, "comment": "客户价值清晰"},
-                "delivery_logic": {"score": 13, "max_score": 15, "comment": "表达顺序清楚"},
-                "evidence_usage": {"score": 7, "max_score": 10, "comment": "案例可继续加强"},
+                "ppt_structure": {
+                    "score": 23,
+                    "max_score": 25,
+                    "comment": "覆盖关键结构",
+                },
+                "business_accuracy": {
+                    "score": 22,
+                    "max_score": 25,
+                    "comment": "能力表达准确",
+                },
+                "customer_value": {
+                    "score": 18,
+                    "max_score": 20,
+                    "comment": "客户价值清晰",
+                },
+                "delivery_logic": {
+                    "score": 13,
+                    "max_score": 15,
+                    "comment": "表达顺序清楚",
+                },
+                "evidence_usage": {
+                    "score": 7,
+                    "max_score": 10,
+                    "comment": "案例可继续加强",
+                },
                 "next_step": {"score": 5, "max_score": 5, "comment": "下一步明确"},
             },
             raw_response={
@@ -312,6 +366,15 @@ class _SeedAudioScoringService:
 
 class VerifyError(Exception):
     pass
+
+
+def _verify_module_readiness_capabilities(
+    path: dict[str, Any],
+    module_key: str,
+) -> None:
+    expected = READINESS_CAPABILITY_KEYS_BY_MODULE[module_key]
+    if path.get("capability_keys") != expected:
+        raise VerifyError(f"{module_key} readiness capability_keys mismatch")
 
 
 class SeedSummary:
@@ -583,7 +646,7 @@ def _elevator_learner_rubric() -> dict[str, Any]:
 
 
 def _elevator_scoring_template() -> str:
-    return """请对学员的电梯演讲录音进行评分。
+    return """请对学员的金字塔演讲录音进行评分。
 
 训练单元：{unit_name}
 录音用途：{purpose}
@@ -604,7 +667,7 @@ def _elevator_scoring_template() -> str:
 {
   "total_score": number,
   "passed": boolean,
-  "summary": "一句话总评，指出这次电梯演讲是否适合见客户",
+  "summary": "一句话总评，指出这次金字塔演讲是否适合见客户",
   "strengths": ["最多 3 条优点"],
   "improvements": ["最多 3 条具体训练建议"],
   "dimension_scores": {
@@ -773,6 +836,7 @@ def _path_config(
     learning_content_id: str | None = None,
     exam_paper_id: str | None = None,
     disabled_reason: str | None = None,
+    capability_keys: list[str] | None = None,
     primary_action_label: str | None = None,
     ai_coach: dict[str, Any] | None = None,
     runtime_binding: dict[str, Any] | None = None,
@@ -791,6 +855,9 @@ def _path_config(
         learning_content_id=learning_content_id,
         exam_paper_id=exam_paper_id,
         disabled_reason=disabled_reason,
+        capability_keys=capability_keys
+        if capability_keys is not None
+        else READINESS_CAPABILITY_KEYS_BY_MODULE.get(module_key, []),
         completion_rule=completion_rule,
         primary_action_label=primary_action_label,
         retry_action_label="再练一次",
@@ -1700,7 +1767,9 @@ def _realtime_runtime_binding(template: PracticeTemplate) -> dict[str, Any]:
         "scenario_key": "newcomer-realtime-roleplay",
         "practice_template_id": str(template.template_id),
         "runtime_config_revision_id": runtime_config_revision_id,
-        "roleplay_contract_revision_id": str(template.content_hash or template.version or "v1"),
+        "roleplay_contract_revision_id": str(
+            template.content_hash or template.version or "v1"
+        ),
         "provider_readiness_snapshot": {
             "provider": "stepfun_realtime",
             "ready": True,
@@ -1811,6 +1880,29 @@ async def _archive_realtime_unit_if_present(
         summary.updated += 1
 
 
+async def _archive_legacy_elevator_pitch_units_if_present(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner_id: str,
+) -> None:
+    result = await db.execute(
+        select(SalesTrainerUnit).where(
+            SalesTrainerUnit.name.like("电梯演讲%"),
+            SalesTrainerUnit.unit_type == "audio_scoring",
+            SalesTrainerUnit.status == "published",
+        )
+    )
+    for unit in result.scalars().all():
+        config = unit.config if isinstance(unit.config, dict) else {}
+        path = config.get("path") if isinstance(config, dict) else None
+        if not isinstance(path, dict) or path.get("module_key") != "elevator_pitch":
+            continue
+        unit.status = "archived"
+        unit.updated_by = owner_id
+        summary.updated += 1
+
+
 async def _backfill_path_payload_from_units(
     db: AsyncSession,
 ) -> NewcomerPathConfigPayload:
@@ -1874,12 +1966,25 @@ def _path_payload_with_elevator_defaults(
     for module in payload.modules:
         data = module.model_dump(mode="json")
         if module.module_key == "elevator_pitch":
+            ready = bool(scoring_prompt_id and duration_options)
             data["module_type"] = "audio_scoring_group"
-            data["enabled"] = False
+            data["enabled"] = ready
+            data["title"] = "第3关：金字塔演讲"
+            data["capability_keys"] = READINESS_CAPABILITY_KEYS_BY_MODULE[
+                "elevator_pitch"
+            ]
+            data["description"] = (
+                "选择一个时长档位上传金字塔演讲录音，系统转写后按结构化表达、"
+                "价值密度和下一步行动进行 AI 初评。"
+            )
             data["scoring_prompt_id"] = scoring_prompt_id
             data["duration_options"] = duration_options
+            data["completion_rule"] = "passed"
+            data["primary_action_label"] = "上传金字塔演讲录音"
             data["disabled_reason"] = (
-                "第 3 关电梯演讲暂不开放；需补齐材料与评分配置后再启用。"
+                None
+                if ready
+                else "第 3 关金字塔演讲缺少评分标准或时长档位，暂不可发布。"
             )
         modules.append(NewcomerPathModuleConfig.model_validate(data))
     return NewcomerPathConfigPayload(
@@ -1904,6 +2009,9 @@ def _path_payload_with_business_etiquette_defaults(
     for module in payload.modules:
         data = module.model_dump(mode="json")
         if module.module_key == BUSINESS_SKILLS_MODULE_KEY:
+            data["capability_keys"] = READINESS_CAPABILITY_KEYS_BY_MODULE[
+                BUSINESS_SKILLS_MODULE_KEY
+            ]
             data["ai_coach"] = ai_coach_config
             if learning_content_id is not None:
                 data["learning_content_id"] = learning_content_id
@@ -2173,6 +2281,116 @@ async def _upsert_e2e_audio_result(
             "path_revision_no": context.path_revision_no,
             "module_key": context.module_key,
             "prompt_id": str(ppt_prompt.prompt_id),
+            "source": PPT_E2E_AUDIO_PROCESS_SOURCE,
+        },
+    )
+    return submission
+
+
+async def _upsert_e2e_pyramid_speech_result(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner: User,
+    learner: User,
+    speech_unit: SalesTrainerUnit,
+    speech_prompt: SalesTrainerAudioScorePrompt,
+) -> SalesTrainerAudioSubmission:
+    context = await PathAttemptContextService(db).resolve_for_unit(speech_unit)
+    audio_service = AudioSubmissionService(
+        db,
+        transcription_service=_SeedAudioTranscriptionService(),
+        scoring_service=_SeedAudioScoringService(
+            path_revision_id=context.path_revision_id,
+            path_revision_no=context.path_revision_no,
+        ),
+    )
+    submission = await _first(
+        db,
+        select(SalesTrainerAudioSubmission).where(
+            SalesTrainerAudioSubmission.user_id == str(learner.user_id),
+            SalesTrainerAudioSubmission.unit_id == str(speech_unit.unit_id),
+            SalesTrainerAudioSubmission.original_filename == PYRAMID_E2E_AUDIO_FILENAME,
+            SalesTrainerAudioSubmission.source_page == PYRAMID_E2E_AUDIO_SOURCE_PAGE,
+        ),
+    )
+    if submission is None:
+        submission = await audio_service.create_submission(
+            AudioSubmissionCreate(
+                unit_id=str(speech_unit.unit_id),
+                purpose="elevator_pitch",
+                original_filename=PYRAMID_E2E_AUDIO_FILENAME,
+                content_type="audio/wav",
+                size_bytes=4096,
+                storage_key="/tmp/newcomer-pyramid-speech-e2e.wav",
+                file_hash=hashlib.sha256(
+                    PYRAMID_E2E_AUDIO_FILENAME.encode()
+                ).hexdigest(),
+                duration_seconds=180,
+                source_page=PYRAMID_E2E_AUDIO_SOURCE_PAGE,
+                auto_process=True,
+            ),
+            actor=learner,
+        )
+        summary.created += 3
+    else:
+        snapshots = await SalesTrainerMaterialService(db).freeze_submission_snapshots(
+            speech_unit,
+            confirmed_material_version_id=None,
+        )
+        task_brief_snapshot = snapshots.get("task_brief_snapshot")
+        snapshots["task_brief_snapshot"] = freeze_submission_context(
+            task_brief_snapshot if isinstance(task_brief_snapshot, dict) else None,
+            context.to_payload(),
+        )
+        summary.updated += 1
+        submission.purpose = "elevator_pitch"
+        submission.content_type = "audio/wav"
+        submission.size_bytes = 4096
+        submission.storage_key = "/tmp/newcomer-pyramid-speech-e2e.wav"
+        submission.file_hash = hashlib.sha256(
+            PYRAMID_E2E_AUDIO_FILENAME.encode()
+        ).hexdigest()
+        submission.duration_seconds = 180
+        baseline_refreshed_at = _now()
+        submission.created_at = baseline_refreshed_at
+        submission.updated_at = baseline_refreshed_at
+        submission.confirmed_material_version_id = None
+        submission.confirmed_material_at = None
+        submission.material_snapshot = snapshots.get("material_snapshot")
+        submission.score_scheme_snapshot = snapshots.get("score_scheme_snapshot")
+        submission.task_brief_snapshot = snapshots.get("task_brief_snapshot")
+        submission.status = "uploaded"
+        submission.error_code = None
+        submission.error_message = None
+        await db.execute(
+            delete(SalesTrainerAudioScoreResult).where(
+                SalesTrainerAudioScoreResult.submission_id
+                == str(submission.submission_id)
+            )
+        )
+        await db.flush()
+        submission = await audio_service.process_submission(
+            str(submission.submission_id),
+            actor=learner,
+        )
+
+    if submission.status != "scored":
+        raise VerifyError(
+            "e2e pyramid speech service processing did not score submission: "
+            f"{submission.status}"
+        )
+    await _record_seed_log_once(
+        db,
+        actor=owner,
+        action="audio_result.seed_pyramid_speech_closed_loop",
+        target_type="sales_trainer_audio_submission",
+        target_id=str(submission.submission_id),
+        metadata={
+            "path_revision_id": context.path_revision_id,
+            "path_revision_no": context.path_revision_no,
+            "module_key": context.module_key,
+            "prompt_id": str(speech_prompt.prompt_id),
             "source": PPT_E2E_AUDIO_PROCESS_SOURCE,
         },
     )
@@ -2635,17 +2853,17 @@ async def _verify_active_path_elevator_options(db: AsyncSession) -> None:
     except SalesTrainerPathConfigError as exc:
         raise VerifyError("newcomer path active revision invalid") from exc
     elevator_module = next(
-        (
-            module
-            for module in payload.modules
-            if module.module_key == "elevator_pitch"
-        ),
+        (module for module in payload.modules if module.module_key == "elevator_pitch"),
         None,
     )
     if elevator_module is None:
         raise VerifyError("active path elevator_pitch module missing")
-    if elevator_module.enabled is not False:
-        raise VerifyError("active path elevator_pitch must remain disabled")
+    if elevator_module.enabled is not True:
+        raise VerifyError("active path elevator_pitch must be enabled")
+    if elevator_module.title != "第3关：金字塔演讲":
+        raise VerifyError("active path elevator_pitch title mismatch")
+    if elevator_module.completion_rule != "passed":
+        raise VerifyError("active path elevator_pitch completion rule must be passed")
     durations = [
         option.duration_minutes
         for option in sorted(
@@ -2655,8 +2873,18 @@ async def _verify_active_path_elevator_options(db: AsyncSession) -> None:
     ]
     if durations != list(ELEVATOR_DURATION_OPTIONS):
         raise VerifyError("active path elevator_pitch duration options mismatch")
-    if elevator_module.scoring_prompt_id is not None:
-        raise VerifyError("active path elevator_pitch scoring prompt must stay unset")
+    if elevator_module.scoring_prompt_id is None:
+        raise VerifyError("active path elevator_pitch scoring prompt missing")
+    prompt = await _first(
+        db,
+        select(SalesTrainerAudioScorePrompt).where(
+            SalesTrainerAudioScorePrompt.prompt_id == elevator_module.scoring_prompt_id
+        ),
+    )
+    if prompt is None or prompt.status != "published":
+        raise VerifyError("active path elevator_pitch scoring prompt not published")
+    if prompt.purpose != "elevator_pitch":
+        raise VerifyError("active path elevator_pitch scoring prompt purpose mismatch")
 
 
 async def _verify_active_business_etiquette_training_pack(
@@ -2742,7 +2970,9 @@ async def _verify_e2e_closed_loop_records(
         raise VerifyError("e2e audio score lineage must not be legacy-only")
     transcript = audio_payload.get("transcript") or {}
     if transcript.get("provider") != PPT_E2E_AUDIO_TRANSCRIPT_PROVIDER:
-        raise VerifyError("e2e audio transcript provider must come from seed ASR service")
+        raise VerifyError(
+            "e2e audio transcript provider must come from seed ASR service"
+        )
     if transcript.get("transcript_text") != PPT_E2E_AUDIO_TRANSCRIPT_TEXT:
         raise VerifyError("e2e audio transcript text mismatch")
     transcript_raw = transcript.get("raw_payload") or {}
@@ -2763,22 +2993,25 @@ async def _verify_e2e_closed_loop_records(
         raise VerifyError("e2e audio score must not contain scoring errors")
 
     records = TrainingRecordService(db)
-    audio_record = await records.get_record("audio_submission", str(audio.submission_id))
+    audio_record = await records.get_record(
+        "audio_submission", str(audio.submission_id)
+    )
     if audio_record is None:
         raise VerifyError("e2e audio training record missing")
     if audio_record.get("legacy_snapshot_only") is not False:
         raise VerifyError("e2e audio training record must not be legacy-only")
     if audio_record.get("passed") is not True:
         raise VerifyError("e2e audio training record must pass")
-    record_snapshot = (
-        (audio_record.get("score_scheme_snapshot") or {})
-        .get("prompt_snapshot", {})
+    record_snapshot = (audio_record.get("score_scheme_snapshot") or {}).get(
+        "prompt_snapshot", {}
     )
     record_template = str(record_snapshot.get("scoring_template") or "")
     if PPT_PROMPT_SNAPSHOT_MARKER not in record_template:
         raise VerifyError("e2e audio training record frozen prompt marker missing")
     if PPT_PROMPT_DRIFT_MARKER in json.dumps(record_snapshot, ensure_ascii=False):
-        raise VerifyError("e2e audio training record leaked current prompt drift marker")
+        raise VerifyError(
+            "e2e audio training record leaked current prompt drift marker"
+        )
     operation_logs = audio_record.get("operation_logs") or []
     if not operation_logs:
         raise VerifyError("e2e audio training record operation log missing")
@@ -2846,10 +3079,9 @@ async def _verify_e2e_closed_loop_records(
     )
     if audio_module is None:
         raise VerifyError("e2e journey audio module missing")
-    if (
-        (audio_module.get("latest_outcome") or {}).get("source_record_id")
-        != expected_audio_submission_id
-    ):
+    if (audio_module.get("latest_outcome") or {}).get(
+        "source_record_id"
+    ) != expected_audio_submission_id:
         raise VerifyError("e2e journey audio outcome mismatch")
     if audio_module.get("passed") is not True:
         raise VerifyError("e2e journey audio module must pass")
@@ -2865,13 +3097,60 @@ async def _verify_e2e_closed_loop_records(
     )
     if ai_module is None:
         raise VerifyError("e2e journey AI coach module missing")
-    if (
-        (ai_module.get("latest_outcome") or {}).get("source_record_id")
-        != expected_ai_session_id
-    ):
+    if (ai_module.get("latest_outcome") or {}).get(
+        "source_record_id"
+    ) != expected_ai_session_id:
         raise VerifyError("e2e journey AI coach outcome mismatch")
     if ai_module.get("passed") is not True:
         raise VerifyError("e2e journey AI coach module must pass")
+
+    speech = await _first(
+        db,
+        select(SalesTrainerAudioSubmission).where(
+            SalesTrainerAudioSubmission.user_id == str(learner.user_id),
+            SalesTrainerAudioSubmission.original_filename == PYRAMID_E2E_AUDIO_FILENAME,
+            SalesTrainerAudioSubmission.source_page == PYRAMID_E2E_AUDIO_SOURCE_PAGE,
+        ),
+    )
+    if speech is None:
+        raise VerifyError("e2e pyramid speech submission missing")
+    speech_payload = await AudioSubmissionService(db).serialize_submission(speech)
+    if speech_payload.get("status") != "scored":
+        raise VerifyError("e2e pyramid speech submission must be scored")
+    if speech_payload.get("path_key") != PATH_KEY:
+        raise VerifyError("e2e pyramid speech path_key mismatch")
+    if speech_payload.get("module_key") != "elevator_pitch":
+        raise VerifyError("e2e pyramid speech module_key mismatch")
+    speech_score = speech_payload.get("score_result") or {}
+    if speech_score.get("passed") is not True:
+        raise VerifyError("e2e pyramid speech score must pass")
+    speech_record = await records.get_record(
+        "audio_submission",
+        str(speech.submission_id),
+    )
+    if speech_record is None:
+        raise VerifyError("e2e pyramid speech training record missing")
+    if speech_record.get("legacy_snapshot_only") is not False:
+        raise VerifyError("e2e pyramid speech training record must not be legacy-only")
+    if speech_record.get("passed") is not True:
+        raise VerifyError("e2e pyramid speech training record must pass")
+    speech_module = next(
+        (
+            module
+            for module in modules
+            if module.get("kind") == "audio_submission"
+            and module.get("module_key") == "elevator_pitch"
+        ),
+        None,
+    )
+    if speech_module is None:
+        raise VerifyError("e2e journey pyramid speech module missing")
+    if (speech_module.get("latest_outcome") or {}).get("source_record_id") != str(
+        speech.submission_id
+    ):
+        raise VerifyError("e2e journey pyramid speech outcome mismatch")
+    if speech_module.get("passed") is not True:
+        raise VerifyError("e2e journey pyramid speech module must pass")
 
 
 async def _fresh_e2e_expected_records(
@@ -2997,6 +3276,20 @@ async def seed(db: AsyncSession) -> SeedSummary:
         ),
         scoring_template=_ppt_scoring_template(),
         learner_rubric=_ppt_learner_rubric(),
+    )
+    elevator_prompt = await _upsert_audio_prompt(
+        db,
+        summary,
+        owner_id=str(owner.user_id),
+        name=ELEVATOR_PROMPT_NAME,
+        purpose="elevator_pitch",
+        system_prompt=(
+            "你是新人训练路径第 3 关的金字塔演讲评分员。"
+            "你会根据录音转写文本判断学员是否能用结构化表达讲清客户价值。"
+            "只输出符合 schema 的 JSON，不要输出 Markdown。"
+        ),
+        scoring_template=_elevator_scoring_template(),
+        learner_rubric=_elevator_learner_rubric(),
     )
     ppt_material = await _upsert_ppt_training_material(
         db,
@@ -3164,29 +3457,46 @@ async def seed(db: AsyncSession) -> SeedSummary:
             ),
         },
     )
+    await _archive_legacy_elevator_pitch_units_if_present(
+        db,
+        summary,
+        owner_id=str(owner.user_id),
+    )
+    elevator_units: dict[int, SalesTrainerUnit] = {}
     for duration_minutes in ELEVATOR_DURATION_OPTIONS:
-        await _upsert_unit(
+        elevator_units[duration_minutes] = await _upsert_unit(
             db,
             summary,
             owner_id=str(owner.user_id),
-            name=f"电梯演讲 · {duration_minutes} 分钟",
-            description=f"上传 {duration_minutes} 分钟电梯演讲录音，由 AI 评分。",
+            name=f"金字塔演讲 · {duration_minutes} 分钟",
+            description=f"上传 {duration_minutes} 分钟金字塔演讲录音，由 AI 评分。",
             unit_type="audio_scoring",
             config={
                 "audio": {
                     "purpose": "elevator_pitch",
+                    "scoring_prompt_id": str(elevator_prompt.prompt_id),
                     "pass_threshold": 70,
+                },
+                "task_brief": {
+                    "enabled": True,
+                    "title": f"第3关：金字塔演讲 · {duration_minutes} 分钟",
+                    "purpose": "在限定时长内按金字塔结构讲清客户问题、方案价值、证据和下一步。",
+                    "scenario": "你正在向客户高层或关键评估人做一段结构化价值说明。",
+                    "success_criteria": [
+                        "先给结论，再展开背景、方案、证据和下一步。",
+                        "表达必须围绕客户价值，而不是堆功能点。",
+                        "结尾提出可执行的下一步推进动作。",
+                    ],
                 },
                 "path": _path_config(
                     module_key="elevator_pitch",
                     module_type="audio_scoring_group",
                     order_index=3,
-                    level_title="第3关：电梯演讲",
-                    level_description="当前版本暂不开放，仅保留后台配置诊断。",
-                    enabled=False,
-                    completion_rule="scored",
-                    primary_action_label="上传录音",
-                    disabled_reason="第 3 关暂不开放；需补齐材料与评分配置后再启用。",
+                    level_title="第3关：金字塔演讲",
+                    level_description="选择时长档位上传金字塔演讲录音，由 AI 按结构化表达和客户价值评分。",
+                    enabled=True,
+                    completion_rule="passed",
+                    primary_action_label="上传金字塔演讲录音",
                 ),
                 "duration_minutes": duration_minutes,
                 "duration_options": list(ELEVATOR_DURATION_OPTIONS),
@@ -3306,7 +3616,7 @@ async def seed(db: AsyncSession) -> SeedSummary:
         summary,
         actor=owner,
         ai_coach_config=ai_coach_config,
-        elevator_prompt_id=None,
+        elevator_prompt_id=str(elevator_prompt.prompt_id),
         learning_content_id=str(content.learning_content_id),
         exam_paper_id=str(paper.paper_id),
     )
@@ -3318,6 +3628,14 @@ async def seed(db: AsyncSession) -> SeedSummary:
         ppt_unit=ppt_unit,
         ppt_prompt=ppt_prompt,
         ppt_material=ppt_material,
+    )
+    await _upsert_e2e_pyramid_speech_result(
+        db,
+        summary,
+        owner=owner,
+        learner=learner,
+        speech_unit=elevator_units[ELEVATOR_DURATION_OPTIONS[0]],
+        speech_prompt=elevator_prompt,
     )
     await _apply_e2e_audio_prompt_drift_after_snapshot(
         db,
@@ -3444,9 +3762,7 @@ async def verify(
     module_keys = set(modules)
     unknown_keys = module_keys - set(CANONICAL_NEWCOMER_MODULE_KEYS)
     if unknown_keys:
-        raise VerifyError(
-            f"unsupported module keys: {sorted(unknown_keys)}"
-        )
+        raise VerifyError(f"unsupported module keys: {sorted(unknown_keys)}")
     missing_required_keys = BASELINE_REQUIRED_MODULE_KEYS - module_keys
     if missing_required_keys:
         raise VerifyError(
@@ -3458,6 +3774,7 @@ async def verify(
     ppt_path = ppt_config.get("path") or {}
     if ppt_path.get("completion_rule") != "passed":
         raise VerifyError("ppt_explanation completion_rule must be passed")
+    _verify_module_readiness_capabilities(ppt_path, "ppt_explanation")
     ppt_audio = ppt_config.get("audio") or {}
     if ppt_audio.get("purpose") != "ppt_pitch":
         raise VerifyError("ppt_explanation audio purpose mismatch")
@@ -3516,6 +3833,7 @@ async def verify(
         raise VerifyError("business_skills exam_paper_id mismatch")
     if business_path.get("completion_rule") != "passed":
         raise VerifyError("business_skills completion_rule must be passed")
+    _verify_module_readiness_capabilities(business_path, BUSINESS_SKILLS_MODULE_KEY)
     await _verify_ai_coach_seed_config(
         db,
         business_path.get("ai_coach") or {},
@@ -3541,9 +3859,12 @@ async def verify(
             raise VerifyError("realtime_roleplay module missing despite ready template")
         realtime_path = (realtime_unit.config or {}).get("path") or {}
         if realtime_path.get("enabled") is not True:
-            raise VerifyError("realtime_roleplay module must be enabled with ready template")
+            raise VerifyError(
+                "realtime_roleplay module must be enabled with ready template"
+            )
         if realtime_path.get("module_type") != "realtime_roleplay":
             raise VerifyError("realtime_roleplay module_type mismatch")
+        _verify_module_readiness_capabilities(realtime_path, "realtime_roleplay")
         binding = realtime_path.get("runtime_binding") or {}
         if binding.get("binding_key") != REALTIME_E2E_BINDING_KEY:
             raise VerifyError("realtime_roleplay binding_key mismatch")
@@ -3558,9 +3879,23 @@ async def verify(
             for unit in realtime_units
         ):
             raise VerifyError("module 4 must remain disabled without ready template")
-    elevator_path = ((modules["elevator_pitch"].config or {}).get("path") or {})
-    if elevator_path.get("enabled") is not False:
-        raise VerifyError("elevator_pitch must remain disabled")
+        placeholder_unit = modules.get("realtime_roleplay_placeholder")
+        if placeholder_unit is not None:
+            _verify_module_readiness_capabilities(
+                (placeholder_unit.config or {}).get("path") or {},
+                "realtime_roleplay_placeholder",
+            )
+    elevator_path = (modules["elevator_pitch"].config or {}).get("path") or {}
+    if elevator_path.get("enabled") is not True:
+        raise VerifyError("elevator_pitch must be enabled")
+    if elevator_path.get("completion_rule") != "passed":
+        raise VerifyError("elevator_pitch completion_rule must be passed")
+    _verify_module_readiness_capabilities(elevator_path, "elevator_pitch")
+    elevator_audio = (modules["elevator_pitch"].config or {}).get("audio") or {}
+    if elevator_audio.get("purpose") != "elevator_pitch":
+        raise VerifyError("elevator_pitch audio purpose mismatch")
+    if not elevator_audio.get("scoring_prompt_id"):
+        raise VerifyError("elevator_pitch scoring_prompt_id missing")
     if (modules["elevator_pitch"].config or {}).get("duration_options") != [10, 20, 30]:
         raise VerifyError("elevator_pitch duration options mismatch")
 

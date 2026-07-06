@@ -130,12 +130,7 @@ export interface TrainingRuntimeDescriptor {
     focus_intent?: RetryFocusIntent | null;
 }
 
-export type SessionStatus =
-    | "preparing"
-    | "in_progress"
-    | "paused"
-    | "completed"
-    | "scoring";
+export type SessionStatus = "preparing" | "in_progress" | "paused" | "completed" | "scoring";
 
 export type SessionLifecycleAction = "start" | "pause" | "resume" | "end";
 
@@ -204,12 +199,7 @@ export interface PracticeSessionRuntime {
 }
 
 export type SessionRuntimeLifecycleState =
-    | "draft"
-    | "validated"
-    | "runnable"
-    | "started"
-    | "completed"
-    | "failed";
+    "draft" | "validated" | "runnable" | "started" | "completed" | "failed";
 
 export interface PracticeRuntimePreflight {
     runnable: boolean;
@@ -348,7 +338,8 @@ export type PracticeTemplateStatus = "draft" | "published" | "archived" | string
 export type ContentAssetStatus = "draft" | "published" | "archived" | string;
 export type LearningContentStatus = "draft" | "published" | "archived" | string;
 export type PracticeTemplateScenarioType = "sales" | "presentation";
-export type PracticeTemplateMode = "learning" | "expert_qa" | "examiner" | "customer_roleplay" | "mixed_path" | string;
+export type PracticeTemplateMode =
+    "learning" | "expert_qa" | "examiner" | "customer_roleplay" | "mixed_path" | string;
 export type PracticeTemplateVoiceMode = "legacy" | "stepfun_realtime";
 export type RoleProfilePressureLevel = "low" | "medium" | "high";
 
@@ -680,7 +671,10 @@ export interface LearningPathStage {
     asset_id?: string | null;
     learning_content_id?: string | null;
     agent_id?: string | null;
-    prerequisites: Array<{ template_stage_key: string; required_result: "completed" }>;
+    prerequisites: Array<{
+        template_stage_key: string;
+        required_result: "completed";
+    }>;
     completion_policy: Record<string, unknown>;
     result?: Record<string, unknown> | null;
     report_url?: string | null;
@@ -1258,10 +1252,7 @@ export interface SalesCombinationRuleValidationResult {
 }
 
 export type SalesCombinationPreviewStatus =
-    | "matched"
-    | "missing_agent"
-    | "missing_persona"
-    | "disabled";
+    "matched" | "missing_agent" | "missing_persona" | "disabled";
 
 export interface SalesCombinationPreviewItem {
     combination_id: string;
@@ -1774,10 +1765,7 @@ export interface AdminAgent {
 }
 
 export type AdminPersonaPressureSource =
-    | "explicit"
-    | "legacy_sales_focus_extensions"
-    | "none"
-    | string;
+    "explicit" | "legacy_sales_focus_extensions" | "none" | string;
 
 export interface AdminPersonaPressureDirection {
     sales_focus?: string;
@@ -1933,12 +1921,7 @@ export interface AdminPersona {
 export type AdminModelConfigType = "llm" | "embedding" | "asr" | "tts";
 
 export type AdminModelConfigProvider =
-    | "openai"
-    | "azure"
-    | "alibaba"
-    | "anthropic"
-    | "local"
-    | "local_streaming";
+    "openai" | "azure" | "alibaba" | "anthropic" | "local" | "local_streaming";
 
 export interface AdminModelConfigListItem {
     id: string;
@@ -2657,10 +2640,7 @@ export interface UserSessionItem {
 }
 
 export type ManagerInterventionResultStatus =
-    | "pending"
-    | "not_evaluable"
-    | "still_blocked"
-    | "improved";
+    "pending" | "not_evaluable" | "still_blocked" | "improved";
 
 export interface ManagerInterventionResultItem {
     intervention_id: string;
@@ -2756,7 +2736,6 @@ export interface ManagerInterventionItem {
     updated_at: string;
 }
 
-
 export interface LearnerOpenIntervention {
     intervention_id: string;
     issue_family: string;
@@ -2809,8 +2788,7 @@ export type PromptType =
     | "report";
 
 export type PromptBusinessPurpose =
-    | "ai_coach_conversation_generation"
-    | "business_etiquette_question_generation";
+    "ai_coach_conversation_generation" | "business_etiquette_question_generation";
 
 export interface PromptTemplate {
     id: string;
@@ -2858,7 +2836,6 @@ export interface PromptTemplateUpdate {
     is_active?: boolean;
     is_default?: boolean;
 }
-
 
 export interface PromptTemplateGovernanceIssue {
     code: string;
@@ -2908,7 +2885,11 @@ export interface PromptTemplateGovernanceStatus {
 
 export interface PromptTemplateGovernanceRemediationResponse {
     remediated_count: number;
-    items: Array<{ before: unknown; after: unknown; issues: PromptTemplateGovernanceIssue[] }>;
+    items: Array<{
+        before: unknown;
+        after: unknown;
+        issues: PromptTemplateGovernanceIssue[];
+    }>;
     audit: {
         action: string;
         actor_id?: string | null;
@@ -2919,7 +2900,10 @@ export interface PromptTemplateGovernanceRemediationResponse {
 
 export interface PromptTemplateOptions {
     allowed_prompt_types: Array<{ value: string; label: string }>;
-    allowed_business_purposes?: Array<{ value: PromptBusinessPurpose; label: string }>;
+    allowed_business_purposes?: Array<{
+        value: PromptBusinessPurpose;
+        label: string;
+    }>;
     sales_allowed_prompt_types: string[];
     variables_schema: string;
     invalid_active_count: number;
@@ -3079,8 +3063,6 @@ export interface RealtimeEvaluationFeedback {
     trigger_type: "turn_count" | "time_interval" | "keyword" | "stage_transition";
 }
 
-
-
 // Scenario types
 export interface ScenarioSummary {
     scenario_id: string;
@@ -3176,9 +3158,7 @@ export interface ReplayTimelineMarker {
 export type SessionEvidenceStage = "opening" | "discovery" | "objection" | "closing" | string;
 
 export type SessionNotEvaluableReason =
-    | "INSUFFICIENT_TURN_DATA"
-    | "INSUFFICIENT_SESSION_METRICS"
-    | string;
+    "INSUFFICIENT_TURN_DATA" | "INSUFFICIENT_SESSION_METRICS" | string;
 
 export interface SessionEvidenceCompleteness {
     complete?: boolean;
@@ -3206,7 +3186,13 @@ export interface PresentationReviewDimensionScore {
 }
 
 export interface PresentationReviewPageIssueCluster {
-    issue_type: "off_page" | "missing_point" | "overlong_explanation" | "forbidden_word" | "weak_qa_handling" | string;
+    issue_type:
+        | "off_page"
+        | "missing_point"
+        | "overlong_explanation"
+        | "forbidden_word"
+        | "weak_qa_handling"
+        | string;
     summary: string;
     evidence: string[];
     turn_numbers: number[];
@@ -3292,7 +3278,8 @@ export interface ReplayAnchor {
     message_id: string | null;
     turn_number: number | null;
     marker?: ReplayAnchorMarker | null;
-    degraded_reason?: "missing_marker" | "no_matching_highlight" | "anchor_target_not_found" | string | null;
+    degraded_reason?:
+        "missing_marker" | "no_matching_highlight" | "anchor_target_not_found" | string | null;
 }
 
 export interface SessionMainIssue {
@@ -3586,7 +3573,13 @@ export interface AdaptiveDifficultyDryRunItem {
     current_difficulty: string;
     suggested_difficulty: string;
     suggested_adjustment: "increase" | "decrease" | "keep" | "none" | string;
-    status: "disabled" | "dry_run" | "active_candidate" | "blocked_by_evidence" | "blocked_by_missing_score" | string;
+    status:
+        | "disabled"
+        | "dry_run"
+        | "active_candidate"
+        | "blocked_by_evidence"
+        | "blocked_by_missing_score"
+        | string;
     enabled: boolean;
     overall_score?: number | null;
     score_basis?: string | null;
@@ -3633,7 +3626,8 @@ export interface BeforeAfterComparison {
     retraining_completed: boolean;
 }
 
-export type CalibrationLabel = "accurate" | "too_high" | "too_low" | "wrong_reason" | "missing_evidence";
+export type CalibrationLabel =
+    "accurate" | "too_high" | "too_low" | "wrong_reason" | "missing_evidence";
 
 export interface SupervisorScoreCalibration {
     review_id: string;
@@ -4117,8 +4111,9 @@ export interface HistoryStatistics {
     total_practice_time_minutes: number;
 }
 
-export interface HistoryTrendPoint extends Pick<SessionEvidenceContract,
-    "overall_score"
+export interface HistoryTrendPoint extends Pick<
+    SessionEvidenceContract,
+    | "overall_score"
     | "evaluable"
     | "not_evaluable_reason"
     | "evidence_completeness"
@@ -4185,7 +4180,14 @@ export interface RetrievalFacts {
 export interface KnowledgeCheckDiagnostics {
     session_id: string;
     voice_mode?: "legacy" | "stepfun_realtime" | string;
-    status: "disabled" | "no_knowledge_base" | "not_triggered" | "kb_not_ready" | "search_failed" | "hit" | "miss";
+    status:
+        | "disabled"
+        | "no_knowledge_base"
+        | "not_triggered"
+        | "kb_not_ready"
+        | "search_failed"
+        | "hit"
+        | "miss";
     summary: string;
     internal_retrieval_enabled: boolean;
     knowledge_base_ids: string[];
@@ -4483,19 +4485,12 @@ export type SalesTrainerStatus = "draft" | "published" | "archived";
 export type SalesTrainerMaterialType = "ppt_deck" | "script" | "example_audio" | "attachment";
 export type SalesTrainerQuizAttemptStatus = "submitted" | "scored" | "failed";
 export type NewcomerTrainingModuleType =
-    | "audio_scoring"
-    | "article_exam"
-    | "audio_scoring_group"
-    | "realtime_placeholder";
+    "audio_scoring" | "article_exam" | "audio_scoring_group" | "realtime_placeholder";
 export type NewcomerTrainingCanonicalCompletionRule =
-    | "audio_scored"
-    | "paper_passed"
-    | "all_audio_options_scored"
-    | "placeholder_disabled";
+    "audio_scored" | "paper_passed" | "all_audio_options_scored" | "placeholder_disabled";
 export type NewcomerPathCompletionRule = "passed" | "scored" | "submitted";
 export type NewcomerTrainingCompletionRule =
-    | NewcomerTrainingCanonicalCompletionRule
-    | NewcomerPathCompletionRule;
+    NewcomerTrainingCanonicalCompletionRule | NewcomerPathCompletionRule;
 export const NEWCOMER_COMPLETION_RULE_COMPATIBILITY = {
     audio_scored: "scored",
     paper_passed: "passed",
@@ -4513,10 +4508,7 @@ export type SalesTrainerAudioSubmissionStatus =
     | "scored"
     | "scoring_failed";
 export type SalesTrainerQuestionType =
-    | "single_choice"
-    | "multiple_choice"
-    | "true_false"
-    | "short_answer";
+    "single_choice" | "multiple_choice" | "true_false" | "short_answer";
 
 export interface SalesTrainerQuestionOption {
     label: string;
@@ -4721,7 +4713,8 @@ export interface SalesTrainerUnitListResponse {
     total: number;
 }
 
-export type SalesTrainerAiCoachInteractionType = "single_choice" | "multiple_choice" | "short_answer";
+export type SalesTrainerAiCoachInteractionType =
+    "single_choice" | "multiple_choice" | "short_answer";
 
 export interface SalesTrainerAiCoachAvailability {
     enabled: boolean;
@@ -4843,10 +4836,7 @@ export type TrainingJourneyStage =
     | "error_transient";
 
 export type TrainingJourneyLearnerLevelSource =
-    | "user_profile"
-    | "org_rule"
-    | "admin_assignment"
-    | "training_projection";
+    "user_profile" | "org_rule" | "admin_assignment" | "training_projection";
 
 export interface TrainingJourneyLearnerLevel {
     level_key: string;
@@ -4886,15 +4876,10 @@ export interface TrainingJourneyDiagnostic {
 }
 
 export type TrainingJourneyModuleType =
-    | NewcomerTrainingModuleType
-    | "ai_coach"
-    | "realtime_roleplay";
+    NewcomerTrainingModuleType | "ai_coach" | "realtime_roleplay";
 
 export type TrainingJourneyModuleKind =
-    | "audio_submission"
-    | "quiz_attempt"
-    | "ai_coach"
-    | "realtime_roleplay";
+    "audio_submission" | "quiz_attempt" | "ai_coach" | "realtime_roleplay";
 
 export type TrainingJourneyModuleOutcomeRecordType =
     | "audio_submission"
@@ -5000,6 +4985,31 @@ export interface TrainingJourneyOverallProgress {
     needs_remediation_modules: number;
 }
 
+export interface TrainingJourneyRetrainingTargetModule {
+    module_key: string | null;
+    title: string | null;
+    kind: string | null;
+    module_type: string | null;
+    status: string | null;
+    action_label: string | null;
+    target_path: string | null;
+    disabled: boolean;
+    disabled_reason: string | null;
+}
+
+export interface TrainingJourneyRetrainingRequest {
+    request_id: string;
+    task_id: string;
+    status: string;
+    reason: string | null;
+    capability_keys: string[];
+    capability_labels: string[];
+    source_evidence_count: number;
+    target_modules: TrainingJourneyRetrainingTargetModule[];
+    primary_target_path: string | null;
+    created_at: string;
+}
+
 export interface TrainingJourneyResponse {
     journey_id: string;
     learner_id: string;
@@ -5016,8 +5026,257 @@ export interface TrainingJourneyResponse {
     training_stage: TrainingJourneyStage;
     modules: TrainingJourneyModuleProgress[];
     overall_progress: TrainingJourneyOverallProgress;
+    retraining_requests: TrainingJourneyRetrainingRequest[];
     diagnostics: TrainingJourneyDiagnostic[];
     generated_at: string;
+}
+
+export type ReadinessDossierStatus =
+    | "not_started"
+    | "in_training"
+    | "ai_evaluating"
+    | "needs_remediation"
+    | "pending_review"
+    | "approved"
+    | "rejected"
+    | "manual_follow_up"
+    | "blocked_by_config";
+
+export type ReadinessCapabilityStatus =
+    | "not_trained"
+    | "ai_passed"
+    | "ai_failed"
+    | "needs_retraining"
+    | "pending_review"
+    | "approved"
+    | "rejected"
+    | "blocked_by_config";
+
+export type ReadinessReviewDecision = "approve" | "require_retraining" | "mark_manual_follow_up";
+
+export type ReadinessWorkbenchGroupKey =
+    | "pending_review"
+    | "not_passed"
+    | "needs_retraining"
+    | "approved"
+    | "config_exception"
+    | "in_training";
+
+export interface ReadinessDossierLearner {
+    learner_id: string;
+    name: string | null;
+    department: string | null;
+}
+
+export interface ReadinessDossierPath {
+    path_key: string | null;
+    path_revision_id: string | null;
+    path_revision_no: number | null;
+    source: string | null;
+}
+
+export interface ReadinessDossierModuleNextAction {
+    label: string | null;
+    target_path: string | null;
+    disabled: boolean;
+    disabled_reason: string | null;
+}
+
+export interface ReadinessDossierModuleSummary {
+    module_key: string | null;
+    title: string | null;
+    kind: string | null;
+    module_type: string | null;
+    order_index: number | null;
+    status: string | null;
+    passed: boolean | null;
+    score: number | null;
+    max_score: number | null;
+    required: boolean | null;
+    completion_satisfied: boolean | null;
+    locked: boolean | null;
+    block_reason: string | null;
+    capability_keys: string[];
+    evidence_ids: string[];
+    next_action: ReadinessDossierModuleNextAction | null;
+}
+
+export interface ReadinessDossierEvidence {
+    evidence_id: string;
+    evidence_type: string;
+    source_record_id: string;
+    record_type: string;
+    module_key: string | null;
+    module_title: string | null;
+    module_type: string | null;
+    capability_keys: string[];
+    status: string | null;
+    score: number | null;
+    max_score: number | null;
+    passed: boolean | null;
+    submitted_at: string | null;
+    completed_at: string | null;
+    target_path: string | null;
+    material_snapshot: Record<string, unknown> | null;
+    scoring_snapshot: Record<string, unknown> | null;
+    task_brief_snapshot: Record<string, unknown> | null;
+    snapshot_ref: Record<string, unknown> | null;
+    result_summary: string | null;
+}
+
+export interface ReadinessDossierCompetency {
+    capability_key: string;
+    display_name: string;
+    description: string | null;
+    status: ReadinessCapabilityStatus;
+    score: number | null;
+    max_score: number | null;
+    weak: boolean;
+    evidence_ids: string[];
+    latest_evidence_id: string | null;
+    review_decision: string | null;
+    reason: string | null;
+}
+
+export interface ReadinessDossierRetrainingTaskComparison {
+    before_evidence_ids: string[];
+    after_evidence_ids: string[];
+    after_status?: string | null;
+    after_passed?: boolean | null;
+    after_score?: number | null;
+    after_max_score?: number | null;
+    [key: string]: unknown;
+}
+
+export interface ReadinessDossierRetrainingTask {
+    task_id: string;
+    status: string;
+    source?: string | null;
+    capability_keys: string[];
+    source_evidence_ids: string[];
+    target_learner_id?: string | null;
+    completed_at?: string | null;
+    completed_evidence_ids?: string[];
+    comparison?: ReadinessDossierRetrainingTaskComparison | null;
+    [key: string]: unknown;
+}
+
+export interface ReadinessDossierReviewAction {
+    action_id: string;
+    audit_log_id: string;
+    decision: ReadinessReviewDecision;
+    decision_label: string;
+    reason: string | null;
+    capability_keys: string[];
+    source_evidence_ids: string[];
+    reviewer_id: string | null;
+    reviewer_role: string | null;
+    created_at: string;
+    retraining_task: ReadinessDossierRetrainingTask | null;
+    state_storage: "operation_log";
+}
+
+export interface ReadinessDossierReviewActionCreateRequest {
+    decision: ReadinessReviewDecision;
+    reason: string;
+    capability_keys: string[];
+    source_evidence_ids: string[];
+}
+
+export interface ReadinessDossierRealtimeGate {
+    module_key: string | null;
+    status: string | null;
+    locked: boolean;
+    reason: string | null;
+    training_gate_status: ReadinessDossierStatus;
+    provider_readiness: Record<string, unknown> | null;
+}
+
+export interface ReadinessDossierNextAction {
+    action_key: string;
+    label: string;
+    target_path: string | null;
+    primary: boolean;
+    capability_keys?: string[];
+}
+
+export interface ReadinessDossierSummary {
+    total_modules: number;
+    completed_modules: number;
+    passed_modules: number;
+    failed_modules: number;
+    needs_remediation_modules: number;
+    evidence_count: number;
+    review_action_count: number;
+    weak_capability_count: number;
+    retraining_task_count: number;
+    completed_retraining_task_count: number;
+    review_state_source: "operation_log";
+    [key: string]: unknown;
+}
+
+export interface ReadinessDossier {
+    contract_version: "readiness_dossier_v1";
+    learner: ReadinessDossierLearner;
+    path: ReadinessDossierPath;
+    status: ReadinessDossierStatus;
+    status_label: string;
+    status_reason: string;
+    summary: ReadinessDossierSummary;
+    modules: ReadinessDossierModuleSummary[];
+    competencies: ReadinessDossierCompetency[];
+    evidence: ReadinessDossierEvidence[];
+    review_actions: ReadinessDossierReviewAction[];
+    latest_review_action: ReadinessDossierReviewAction | null;
+    retraining_tasks: ReadinessDossierRetrainingTask[];
+    realtime_gate: ReadinessDossierRealtimeGate;
+    diagnostics: TrainingJourneyDiagnostic[];
+    next_actions: ReadinessDossierNextAction[];
+    generated_at: string;
+}
+
+export interface ReadinessWorkbenchItem {
+    learner: ReadinessDossierLearner;
+    status: ReadinessDossierStatus;
+    status_label: string;
+    status_reason: string;
+    path: ReadinessDossierPath;
+    weak_capability_keys: string[];
+    weak_capability_labels: string[];
+    evidence_count: number;
+    latest_review_action: ReadinessDossierReviewAction | null;
+    next_action: ReadinessDossierNextAction | null;
+    target_path: string | null;
+}
+
+export interface ReadinessWorkbenchGroup {
+    group_key: ReadinessWorkbenchGroupKey;
+    label: string;
+    count: number;
+    items: ReadinessWorkbenchItem[];
+}
+
+export interface ReadinessWorkbenchSummary {
+    learner_count: number;
+    loaded_learner_count: number;
+    pending_review_count: number;
+    not_passed_count: number;
+    needs_retraining_count: number;
+    approved_count: number;
+    config_exception_count: number;
+    in_training_count: number;
+}
+
+export interface ReadinessWorkbenchResponse {
+    contract_version: "readiness_dossier_v1";
+    generated_at: string;
+    groups: Record<ReadinessWorkbenchGroupKey, ReadinessWorkbenchGroup>;
+    summary: ReadinessWorkbenchSummary;
+    filters: {
+        department: string | null;
+        limit: number;
+        offset: number;
+    };
 }
 
 export interface RealtimeRoleplayStartRequest {
@@ -5334,6 +5593,7 @@ export interface NewcomerPathModuleConfig {
     readonly scoring_prompt_id?: string | null;
     readonly disabled_reason: string | null;
     readonly unlock_after_unit_ids: readonly string[];
+    readonly capability_keys?: readonly string[];
     readonly completion_rule: NewcomerPathCompletionRule;
     readonly primary_action_label: string | null;
     readonly retry_action_label: string | null;
@@ -5391,11 +5651,7 @@ export interface BusinessEtiquetteMasteryLevelConfig {
 }
 
 export type BusinessEtiquetteEvidenceType =
-    | "quiz_question"
-    | "ai_coach_card"
-    | "coach_feedback"
-    | "reading_progress"
-    | "manual_review";
+    "quiz_question" | "ai_coach_card" | "coach_feedback" | "reading_progress" | "manual_review";
 
 export interface BusinessEtiquetteEvidenceRuleConfig {
     evidence_type: BusinessEtiquetteEvidenceType;
@@ -5498,12 +5754,7 @@ export interface BusinessEtiquetteCapabilityScore {
 }
 
 export type BusinessEtiquetteAiCoachProgressStatus =
-    | "not_started"
-    | "in_progress"
-    | "not_mastered"
-    | "mastered"
-    | "ready"
-    | "manual_review";
+    "not_started" | "in_progress" | "not_mastered" | "mastered" | "ready" | "manual_review";
 
 export interface BusinessEtiquetteAiCoachProgress {
     session_id: string;
@@ -5525,11 +5776,7 @@ export interface BusinessEtiquetteAiCoachProgress {
     recommended_chapter_orders: number[];
     recommended_training_card_types: AiCoachTrainingCardTypeV1[];
     next_step_code:
-        | "start_training"
-        | "continue_remediation"
-        | "manual_review"
-        | "mastered"
-        | "ready";
+        "start_training" | "continue_remediation" | "manual_review" | "mastered" | "ready";
     next_step: string;
     capability_scores: BusinessEtiquetteCapabilityScore[];
 }
@@ -5579,9 +5826,7 @@ export interface BusinessEtiquetteUnitQuizAttemptListResponse {
 }
 
 export type BusinessEtiquetteReleaseStrategy =
-    | "future_learners_only"
-    | "allow_voluntary_switch"
-    | "assign_retraining";
+    "future_learners_only" | "allow_voluntary_switch" | "assign_retraining";
 
 export interface BusinessEtiquetteReleaseConfig {
     default_strategy: BusinessEtiquetteReleaseStrategy;
@@ -5743,11 +5988,7 @@ export interface NewcomerPathConfigActionRequest {
 
 export type NewcomerPathRevisionStatus = "working" | "published" | "archived";
 
-export type NewcomerPathChangeClass =
-    | "non_semantic"
-    | "semantic"
-    | "binding"
-    | "scoring_high_risk";
+export type NewcomerPathChangeClass = "non_semantic" | "semantic" | "binding" | "scoring_high_risk";
 
 export interface NewcomerPathRevisionSummary {
     readonly revision_id: string;
@@ -6355,15 +6596,10 @@ export interface BusinessEtiquetteCapabilitySnapshotResponse {
 }
 
 export type BusinessEtiquetteQuestionDraftType =
-    | "single_choice"
-    | "multiple_choice"
-    | "short_answer";
+    "single_choice" | "multiple_choice" | "short_answer";
 
 export type BusinessEtiquetteQuestionDraftStatus =
-    | "pending_review"
-    | "approved"
-    | "rejected"
-    | "converted";
+    "pending_review" | "approved" | "rejected" | "converted";
 
 export interface BusinessEtiquetteQuestionDraftOption {
     value: string;
@@ -7201,11 +7437,7 @@ export interface SalesTrainerTrainingRecordListResponse {
 
 export type SalesTrainerRoleplayObservationSource = "heuristic" | "llm_evaluator";
 
-export type SalesTrainerRoleplayObservationStatus =
-    | "pending"
-    | "completed"
-    | "failed"
-    | "ignored";
+export type SalesTrainerRoleplayObservationStatus = "pending" | "completed" | "failed" | "ignored";
 
 export interface SalesTrainerRoleplayObservationErrorSnapshot {
     code?: string | null;
@@ -7233,8 +7465,10 @@ export interface SalesTrainerRoleplayObservationSessionResponse {
     source_record_id: string;
     total: number;
     latest_turn_index: number | null;
-    source_counts: Partial<Record<SalesTrainerRoleplayObservationSource, number>> & Record<string, number>;
-    status_counts: Partial<Record<SalesTrainerRoleplayObservationStatus, number>> & Record<string, number>;
+    source_counts: Partial<Record<SalesTrainerRoleplayObservationSource, number>> &
+        Record<string, number>;
+    status_counts: Partial<Record<SalesTrainerRoleplayObservationStatus, number>> &
+        Record<string, number>;
     items: SalesTrainerRoleplayObservation[];
 }
 
@@ -7507,15 +7741,10 @@ export interface ExaminerAgentSimulationRequest {
 // accepts values shaped by these types — never LLM-supplied executable
 // structure or arbitrary components.
 
-export type AiCoachInteractionTypeV1 =
-    | "single_choice"
-    | "multiple_choice"
-    | "short_answer";
+export type AiCoachInteractionTypeV1 = "single_choice" | "multiple_choice" | "short_answer";
 
 export type AiCoachTrainingCardTypeV1 =
-    | "scenario_judgment"
-    | "expression_rewrite"
-    | "role_response";
+    "scenario_judgment" | "expression_rewrite" | "role_response";
 
 export interface AiCoachInteractionOptionV1 {
     readonly option_id: string;
@@ -7734,11 +7963,7 @@ export type AiCoachUiEventTypeV1 =
     | "summary_card"
     | "followup_prompt";
 
-export type AiCoachUiEventStatusV1 =
-    | "pending"
-    | "submitted"
-    | "scored"
-    | "failed";
+export type AiCoachUiEventStatusV1 = "pending" | "submitted" | "scored" | "failed";
 
 export type AiCoachNextActionV1 =
     | "continue_drill"
@@ -7750,7 +7975,8 @@ export type AiCoachNextActionV1 =
     | "end_session";
 
 export interface AiCoachCoachStatePublicV1 {
-    readonly session_phase: "starting" | "answering" | "reviewing" | "choosing" | "summarizing" | "completed";
+    readonly session_phase:
+        "starting" | "answering" | "reviewing" | "choosing" | "summarizing" | "completed";
     readonly active_event_id: string | null;
     readonly auto_step_count: number;
     readonly answered_card_count: number;

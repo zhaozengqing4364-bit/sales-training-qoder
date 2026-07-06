@@ -22,24 +22,38 @@ export interface PathBusinessBindingValue {
     readonly learningContentId: string;
 }
 
-const AUDIO_MODULE_DEFAULTS: Record<AudioEditableModuleKey, {
-    readonly completionRule: "scored";
-    readonly moduleType: "audio_scoring" | "audio_scoring_group";
-    readonly orderIndex: number;
-    readonly primaryActionLabel: string;
-}> = {
+const AUDIO_MODULE_DEFAULTS: Record<
+    AudioEditableModuleKey,
+    {
+        readonly completionRule: "passed" | "scored";
+        readonly moduleType: "audio_scoring" | "audio_scoring_group";
+        readonly orderIndex: number;
+        readonly primaryActionLabel: string;
+    }
+> = {
     ppt_explanation: {
-        completionRule: "scored",
+        completionRule: "passed",
         moduleType: "audio_scoring",
         orderIndex: 1,
         primaryActionLabel: "上传录音",
     },
     elevator_pitch: {
-        completionRule: "scored",
+        completionRule: "passed",
         moduleType: "audio_scoring_group",
         orderIndex: 3,
-        primaryActionLabel: "上传演讲录音",
+        primaryActionLabel: "上传金字塔演讲录音",
     },
+};
+
+const READINESS_CAPABILITY_KEYS_BY_MODULE: Record<string, readonly string[]> = {
+    ppt_explanation: ["expression_clarity", "structured_presentation", "product_understanding"],
+    business_skills: [
+        "business_etiquette",
+        "customer_perspective",
+        "needs_discovery",
+        "objection_handling",
+    ],
+    elevator_pitch: ["expression_clarity", "structured_presentation", "customer_perspective"],
 };
 
 export function isAudioEditableModuleKey(
@@ -74,9 +88,9 @@ export function updatePathAudioBinding(
     if (path.modules.some((pathModule) => pathModule.module_key === moduleKey)) {
         return {
             ...path,
-            modules: path.modules.map((pathModule) => (
-                pathModule.module_key === moduleKey ? nextModule(pathModule) : pathModule
-            )),
+            modules: path.modules.map((pathModule) =>
+                pathModule.module_key === moduleKey ? nextModule(pathModule) : pathModule,
+            ),
         };
     }
     return {
@@ -111,9 +125,9 @@ export function updatePathBusinessBinding(
     if (path.modules.some((pathModule) => pathModule.module_key === "business_skills")) {
         return {
             ...path,
-            modules: path.modules.map((pathModule) => (
-                pathModule.module_key === "business_skills" ? nextModule(pathModule) : pathModule
-            )),
+            modules: path.modules.map((pathModule) =>
+                pathModule.module_key === "business_skills" ? nextModule(pathModule) : pathModule,
+            ),
         };
     }
     return {
@@ -137,6 +151,7 @@ function defaultAudioModule(moduleKey: AudioEditableModuleKey): NewcomerPathModu
         exam_paper_id: null,
         disabled_reason: null,
         unlock_after_unit_ids: [],
+        capability_keys: READINESS_CAPABILITY_KEYS_BY_MODULE[moduleKey] ?? [],
         completion_rule: defaults.completionRule,
         primary_action_label: defaults.primaryActionLabel,
         retry_action_label: null,
@@ -161,6 +176,7 @@ function defaultBusinessModule(): NewcomerPathModuleConfig {
         exam_paper_id: null,
         disabled_reason: null,
         unlock_after_unit_ids: [],
+        capability_keys: READINESS_CAPABILITY_KEYS_BY_MODULE.business_skills,
         completion_rule: "passed",
         primary_action_label: "开始学习",
         retry_action_label: null,

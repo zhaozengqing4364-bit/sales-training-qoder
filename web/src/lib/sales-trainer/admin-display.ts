@@ -43,7 +43,7 @@ export const TRAINING_PURPOSE_OPTIONS = [
     { value: "ppt_pitch", label: "PPT 讲解录音" },
     { value: "general_audio_scoring", label: "通用录音评分" },
     { value: "business_skills", label: "商务技巧" },
-    { value: "elevator_pitch", label: "电梯演讲" },
+    { value: "elevator_pitch", label: "金字塔演讲" },
 ] as const;
 
 const TRAINING_PURPOSE_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
@@ -74,12 +74,12 @@ export function formatAdminRecordStatus(status: string | null | undefined): stri
         return QUIZ_ATTEMPT_STATUS_LABELS[status];
     }
     if (
-        status === "uploaded"
-        || status === "transcribing"
-        || status === "transcribed"
-        || status === "transcription_failed"
-        || status === "scoring"
-        || status === "scoring_failed"
+        status === "uploaded" ||
+        status === "transcribing" ||
+        status === "transcribed" ||
+        status === "transcription_failed" ||
+        status === "scoring" ||
+        status === "scoring_failed"
     ) {
         return AUDIO_SUBMISSION_STATUS_LABELS[status];
     }
@@ -143,26 +143,24 @@ export function formatTrainingTaskDisplay(
 }
 
 export function normalizeNewcomerUnitDisplay(unit: SalesTrainerUnit): SalesTrainerUnit {
-    const isBusinessSkillsUnit = unit.config.path?.module_key === "business_skills"
-        || unit.name === LEGACY_BUSINESS_SKILLS_UNIT_NAME
-        || unit.description?.includes(LEGACY_BUSINESS_SKILLS_DESCRIPTION_TOKEN) === true;
+    const isBusinessSkillsUnit =
+        unit.config.path?.module_key === "business_skills" ||
+        unit.name === LEGACY_BUSINESS_SKILLS_UNIT_NAME ||
+        unit.description?.includes(LEGACY_BUSINESS_SKILLS_DESCRIPTION_TOKEN) === true;
     if (!isBusinessSkillsUnit) {
         return unit;
     }
     return {
         ...unit,
-        name: unit.name === LEGACY_BUSINESS_SKILLS_UNIT_NAME
-            ? BUSINESS_SKILLS_UNIT_NAME
-            : unit.name,
+        name:
+            unit.name === LEGACY_BUSINESS_SKILLS_UNIT_NAME ? BUSINESS_SKILLS_UNIT_NAME : unit.name,
         description: unit.description?.includes(LEGACY_BUSINESS_SKILLS_DESCRIPTION_TOKEN)
             ? BUSINESS_SKILLS_UNIT_DESCRIPTION
             : unit.description,
     };
 }
 
-export function filterNewcomerAdminUnits(
-    units: readonly SalesTrainerUnit[],
-): SalesTrainerUnit[] {
+export function filterNewcomerAdminUnits(units: readonly SalesTrainerUnit[]): SalesTrainerUnit[] {
     const currentUnits = units.filter(
         (unit) => unit.config.path?.path_key === CURRENT_NEWCOMER_PATH_KEY,
     );

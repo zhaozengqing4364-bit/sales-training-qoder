@@ -3,19 +3,23 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiRequestError } from "@/lib/api/client";
+import type { TrainingJourneyRetrainingRequest } from "@/lib/api/types";
 
 import SalesTrainerPage from "./page";
 
-const { getJourneyMock, listPathsMock, listUnitsMock, routerPushMock, startRealtimeRoleplayMock } = vi.hoisted(() => ({
-    getJourneyMock: vi.fn(),
-    listUnitsMock: vi.fn(),
-    listPathsMock: vi.fn(),
-    routerPushMock: vi.fn(),
-    startRealtimeRoleplayMock: vi.fn(),
-}));
+const { getJourneyMock, listPathsMock, listUnitsMock, routerPushMock, startRealtimeRoleplayMock } =
+    vi.hoisted(() => ({
+        getJourneyMock: vi.fn(),
+        listUnitsMock: vi.fn(),
+        listPathsMock: vi.fn(),
+        routerPushMock: vi.fn(),
+        startRealtimeRoleplayMock: vi.fn(),
+    }));
 
 vi.mock("next/link", () => ({
-    default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
+    default: ({ href, children }: { href: string; children: ReactNode }) => (
+        <a href={href}>{children}</a>
+    ),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -25,11 +29,17 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-    Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props}>{children}</button>,
+    Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+        <button type="button" {...props}>
+            {children}
+        </button>
+    ),
 }));
 
 vi.mock("@/components/ui/glass-card", () => ({
-    GlassCard: ({ children, className }: { children: ReactNode; className?: string }) => <div className={className}>{children}</div>,
+    GlassCard: ({ children, className }: { children: ReactNode; className?: string }) => (
+        <div className={className}>{children}</div>
+    ),
 }));
 
 vi.mock("@/components/ui/badge", () => ({
@@ -37,19 +47,27 @@ vi.mock("@/components/ui/badge", () => ({
 }));
 
 vi.mock("@/components/sales-trainer/sales-trainer-module-grid", () => ({
-    SalesTrainerModuleGrid: ({ path }: { path: { path_key: string } }) => <div>{`legacy-module-grid:${path.path_key}`}</div>,
+    SalesTrainerModuleGrid: ({ path }: { path: { path_key: string } }) => (
+        <div>{`legacy-module-grid:${path.path_key}`}</div>
+    ),
 }));
 
 vi.mock("@/components/sales-trainer/sales-trainer-module-mission-panel", () => ({
-    SalesTrainerModuleMissionPanel: ({ path }: { path: { path_key: string } }) => <div>{`legacy-module-mission:${path.path_key}`}</div>,
+    SalesTrainerModuleMissionPanel: ({ path }: { path: { path_key: string } }) => (
+        <div>{`legacy-module-mission:${path.path_key}`}</div>
+    ),
 }));
 
 vi.mock("./path-mission-panel", () => ({
-    PathMissionPanel: ({ path }: { path: { path_key: string } }) => <div>{`legacy-path-mission:${path.path_key}`}</div>,
+    PathMissionPanel: ({ path }: { path: { path_key: string } }) => (
+        <div>{`legacy-path-mission:${path.path_key}`}</div>
+    ),
 }));
 
 vi.mock("./path-level-timeline", () => ({
-    PathLevelTimeline: ({ path }: { path: { path_key: string } }) => <div>{`legacy-path-timeline:${path.path_key}`}</div>,
+    PathLevelTimeline: ({ path }: { path: { path_key: string } }) => (
+        <div>{`legacy-path-timeline:${path.path_key}`}</div>
+    ),
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -248,6 +266,7 @@ function createJourneyFixture() {
             failed_modules: 0,
             needs_remediation_modules: 0,
         },
+        retraining_requests: [] as TrainingJourneyRetrainingRequest[],
         diagnostics: [
             {
                 code: "JOURNEY_ACTIVE_REVISION",
@@ -349,13 +368,12 @@ describe("SalesTrainerPage", () => {
         });
     });
 
-    it("优先渲染 Journey 状态，并不再读取 /paths 兼容入口卡片", async () => {
+    it("优先渲染训练状态，并不再读取 /paths 兼容入口卡片", async () => {
         render(<SalesTrainerPage />);
 
-        expect(await screen.findByText("当前训练闭环状态")).toBeTruthy();
+        expect(await screen.findByText("当前训练状态")).toBeTruthy();
         expect(screen.getByText("学员等级：新人销售")).toBeTruthy();
-        expect(screen.getByText("来源：training_projection")).toBeTruthy();
-        expect(screen.getByText("Journey 已按 active revision 更新。")).toBeTruthy();
+        expect(screen.getByText("训练路径已按当前发布版本更新。")).toBeTruthy();
         expect(screen.getByText("PPT 讲解录音")).toBeTruthy();
         expect(screen.getByText("商务技巧")).toBeTruthy();
         expect(screen.queryByText("兼容入口卡片")).toBeNull();
@@ -365,7 +383,7 @@ describe("SalesTrainerPage", () => {
         expect(listPathsMock).not.toHaveBeenCalled();
     });
 
-    it("在无 active revision 时 fail-closed，并展示错误码与 trace_id", async () => {
+    it("在无 active revision 时 fail-closed，并展示用户可理解的修复提示", async () => {
         getJourneyMock.mockRejectedValue(
             buildJourneyError(
                 "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
@@ -376,11 +394,14 @@ describe("SalesTrainerPage", () => {
 
         render(<SalesTrainerPage />);
 
-        expect(await screen.findByText("Journey 读取失败")).toBeTruthy();
-        expect(screen.getByText("当前没有生效中的训练路径版本。 (trace_id: trace-journey-missing)")).toBeTruthy();
-        expect(screen.getByText("后端信息：当前没有生效中的训练路径版本。")).toBeTruthy();
-        expect(screen.getByText("error_code: [NEWCOMER_PATH_ACTIVE_REVISION_MISSING]")).toBeTruthy();
-        expect(screen.getByText("trace_id: trace-journey-missing")).toBeTruthy();
+        expect(await screen.findByText("训练路径暂不可用")).toBeTruthy();
+        expect(
+            screen.getByText("当前训练路径还没有发布完成，请联系培训负责人处理后再继续。"),
+        ).toBeTruthy();
+        expect(
+            screen.queryByText("error_code: [NEWCOMER_PATH_ACTIVE_REVISION_MISSING]"),
+        ).toBeNull();
+        expect(screen.queryByText("trace_id: trace-journey-missing")).toBeNull();
         expect(screen.queryByText("legacy-module-mission:newcomer_training_path_v1")).toBeNull();
         expect(listUnitsMock).not.toHaveBeenCalled();
         expect(listPathsMock).not.toHaveBeenCalled();
@@ -388,19 +409,15 @@ describe("SalesTrainerPage", () => {
 
     it("Journey 报错时不会回退成 catalog 伪成功", async () => {
         getJourneyMock.mockRejectedValue(
-            buildJourneyError(
-                "[HTTP_500]",
-                "Journey 服务暂时不可用。",
-                "trace-journey-500",
-                500,
-            ),
+            buildJourneyError("[HTTP_500]", "Journey 服务暂时不可用。", "trace-journey-500", 500),
         );
 
         render(<SalesTrainerPage />);
 
-        expect(await screen.findByText("Journey 读取失败")).toBeTruthy();
-        expect(screen.getByText("Journey 服务暂时不可用。 (trace_id: trace-journey-500)")).toBeTruthy();
-        expect(screen.queryByText("当前训练闭环状态")).toBeNull();
+        expect(await screen.findByText("训练路径暂不可用")).toBeTruthy();
+        expect(screen.getByText("训练路径服务暂时不可用。")).toBeTruthy();
+        expect(screen.queryByText("trace_id: trace-journey-500")).toBeNull();
+        expect(screen.queryByText("当前训练状态")).toBeNull();
         expect(screen.queryByText("legacy-module-grid:newcomer_training_path_v1")).toBeNull();
         expect(listUnitsMock).not.toHaveBeenCalled();
         expect(listPathsMock).not.toHaveBeenCalled();
@@ -417,6 +434,112 @@ describe("SalesTrainerPage", () => {
         expect(screen.getByText("系统正在处理最近一次结果。")).toBeTruthy();
     });
 
+    it("展示培训负责人要求重练的能力和入口，但不暴露后台审计字段", async () => {
+        getJourneyMock.mockResolvedValue(
+            buildJourney({
+                retraining_requests: [
+                    {
+                        request_id: "review-action-1",
+                        task_id: "retraining-task-1",
+                        status: "pending",
+                        reason: "商务礼仪表达还需要再练一次。",
+                        capability_keys: ["business_etiquette"],
+                        capability_labels: ["商务礼仪与职业表达"],
+                        source_evidence_count: 1,
+                        target_modules: [
+                            {
+                                module_key: "business_skills",
+                                title: "商务技巧 AI 教练",
+                                kind: "ai_coach",
+                                module_type: "ai_coach",
+                                status: "failed",
+                                action_label: "继续 AI 教练",
+                                target_path: "/sales-trainer/business-skills/coach",
+                                disabled: false,
+                                disabled_reason: null,
+                            },
+                        ],
+                        primary_target_path: "/sales-trainer/business-skills/coach",
+                        created_at: baseTimestamp,
+                    },
+                ],
+            }),
+        );
+
+        render(<SalesTrainerPage />);
+
+        expect(await screen.findByText("培训负责人已要求重练")).toBeTruthy();
+        expect(screen.getByText("商务礼仪与职业表达")).toBeTruthy();
+        expect(screen.getByText("商务礼仪表达还需要再练一次。")).toBeTruthy();
+        expect(screen.getByText("关联了 1 份你提交过的训练结果。")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "继续 AI 教练" }).getAttribute("href")).toBe(
+            "/sales-trainer/business-skills/coach",
+        );
+        expect(screen.queryByText(/operation_log/)).toBeNull();
+        expect(screen.queryByText(/retraining-task-1/)).toBeNull();
+        expect(screen.queryByText(/business_etiquette/)).toBeNull();
+        expect(screen.queryByText(/ai_coach_session/)).toBeNull();
+    });
+
+    it("不会向学员暴露后台失败分类和配置术语", async () => {
+        const journey = createJourneyFixture();
+        const realtimeModule = journey.modules[2];
+        getJourneyMock.mockResolvedValue({
+            ...journey,
+            modules: [
+                {
+                    ...realtimeModule,
+                    stage: "error_terminal" as const,
+                    unmet_reasons: [
+                        {
+                            code: "NEWCOMER_REALTIME_BINDING_INVALID",
+                            message: "active path revision 中该模块缺少受治理的 runtime binding。",
+                            terminal: true,
+                        },
+                    ],
+                    next_action: {
+                        ...realtimeModule.next_action,
+                        disabled: true,
+                        disabled_reason: "实时对练 provider readiness 未通过。",
+                    },
+                    latest_outcome: {
+                        outcome_id: "outcome-failed",
+                        record_type: "ai_coach_session" as const,
+                        source_record_id: "session-failed",
+                        module_key: "realtime_roleplay",
+                        module_type: "realtime_roleplay" as const,
+                        status: "error_terminal" as const,
+                        score: null,
+                        max_score: null,
+                        passed: null,
+                        failure_type: "terminal" as const,
+                        failure_code: "[AI_COACH_SESSION_FAILED]",
+                        submitted_at: baseTimestamp,
+                        completed_at: null,
+                        path_revision_id: "path-rev-1",
+                        path_revision_no: 3,
+                        snapshot_ref: {
+                            snapshot_type: "session_snapshot" as const,
+                            legacy_snapshot_only: false,
+                        },
+                    },
+                },
+            ],
+        });
+
+        render(<SalesTrainerPage />);
+
+        expect(await screen.findByText("最近记录：AI 教练 · 需要人工处理")).toBeTruthy();
+        expect(
+            screen.getByText("真实语音对练还没有完成后台接入，请联系培训负责人处理。"),
+        ).toBeTruthy();
+        expect(screen.getByText("真实语音对练暂未开放，请先完成前置训练或稍后再试。")).toBeTruthy();
+        expect(screen.queryByText(/provider readiness/)).toBeNull();
+        expect(screen.queryByText(/runtime binding/)).toBeNull();
+        expect(screen.queryByText(/active path revision/)).toBeNull();
+        expect(screen.queryByText(/AI_COACH_SESSION_FAILED/)).toBeNull();
+    });
+
     it("点击实时对练 action 会调用 start API 并跳转到 practice_url", async () => {
         render(<SalesTrainerPage />);
 
@@ -430,7 +553,7 @@ describe("SalesTrainerPage", () => {
         });
     });
 
-    it("实时对练启动失败时展示后端错误码与 trace_id", async () => {
+    it("实时对练启动失败时展示用户可理解的锁定原因", async () => {
         startRealtimeRoleplayMock.mockRejectedValue(
             buildJourneyError(
                 "[NEWCOMER_REALTIME_PROVIDER_NOT_READY]",
@@ -444,9 +567,12 @@ describe("SalesTrainerPage", () => {
 
         fireEvent.click(await screen.findByText("开始实时对练"));
 
-        expect(await screen.findByText("实时对练启动失败")).toBeTruthy();
-        expect(screen.getByText("error_code: [NEWCOMER_REALTIME_PROVIDER_NOT_READY]")).toBeTruthy();
-        expect(screen.getByText("trace_id: trace-realtime-start")).toBeTruthy();
+        expect(await screen.findByText("真实语音对练暂不可用")).toBeTruthy();
+        expect(
+            screen.getByText("真实语音对练暂未开放，不影响你继续完成前置训练和查看已有结果。"),
+        ).toBeTruthy();
+        expect(screen.queryByText("error_code: [NEWCOMER_REALTIME_PROVIDER_NOT_READY]")).toBeNull();
+        expect(screen.queryByText("trace_id: trace-realtime-start")).toBeNull();
     });
 
     it("首屏只请求 Journey，不再并行读取 units 和 paths 伪装入口成功", async () => {

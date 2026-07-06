@@ -10,6 +10,10 @@ import type {
     SalesTrainerAudioSubmissionListResponse,
     SalesTrainerAudioUploadUrlRequest,
     SalesTrainerAudioUploadUrlResponse,
+    ReadinessDossier,
+    ReadinessDossierReviewAction,
+    ReadinessDossierReviewActionCreateRequest,
+    ReadinessWorkbenchResponse,
     SalesTrainerManagerDashboard,
     SalesTrainerMaterial,
     SalesTrainerMaterialCreateRequest,
@@ -118,10 +122,13 @@ export function createSalesTrainerDomain({
         },
 
         startRealtimeRoleplay: async (payload: RealtimeRoleplayStartRequest = {}) => {
-            return request<RealtimeRoleplayStartResponse>("/sales-trainer/realtime-roleplay/start", {
-                method: "POST",
-                body: JSON.stringify(payload),
-            });
+            return request<RealtimeRoleplayStartResponse>(
+                "/sales-trainer/realtime-roleplay/start",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
         },
 
         getUnit: async (unitId: string) => {
@@ -276,12 +283,14 @@ export function createAdminSalesTrainerDomain({
 
     return {
         getCapabilities: async () => {
-            return request<SalesTrainerAdminCapabilities>(
-                "/admin/sales-trainer/capabilities",
-            );
+            return request<SalesTrainerAdminCapabilities>("/admin/sales-trainer/capabilities");
         },
 
-        listUnits: async (params?: { include_archived?: boolean; limit?: number; offset?: number }) => {
+        listUnits: async (params?: {
+            include_archived?: boolean;
+            limit?: number;
+            offset?: number;
+        }) => {
             const query = buildQueryString({
                 include_archived: params?.include_archived,
                 limit: params?.limit,
@@ -321,7 +330,11 @@ export function createAdminSalesTrainerDomain({
             );
         },
 
-        listMaterials: async (params?: { include_archived?: boolean; limit?: number; offset?: number }) => {
+        listMaterials: async (params?: {
+            include_archived?: boolean;
+            limit?: number;
+            offset?: number;
+        }) => {
             const query = buildQueryString({
                 include_archived: params?.include_archived,
                 limit: params?.limit,
@@ -339,10 +352,7 @@ export function createAdminSalesTrainerDomain({
             });
         },
 
-        updateMaterial: async (
-            materialId: string,
-            payload: SalesTrainerMaterialUpdateRequest,
-        ) => {
+        updateMaterial: async (materialId: string, payload: SalesTrainerMaterialUpdateRequest) => {
             return request<SalesTrainerMaterial>(
                 `/admin/sales-trainer/materials/${encodeURIComponent(materialId)}`,
                 {
@@ -435,9 +445,7 @@ export function createAdminSalesTrainerDomain({
             );
         },
 
-        createQuestionCategory: async (
-            payload: SalesTrainerQuestionCategoryCreateRequest,
-        ) => {
+        createQuestionCategory: async (payload: SalesTrainerQuestionCategoryCreateRequest) => {
             return request<SalesTrainerQuestionCategory>(
                 "/admin/sales-trainer/question-categories",
                 {
@@ -490,10 +498,7 @@ export function createAdminSalesTrainerDomain({
             );
         },
 
-        updateQuestion: async (
-            questionId: string,
-            payload: SalesTrainerQuestionUpdateRequest,
-        ) => {
+        updateQuestion: async (questionId: string, payload: SalesTrainerQuestionUpdateRequest) => {
             return request<SalesTrainerQuestion>(
                 `/admin/sales-trainer/questions/${encodeURIComponent(questionId)}`,
                 {
@@ -517,7 +522,11 @@ export function createAdminSalesTrainerDomain({
             );
         },
 
-        listAudioSubmissions: async (params?: { user_id?: string; limit?: number; offset?: number }) => {
+        listAudioSubmissions: async (params?: {
+            user_id?: string;
+            limit?: number;
+            offset?: number;
+        }) => {
             const query = buildQueryString({
                 user_id: params?.user_id,
                 limit: params?.limit,
@@ -553,17 +562,22 @@ export function createAdminSalesTrainerDomain({
         },
 
         listScorePrompts: async (params?: { include_archived?: boolean }) => {
-            const query = buildQueryString({ include_archived: params?.include_archived });
+            const query = buildQueryString({
+                include_archived: params?.include_archived,
+            });
             return request<SalesTrainerAudioScorePromptListResponse>(
                 `/admin/sales-trainer/audio-score-prompts${query}`,
             );
         },
 
         createScorePrompt: async (payload: SalesTrainerAudioScorePromptCreateRequest) => {
-            return request<SalesTrainerAudioScorePrompt>("/admin/sales-trainer/audio-score-prompts", {
-                method: "POST",
-                body: JSON.stringify(payload),
-            });
+            return request<SalesTrainerAudioScorePrompt>(
+                "/admin/sales-trainer/audio-score-prompts",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
         },
 
         updateScorePrompt: async (
@@ -633,8 +647,40 @@ export function createAdminSalesTrainerDomain({
         },
 
         getManagerDashboard: async () => {
-            return request<SalesTrainerManagerDashboard>(
-                "/admin/sales-trainer/manager-dashboard",
+            return request<SalesTrainerManagerDashboard>("/admin/sales-trainer/manager-dashboard");
+        },
+
+        getReadinessWorkbench: async (params?: {
+            department?: string;
+            limit?: number;
+            offset?: number;
+        }) => {
+            const query = buildQueryString({
+                department: params?.department,
+                limit: params?.limit,
+                offset: params?.offset,
+            });
+            return request<ReadinessWorkbenchResponse>(
+                `/admin/sales-trainer/readiness/workbench${query}`,
+            );
+        },
+
+        getReadinessDossier: async (learnerId: string) => {
+            return request<ReadinessDossier>(
+                `/admin/sales-trainer/readiness/dossiers/${encodeURIComponent(learnerId)}`,
+            );
+        },
+
+        createReadinessReviewAction: async (
+            learnerId: string,
+            payload: ReadinessDossierReviewActionCreateRequest,
+        ) => {
+            return request<ReadinessDossierReviewAction>(
+                `/admin/sales-trainer/readiness/dossiers/${encodeURIComponent(learnerId)}/review-actions`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
             );
         },
 

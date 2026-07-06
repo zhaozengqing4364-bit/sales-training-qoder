@@ -119,6 +119,7 @@ From `backend/AGENTS.md` and `.kiro/steering/backend-principles.md`:
 - Adding integration test dependencies to unit tests — slows CI and flakes on network.
 - Changing response shape without updating `tests/contract/` and `docs/api-contract/`.
 - Mutating singleton collaborators such as `get_connection_manager().send_json` or `.connect` in a test without restoring them. If a test must replace a singleton method, use `monkeypatch` or add an autouse fixture in the affected suite that restores `ConnectionManager.<method>.__get__(manager, ConnectionManager)` and clears `active_connections` before and after each test.
+- For Sales Trainer learner-record workflows, do not gate review or learner-scope write actions with content-management permission. Training managers need to reach the service so object-level department scope can decide; content admins configure assets but should not implicitly review learner dossiers.
 
 ---
 

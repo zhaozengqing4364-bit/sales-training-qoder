@@ -83,6 +83,7 @@ class SalesTrainerPathConfig(BaseModel):
     scoring_prompt_id: str | None = Field(None, min_length=1, max_length=36)
     disabled_reason: str | None = Field(None, max_length=300)
     unlock_after_unit_ids: list[str] = Field(default_factory=list)
+    capability_keys: list[str] = Field(default_factory=list)
     learner_level_required: list[str] = Field(default_factory=list)
     completion_rule: NewcomerPathCompletionRule = "passed"
     primary_action_label: str | None = Field(None, max_length=40)
@@ -128,6 +129,19 @@ class SalesTrainerPathConfig(BaseModel):
         for value in stripped:
             if len(value) > 80:
                 raise ValueError("learner_level_required items must be <= 80 chars")
+        return stripped
+
+    @field_validator("capability_keys")
+    @classmethod
+    def validate_capability_keys(cls, values: list[str]) -> list[str]:
+        stripped = [value.strip() for value in values if value.strip()]
+        if len(stripped) > 20:
+            raise ValueError("capability_keys must contain <= 20 items")
+        if len(set(stripped)) != len(stripped):
+            raise ValueError("capability_keys cannot contain duplicates")
+        for value in stripped:
+            if len(value) > 80:
+                raise ValueError("capability_keys items must be <= 80 chars")
         return stripped
 
 
@@ -1371,6 +1385,7 @@ class NewcomerPathModuleConfig(BaseModel):
     scoring_prompt_id: str | None = Field(None, min_length=1, max_length=36)
     disabled_reason: str | None = Field(None, max_length=300)
     unlock_after_unit_ids: list[str] = Field(default_factory=list)
+    capability_keys: list[str] = Field(default_factory=list)
     learner_level_required: list[str] = Field(default_factory=list)
     completion_rule: NewcomerPathCompletionRule = "passed"
     primary_action_label: str | None = Field(None, max_length=40)
@@ -1388,6 +1403,18 @@ class NewcomerPathModuleConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_module_collections(self) -> NewcomerPathModuleConfig:
+        if len(self.capability_keys) > 20:
+            raise ValueError("capability_keys must contain <= 20 items")
+        capability_keys = [
+            value.strip() for value in self.capability_keys if value.strip()
+        ]
+        if len(set(capability_keys)) != len(capability_keys):
+            raise ValueError("capability_keys cannot contain duplicate values")
+        if len(capability_keys) != len(self.capability_keys):
+            raise ValueError("capability_keys cannot contain blank values")
+        for value in capability_keys:
+            if len(value) > 80:
+                raise ValueError("capability_keys items must be <= 80 chars")
         if len(self.learner_level_required) > 20:
             raise ValueError("learner_level_required must contain <= 20 items")
         learner_levels = [
@@ -2907,6 +2934,10 @@ class TrainingJourneyModuleOutcome(BaseModel):
 
 class TrainingJourneyNextAction(BaseModel):
     action_key: Literal[
+        "start_audio_submission",
+        "retry_audio_submission",
+        "start_quiz_attempt",
+        "retry_quiz_attempt",
         "start_ai_coach",
         "continue_ai_coach",
         "start_realtime_roleplay",
@@ -2956,6 +2987,33 @@ class TrainingJourneyOverallProgress(BaseModel):
     needs_remediation_modules: int
 
 
+class TrainingJourneyRetrainingTargetModule(BaseModel):
+    module_key: str | None = None
+    title: str | None = None
+    kind: str | None = None
+    module_type: str | None = None
+    status: str | None = None
+    action_label: str | None = None
+    target_path: str | None = None
+    disabled: bool = False
+    disabled_reason: str | None = None
+
+
+class TrainingJourneyRetrainingRequest(BaseModel):
+    request_id: str
+    task_id: str
+    status: str
+    reason: str | None = None
+    capability_keys: list[str] = Field(default_factory=list)
+    capability_labels: list[str] = Field(default_factory=list)
+    source_evidence_count: int = 0
+    target_modules: list[TrainingJourneyRetrainingTargetModule] = Field(
+        default_factory=list
+    )
+    primary_target_path: str | None = None
+    created_at: object
+
+
 class TrainingJourneyResponse(BaseModel):
     journey_id: str
     learner_id: str
@@ -2972,6 +3030,9 @@ class TrainingJourneyResponse(BaseModel):
     training_stage: TrainingJourneyStage
     modules: list[TrainingJourneyModuleProgress] = Field(default_factory=list)
     overall_progress: TrainingJourneyOverallProgress
+    retraining_requests: list[TrainingJourneyRetrainingRequest] = Field(
+        default_factory=list
+    )
     diagnostics: list[TrainingJourneyDiagnostic] = Field(default_factory=list)
     generated_at: object
 
@@ -3125,6 +3186,306 @@ class TrainingJourneyAnalyticsResponse(BaseModel):
     )
     additive_observation: TrainingJourneyAnalyticsAdditiveObservation
     filters: TrainingJourneyAnalyticsFilters
+
+
+ReadinessDossierStatus = Literal[
+    "not_started",
+    "in_training",
+    "ai_evaluating",
+    "needs_remediation",
+    "pending_review",
+    "approved",
+    "rejected",
+    "manual_follow_up",
+    "blocked_by_config",
+]
+ReadinessCapabilityStatus = Literal[
+    "not_trained",
+    "ai_passed",
+    "ai_failed",
+    "needs_retraining",
+    "pending_review",
+    "approved",
+    "rejected",
+    "blocked_by_config",
+]
+ReadinessReviewDecision = Literal[
+    "approve",
+    "require_retraining",
+    "mark_manual_follow_up",
+]
+ReadinessWorkbenchGroupKey = Literal[
+    "pending_review",
+    "not_passed",
+    "needs_retraining",
+    "approved",
+    "config_exception",
+    "in_training",
+]
+
+
+class ReadinessDossierLearner(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    learner_id: str
+    name: str | None = None
+    department: str | None = None
+
+
+class ReadinessDossierPath(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path_key: str | None = None
+    path_revision_id: str | None = None
+    path_revision_no: int | None = None
+    source: str | None = None
+
+
+class ReadinessDossierModuleNextAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str | None = None
+    target_path: str | None = None
+    disabled: bool = False
+    disabled_reason: str | None = None
+
+
+class ReadinessDossierModuleSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    module_key: str | None = None
+    title: str | None = None
+    kind: str | None = None
+    module_type: str | None = None
+    order_index: int | None = None
+    status: str | None = None
+    passed: bool | None = None
+    score: float | None = None
+    max_score: float | None = None
+    required: bool | None = None
+    completion_satisfied: bool | None = None
+    locked: bool | None = None
+    block_reason: str | None = None
+    capability_keys: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+    next_action: ReadinessDossierModuleNextAction | None = None
+
+
+class ReadinessDossierEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str
+    evidence_type: str
+    source_record_id: str
+    record_type: str
+    module_key: str | None = None
+    module_title: str | None = None
+    module_type: str | None = None
+    capability_keys: list[str] = Field(default_factory=list)
+    status: str | None = None
+    score: float | None = None
+    max_score: float | None = None
+    passed: bool | None = None
+    submitted_at: object | None = None
+    completed_at: object | None = None
+    target_path: str | None = None
+    material_snapshot: dict[str, Any] | None = None
+    scoring_snapshot: dict[str, Any] | None = None
+    task_brief_snapshot: dict[str, Any] | None = None
+    snapshot_ref: dict[str, Any] | None = None
+    result_summary: str | None = None
+
+
+class ReadinessDossierCompetency(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    capability_key: str
+    display_name: str
+    description: str | None = None
+    status: ReadinessCapabilityStatus
+    score: float | None = None
+    max_score: float | None = None
+    weak: bool = False
+    evidence_ids: list[str] = Field(default_factory=list)
+    latest_evidence_id: str | None = None
+    review_decision: str | None = None
+    reason: str | None = None
+
+
+class ReadinessDossierRetrainingTaskComparison(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    before_evidence_ids: list[str] = Field(default_factory=list)
+    after_evidence_ids: list[str] = Field(default_factory=list)
+    after_status: str | None = None
+    after_passed: bool | None = None
+    after_score: float | None = None
+    after_max_score: float | None = None
+
+
+class ReadinessDossierRetrainingTask(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    task_id: str
+    status: str = "pending"
+    source: str | None = None
+    capability_keys: list[str] = Field(default_factory=list)
+    source_evidence_ids: list[str] = Field(default_factory=list)
+    target_learner_id: str | None = None
+    completed_at: object | None = None
+    completed_evidence_ids: list[str] = Field(default_factory=list)
+    comparison: ReadinessDossierRetrainingTaskComparison | None = None
+
+
+class ReadinessDossierReviewAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action_id: str
+    audit_log_id: str
+    decision: ReadinessReviewDecision
+    decision_label: str
+    reason: str | None = None
+    capability_keys: list[str] = Field(default_factory=list)
+    source_evidence_ids: list[str] = Field(default_factory=list)
+    reviewer_id: str | None = None
+    reviewer_role: str | None = None
+    created_at: object
+    retraining_task: ReadinessDossierRetrainingTask | None = None
+    state_storage: Literal["operation_log"] = "operation_log"
+
+
+class ReadinessDossierReviewActionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: ReadinessReviewDecision
+    reason: str = Field(..., min_length=1, max_length=1000)
+    capability_keys: list[str] = Field(default_factory=list, max_length=20)
+    source_evidence_ids: list[str] = Field(default_factory=list, max_length=50)
+
+    @field_validator("capability_keys", "source_evidence_ids")
+    @classmethod
+    def validate_non_empty_strings(cls, values: list[str]) -> list[str]:
+        stripped = [value.strip() for value in values if value.strip()]
+        if len(set(stripped)) != len(stripped):
+            raise ValueError("values cannot contain duplicates")
+        return stripped
+
+
+class ReadinessDossierRealtimeGate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    module_key: str | None = None
+    status: str | None = None
+    locked: bool
+    reason: str | None = None
+    training_gate_status: ReadinessDossierStatus
+    provider_readiness: dict[str, Any] | None = None
+
+
+class ReadinessDossierNextAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action_key: str
+    label: str
+    target_path: str | None = None
+    primary: bool = False
+    capability_keys: list[str] = Field(default_factory=list)
+
+
+class ReadinessDossierSummary(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    total_modules: int = 0
+    completed_modules: int = 0
+    passed_modules: int = 0
+    failed_modules: int = 0
+    needs_remediation_modules: int = 0
+    evidence_count: int = 0
+    review_action_count: int = 0
+    weak_capability_count: int = 0
+    retraining_task_count: int = 0
+    completed_retraining_task_count: int = 0
+    review_state_source: Literal["operation_log"] = "operation_log"
+
+
+class ReadinessDossierResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal["readiness_dossier_v1"]
+    learner: ReadinessDossierLearner
+    path: ReadinessDossierPath
+    status: ReadinessDossierStatus
+    status_label: str
+    status_reason: str
+    summary: ReadinessDossierSummary
+    modules: list[ReadinessDossierModuleSummary] = Field(default_factory=list)
+    competencies: list[ReadinessDossierCompetency] = Field(default_factory=list)
+    evidence: list[ReadinessDossierEvidence] = Field(default_factory=list)
+    review_actions: list[ReadinessDossierReviewAction] = Field(default_factory=list)
+    latest_review_action: ReadinessDossierReviewAction | None = None
+    retraining_tasks: list[ReadinessDossierRetrainingTask] = Field(
+        default_factory=list
+    )
+    realtime_gate: ReadinessDossierRealtimeGate
+    diagnostics: list[TrainingJourneyDiagnostic] = Field(default_factory=list)
+    next_actions: list[ReadinessDossierNextAction] = Field(default_factory=list)
+    generated_at: object
+
+
+class ReadinessWorkbenchItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    learner: ReadinessDossierLearner
+    status: ReadinessDossierStatus
+    status_label: str
+    status_reason: str
+    path: ReadinessDossierPath
+    weak_capability_keys: list[str] = Field(default_factory=list)
+    weak_capability_labels: list[str] = Field(default_factory=list)
+    evidence_count: int = 0
+    latest_review_action: ReadinessDossierReviewAction | None = None
+    next_action: ReadinessDossierNextAction | None = None
+    target_path: str | None = None
+
+
+class ReadinessWorkbenchGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    group_key: ReadinessWorkbenchGroupKey
+    label: str
+    count: int
+    items: list[ReadinessWorkbenchItem] = Field(default_factory=list)
+
+
+class ReadinessWorkbenchSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    learner_count: int
+    loaded_learner_count: int
+    pending_review_count: int
+    not_passed_count: int
+    needs_retraining_count: int
+    approved_count: int
+    config_exception_count: int
+    in_training_count: int
+
+
+class ReadinessWorkbenchFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    department: str | None = None
+    limit: int
+    offset: int
+
+
+class ReadinessWorkbenchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal["readiness_dossier_v1"]
+    generated_at: object
+    groups: dict[ReadinessWorkbenchGroupKey, ReadinessWorkbenchGroup]
+    summary: ReadinessWorkbenchSummary
+    filters: ReadinessWorkbenchFilters
 
 
 class RealtimeRoleplayStartRequest(BaseModel):

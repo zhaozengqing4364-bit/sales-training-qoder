@@ -3,7 +3,16 @@ from __future__ import annotations
 import os
 from typing import Any, cast
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +56,10 @@ from sales_trainer.schemas import (
     QuizAttemptCreate,
     QuizAttemptListResponse,
     QuizAttemptResponse,
+    ReadinessDossierResponse,
+    ReadinessDossierReviewAction,
+    ReadinessDossierReviewActionCreate,
+    ReadinessWorkbenchResponse,
     RealtimeRoleplayStartRequest,
     RealtimeRoleplayStartResponse,
     SalesTrainerManagerDashboardResponse,
@@ -117,6 +130,10 @@ from sales_trainer.services.question_bank import (
     serialize_sales_trainer_question,
 )
 from sales_trainer.services.quiz_service import QuizService, QuizServiceError
+from sales_trainer.services.readiness_dossier_service import (
+    ReadinessDossierError,
+    ReadinessDossierService,
+)
 from sales_trainer.services.realtime_roleplay_start_service import (
     RealtimeRoleplayStartError,
     RealtimeRoleplayStartService,
@@ -171,31 +188,41 @@ def _require_question_manager(user: User) -> JSONResponse | None:
 def _require_records_viewer(user: User) -> JSONResponse | None:
     if can_view_sales_trainer_records(user):
         return None
-    return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号无权查看学员记录。")
+    return _api_error(
+        "[ROLE_REQUIRED]", status_code=403, message="当前账号无权查看学员记录。"
+    )
 
 
 def _require_job_retry(user: User) -> JSONResponse | None:
     if can_retry_sales_trainer_jobs(user):
         return None
-    return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号无权重试转写或评分任务。")
+    return _api_error(
+        "[ROLE_REQUIRED]", status_code=403, message="当前账号无权重试转写或评分任务。"
+    )
 
 
 def _require_ops_viewer(user: User) -> JSONResponse | None:
     if can_view_sales_trainer_logs(user):
         return None
-    return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号无权查看运维诊断。")
+    return _api_error(
+        "[ROLE_REQUIRED]", status_code=403, message="当前账号无权查看运维诊断。"
+    )
 
 
 def _require_settings_viewer(user: User) -> JSONResponse | None:
     if can_view_sales_trainer_settings(user):
         return None
-    return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号无权查看配置健康。")
+    return _api_error(
+        "[ROLE_REQUIRED]", status_code=403, message="当前账号无权查看配置健康。"
+    )
 
 
 def _require_material_file_admin(user: User) -> JSONResponse | None:
     if can_manage_sales_trainer(user) or is_sales_trainer_ops(user):
         return None
-    return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号无权访问材料文件。")
+    return _api_error(
+        "[ROLE_REQUIRED]", status_code=403, message="当前账号无权访问材料文件。"
+    )
 
 
 def _team_scope(user: User) -> str | None:
@@ -415,7 +442,9 @@ async def list_published_units(
         if unit is None or unit.status != "published":
             continue
         payload.append(_as_learner_unit_list_item(unit))
-    return success_response(SalesTrainerUnitListResponse(items=payload, total=len(payload)))
+    return success_response(
+        SalesTrainerUnitListResponse(items=payload, total=len(payload))
+    )
 
 
 @router.get("/paths", response_model=None)
@@ -430,10 +459,11 @@ async def list_training_paths(
         str(current_user.user_id)
     )
     payload = [
-        SalesTrainerPathResponse.model_validate(path).model_dump()
-        for path in paths
+        SalesTrainerPathResponse.model_validate(path).model_dump() for path in paths
     ]
-    return success_response(SalesTrainerPathListResponse(items=payload, total=len(payload)))
+    return success_response(
+        SalesTrainerPathListResponse(items=payload, total=len(payload))
+    )
 
 
 @router.get("/journey", response_model=None)
@@ -451,7 +481,9 @@ async def get_my_training_journey(
         )
     except TrainingJourneyError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(TrainingJourneyResponse.model_validate(journey).model_dump())
+    return success_response(
+        TrainingJourneyResponse.model_validate(journey).model_dump()
+    )
 
 
 @router.post("/realtime-roleplay/start", response_model=None)
@@ -505,7 +537,9 @@ async def get_published_unit(
     )
     if access_error is not None:
         return access_error
-    return success_response(_as_learner_unit_response(await service.serialize_unit(unit)))
+    return success_response(
+        _as_learner_unit_response(await service.serialize_unit(unit))
+    )
 
 
 @router.get("/units/{unit_id}/brief", response_model=None)
@@ -548,7 +582,9 @@ async def get_published_unit_brief(
         "materials": brief["materials"],
         "score_scheme": brief["score_scheme"],
     }
-    return success_response(SalesTrainerUnitBriefResponse.model_validate(payload).model_dump())
+    return success_response(
+        SalesTrainerUnitBriefResponse.model_validate(payload).model_dump()
+    )
 
 
 @router.get("/materials/versions/{version_id}/file", response_model=None)
@@ -646,7 +682,9 @@ async def upload_audio_file(
             file=file,
             unit_id=unit_id,
             purpose=purpose,
-            source_page=source_page.strip() if source_page and source_page.strip() else None,
+            source_page=source_page.strip()
+            if source_page and source_page.strip()
+            else None,
             confirmed_material_version_id=confirmed_material_version_id.strip()
             if confirmed_material_version_id and confirmed_material_version_id.strip()
             else None,
@@ -853,7 +891,9 @@ async def admin_list_materials(
         ).model_dump()
         for material in materials
     ]
-    return success_response(SalesTrainerMaterialListResponse(items=payload, total=total))
+    return success_response(
+        SalesTrainerMaterialListResponse(items=payload, total=total)
+    )
 
 
 @admin_router.post("/materials", response_model=None)
@@ -967,7 +1007,9 @@ async def admin_publish_material_version(
     )
 
 
-@admin_router.post("/materials/{material_id}/versions/rollback/preview", response_model=None)
+@admin_router.post(
+    "/materials/{material_id}/versions/rollback/preview", response_model=None
+)
 async def admin_preview_material_version_rollback(
     material_id: str,
     payload: SalesTrainerMaterialVersionRollbackPreviewRequest,
@@ -1373,7 +1415,9 @@ async def admin_get_audio_submission_file(
     return _api_error("[AUDIO_FILE_NOT_FOUND]", status_code=404)
 
 
-@admin_router.post("/audio-submissions/{submission_id}/retry-transcription", response_model=None)
+@admin_router.post(
+    "/audio-submissions/{submission_id}/retry-transcription", response_model=None
+)
 async def admin_retry_transcription(
     submission_id: str,
     current_user: User = Depends(get_current_user),
@@ -1389,7 +1433,9 @@ async def admin_retry_transcription(
             allow_admin=can_view_sales_trainer_global_records(current_user),
             team_department=_team_scope(current_user),
         )
-        submission = await service.retry_transcription(submission_id, actor=current_user)
+        submission = await service.retry_transcription(
+            submission_id, actor=current_user
+        )
     except AudioSubmissionServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
     return success_response(
@@ -1399,7 +1445,9 @@ async def admin_retry_transcription(
     )
 
 
-@admin_router.post("/audio-submissions/{submission_id}/retry-scoring", response_model=None)
+@admin_router.post(
+    "/audio-submissions/{submission_id}/retry-scoring", response_model=None
+)
 async def admin_retry_scoring(
     submission_id: str,
     current_user: User = Depends(get_current_user),
@@ -1524,7 +1572,9 @@ async def admin_list_training_journeys(
         )
     except TrainingJourneyError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(TrainingJourneyListResponse.model_validate(payload).model_dump())
+    return success_response(
+        TrainingJourneyListResponse.model_validate(payload).model_dump()
+    )
 
 
 @admin_router.get("/journeys/analytics", response_model=None)
@@ -1574,7 +1624,9 @@ async def admin_get_training_journey(
         )
     except TrainingJourneyError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(TrainingJourneyResponse.model_validate(journey).model_dump())
+    return success_response(
+        TrainingJourneyResponse.model_validate(journey).model_dump()
+    )
 
 
 @admin_router.get("/manager-dashboard", response_model=None)
@@ -1589,6 +1641,99 @@ async def admin_get_manager_dashboard(
     )
     return success_response(
         SalesTrainerManagerDashboardResponse.model_validate(payload).model_dump()
+    )
+
+
+@admin_router.get("/readiness/workbench", response_model=None)
+async def admin_get_readiness_workbench(
+    department: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    if error := _require_records_viewer(current_user):
+        return error
+    try:
+        payload = await ReadinessDossierService(db).list_workbench(
+            viewer=current_user,
+            team_department=_team_scope(current_user),
+            department=department,
+            limit=limit,
+            offset=offset,
+        )
+    except ReadinessDossierError as exc:
+        return _api_error(
+            exc.code,
+            status_code=exc.status_code,
+            message=exc.message,
+            details=exc.details,
+        )
+    return success_response(
+        ReadinessWorkbenchResponse.model_validate(payload).model_dump()
+    )
+
+
+@admin_router.get("/readiness/dossiers/{learner_id}", response_model=None)
+async def admin_get_readiness_dossier(
+    learner_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    if error := _require_records_viewer(current_user):
+        return error
+    try:
+        payload = await ReadinessDossierService(db).get_dossier(
+            learner_id,
+            viewer=current_user,
+            team_department=_team_scope(current_user),
+        )
+    except ReadinessDossierError as exc:
+        return _api_error(
+            exc.code,
+            status_code=exc.status_code,
+            message=exc.message,
+            details=exc.details,
+        )
+    return success_response(
+        ReadinessDossierResponse.model_validate(payload).model_dump()
+    )
+
+
+@admin_router.post(
+    "/readiness/dossiers/{learner_id}/review-actions", response_model=None
+)
+async def admin_create_readiness_review_action(
+    learner_id: str,
+    payload: ReadinessDossierReviewActionCreate,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    if error := _require_records_viewer(current_user):
+        return error
+    try:
+        action = await ReadinessDossierService(db).create_review_action(
+            learner_id,
+            actor=current_user,
+            team_department=_team_scope(current_user),
+            decision=payload.decision,
+            reason=payload.reason,
+            capability_keys=payload.capability_keys,
+            source_evidence_ids=payload.source_evidence_ids,
+            request_id=get_trace_id(),
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except ReadinessDossierError as exc:
+        return _api_error(
+            exc.code,
+            status_code=exc.status_code,
+            message=exc.message,
+            details=exc.details,
+        )
+    return success_response(
+        ReadinessDossierReviewAction.model_validate(action).model_dump()
     )
 
 
@@ -1615,10 +1760,14 @@ async def admin_get_audio_training_record(
     record = await TrainingRecordService(db).get_audio_record(submission_id)
     if record is None:
         return _api_error("[TRAINING_RECORD_NOT_FOUND]", status_code=404)
-    return success_response(SalesTrainerTrainingRecordResponse.model_validate(record).model_dump())
+    return success_response(
+        SalesTrainerTrainingRecordResponse.model_validate(record).model_dump()
+    )
 
 
-@admin_router.get("/training-records/detail/{record_type}/{record_id}", response_model=None)
+@admin_router.get(
+    "/training-records/detail/{record_type}/{record_id}", response_model=None
+)
 async def admin_get_training_record_detail(
     record_type: str,
     record_id: str,
@@ -1648,7 +1797,9 @@ async def admin_get_training_record_detail(
     )
 
 
-@admin_router.get("/training-records/realtime-roleplay/{session_id}/observations", response_model=None)
+@admin_router.get(
+    "/training-records/realtime-roleplay/{session_id}/observations", response_model=None
+)
 async def admin_get_realtime_roleplay_observations(
     session_id: str,
     current_user: User = Depends(get_current_user),
@@ -1758,8 +1909,12 @@ async def admin_create_audio_score_prompt(
 ) -> ApiResponse:
     if error := _require_manager(current_user):
         return error
-    prompt = await AudioScorePromptService(db).create_prompt(payload, actor=current_user)
-    return success_response(AudioScorePromptResponse.model_validate(prompt).model_dump())
+    prompt = await AudioScorePromptService(db).create_prompt(
+        payload, actor=current_user
+    )
+    return success_response(
+        AudioScorePromptResponse.model_validate(prompt).model_dump()
+    )
 
 
 @admin_router.put("/audio-score-prompts/{prompt_id}", response_model=None)
@@ -1779,7 +1934,9 @@ async def admin_update_audio_score_prompt(
         updated = await service.update_prompt(prompt, payload, actor=current_user)
     except PromptServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(AudioScorePromptResponse.model_validate(updated).model_dump())
+    return success_response(
+        AudioScorePromptResponse.model_validate(updated).model_dump()
+    )
 
 
 @admin_router.get("/audio-score-prompts/{prompt_id}/revisions", response_model=None)
@@ -1823,10 +1980,14 @@ async def admin_publish_audio_score_prompt(
         published = await service.publish_prompt(prompt, actor=current_user)
     except PromptServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(AudioScorePromptResponse.model_validate(published).model_dump())
+    return success_response(
+        AudioScorePromptResponse.model_validate(published).model_dump()
+    )
 
 
-@admin_router.post("/audio-score-prompts/{prompt_id}/rollback/preview", response_model=None)
+@admin_router.post(
+    "/audio-score-prompts/{prompt_id}/rollback/preview", response_model=None
+)
 async def admin_preview_audio_score_prompt_rollback(
     prompt_id: str,
     payload: AudioScorePromptRollbackPreviewRequest,

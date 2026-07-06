@@ -43,17 +43,17 @@ const PPT_EXPLANATION_TEMPLATE: AudioModuleTemplate = {
 
 const ELEVATOR_PITCH_TEMPLATE: AudioModuleTemplate = {
     audioPurpose: "elevator_pitch",
-    description: "配置电梯演讲录音任务，学员按后台材料与时长要求上传演讲录音。",
-    levelDescription: "按配置的演讲材料和时长要求完成录音。",
-    levelTitle: "第三关：电梯演讲",
+    description: "配置金字塔演讲录音任务，学员按后台材料与时长要求上传演讲录音。",
+    levelDescription: "按配置的金字塔演讲材料和时长要求完成录音。",
+    levelTitle: "第三关：金字塔演讲",
     moduleKey: "elevator_pitch",
     moduleType: "audio_scoring_group",
-    name: "第三关：电梯演讲",
+    name: "第三关：金字塔演讲",
     orderIndex: 3,
-    primaryActionLabel: "上传演讲录音",
+    primaryActionLabel: "上传金字塔演讲录音",
     taskBriefPurpose: "训练新人用短时间讲清公司、产品价值和下一步邀约。",
-    taskBriefScenario: "客户临时给你一段短时间介绍机会，需要完成清晰、有重点的电梯演讲。",
-    taskBriefTitle: "电梯演讲录音",
+    taskBriefScenario: "客户给你一段有限时间介绍机会，需要按金字塔结构完成清晰、有重点的价值说明。",
+    taskBriefTitle: "金字塔演讲录音",
 };
 
 export function buildUnitTemplateForModule({
@@ -65,14 +65,17 @@ export function buildUnitTemplateForModule({
     if (!template) {
         return null;
     }
-    const promptId = prompts.find((prompt) =>
-        prompt.status === "published" && prompt.purpose === template.audioPurpose,
-    )?.prompt_id ?? "";
-    const materialId = materials.find((material) =>
-        material.status === "published"
-        && material.purpose === template.audioPurpose
-        && Boolean(material.current_version_id),
-    )?.material_id ?? "";
+    const promptId =
+        prompts.find(
+            (prompt) => prompt.status === "published" && prompt.purpose === template.audioPurpose,
+        )?.prompt_id ?? "";
+    const materialId =
+        materials.find(
+            (material) =>
+                material.status === "published" &&
+                material.purpose === template.audioPurpose &&
+                Boolean(material.current_version_id),
+        )?.material_id ?? "";
     return {
         unit_id: "",
         name: template.name,
@@ -91,19 +94,19 @@ export function buildUnitTemplateForModule({
             },
             ...(materialId
                 ? {
-                    materials: {
-                        require_latest_confirmation: true,
-                        bindings: [
-                            {
-                                material_id: materialId,
-                                required: true,
-                                confirmation_required: true,
-                                version_policy: "current_published",
-                                display_order: 1,
-                            },
-                        ],
-                    },
-                }
+                      materials: {
+                          require_latest_confirmation: true,
+                          bindings: [
+                              {
+                                  material_id: materialId,
+                                  required: true,
+                                  confirmation_required: true,
+                                  version_policy: "current_published",
+                                  display_order: 1,
+                              },
+                          ],
+                      },
+                  }
                 : {}),
             path: {
                 enabled: true,

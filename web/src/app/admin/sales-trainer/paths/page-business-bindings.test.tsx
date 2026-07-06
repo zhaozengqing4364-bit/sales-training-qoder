@@ -17,6 +17,7 @@ import {
 } from "./page.test-data";
 
 const {
+    getCapabilitiesMock,
     getPathConfigMock,
     getSettingsMock,
     listLearningContentsMock,
@@ -28,6 +29,7 @@ const {
     savePathConfigMock,
     searchParamsMock,
 } = vi.hoisted(() => ({
+    getCapabilitiesMock: vi.fn(),
     getPathConfigMock: vi.fn(),
     getSettingsMock: vi.fn(),
     listLearningContentsMock: vi.fn(),
@@ -56,6 +58,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     getSettings: getSettingsMock,
                     listMaterials: listMaterialsMock,
                     listScorePrompts: listScorePromptsMock,
@@ -82,6 +85,24 @@ vi.mock("@/lib/api/client", async () => {
 describe("SalesTrainerPathsPage business skill bindings", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_questions: false,
+                manage_modules: true,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_modules"],
+        });
         listUnitsMock.mockResolvedValue(defaultUnitsResponse());
         getPathConfigMock.mockResolvedValue(defaultPathConfigResponse());
         listPathConfigRevisionsMock.mockResolvedValue(defaultPathRevisionsResponse());

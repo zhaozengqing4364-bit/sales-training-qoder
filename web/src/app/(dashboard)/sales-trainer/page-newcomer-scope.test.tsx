@@ -4,16 +4,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerPage from "./page";
 
-const { getJourneyMock, listPathsMock, listUnitsMock, routerPushMock, startRealtimeRoleplayMock } = vi.hoisted(() => ({
-    getJourneyMock: vi.fn(),
-    listPathsMock: vi.fn(),
-    listUnitsMock: vi.fn(),
-    routerPushMock: vi.fn(),
-    startRealtimeRoleplayMock: vi.fn(),
-}));
+const { getJourneyMock, listPathsMock, listUnitsMock, routerPushMock, startRealtimeRoleplayMock } =
+    vi.hoisted(() => ({
+        getJourneyMock: vi.fn(),
+        listPathsMock: vi.fn(),
+        listUnitsMock: vi.fn(),
+        routerPushMock: vi.fn(),
+        startRealtimeRoleplayMock: vi.fn(),
+    }));
 
 vi.mock("next/link", () => ({
-    default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
+    default: ({ href, children }: { href: string; children: ReactNode }) => (
+        <a href={href}>{children}</a>
+    ),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -23,11 +26,17 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-    Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props}>{children}</button>,
+    Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+        <button type="button" {...props}>
+            {children}
+        </button>
+    ),
 }));
 
 vi.mock("@/components/ui/glass-card", () => ({
-    GlassCard: ({ children, className }: { children: ReactNode; className?: string }) => <div className={className}>{children}</div>,
+    GlassCard: ({ children, className }: { children: ReactNode; className?: string }) => (
+        <div className={className}>{children}</div>
+    ),
 }));
 
 vi.mock("@/components/ui/badge", () => ({
@@ -35,7 +44,12 @@ vi.mock("@/components/ui/badge", () => ({
 }));
 
 vi.mock("@/components/ui/empty-state", () => ({
-    EmptyState: ({ title, description }: { title: string; description: string }) => <div>{title}{description}</div>,
+    EmptyState: ({ title, description }: { title: string; description: string }) => (
+        <div>
+            {title}
+            {description}
+        </div>
+    ),
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -144,6 +158,13 @@ describe("SalesTrainerPage newcomer scope", () => {
                     learner_level_required: null,
                     unmet_reasons: [],
                     diagnostics: [],
+                    next_action: {
+                        action_key: "start_quiz_attempt",
+                        label: "学习并答题",
+                        target_path: "/sales-trainer/business-skills?unitId=business-unit",
+                        disabled: false,
+                        disabled_reason: null,
+                    },
                     latest_outcome: null,
                     outcome_history: [],
                 },
@@ -221,10 +242,15 @@ describe("SalesTrainerPage newcomer scope", () => {
 
         render(<SalesTrainerPage />);
 
-        expect(await screen.findByText("当前训练闭环状态")).toBeTruthy();
+        expect(await screen.findByText("当前训练状态")).toBeTruthy();
         expect(screen.getByText("模块闭环状态")).toBeTruthy();
-        expect(screen.getAllByRole("heading", { name: /商务技巧/ }).length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByRole("heading", { name: /商务技巧/ }).length).toBeGreaterThanOrEqual(
+            1,
+        );
         expect(screen.getByText("最近记录：暂无训练结果")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "学习并答题" }).getAttribute("href")).toBe(
+            "/sales-trainer/business-skills?unitId=business-unit",
+        );
         expect(listPathsMock).not.toHaveBeenCalled();
         expect(listUnitsMock).not.toHaveBeenCalled();
         expect(screen.queryByText("选择下方模块开始训练")).toBeNull();

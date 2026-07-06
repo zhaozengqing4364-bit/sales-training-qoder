@@ -3,7 +3,10 @@ import type {
     NewcomerConfigStatus,
 } from "@/lib/sales-trainer/config-center";
 
-export const STATUS_COPY: Record<NewcomerConfigStatus, { readonly label: string; readonly className: string }> = {
+export const STATUS_COPY: Record<
+    NewcomerConfigStatus,
+    { readonly label: string; readonly className: string }
+> = {
     disabled: { label: "未开放", className: "bg-slate-100 text-slate-600 border-slate-200" },
     missing: { label: "缺配置", className: "bg-red-50 text-red-700 border-red-100" },
     ready: { label: "可发布", className: "bg-emerald-50 text-emerald-700 border-emerald-100" },
@@ -47,7 +50,7 @@ export function remediationLabel(module: NewcomerConfigModuleSummary): string {
         return "选择 PPT 材料";
     }
     if (module.moduleKey === "elevator_pitch") {
-        return "选择电梯演讲材料";
+        return "选择金字塔演讲材料";
     }
     if (module.moduleKey === "realtime_roleplay") {
         return "配置实时对练";

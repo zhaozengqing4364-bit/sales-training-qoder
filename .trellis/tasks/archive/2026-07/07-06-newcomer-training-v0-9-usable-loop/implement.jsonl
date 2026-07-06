@@ -1,0 +1,4 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "设计文档落盘前审计指南"}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "后台配置治理边界参考"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "培训负责人工作台形态参考"}
