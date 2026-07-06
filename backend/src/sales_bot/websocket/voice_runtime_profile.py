@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from prompt_templates.compiled_contract import compose_turn_instruction_text
-from sales_bot.services.voice_instruction_compiler import build_instruction_contract_hash
+from sales_bot.services.voice_instruction_compiler import (
+    build_instruction_contract_hash,
+)
 
 
 class FrozenDict(Mapping[str, Any]):
@@ -122,7 +124,11 @@ class VoiceRuntimeProfile:
         object.__setattr__(
             self,
             "knowledge_base_ids",
-            tuple(str(item).strip() for item in self.knowledge_base_ids if str(item).strip()),
+            tuple(
+                str(item).strip()
+                for item in self.knowledge_base_ids
+                if str(item).strip()
+            ),
         )
         object.__setattr__(self, "tool_policy", FrozenDict(self.tool_policy))
         object.__setattr__(
@@ -142,7 +148,7 @@ class VoiceRuntimeProfile:
         tool_policy = snapshot.get("tool_policy")
         return cls(
             voice_mode=_as_text(snapshot.get("voice_mode"), "legacy"),
-            model_name=_as_text(snapshot.get("model_name"), "step-audio-2"),
+            model_name=_as_text(snapshot.get("model_name"), "stepaudio-2.5-realtime"),
             voice_name=_as_text(snapshot.get("voice_name"), "qingchunshaonv"),
             temperature=_as_float(snapshot.get("temperature"), 0.7),
             instructions=instructions,
@@ -176,15 +182,18 @@ class VoiceRuntimeProfile:
             if role_anchor_text is None
             else str(role_anchor_text or "").strip()
         )
-        return compose_turn_instruction_text(
-            base_instructions=(
-                self.instructions
-                if base_instructions is None
-                else base_instructions
+        return cast(
+            str,
+            compose_turn_instruction_text(
+                base_instructions=(
+                    self.instructions
+                    if base_instructions is None
+                    else base_instructions
+                ),
+                grounding_context=grounding_context,
+                roleplay_turn_instruction=roleplay_turn_instruction,
+                role_anchor_text=anchor,
             ),
-            grounding_context=grounding_context,
-            roleplay_turn_instruction=roleplay_turn_instruction,
-            role_anchor_text=anchor,
         )
 
     def validate_instruction_contract(self) -> ContractValidationResult:

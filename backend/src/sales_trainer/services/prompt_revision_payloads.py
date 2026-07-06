@@ -5,7 +5,10 @@ from typing import Any
 from sales_trainer.models import SalesTrainerAudioScorePrompt
 from sales_trainer.schemas import AudioScorePromptUpdate
 from sales_trainer.services.asset_revision_service import AssetChangeClass
-from sales_trainer.services.material_service import normalize_learner_rubric
+from sales_trainer.services.material_service import (
+    normalize_audio_score_output_schema,
+    normalize_learner_rubric,
+)
 
 PROMPT_RESOURCE_TYPE = "sales_trainer_audio_score_prompt"
 HIGH_RISK_PROMPT_FIELDS = frozenset(
@@ -28,7 +31,7 @@ def prompt_lifecycle_snapshot(
         "purpose": prompt.purpose,
         "system_prompt": prompt.system_prompt,
         "scoring_template": prompt.scoring_template,
-        "output_schema": dict(prompt.output_schema or {}),
+        "output_schema": normalize_audio_score_output_schema(prompt.output_schema),
         "learner_rubric": normalize_learner_rubric(prompt.learner_rubric),
         "version": int(prompt.version),
         "status": prompt.status,
@@ -41,6 +44,10 @@ def prompt_revision_payload_from_update(
 ) -> dict[str, Any]:
     next_snapshot = prompt_lifecycle_snapshot(prompt)
     data = payload.model_dump(exclude_unset=True)
+    if "output_schema" in data:
+        data["output_schema"] = normalize_audio_score_output_schema(
+            data["output_schema"]
+        )
     if "learner_rubric" in data:
         data["learner_rubric"] = normalize_learner_rubric(data["learner_rubric"])
     next_snapshot.update(data)
@@ -60,14 +67,24 @@ def apply_prompt_revision_payload(
         "purpose",
         "system_prompt",
         "scoring_template",
-        "output_schema",
-        "learner_rubric",
     ):
         if field in payload:
             setattr(prompt, field, payload[field])
-    prompt.version = revision_no
-    prompt.status = "published"
-    prompt.updated_by = actor_id
+    if "output_schema" in payload:
+        setattr(
+            prompt,
+            "output_schema",
+            normalize_audio_score_output_schema(payload["output_schema"]),
+        )
+    if "learner_rubric" in payload:
+        setattr(
+            prompt,
+            "learner_rubric",
+            normalize_learner_rubric(payload["learner_rubric"]),
+        )
+    setattr(prompt, "version", revision_no)
+    setattr(prompt, "status", "published")
+    setattr(prompt, "updated_by", actor_id)
 
 
 def prompt_change_class(

@@ -8,7 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
-from common.db.models import User
+from common.db.models import PracticeSession, Scenario, User
 from curriculum_practice.models import QuestionCategory, QuestionItem
 from sales_trainer.models import (
     SalesTrainerAudioScorePrompt,
@@ -17,6 +17,7 @@ from sales_trainer.models import (
     SalesTrainerOperationLog,
     SalesTrainerQuizAnswer,
     SalesTrainerQuizAttempt,
+    SalesTrainerRoleplayObservation,
     SalesTrainerUnit,
 )
 
@@ -729,6 +730,16 @@ async def test_should_scope_sales_trainer_manager_to_same_department(
         f"/api/v1/admin/sales-trainer/audio-submissions/{other_submission.submission_id}",
         headers=headers,
     )
+    same_training_record_detail_response = await async_client.get(
+        "/api/v1/admin/sales-trainer/training-records/detail/"
+        f"audio_submission/{same_submission.submission_id}",
+        headers=headers,
+    )
+    other_training_record_detail_response = await async_client.get(
+        "/api/v1/admin/sales-trainer/training-records/detail/"
+        f"audio_submission/{other_submission.submission_id}",
+        headers=headers,
+    )
     score_response = await async_client.get(
         "/api/v1/admin/sales-trainer/score-results",
         headers=headers,
@@ -763,16 +774,22 @@ async def test_should_scope_sales_trainer_manager_to_same_department(
     assert same_detail_payload["user_email"] == same_department_user.email
     assert other_detail_response.status_code == 403
     assert other_detail_response.json()["error"] == "[ACCESS_DENIED]"
+    assert same_training_record_detail_response.status_code == 200
+    same_record_detail = same_training_record_detail_response.json()["data"]
+    assert same_record_detail["record_id"] == same_submission.submission_id
+    assert same_record_detail["user_department"] == same_department_user.department
+    assert other_training_record_detail_response.status_code == 404
+    assert other_training_record_detail_response.json()["error"] == (
+        "[TRAINING_RECORD_NOT_FOUND]"
+    )
 
     assert score_response.status_code == 200
     score_payload = score_response.json()["data"]
     assert score_payload["total"] == 1
     assert score_payload["items"][0]["submission_id"] == same_submission.submission_id
 
-    assert logs_response.status_code == 200
-    logs_payload = logs_response.json()["data"]
-    assert logs_payload["total"] == 1
-    assert logs_payload["items"][0]["target_id"] == same_submission.submission_id
+    assert logs_response.status_code == 403
+    assert logs_response.json()["error"] == "[ROLE_REQUIRED]"
 
     assert quiz_attempts_response.status_code == 200
     quiz_payload = quiz_attempts_response.json()["data"]
@@ -780,6 +797,142 @@ async def test_should_scope_sales_trainer_manager_to_same_department(
     assert quiz_payload["items"][0]["attempt_id"] == same_attempt.attempt_id
     assert same_quiz_detail_response.status_code == 200
     assert other_quiz_detail_response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_should_expose_realtime_roleplay_observations_with_record_scope_guard(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    learner = _user("user", department="华东销售")
+    manager = _user("support", department="华东销售")
+    outside_manager = _user("support", department="华北销售")
+    content_admin = _user("content_admin", department="华东销售")
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        name="新人实时对练",
+        description="新人实时对练",
+        scenario_type="sales",
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=learner.user_id,
+        scenario_id=scenario.scenario_id,
+        voice_mode="stepfun_realtime",
+        status="completed",
+        voice_policy_snapshot={
+            "external_binding": {
+                "owner": "sales_trainer",
+                "path_key": "newcomer_training_path_v1",
+                "path_revision_id": "path-rev-002",
+                "path_revision_no": 2,
+                "module_key": "realtime_roleplay",
+                "binding_key": "newcomer_realtime_roleplay_v1",
+            }
+        },
+    )
+    heuristic = SalesTrainerRoleplayObservation(
+        observation_id=str(uuid.uuid4()),
+        session_id=session.session_id,
+        source_record_id=session.session_id,
+        source="heuristic",
+        turn_index=1,
+        evaluator_status="completed",
+        dimensions_json=[
+            {
+                "key": "capture_context",
+                "main_chain_effect": "none",
+            },
+            {
+                "key": "evaluation_runtime",
+                "realtime_disposition": "record_only",
+                "blocking": False,
+                "main_chain_effect": "none",
+            },
+        ],
+        signals_json=[
+            {"signal_type": "quality_flag", "value": "knowledge_gap_degradation"}
+        ],
+        payload_hash="sha256:heuristic",
+    )
+    llm = SalesTrainerRoleplayObservation(
+        observation_id=str(uuid.uuid4()),
+        session_id=session.session_id,
+        source_record_id=session.session_id,
+        source="llm_evaluator",
+        turn_index=2,
+        evaluator_status="failed",
+        dimensions_json=[
+            {
+                "key": "capture_context",
+                "main_chain_effect": "none",
+            },
+            {
+                "key": "evaluation_runtime",
+                "realtime_disposition": "record_only",
+                "blocking": False,
+                "main_chain_effect": "none",
+            },
+        ],
+        signals_json=[{"signal_type": "manual_review_required", "value": True}],
+        error_json={"code": "[LLM_EVALUATOR_TIMEOUT]", "message": "timeout"},
+        payload_hash="sha256:llm",
+    )
+    test_db.add_all(
+        [learner, manager, outside_manager, content_admin, scenario, session, heuristic, llm]
+    )
+    await test_db.commit()
+
+    missing_session_id = str(uuid.uuid4())
+    manager_response = await async_client.get(
+        f"/api/v1/admin/sales-trainer/training-records/realtime-roleplay/{session.session_id}/observations",
+        headers=_auth_headers(manager),
+    )
+    outside_response = await async_client.get(
+        f"/api/v1/admin/sales-trainer/training-records/realtime-roleplay/{session.session_id}/observations",
+        headers=_auth_headers(outside_manager),
+    )
+    outside_missing_response = await async_client.get(
+        "/api/v1/admin/sales-trainer/training-records/realtime-roleplay/"
+        f"{missing_session_id}/observations",
+        headers=_auth_headers(outside_manager),
+    )
+    content_admin_response = await async_client.get(
+        f"/api/v1/admin/sales-trainer/training-records/realtime-roleplay/{session.session_id}/observations",
+        headers=_auth_headers(content_admin),
+    )
+
+    assert manager_response.status_code == 200
+    payload = manager_response.json()["data"]
+    assert payload["session_id"] == session.session_id
+    assert payload["total"] == 2
+    assert payload["source_counts"] == {"heuristic": 1, "llm_evaluator": 1}
+    assert payload["status_counts"]["completed"] == 1
+    assert payload["status_counts"]["failed"] == 1
+    heuristic_item = next(
+        item for item in payload["items"] if item["source"] == "heuristic"
+    )
+    llm_item = next(
+        item for item in payload["items"] if item["source"] == "llm_evaluator"
+    )
+    assert heuristic_item["dimensions"][0]["main_chain_effect"] == "none"
+    assert heuristic_item["dimensions"][1]["realtime_disposition"] == "record_only"
+    assert heuristic_item["dimensions"][1]["blocking"] is False
+    assert heuristic_item["dimensions"][1]["main_chain_effect"] == "none"
+    assert llm_item["dimensions"][0]["main_chain_effect"] == "none"
+    assert llm_item["dimensions"][1]["realtime_disposition"] == "record_only"
+    assert llm_item["dimensions"][1]["blocking"] is False
+    assert llm_item["dimensions"][1]["main_chain_effect"] == "none"
+    assert llm_item["error"]["code"] == "[LLM_EVALUATOR_TIMEOUT]"
+
+    assert outside_response.status_code == 404
+    assert outside_response.json()["error"] == "[TRAINING_RECORD_NOT_FOUND]"
+    assert outside_missing_response.status_code == 404
+    assert outside_missing_response.json()["error"] == "[TRAINING_RECORD_NOT_FOUND]"
+    assert str(session.session_id) not in str(outside_response.json())
+
+    assert content_admin_response.status_code == 403
+    assert content_admin_response.json()["error"] == "[ROLE_REQUIRED]"
 
 
 @pytest.mark.asyncio

@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { History, Pencil, Plus } from "lucide-react";
+import { AlertTriangle, History, Pencil, Plus } from "lucide-react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
+import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,12 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { NewcomerExamPaper, NewcomerExamPaperRevision } from "@/lib/api/types";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
+import type {
+    NewcomerExamPaper,
+    NewcomerExamPaperRevision,
+    SalesTrainerAdminCapabilities,
+} from "@/lib/api/types";
 import { PAPER_STATUS_LABELS } from "./paper-form-model";
 
 type ConfirmState =
@@ -27,6 +33,7 @@ export default function NewcomerPapersPage() {
     const toast = useToast();
     const [items, setItems] = useState<NewcomerExamPaper[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [confirmState, setConfirmState] = useState<ConfirmState>(null);
     const [historyPaper, setHistoryPaper] = useState<NewcomerExamPaper | null>(null);
@@ -34,9 +41,18 @@ export default function NewcomerPapersPage() {
     const [isHistoryLoading, setIsHistoryLoading] = useState(false);
     const [rollbackReasonByRevision, setRollbackReasonByRevision] = useState<Record<string, string>>({});
     const [rollbackRevisionId, setRollbackRevisionId] = useState<string | null>(null);
+    const [capabilities, setCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessPapers = isSalesTrainerAdminPathAllowedForCapabilities(pathname, capabilities);
 
     const loadPapers = useCallback(async () => {
+        if (!canAccessPapers) {
+            setLoadError(null);
+            return;
+        }
         setIsLoading(true);
+        setLoadError(null);
         try {
             const result = await api.admin.newcomerTraining.listPapers({
                 include_archived: true,
@@ -44,16 +60,53 @@ export default function NewcomerPapersPage() {
             });
             setItems(result.items);
         } catch (error) {
+            const message = getApiErrorMessage(error);
             setItems([]);
-            toast.error(getApiErrorMessage(error));
+            setHistoryPaper(null);
+            setRevisions([]);
+            setLoadError(message);
+            toast.error(message);
         } finally {
             setIsLoading(false);
         }
-    }, [toast]);
+    }, [canAccessPapers, toast]);
 
     useEffect(() => {
+        let isCurrent = true;
+        void api.admin.salesTrainer.getCapabilities()
+            .then((result) => {
+                if (!isCurrent) return;
+                setCapabilities(result);
+                setCapabilityError(null);
+            })
+            .catch((error) => {
+                if (!isCurrent) return;
+                setCapabilities(null);
+                setCapabilityError(getApiErrorMessage(error));
+            })
+            .finally(() => {
+                if (!isCurrent) return;
+                setIsCapabilityLoading(false);
+            });
+        return () => {
+            isCurrent = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (isCapabilityLoading) {
+            return;
+        }
+        if (!canAccessPapers) {
+            setItems([]);
+            setHistoryPaper(null);
+            setRevisions([]);
+            setLoadError(null);
+            setIsLoading(false);
+            return;
+        }
         void loadPapers();
-    }, [loadPapers]);
+    }, [canAccessPapers, isCapabilityLoading, loadPapers]);
 
     async function handleConfirm() {
         if (!confirmState) {
@@ -123,15 +176,15 @@ export default function NewcomerPapersPage() {
                 <AdminPageHeader
                     title="商务技巧考卷管理"
                     description="按考卷管理题目组合、分值和发布状态；题目内容来自正式题目库。"
-                    primaryAction={(
+                    primaryAction={canAccessPapers ? (
                         <Button asChild>
                             <Link href="/admin/sales-trainer/papers/new">
                                 <Plus className="mr-2 h-4 w-4" />
                                 新建考卷
                             </Link>
                         </Button>
-                    )}
-                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+                    ) : null}
+                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={capabilities} />}
                 />
             )}
         >
@@ -144,7 +197,36 @@ export default function NewcomerPapersPage() {
                 onConfirm={() => void handleConfirm()}
                 isLoading={isSubmitting}
             />
+            {isCapabilityLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                    正在校验考卷管理权限...
+                </div>
+            ) : capabilityError || !canAccessPapers ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
+                        <div>
+                            <h2 className="font-bold text-amber-950">考卷管理权限不足</h2>
+                            <p className="mt-1 text-sm leading-6">
+                                当前页不会在权限未确认时展示考卷写入入口。请联系管理员开通内容管理权限后重试。
+                            </p>
+                            {capabilityError ? (
+                                <p className="mt-2 text-sm font-medium">{capabilityError}</p>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+            ) : null}
             <div className="space-y-4">
+                {canAccessPapers && loadError ? (
+                    <AdminLoadErrorCard
+                        title="考卷列表加载失败"
+                        description="当前页不会把考卷接口异常伪装成暂无考卷。请检查内容管理权限、考卷配置或后端服务状态后重试。"
+                        message={loadError}
+                        retryLabel="重新加载考卷"
+                        onRetry={() => void loadPapers()}
+                    />
+                ) : canAccessPapers ? (
                 <GlassCard className="overflow-hidden p-0">
                     <table className="w-full text-sm">
                         <thead>
@@ -212,6 +294,7 @@ export default function NewcomerPapersPage() {
                         </tbody>
                     </table>
                 </GlassCard>
+                ) : null}
                 {historyPaper ? (
                     <GlassCard className="space-y-4 p-6">
                         <div className="flex flex-wrap items-start justify-between gap-3">

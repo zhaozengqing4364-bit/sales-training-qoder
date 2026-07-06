@@ -2,20 +2,23 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Check, RefreshCcw, Save, Sparkles, XCircle } from "lucide-react";
+import { AlertTriangle, Check, RefreshCcw, Save, Sparkles, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
+import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 import type {
     BusinessEtiquetteCapabilityConfig,
     BusinessEtiquetteQuestionDraft,
     BusinessEtiquetteQuestionDraftStatus,
     BusinessEtiquetteQuestionDraftType,
+    SalesTrainerAdminCapabilities,
     SalesTrainerQuestionCategory,
 } from "@/lib/api/types";
 
@@ -130,9 +133,14 @@ export default function BusinessEtiquetteQuestionDraftsPage() {
     const [editCorrectAnswersText, setEditCorrectAnswersText] = useState("");
     const [selectedDraftEdit, setSelectedDraftEdit] = useState<BusinessEtiquetteQuestionDraft | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
     const selectedDraftIdRef = useRef<string | null>(null);
+    const canAccessQuestions = isSalesTrainerAdminPathAllowedForCapabilities(pathname, adminCapabilities);
 
     const pendingCount = drafts.filter((draft) => draft.status === "pending_review").length;
 
@@ -147,7 +155,12 @@ export default function BusinessEtiquetteQuestionDraftsPage() {
     }, []);
 
     const loadData = useCallback(async () => {
+        if (!canAccessQuestions) {
+            setLoadError(null);
+            return;
+        }
         setIsLoading(true);
+        setLoadError(null);
         try {
             const [draftResult, categoryResult, capabilityResult] = await Promise.all([
                 api.admin.salesTrainer.listBusinessEtiquetteQuestionDrafts({
@@ -169,13 +182,20 @@ export default function BusinessEtiquetteQuestionDraftsPage() {
                 applySelectedDraft(draftResult.items[0] ?? null);
             }
         } catch (error) {
-            toast.error(getApiErrorMessage(error));
+            const message = getApiErrorMessage(error);
+            setDrafts([]);
+            setCategories([]);
+            setCapabilities([]);
+            applySelectedDraft(null);
+            setLoadError(message);
+            toast.error(message);
         } finally {
             setIsLoading(false);
         }
     }, [
         applySelectedDraft,
         batchFilter,
+        canAccessQuestions,
         capabilityFilter,
         chapterFilter,
         statusFilter,
@@ -184,11 +204,45 @@ export default function BusinessEtiquetteQuestionDraftsPage() {
     ]);
 
     useEffect(() => {
+        let isCurrent = true;
+        void api.admin.salesTrainer.getCapabilities()
+            .then((result) => {
+                if (!isCurrent) return;
+                setAdminCapabilities(result);
+                setCapabilityError(null);
+            })
+            .catch((error) => {
+                if (!isCurrent) return;
+                setAdminCapabilities(null);
+                setCapabilityError(getApiErrorMessage(error));
+            })
+            .finally(() => {
+                if (!isCurrent) return;
+                setIsCapabilityLoading(false);
+            });
+        return () => {
+            isCurrent = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (isCapabilityLoading) {
+            return undefined;
+        }
+        if (!canAccessQuestions) {
+            setDrafts([]);
+            setCategories([]);
+            setCapabilities([]);
+            applySelectedDraft(null);
+            setLoadError(null);
+            setIsLoading(false);
+            return undefined;
+        }
         const timer = window.setTimeout(() => {
             void loadData();
         }, 0);
         return () => window.clearTimeout(timer);
-    }, [loadData]);
+    }, [applySelectedDraft, canAccessQuestions, isCapabilityLoading, loadData]);
 
     function toggleQuestionType(type: BusinessEtiquetteQuestionDraftType) {
         setQuestionTypes((current) => (
@@ -323,7 +377,7 @@ export default function BusinessEtiquetteQuestionDraftsPage() {
                     <AdminPageHeader
                         title="AI 出题审核"
                         description="按章节生成商务礼仪题目草稿，人工审核后只会转为正式题目草稿；发布仍在正式题目库完成。"
-                        primaryAction={(
+                        primaryAction={canAccessQuestions ? (
                             <div className="flex flex-wrap gap-2">
                                 <Button variant="outline" asChild>
                                     <Link href="/admin/sales-trainer/questions">正式题目库</Link>
@@ -333,12 +387,41 @@ export default function BusinessEtiquetteQuestionDraftsPage() {
                                     刷新
                                 </Button>
                             </div>
-                        )}
+                        ) : null}
                     />
-                    <SalesTrainerAdminModuleNav currentPath={pathname} />
+                    <SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />
                 </div>
             )}
         >
+            {isCapabilityLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                    正在校验题库管理权限...
+                </div>
+            ) : capabilityError || !canAccessQuestions ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
+                        <div>
+                            <h2 className="font-bold text-amber-950">题库管理权限不足</h2>
+                            <p className="mt-1 text-sm leading-6">
+                                当前页不会在权限未确认时加载 AI 草稿或展示审核写入入口。请联系管理员开通题库管理权限后重试。
+                            </p>
+                            {capabilityError ? (
+                                <p className="mt-2 text-sm font-medium">{capabilityError}</p>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+            ) : loadError ? (
+                <AdminLoadErrorCard
+                    title="题目草稿加载失败"
+                    description="当前页不会把草稿、分类或能力点接口异常伪装成暂无草稿。请检查题库权限、Prompt 生成配置或后端服务状态后重试。"
+                    message={loadError}
+                    retryLabel="重新加载草稿"
+                    onRetry={() => void loadData()}
+                />
+            ) : (
+            <>
             <QuestionProductionFlow />
             <div className="grid gap-5 xl:grid-cols-[minmax(360px,0.9fr)_minmax(520px,1.1fr)]">
                 <div className="space-y-5">
@@ -724,6 +807,8 @@ export default function BusinessEtiquetteQuestionDraftsPage() {
                     </GlassCard>
                 </div>
             </div>
+            </>
+            )}
         </AdminIndexShell>
     );
 }

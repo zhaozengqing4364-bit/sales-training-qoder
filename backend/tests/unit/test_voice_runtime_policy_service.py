@@ -635,13 +635,13 @@ async def test_env_fallback_policy_defaults_to_latest_realtime_model(
 
     service = VoiceRuntimePolicyService(test_db)
 
-    assert service._env_fallback_policy()["model_name"] == "step-audio-2"
+    assert service._env_fallback_policy()["model_name"] == "stepaudio-2.5-realtime"
     assert service._env_fallback_policy()["tool_policy"]["kb_lock_mode"] == "coach_mode"
     assert service._env_fallback_policy()["tool_policy"]["max_questions_per_turn"] == 1
 
 
 @pytest.mark.asyncio
-async def test_resolve_effective_policy_uses_step_audio_2_default_profile(
+async def test_resolve_effective_policy_uses_step_audio_25_default_profile(
     test_db: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -652,7 +652,7 @@ async def test_resolve_effective_policy_uses_step_audio_2_default_profile(
         is_default=True,
         is_active=True,
         voice_mode="stepfun_realtime",
-        model_name="step-audio-2",
+        model_name="stepaudio-2.5-realtime",
         voice_name="qingchunshaonv",
         temperature=0.7,
         input_audio_format="pcm16",
@@ -668,7 +668,7 @@ async def test_resolve_effective_policy_uses_step_audio_2_default_profile(
     effective = await service.resolve_effective_policy()
 
     assert effective["source"]["runtime_profile"] == "system_default"
-    assert effective["model_name"] == "step-audio-2"
+    assert effective["model_name"] == "stepaudio-2.5-realtime"
     assert effective["voice_mode"] == "stepfun_realtime"
     assert effective["input_audio_format"] == "pcm16"
     assert effective["output_audio_format"] == "pcm16"

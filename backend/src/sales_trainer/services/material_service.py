@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,18 +13,33 @@ from common.db.models import User
 from common.monitoring.logger import get_trace_id
 from common.oss.signing import OssConfigError, get_oss_signing_service
 from sales_trainer.models import (
+    SalesTrainerAssetRevision,
+    SalesTrainerAudioSubmission,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
     SalesTrainerUnit,
 )
+from sales_trainer.permissions import (
+    can_manage_sales_trainer,
+    is_sales_trainer_manager,
+    is_sales_trainer_ops,
+)
 from sales_trainer.schemas import (
+    SalesTrainerAudioScoreOutputSchema,
     SalesTrainerLearnerRubric,
     SalesTrainerMaterialBindingConfig,
     SalesTrainerMaterialCreate,
     SalesTrainerMaterialUpdate,
     SalesTrainerMaterialVersionCreate,
+    SalesTrainerPathConfig,
     SalesTrainerTaskBriefConfig,
     SalesTrainerUnitMaterialsConfig,
+)
+from sales_trainer.services.asset_revision_service import (
+    SalesTrainerAssetRevisionService,
+)
+from sales_trainer.services.effective_audio_training_config import (
+    merge_audio_path_config,
 )
 from sales_trainer.services.material_metadata_update import (
     material_metadata_snapshot,
@@ -35,6 +50,13 @@ from sales_trainer.services.material_publish_workflow import (
     publish_material_version,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.path_config_models import (
+    NEWCOMER_PATH_LOGICAL_ID,
+    NEWCOMER_PATH_RESOURCE_TYPE,
+    payload_from_revision,
+)
+from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
+from sales_trainer.services.path_service import SalesTrainerPathService
 
 DEFAULT_MATERIAL_FILE_URL_EXPIRES_SECONDS = 3600
 
@@ -116,8 +138,11 @@ class SalesTrainerMaterialService:
             actor=actor,
             action="material_created",
             target_type="sales_trainer_material",
-            target_id=material.material_id,
-            metadata={"material_key": material.material_key, "material_type": material.material_type},
+            target_id=str(material.material_id),
+            metadata={
+                "material_key": str(material.material_key),
+                "material_type": str(material.material_type),
+            },
         )
         await self._db.commit()
         await self._db.refresh(material)
@@ -145,7 +170,7 @@ class SalesTrainerMaterialService:
             await self._ensure_material_key_available(str(data["material_key"]))
         for key, value in data.items():
             setattr(material, key, value)
-        material.updated_by = str(actor.user_id)
+        setattr(material, "updated_by", str(actor.user_id))
         await record_material_metadata_update(
             self._logs,
             material=material,
@@ -164,13 +189,25 @@ class SalesTrainerMaterialService:
         *,
         actor: User,
     ) -> SalesTrainerMaterial:
-        material.status = "archived"
-        material.updated_by = str(actor.user_id)
+        blockers = await self._path_reference_blockers(material)
+        if blockers:
+            raise MaterialServiceError(
+                "[MATERIAL_ARCHIVE_ACTIVE_REFERENCE]",
+                "材料仍被 active 或 working 新人训练路径引用，禁止归档。",
+                status_code=409,
+            )
+        setattr(material, "status", "archived")
+        setattr(material, "updated_by", str(actor.user_id))
         await self._logs.record(
             actor=actor,
             action="material_archived",
             target_type="sales_trainer_material",
-            target_id=material.material_id,
+            target_id=str(material.material_id),
+            metadata={
+                "trace_id": get_trace_id(),
+                "active_or_working_path_refs": blockers,
+                "historical_replay_preserved": True,
+            },
         )
         await self._db.commit()
         await self._db.refresh(material)
@@ -219,8 +256,11 @@ class SalesTrainerMaterialService:
             actor=actor,
             action="material_version_created",
             target_type="sales_trainer_material_version",
-            target_id=version.version_id,
-            metadata={"material_id": material.material_id, "version_label": version.version_label},
+            target_id=str(version.version_id),
+            metadata={
+                "material_id": str(material.material_id),
+                "version_label": str(version.version_label),
+            },
         )
         await self._db.commit()
         await self._db.refresh(version)
@@ -246,6 +286,101 @@ class SalesTrainerMaterialService:
                 exc.status_code,
             ) from exc
 
+    async def preview_version_rollback(
+        self,
+        material: SalesTrainerMaterial,
+        *,
+        target_version_id: str,
+    ) -> dict[str, Any]:
+        target = await self._material_rollback_target(material, target_version_id)
+        refs = await self._path_reference_blockers(material)
+        return {
+            "action": "material_version.rollback",
+            "permission": "sales_trainer.manage_modules",
+            "requires_reason": True,
+            "future_only": True,
+            "mutates_history": False,
+            "target_material_id": str(material.material_id),
+            "current_version_id": material.current_version_id,
+            "target_version": _serialize_version(target),
+            "future_material_current_version_changed": (
+                str(material.current_version_id or "") != str(target.version_id)
+            ),
+            "historical_submissions_changed": False,
+            "historical_replay_preserved": True,
+            "active_or_working_path_refs": refs,
+            "rollback_plan": {
+                "apply_endpoint": (
+                    f"/api/v1/admin/sales-trainer/materials/"
+                    f"{material.material_id}/versions/rollback"
+                ),
+                "rollback_endpoint": (
+                    f"/api/v1/admin/sales-trainer/materials/"
+                    f"{material.material_id}/versions/rollback/preview"
+                ),
+                "strategy": "restore_existing_material_version_as_current",
+            },
+        }
+
+    async def rollback_version(
+        self,
+        material: SalesTrainerMaterial,
+        *,
+        target_version_id: str,
+        reason: str,
+        actor: User,
+    ) -> SalesTrainerMaterialVersion:
+        if material.status == "archived":
+            raise MaterialServiceError(
+                "[SALES_TRAINER_MATERIAL_ARCHIVED]",
+                "已归档材料不能回滚版本。",
+                status_code=409,
+            )
+        trace_id = get_trace_id()
+        target = await self._material_rollback_target(material, target_version_id)
+        previous_current_version_id = str(material.current_version_id or "") or None
+        previous = await self._db.execute(
+            select(SalesTrainerMaterialVersion).where(
+                SalesTrainerMaterialVersion.material_id == material.material_id,
+                SalesTrainerMaterialVersion.status == "published",
+                SalesTrainerMaterialVersion.version_id != target.version_id,
+            )
+        )
+        archived_version_ids: list[str] = []
+        for item in previous.scalars().all():
+            setattr(item, "status", "archived")
+            archived_version_ids.append(str(item.version_id))
+        target_published_at = cast(datetime | None, target.published_at)
+        target_published_by = cast(str | None, target.published_by)
+        target_version_id_str = str(target.version_id)
+        setattr(target, "status", "published")
+        setattr(target, "published_at", target_published_at or datetime.now(UTC))
+        setattr(target, "published_by", target_published_by or str(actor.user_id))
+        setattr(material, "status", "published")
+        setattr(material, "current_version_id", target_version_id_str)
+        setattr(material, "updated_by", str(actor.user_id))
+        await self._logs.record(
+            actor=actor,
+            action="material_version_rolled_back",
+            target_type="sales_trainer_material_version",
+            target_id=target_version_id_str,
+            request_id=trace_id,
+            metadata={
+                "material_id": str(material.material_id),
+                "before_version_id": previous_current_version_id,
+                "after_version_id": target_version_id_str,
+                "archived_version_ids": archived_version_ids,
+                "reason": reason,
+                "trace_id": trace_id,
+                "future_only": True,
+                "historical_submissions_changed": False,
+                "historical_replay_preserved": True,
+            },
+        )
+        await self._db.commit()
+        await self._db.refresh(target)
+        return target
+
     async def list_versions(self, material_id: str) -> list[SalesTrainerMaterialVersion]:
         result = await self._db.execute(
             select(SalesTrainerMaterialVersion)
@@ -254,13 +389,34 @@ class SalesTrainerMaterialService:
         )
         return list(result.scalars().all())
 
+    async def _material_rollback_target(
+        self,
+        material: SalesTrainerMaterial,
+        target_version_id: str,
+    ) -> SalesTrainerMaterialVersion:
+        target = await self._db.get(SalesTrainerMaterialVersion, target_version_id)
+        if target is None or target.material_id != material.material_id:
+            raise MaterialServiceError(
+                "[MATERIAL_VERSION_NOT_FOUND]",
+                "目标材料版本不存在或不属于当前材料。",
+                status_code=404,
+            )
+        if target.status not in {"published", "archived"}:
+            raise MaterialServiceError(
+                "[MATERIAL_VERSION_NOT_ROLLBACKABLE]",
+                "只能回滚到已发布或已归档的材料版本。",
+                status_code=409,
+            )
+        return target
+
     async def serialize_material(
         self,
         material: SalesTrainerMaterial,
         *,
         include_versions: bool = True,
     ) -> dict[str, Any]:
-        versions = await self.list_versions(material.material_id) if include_versions else []
+        material_id = str(material.material_id)
+        versions = await self.list_versions(material_id) if include_versions else []
         current_version = None
         if material.current_version_id:
             current_version = await self._db.get(
@@ -290,7 +446,7 @@ class SalesTrainerMaterialService:
         *,
         config_override: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        config = config_override if config_override is not None else unit.config
+        config = config_override if config_override is not None else _unit_config(unit)
         task_brief = _resolve_task_brief(unit, config_override=config)
         material_items = await self.resolve_unit_material_items(
             unit,
@@ -311,7 +467,7 @@ class SalesTrainerMaterialService:
         learner_visible: bool,
         config_override: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        raw_config = config_override if config_override is not None else unit.config
+        raw_config = config_override if config_override is not None else _unit_config(unit)
         config = _validate_materials_config(raw_config or {})
         items: list[dict[str, Any]] = []
         for binding in sorted(config.bindings, key=lambda item: item.display_order):
@@ -370,7 +526,7 @@ class SalesTrainerMaterialService:
         *,
         config_override: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
-        raw_config = config_override if config_override is not None else unit.config
+        raw_config = config_override if config_override is not None else _unit_config(unit)
         prompt_id = ((raw_config or {}).get("audio") or {}).get("scoring_prompt_id")
         if not prompt_id:
             return None
@@ -380,7 +536,11 @@ class SalesTrainerMaterialService:
         prompt = await self._db.get(SalesTrainerAudioScorePrompt, str(prompt_id))
         if prompt is None:
             return None
-        rubric = prompt.learner_rubric or {}
+        from sales_trainer.services.prompt_revision_payloads import (
+            prompt_lifecycle_snapshot,
+        )
+
+        rubric: dict[str, Any] = normalize_learner_rubric(prompt.learner_rubric)
         threshold = resolve_audio_pass_threshold(raw_config or {})
         if isinstance(rubric, dict) and "pass_threshold" not in rubric:
             rubric = {**rubric, "pass_threshold": threshold}
@@ -392,6 +552,7 @@ class SalesTrainerMaterialService:
             "status": prompt.status,
             "learner_rubric": rubric,
             "pass_threshold": threshold,
+            "prompt_snapshot": prompt_lifecycle_snapshot(prompt),
         }
 
     async def freeze_submission_snapshots(
@@ -401,7 +562,7 @@ class SalesTrainerMaterialService:
         confirmed_material_version_id: str | None,
         config_override: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        config = config_override if config_override is not None else unit.config
+        config = config_override if config_override is not None else _unit_config(unit)
         task_brief = _resolve_task_brief(unit, config_override=config)
         material_items = await self.resolve_unit_material_items(
             unit,
@@ -445,6 +606,8 @@ class SalesTrainerMaterialService:
     async def resolve_file_access(
         self,
         version_id: str,
+        *,
+        actor: User,
     ) -> MaterialFileAccess:
         version = await self._db.get(SalesTrainerMaterialVersion, version_id)
         if version is None or version.status != "published":
@@ -453,12 +616,192 @@ class SalesTrainerMaterialService:
                 "训练材料版本不存在或未发布。",
                 status_code=404,
             )
+        await self._ensure_actor_can_access_file(version, actor=actor)
+        return self._file_access_from_version(version)
+
+    async def resolve_historical_file_access(
+        self,
+        version_id: str,
+        *,
+        record_type: str,
+        record_id: str,
+        viewer: User,
+        team_department: str | None,
+    ) -> MaterialFileAccess:
+        if record_type != "audio_submission":
+            raise MaterialServiceError(
+                "[TRAINING_RECORD_MATERIAL_REPLAY_UNSUPPORTED]",
+                "当前训练记录类型没有可回放材料文件。",
+                status_code=400,
+            )
+        from sales_trainer.services.training_record_service import TrainingRecordService
+
+        record = await TrainingRecordService(self._db).get_record_for_viewer(
+            record_type,
+            record_id,
+            viewer=viewer,
+            team_department=team_department,
+        )
+        if record is None:
+            raise MaterialServiceError(
+                "[TRAINING_RECORD_NOT_FOUND]",
+                "训练记录不存在或无权查看。",
+                status_code=404,
+            )
+        version = await self._db.get(SalesTrainerMaterialVersion, version_id)
+        if version is None or version.status not in {"published", "archived"}:
+            raise MaterialServiceError(
+                "[MATERIAL_VERSION_NOT_PUBLISHED]",
+                "历史训练材料版本不存在或不可回放。",
+                status_code=404,
+            )
+        submission = await self._db.get(SalesTrainerAudioSubmission, record_id)
+        if (
+            submission is None
+            or str(submission.confirmed_material_version_id or "") != version_id
+        ):
+            raise MaterialServiceError(
+                "[MATERIAL_HISTORY_REFERENCE_NOT_FOUND]",
+                "训练记录未引用该材料版本，禁止历史回放。",
+                status_code=404,
+            )
+        return self._file_access_from_version(version)
+
+    async def _ensure_actor_can_access_file(
+        self,
+        version: SalesTrainerMaterialVersion,
+        *,
+        actor: User,
+    ) -> None:
+        if can_manage_sales_trainer(actor) or is_sales_trainer_ops(actor):
+            return
+        if is_sales_trainer_manager(actor):
+            raise MaterialServiceError(
+                "[PERMISSION_DENIED]",
+                "当前账号无权访问训练材料文件。",
+                status_code=403,
+            )
+        if not await self._learner_can_access_active_material_version(
+            actor=actor,
+            version=version,
+        ):
+            raise MaterialServiceError(
+                "[MATERIAL_FILE_NOT_FOUND]",
+                "训练材料文件不存在。",
+                status_code=404,
+            )
+
+    async def _learner_can_access_active_material_version(
+        self,
+        *,
+        actor: User,
+        version: SalesTrainerMaterialVersion,
+    ) -> bool:
+        projection = await SalesTrainerPathConfigService(self._db).active_projection()
+        if projection is None or not projection.items:
+            return False
+        learner_paths = await SalesTrainerPathService(self._db).list_paths_for_user(
+            str(actor.user_id)
+        )
+        accessible_unit_ids: set[str] = set()
+        active_revision_id = str(projection.revision_id)
+        for path in learner_paths:
+            if str(path.get("path_revision_id") or "") != active_revision_id:
+                continue
+            for level in path.get("levels") or []:
+                if bool(level.get("locked")):
+                    continue
+                unit_id = str(level.get("unit_id") or "").strip()
+                if unit_id:
+                    accessible_unit_ids.add(unit_id)
+        if not accessible_unit_ids:
+            return False
+
+        target_version_id = str(version.version_id)
+        for item in projection.items:
+            if str(item.unit.unit_id) not in accessible_unit_ids:
+                continue
+            config_override = merge_audio_path_config(
+                _unit_config(item.unit) or {},
+                cast(SalesTrainerPathConfig, item.path_config),
+            )
+            try:
+                material_items = await self.resolve_unit_material_items(
+                    item.unit,
+                    learner_visible=True,
+                    config_override=config_override,
+                )
+            except MaterialServiceError:
+                continue
+            for material_item in material_items:
+                current_version = material_item.get("current_version")
+                if not isinstance(current_version, dict):
+                    continue
+                if str(current_version.get("version_id") or "") == target_version_id:
+                    return True
+        return False
+
+    async def _path_reference_blockers(
+        self,
+        material: SalesTrainerMaterial,
+    ) -> list[dict[str, Any]]:
+        version_ids_result = await self._db.execute(
+            select(SalesTrainerMaterialVersion.version_id).where(
+                SalesTrainerMaterialVersion.material_id == material.material_id
+            )
+        )
+        version_ids = {str(value) for value in version_ids_result.scalars().all()}
+        revisions: list[SalesTrainerAssetRevision] = []
+        revisions_service = SalesTrainerAssetRevisionService(self._db)
+        active = await revisions_service.active_revision(
+            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+            logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        )
+        working = await revisions_service.latest_working_revision(
+            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+            logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        )
+        for revision in (active, working):
+            if revision is None:
+                continue
+            if all(existing.revision_id != revision.revision_id for existing in revisions):
+                revisions.append(revision)
+
+        blockers: list[dict[str, Any]] = []
+        for revision in revisions:
+            payload = payload_from_revision(revision)
+            for module in payload.modules:
+                if module.material_id == material.material_id or (
+                    module.material_version_id is not None
+                    and module.material_version_id in version_ids
+                ):
+                    blockers.append(
+                        {
+                            "source": "active_revision"
+                            if revision is active
+                            else "working_revision",
+                            "revision_id": str(revision.revision_id),
+                            "revision_no": int(revision.revision_no),
+                            "module_key": module.module_key,
+                            "material_id": module.material_id,
+                            "material_version_id": module.material_version_id,
+                        }
+                    )
+        return blockers
+
+    def _file_access_from_version(
+        self,
+        version: SalesTrainerMaterialVersion,
+    ) -> MaterialFileAccess:
         storage_key = str(version.storage_key or "")
         local_path = Path(storage_key)
         if local_path.exists():
             resolved_path = local_path.resolve()
             storage_root = Path(
-                os.getenv("SALES_TRAINER_MATERIAL_STORAGE_PATH", "./data/sales_trainer_materials")
+                os.getenv(
+                    "SALES_TRAINER_MATERIAL_STORAGE_PATH",
+                    "./data/sales_trainer_materials",
+                )
             ).resolve()
             if storage_root not in (resolved_path, *resolved_path.parents):
                 raise MaterialServiceError(
@@ -535,6 +878,10 @@ class SalesTrainerMaterialService:
         )
 
 
+def _unit_config(unit: SalesTrainerUnit) -> dict[str, Any] | None:
+    return cast(dict[str, Any] | None, unit.config)
+
+
 def _validate_materials_config(config: dict[str, Any]) -> SalesTrainerUnitMaterialsConfig:
     raw = config.get("materials")
     if raw is None:
@@ -546,7 +893,10 @@ def _validate_materials_config(config: dict[str, Any]) -> SalesTrainerUnitMateri
             status_code=422,
         )
     try:
-        return SalesTrainerUnitMaterialsConfig.model_validate(raw)
+        return cast(
+            SalesTrainerUnitMaterialsConfig,
+            SalesTrainerUnitMaterialsConfig.model_validate(raw),
+        )
     except ValueError as exc:
         raise MaterialServiceError(
             "[SALES_TRAINER_MATERIAL_BINDING_INVALID]",
@@ -560,7 +910,7 @@ def _resolve_task_brief(
     *,
     config_override: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    config = config_override if config_override is not None else unit.config
+    config = config_override if config_override is not None else _unit_config(unit)
     raw = (config or {}).get("task_brief")
     if raw is None:
         return {
@@ -580,7 +930,10 @@ def _resolve_task_brief(
             status_code=422,
         )
     try:
-        brief = SalesTrainerTaskBriefConfig.model_validate(raw).model_dump()
+        brief = cast(
+            dict[str, Any],
+            SalesTrainerTaskBriefConfig.model_validate(raw).model_dump(),
+        )
     except ValueError as exc:
         raise MaterialServiceError(
             "[SALES_TRAINER_TASK_BRIEF_INVALID]",
@@ -663,11 +1016,11 @@ def _serialize_version(version: SalesTrainerMaterialVersion) -> dict[str, Any]:
         "file_hash": version.file_hash,
         "release_notes": version.release_notes,
         "status": version.status,
-        "published_at": _datetime_to_json(version.published_at),
+        "published_at": _datetime_to_json(cast(datetime | None, version.published_at)),
         "published_by": version.published_by,
         "created_by": version.created_by,
-        "created_at": _datetime_to_json(version.created_at),
-        "updated_at": _datetime_to_json(version.updated_at),
+        "created_at": _datetime_to_json(cast(datetime | None, version.created_at)),
+        "updated_at": _datetime_to_json(cast(datetime | None, version.updated_at)),
     }
 
 
@@ -677,23 +1030,40 @@ def _datetime_to_json(value: datetime | None) -> str | None:
 
 def normalize_learner_rubric(value: Any) -> dict[str, Any]:
     if isinstance(value, SalesTrainerLearnerRubric):
-        return value.model_dump()
+        return cast(dict[str, Any], value.model_dump())
     if value is None:
-        return {}
+        return cast(dict[str, Any], SalesTrainerLearnerRubric().model_dump())
     if not isinstance(value, dict):
-        raise MaterialServiceError(
-            "[LEARNER_RUBRIC_INVALID]",
-            "学员可见评分标准必须是对象。",
-            status_code=422,
-        )
+        return cast(dict[str, Any], SalesTrainerLearnerRubric().model_dump())
     try:
-        return SalesTrainerLearnerRubric.model_validate(value).model_dump()
-    except ValueError as exc:
-        raise MaterialServiceError(
-            "[LEARNER_RUBRIC_INVALID]",
-            "学员可见评分标准不合法。",
-            status_code=422,
-        ) from exc
+        return cast(
+            dict[str, Any],
+            SalesTrainerLearnerRubric.model_validate(value).model_dump(),
+        )
+    except ValueError:
+        return cast(dict[str, Any], SalesTrainerLearnerRubric().model_dump())
+
+
+def normalize_audio_score_output_schema(value: Any) -> dict[str, Any]:
+    if isinstance(value, SalesTrainerAudioScoreOutputSchema):
+        return cast(dict[str, Any], value.model_dump(by_alias=True))
+    if value is None:
+        return cast(
+            dict[str, Any], SalesTrainerAudioScoreOutputSchema().model_dump(by_alias=True)
+        )
+    if not isinstance(value, dict):
+        return cast(dict[str, Any], SalesTrainerAudioScoreOutputSchema().model_dump())
+    try:
+        return cast(
+            dict[str, Any],
+            SalesTrainerAudioScoreOutputSchema.model_validate(value).model_dump(
+                by_alias=True
+            ),
+        )
+    except ValueError:
+        return cast(
+            dict[str, Any], SalesTrainerAudioScoreOutputSchema().model_dump(by_alias=True)
+        )
 
 
 def _is_object_storage_key(storage_key: str) -> bool:
@@ -725,8 +1095,11 @@ def _generate_object_storage_get_url(storage_key: str) -> str:
     backend = _resolve_object_storage_backend(storage_key)
     expires = _resolve_file_url_expires_seconds()
     if backend == "cos":
-        return get_cos_signing_service().generate_get_url(object_key, expires=expires)
-    return get_oss_signing_service().generate_get_url(object_key, expires=expires)
+        return cast(
+            str,
+            get_cos_signing_service().generate_get_url(object_key, expires=expires),
+        )
+    return cast(str, get_oss_signing_service().generate_get_url(object_key, expires=expires))
 
 
 def _resolve_file_url_expires_seconds() -> int:

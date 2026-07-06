@@ -6,7 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from curriculum_practice.models import PracticeTemplate
-from curriculum_practice.schemas import PublishedAssetRefSchema
+from curriculum_practice.schemas import PublishedAssetRef, PublishedAssetRefSchema
 from curriculum_practice.services.frozen_asset_refs import parse_published_asset_refs
 
 ASSET_RESOLUTION_DIRECT_PRACTICE_LIVE = "direct_practice_live"
@@ -53,7 +53,7 @@ def published_asset_refs_summary(
     return summary
 
 
-def _published_asset_ref_summary(ref: object) -> dict[str, Any]:
+def _published_asset_ref_summary(ref: PublishedAssetRef) -> dict[str, Any]:
     return {
         "asset_type": ref.asset_type,
         "asset_id": ref.asset_id,

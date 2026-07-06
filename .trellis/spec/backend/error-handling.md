@@ -100,6 +100,83 @@ Contract tests: `backend/tests/contract/test_error_envelopes.py`.
 
 Reference: `backend/src/sales_bot/AGENTS.md`.
 
+## Scenario: WebSocket Send and Session-State Startup Failures
+
+### 1. Scope / Trigger
+
+- Trigger: WebSocket delivery and Redis-backed session snapshots are runtime infrastructure. Silent failure makes the UI believe a critical frame was delivered when it was not.
+- Scope: `common.websocket.base_handler.ConnectionManager.send_json`, handler call sites, session-state startup in `common.websocket.session_state_service`, and lifespan health exposure.
+
+### 2. Signatures
+
+```python
+@dataclass(frozen=True)
+class WebSocketSendResult:
+    success: bool
+    skipped: bool = False
+    message_type: str = "unknown"
+    error_type: str | None = None
+    error: str | None = None
+
+async def ConnectionManager.send_json(...) -> WebSocketSendResult: ...
+```
+
+Environment keys:
+
+- `SESSION_STATE_STARTUP_POLICY`: `required` (default), `optional`, or `disabled`.
+- `SESSION_STATE_SNAPSHOT_ENABLED`: `true`/`false`; `false` explicitly disables snapshot storage.
+
+### 3. Contracts
+
+- `send_json` never reports success for missing sockets or send exceptions.
+- Callers that need delivery semantics must inspect `result.success`; they must not rely on exceptions.
+- `required` Redis startup policy is fail-fast.
+- `optional` Redis startup policy degrades snapshot storage and exposes health as not ready/degraded.
+- `disabled` policy or `SESSION_STATE_SNAPSHOT_ENABLED=false` disables snapshot writes intentionally and exposes the disabled reason.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected behavior |
+|---|---|
+| WebSocket is `None` | Return `success=false`, `skipped=true`, `error_type="MissingWebSocket"` |
+| `websocket.send_json()` raises | Return `success=false`, log `websocket_send_failed`, increment send-failure and websocket-error metrics |
+| Heartbeat/control send returns failure | Treat the connection as failed where the caller owns liveness |
+| Redis ping fails with `required` | Startup raises a clear runtime error |
+| Redis ping fails with `optional` | Startup continues with snapshot disabled/degraded health |
+| Snapshot explicitly disabled | Runtime skips snapshot reads/writes without pretending Redis is connected |
+
+### 5. Good/Base/Bad Cases
+
+- Good: a failed heartbeat send returns `success=false`; liveness code unregisters the stale session and metrics identify the message type.
+- Base: local development sets `SESSION_STATE_STARTUP_POLICY=optional` while Redis is down; realtime still runs without reconnect snapshots and health states why.
+- Bad: `await websocket.send_json(...)` is wrapped in a broad `except` that only logs and returns `None`.
+
+### 6. Tests Required
+
+- Unit tests for `sent`, `skipped`, and failed send results.
+- Call-site regression tests for heartbeat/control emitters that must react to `success=false`.
+- Session-state startup tests for required, optional, and disabled policies.
+- Observability tests asserting `/metrics` includes send failure / connection lifecycle counters.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+await manager.send_json(websocket, {"type": "heartbeat"})
+# caller assumes delivery because no exception was raised
+```
+
+#### Correct
+
+```python
+result = await manager.send_json(websocket, {"type": "heartbeat"})
+if not result.success:
+    await session_manager.unregister(session_id)
+```
+
+Delivery is explicit and testable.
+
 ---
 
 ## Known Mixed State (document reality)

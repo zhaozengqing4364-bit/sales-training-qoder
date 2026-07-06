@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.db.typing import orm_scalar
 from common.monitoring.logger import get_trace_id
 from sales_trainer.models import (
     SalesTrainerAssetRevision,
@@ -23,6 +24,7 @@ from sales_trainer.services.audio_regrade_calculator import (
 from sales_trainer.services.deucate_scoring_service import DeucateScoringService
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.prompt_revision_payloads import PROMPT_RESOURCE_TYPE
+from sales_trainer.services.training_record_service import TrainingRecordService
 
 
 class SalesTrainerAudioRegradeService:
@@ -42,7 +44,14 @@ class SalesTrainerAudioRegradeService:
         submission_id: str,
         *,
         target_revision_id: str | None,
+        viewer: User,
+        team_department: str | None,
     ) -> AudioRegradePreview:
+        await self._require_submission_for_viewer(
+            submission_id,
+            viewer=viewer,
+            team_department=team_department,
+        )
         submission = await self._require_submission(submission_id)
         score = await self._require_latest_score(submission_id)
         target_revision = await self._resolve_target_revision(
@@ -64,11 +73,14 @@ class SalesTrainerAudioRegradeService:
         target_revision_id: str | None,
         reason: str,
         actor: User,
+        team_department: str | None,
     ) -> SalesTrainerRegradeRun:
         trace_id = get_trace_id()
         preview = await self.preview_audio_submission(
             submission_id,
             target_revision_id=target_revision_id,
+            viewer=actor,
+            team_department=team_department,
         )
         run = SalesTrainerRegradeRun(
             target_type=preview.target_type,
@@ -109,6 +121,26 @@ class SalesTrainerAudioRegradeService:
         await self._db.commit()
         await self._db.refresh(run)
         return run
+
+    async def _require_submission_for_viewer(
+        self,
+        submission_id: str,
+        *,
+        viewer: User,
+        team_department: str | None,
+    ) -> None:
+        record = await TrainingRecordService(self._db).get_record_for_viewer(
+            "audio_submission",
+            submission_id,
+            viewer=viewer,
+            team_department=team_department,
+        )
+        if record is None:
+            raise SalesTrainerAudioRegradeServiceError(
+                "[REGRADING_TARGET_NOT_FOUND]",
+                "历史录音提交不存在，无法重新评分。",
+                404,
+            )
 
     async def _require_submission(
         self,
@@ -159,7 +191,7 @@ class SalesTrainerAudioRegradeService:
         else:
             target_revision = await self._revisions.active_revision(
                 resource_type=PROMPT_RESOURCE_TYPE,
-                logical_id=score.prompt_id,
+                logical_id=orm_scalar(score.prompt_id, str),
             )
         if target_revision is None:
             raise SalesTrainerAudioRegradeServiceError(

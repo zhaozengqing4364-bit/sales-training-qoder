@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerQuizResultPage from "./page";
 
-const { getQuizAttemptMock, listPathsMock } = vi.hoisted(() => ({
+const { getJourneyMock, getQuizAttemptMock, listPathsMock } = vi.hoisted(() => ({
+    getJourneyMock: vi.fn(),
     getQuizAttemptMock: vi.fn(),
     listPathsMock: vi.fn(),
 }));
@@ -20,6 +21,7 @@ vi.mock("@/lib/api/client", async () => {
             ...actual.api,
             salesTrainer: {
                 ...actual.api.salesTrainer,
+                getJourney: getJourneyMock,
                 getQuizAttempt: getQuizAttemptMock,
                 listPaths: listPathsMock,
             },
@@ -29,55 +31,75 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("SalesTrainerQuizResultPage", () => {
     beforeEach(() => {
-        listPathsMock.mockResolvedValue({
-            items: [
-                {
-                    path_key: "new_seller",
-                    title: "新人销售闯关",
-                    goal_title: "掌握首次客户沟通",
-                    total_levels: 2,
-                    completed_levels: 1,
-                    current_level_id: "audio-unit",
-                    next_level_id: "audio-unit",
-                    levels: [
-                        {
-                            unit_id: "unit-1",
-                            name: "做题单元",
-                            description: "题目训练",
-                            unit_type: "quiz",
-                            order_index: 1,
-                            level_title: "第一关：产品定位",
-                            level_description: "先确认产品定位。",
-                            locked: false,
-                            lock_reason: null,
-                            status: "completed",
-                            completion_rule: "passed",
-                            primary_action_label: "开始做题",
-                            retry_action_label: "重练本关",
-                            review_action_label: "查看结果",
-                            target_path: "/sales-trainer/quiz/unit-1",
-                            latest_result: null,
-                        },
-                    ],
-                    goal_context: {
-                        goal_title: "掌握首次客户沟通",
-                        score_basis: "sales_trainer_path_projection_v1",
-                        evidence_items: [],
-                        weak_points: [],
-                        next_recommendation: {
-                            title: "下一关：第二关：录音表达",
-                            reason: "继续补齐录音表达证据。",
-                            action_label: "上传录音",
-                            target_path: "/sales-trainer/audio/audio-unit",
-                            unit_id: "audio-unit",
-                            level_title: "第二关：录音表达",
-                            recommendation_kind: "start_level",
-                        },
-                    },
+        getJourneyMock.mockResolvedValue({
+            journey_id: "journey-user-1",
+            learner_id: "user-1",
+            learner_name: "新人",
+            department: "销售一部",
+            path_key: "newcomer_training_path_v1",
+            path_revision_id: "revision-1",
+            path_revision_no: 1,
+            source: "active_revision",
+            legacy_snapshot_only: false,
+            role_capabilities: [],
+            learner_level: {
+                level_key: "unassigned",
+                label: "未分配",
+                source: "training_projection",
+                rank: 0,
+            },
+            role_level: {
+                level_key: "learner",
+                label: "学员",
+                source: "training_projection",
+                rank: 0,
+            },
+            training_stage: "in_progress",
+            modules: [{
+                module_key: "audio-unit",
+                title: "下一关：第二关：录音表达",
+                kind: "audio_submission",
+                module_type: "audio_scoring",
+                display_name: "下一关：第二关：录音表达",
+                order_index: 2,
+                enabled: true,
+                status: "not_started",
+                stage: "not_started",
+                passed: null,
+                score: null,
+                max_score: null,
+                required: true,
+                completion_satisfied: false,
+                locked: false,
+                block_reason: null,
+                completion_rule: "passed",
+                source: {
+                    path_revision_id: "revision-1",
+                    path_revision_no: 1,
                 },
-            ],
-            total: 1,
+                learner_level_required: null,
+                unmet_reasons: [],
+                diagnostics: [],
+                next_action: {
+                    action_key: "start_audio",
+                    label: "上传录音",
+                    target_path: "/sales-trainer/audio/audio-unit",
+                    disabled: false,
+                    disabled_reason: null,
+                },
+                latest_outcome: null,
+                outcome_history: [],
+            }],
+            overall_progress: {
+                total_modules: 1,
+                completed_modules: 0,
+                passed_modules: 0,
+                failed_modules: 0,
+                needs_remediation_modules: 0,
+            },
+            diagnostics: [],
         });
+        listPathsMock.mockReset();
         getQuizAttemptMock.mockResolvedValue({
             attempt_id: "attempt-1",
             unit_id: "unit-1",
@@ -126,6 +148,7 @@ describe("SalesTrainerQuizResultPage", () => {
         expect(await screen.findByText("练完下一步")).toBeTruthy();
         expect(screen.getByText("下一关：第二关：录音表达")).toBeTruthy();
         expect(screen.getByRole("link", { name: /上传录音/ }).getAttribute("href")).toBe("/sales-trainer/audio/audio-unit");
+        expect(listPathsMock).not.toHaveBeenCalled();
     });
 
     it("renders pending score when any answer still needs judging", async () => {
@@ -217,56 +240,73 @@ describe("SalesTrainerQuizResultPage", () => {
                 },
             ],
         });
-        listPathsMock.mockResolvedValue({
-            items: [
-                {
-                    path_key: "newcomer_training_path_v1",
-                    title: "新人训练路径",
-                    goal_title: "掌握新人训练路径",
-                    total_levels: 1,
-                    completed_levels: 0,
-                    current_level_id: "unit-1",
-                    next_level_id: "unit-1",
-                    levels: [
-                        {
-                            unit_id: "unit-1",
-                            name: "商务技巧",
-                            description: null,
-                            unit_type: "quiz",
-                            module_key: "business_skills",
-                            module_type: "article_exam",
-                            order_index: 2,
-                            level_title: "第二关：商务技巧",
-                            level_description: "商务技巧",
-                            locked: false,
-                            lock_reason: null,
-                            status: "available",
-                            completion_rule: "passed",
-                            primary_action_label: "开始学习",
-                            retry_action_label: "重练本关",
-                            review_action_label: "查看结果",
-                            target_path: "/sales-trainer/business-skills",
-                            ai_coach_availability: {
-                                enabled: true,
-                                configured: true,
-                                available: true,
-                                coach_path: "/sales-trainer/business-skills/coach",
-                                disabled_reason: null,
-                                allowed_interaction_types: ["single_choice", "multiple_choice"],
-                            },
-                            latest_result: null,
-                        },
-                    ],
-                    goal_context: {
-                        goal_title: "掌握新人训练路径",
-                        score_basis: "sales_trainer_path_projection_v1",
-                        evidence_items: [],
-                        weak_points: [],
-                        next_recommendation: null,
-                    },
+        getJourneyMock.mockResolvedValueOnce({
+            journey_id: "journey-user-1",
+            learner_id: "user-1",
+            learner_name: "新人",
+            department: "销售一部",
+            path_key: "newcomer_training_path_v1",
+            path_revision_id: "revision-1",
+            path_revision_no: 1,
+            source: "active_revision",
+            legacy_snapshot_only: false,
+            role_capabilities: [],
+            learner_level: {
+                level_key: "unassigned",
+                label: "未分配",
+                source: "training_projection",
+                rank: 0,
+            },
+            role_level: {
+                level_key: "learner",
+                label: "学员",
+                source: "training_projection",
+                rank: 0,
+            },
+            training_stage: "needs_remediation",
+            modules: [{
+                module_key: "business_skills",
+                title: "商务技巧",
+                kind: "quiz_attempt",
+                module_type: "article_exam",
+                display_name: "商务技巧 AI 教练",
+                order_index: 2,
+                enabled: true,
+                status: "needs_remediation",
+                stage: "needs_remediation",
+                passed: false,
+                score: 60,
+                max_score: 100,
+                required: true,
+                completion_satisfied: false,
+                locked: false,
+                block_reason: null,
+                completion_rule: "passed",
+                source: {
+                    path_revision_id: "revision-1",
+                    path_revision_no: 1,
                 },
-            ],
-            total: 1,
+                learner_level_required: null,
+                unmet_reasons: [],
+                diagnostics: [],
+                next_action: {
+                    action_key: "start_ai_coach",
+                    label: "进入 AI 教练",
+                    target_path: "/sales-trainer/business-skills/coach",
+                    disabled: false,
+                    disabled_reason: null,
+                },
+                latest_outcome: null,
+                outcome_history: [],
+            }],
+            overall_progress: {
+                total_modules: 1,
+                completed_modules: 0,
+                passed_modules: 0,
+                failed_modules: 1,
+                needs_remediation_modules: 1,
+            },
+            diagnostics: [],
         });
 
         render(<SalesTrainerQuizResultPage />);
@@ -278,6 +318,99 @@ describe("SalesTrainerQuizResultPage", () => {
         expect(screen.getAllByRole("link", { name: /进入 AI 教练/ })[0].getAttribute("href")).toBe(
             "/sales-trainer/business-skills/coach",
         );
+        expect(listPathsMock).not.toHaveBeenCalled();
+    });
+
+    it("shows a diagnostic instead of silently hiding AI coach entry when path config lookup fails", async () => {
+        getQuizAttemptMock.mockResolvedValue({
+            attempt_id: "attempt-1",
+            unit_id: "unit-1",
+            user_id: "user-1",
+            total_score: 60,
+            max_score: 100,
+            passed: false,
+            status: "scored",
+            submitted_at: "2026-05-28T00:00:00Z",
+            answers: [
+                {
+                    answer_id: "answer-1",
+                    question_id: "question-1",
+                    question_type: "single_choice",
+                    answer_payload: "B",
+                    question_title: "商务礼仪",
+                    question_stem: "见客户前应先确认什么？",
+                    options: [],
+                    correct_answer: "A",
+                    reference_answer: "A. 客户背景",
+                    explanation: null,
+                    scoring_feedback: null,
+                    scoring_reason: null,
+                    normalized_score: null,
+                    is_correct: false,
+                    score: 0,
+                    created_at: "2026-05-28T00:00:00Z",
+                },
+            ],
+        });
+        getJourneyMock.mockRejectedValueOnce(new Error("journey config unavailable"));
+
+        render(<SalesTrainerQuizResultPage />);
+
+        expect(await screen.findByText("做题结果")).toBeTruthy();
+        expect(screen.getByText("AI 教练入口配置诊断")).toBeTruthy();
+        expect(screen.getByText(/journey config unavailable/)).toBeTruthy();
+        expect(screen.queryByRole("link", { name: /进入 AI 教练/ })).toBeNull();
+        expect(listPathsMock).not.toHaveBeenCalled();
+    });
+
+    it("keeps attempt load failures recoverable instead of rendering a missing result", async () => {
+        getQuizAttemptMock
+            .mockRejectedValueOnce(new Error("attempt service unavailable"))
+            .mockResolvedValueOnce({
+                attempt_id: "attempt-1",
+                unit_id: "unit-1",
+                user_id: "user-1",
+                total_score: 10,
+                max_score: 10,
+                passed: true,
+                status: "scored",
+                submitted_at: "2026-05-28T00:00:00Z",
+                answers: [
+                    {
+                        answer_id: "answer-1",
+                        question_id: "question-1",
+                        question_type: "single_choice",
+                        answer_payload: "A",
+                        question_title: "产品定位",
+                        question_stem: "石犀核心定位是什么？",
+                        options: [],
+                        correct_answer: "A",
+                        reference_answer: "A. 数据流动治理",
+                        explanation: null,
+                        scoring_feedback: null,
+                        scoring_reason: null,
+                        normalized_score: null,
+                        is_correct: true,
+                        score: 10,
+                        created_at: "2026-05-28T00:00:00Z",
+                    },
+                ],
+            });
+
+        render(<SalesTrainerQuizResultPage />);
+
+        expect(await screen.findByText("做题结果加载失败")).toBeTruthy();
+        expect(screen.getByText(/attempt service unavailable/)).toBeTruthy();
+        expect(screen.queryByText("做题结果不存在。")).toBeNull();
+
+        const callsBeforeRetry = getQuizAttemptMock.mock.calls.length;
+        fireEvent.click(screen.getByRole("button", { name: "重新加载结果" }));
+
+        expect(await screen.findByText("做题结果")).toBeTruthy();
+        expect(screen.getByText("已通过")).toBeTruthy();
+        await waitFor(() => {
+            expect(getQuizAttemptMock.mock.calls.length).toBeGreaterThan(callsBeforeRetry);
+        });
     });
 
     it("renders AI short-answer feedback when scoring succeeds", async () => {

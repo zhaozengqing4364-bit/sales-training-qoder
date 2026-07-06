@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
+import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { MaterialCreateCard } from "@/components/admin/sales-trainer/material-create-card";
 import { MaterialDetailPanel } from "@/components/admin/sales-trainer/material-detail-panel";
 import { MaterialListCard } from "@/components/admin/sales-trainer/material-list-card";
@@ -22,6 +23,7 @@ import type {
     SalesTrainerMaterial,
     SalesTrainerMaterialCreateRequest,
 } from "@/lib/api/types";
+import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 
 export default function SalesTrainerMaterialsPage() {
     const pathname = usePathname();
@@ -31,6 +33,7 @@ export default function SalesTrainerMaterialsPage() {
     const purposeFromQuery = searchParams.get("purpose");
     const [items, setItems] = useState<SalesTrainerMaterial[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -38,14 +41,16 @@ export default function SalesTrainerMaterialsPage() {
         createEmptyMaterialDraft(purposeFromQuery),
     );
     const [versionDraft, setVersionDraft] = useState<VersionDraft>(createEmptyVersionDraft());
+    const routeAccess = useSalesTrainerAdminRouteAccess(pathname);
 
     const selectedMaterial = useMemo(
         () => firstSelectedMaterial(items, selectedMaterialId),
         [items, selectedMaterialId],
     );
 
-    async function loadMaterials() {
+    const loadMaterials = useCallback(async () => {
         setIsLoading(true);
+        setLoadError(null);
         try {
             const result = await api.admin.salesTrainer.listMaterials({
                 include_archived: true,
@@ -54,16 +59,29 @@ export default function SalesTrainerMaterialsPage() {
             setItems(result.items);
             setSelectedMaterialId((current) => current ?? result.items[0]?.material_id ?? null);
         } catch (loadError) {
+            const message = getApiErrorMessage(loadError);
             setItems([]);
-            toast.error(getApiErrorMessage(loadError));
+            setSelectedMaterialId(null);
+            setLoadError(message);
+            toast.error(message);
         } finally {
             setIsLoading(false);
         }
-    }
+    }, [toast]);
 
     useEffect(() => {
+        if (routeAccess.isLoading) {
+            return;
+        }
+        if (!routeAccess.canAccess) {
+            setItems([]);
+            setSelectedMaterialId(null);
+            setIsLoading(false);
+            setLoadError(null);
+            return;
+        }
         void loadMaterials();
-    }, []);
+    }, [loadMaterials, routeAccess.canAccess, routeAccess.isLoading]);
 
     useEffect(() => {
         if (!purposeFromQuery) {
@@ -162,39 +180,59 @@ export default function SalesTrainerMaterialsPage() {
                 <AdminPageHeader
                     title="新人训练路径材料库"
                     description="单独管理新人训练路径 PPT、逐字稿和附件版本；训练任务只绑定这里的已发布材料。"
-                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={routeAccess.capabilities} />}
                 />
             )}
         >
-            <MaterialSetupGuide moduleKey={moduleKey} />
-            <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-                <div className="space-y-6">
-                    <MaterialCreateCard
-                        isSubmitting={isSubmitting}
-                        materialDraft={materialDraft}
-                        onSubmit={createMaterial}
-                        setMaterialDraft={setMaterialDraft}
-                    />
-                    <MaterialListCard
-                        isLoading={isLoading}
-                        items={items}
-                        onSelect={setSelectedMaterialId}
-                    />
-                </div>
+            {routeAccess.denialMessage ? (
+                <AdminLoadErrorCard
+                    title="页面访问受限"
+                    description="当前页不会在能力接口失败或权限不足时继续加载材料库，避免把不可访问状态伪装成空数据。"
+                    message={routeAccess.denialMessage}
+                    retryLabel="重新检查权限"
+                    onRetry={routeAccess.reloadCapabilities}
+                />
+            ) : (
+                <MaterialSetupGuide moduleKey={moduleKey} />
+            )}
+            {!routeAccess.denialMessage && loadError ? (
+                <AdminLoadErrorCard
+                    title="材料库加载失败"
+                    description="当前页不会把接口异常伪装成空材料库。请核对权限、筛选条件或后端服务状态后重试。"
+                    message={loadError}
+                    retryLabel="重新加载材料"
+                    onRetry={() => void loadMaterials()}
+                />
+            ) : !routeAccess.denialMessage ? (
+                <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+                    <div className="space-y-6">
+                        <MaterialCreateCard
+                            isSubmitting={isSubmitting}
+                            materialDraft={materialDraft}
+                            onSubmit={createMaterial}
+                            setMaterialDraft={setMaterialDraft}
+                        />
+                        <MaterialListCard
+                            isLoading={isLoading}
+                            items={items}
+                            onSelect={setSelectedMaterialId}
+                        />
+                    </div>
 
-                <div className="space-y-6">
-                    <MaterialDetailPanel
-                        isSubmitting={isSubmitting}
-                        onFileSelected={handleFileSelected}
-                        onPublishVersion={(versionId) => void publishVersion(versionId)}
-                        onUploadVersion={uploadVersion}
-                        selectedFile={selectedFile}
-                        selectedMaterial={selectedMaterial}
-                        setVersionDraft={setVersionDraft}
-                        versionDraft={versionDraft}
-                    />
+                    <div className="space-y-6">
+                        <MaterialDetailPanel
+                            isSubmitting={isSubmitting}
+                            onFileSelected={handleFileSelected}
+                            onPublishVersion={(versionId) => void publishVersion(versionId)}
+                            onUploadVersion={uploadVersion}
+                            selectedFile={selectedFile}
+                            selectedMaterial={selectedMaterial}
+                            setVersionDraft={setVersionDraft}
+                            versionDraft={versionDraft}
+                        />
+                    </div>
                 </div>
-            </div>
+            ) : null}
         </AdminIndexShell>
     );
 }

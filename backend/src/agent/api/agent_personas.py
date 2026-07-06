@@ -11,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
@@ -27,6 +27,7 @@ from common.monitoring.logger import get_logger, get_trace_id
 from ..schemas import (
     AgentPersonaListResponse,
     AgentPersonaResponse,
+    AgentPersonaWithDetails,
     CreateAgentPersonaRequest,
     UpdateAgentPersonaRequest,
 )
@@ -71,7 +72,7 @@ async def add_persona_to_agent(
     request: CreateAgentPersonaRequest,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """Add a Persona to an Agent - R4.1"""
     service = AgentPersonaService(db)
     result = await service.add_persona(agent_id, request)
@@ -91,7 +92,7 @@ async def add_persona_to_agent(
             )
         raise HTTPException(status_code=400, detail=result.fallback)
 
-    link = result.value
+    link = cast(Any, result.value)
     commit_error = await commit_or_500(db, "add_persona_to_agent")
     if commit_error is not None:
         return commit_error
@@ -114,7 +115,7 @@ async def list_agent_personas(
     agent_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """Get all Personas linked to an Agent - R4.2"""
     service = AgentPersonaService(db)
     result = await service.list_personas(agent_id)
@@ -122,10 +123,11 @@ async def list_agent_personas(
     if not result.is_success:
         raise HTTPException(status_code=404, detail=result.fallback)
 
+    personas = cast(list[AgentPersonaWithDetails], result.value)
     return {
         "success": True,
         "data": AgentPersonaListResponse(
-            personas=[item.model_dump() for item in result.value]
+            personas=[item.model_dump() for item in personas]
         ).model_dump(),
     }
 
@@ -137,7 +139,7 @@ async def update_agent_persona(
     request: UpdateAgentPersonaRequest,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """Update Agent-Persona association - R4.3"""
     service = AgentPersonaService(db)
     result = await service.update_link(agent_id, persona_id, request)
@@ -155,7 +157,7 @@ async def update_agent_persona(
             return error_response("[PERSONA_INACTIVE]", status_code=400)
         raise HTTPException(status_code=400, detail=result.fallback)
 
-    link = result.value
+    link = cast(Any, result.value)
     commit_error = await commit_or_500(db, "update_agent_persona")
     if commit_error is not None:
         return commit_error
@@ -179,7 +181,7 @@ async def remove_persona_from_agent(
     persona_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """Remove Persona from Agent - R4.4"""
     service = AgentPersonaService(db)
     result = await service.remove_persona(agent_id, persona_id)

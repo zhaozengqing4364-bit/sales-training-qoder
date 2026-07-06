@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -65,7 +65,8 @@ class BusinessEtiquetteCapabilityService:
         )
         source_revision = working_revision or active_revision
         if source_revision is not None:
-            snapshot = _snapshot_from_payload(source_revision.payload_json)
+            source_payload = cast(dict[str, Any], source_revision.payload_json)
+            snapshot = _snapshot_from_payload(source_payload)
             if snapshot is not None:
                 return _snapshot_response(
                     logical_id=logical_id,
@@ -78,13 +79,16 @@ class BusinessEtiquetteCapabilityService:
                     ),
                     working_revision=working_revision,
                     active_revision=active_revision,
-                    original_chapter_count=_original_chapter_count(
-                        source_revision.payload_json
-                    ),
+                    original_chapter_count=_original_chapter_count(source_payload),
                     needs_save=False,
                 )
 
         default_snapshot = default_business_etiquette_capability_snapshot()
+        source_payload = (
+            cast(dict[str, Any], source_revision.payload_json)
+            if source_revision is not None
+            else {}
+        )
         return _snapshot_response(
             logical_id=logical_id,
             capabilities=default_snapshot["capabilities"],
@@ -92,9 +96,7 @@ class BusinessEtiquetteCapabilityService:
             source="default_seed",
             working_revision=working_revision,
             active_revision=active_revision,
-            original_chapter_count=_original_chapter_count(
-                source_revision.payload_json if source_revision is not None else {}
-            ),
+            original_chapter_count=_original_chapter_count(source_payload),
             needs_save=True,
         )
 
@@ -175,7 +177,7 @@ class BusinessEtiquetteCapabilityService:
         )
         if active_revision is None:
             return {}
-        snapshot = _snapshot_from_payload(active_revision.payload_json)
+        snapshot = _snapshot_from_payload(cast(dict[str, Any], active_revision.payload_json))
         if snapshot is None:
             return {}
         return {
@@ -195,15 +197,16 @@ class BusinessEtiquetteCapabilityService:
         trace_id: str | None,
         audit_action: str,
         audit_metadata: dict[str, Any],
-    ) -> BusinessEtiquetteCapabilitySnapshotResponse:
+        ) -> BusinessEtiquetteCapabilitySnapshotResponse:
         logical_id = _normalize_training_pack_key(training_pack_key)
         base_revision = await self._base_revision_for_save(logical_id)
+        base_payload = cast(dict[str, Any], base_revision.payload_json)
         validated_capabilities, validated_bindings = _validate_snapshot(
             capabilities=capabilities,
             chapter_bindings=chapter_bindings,
-            base_payload=base_revision.payload_json,
+            base_payload=base_payload,
         )
-        payload = deepcopy(base_revision.payload_json or {})
+        payload: dict[str, Any] = deepcopy(base_payload)
         updated_at = datetime.now(UTC)
         payload[CAPABILITY_SNAPSHOT_KEY] = {
             "schema_version": CAPABILITY_SNAPSHOT_SCHEMA_VERSION,

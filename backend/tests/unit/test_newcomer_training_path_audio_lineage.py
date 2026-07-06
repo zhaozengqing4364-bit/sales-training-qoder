@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
@@ -11,6 +12,7 @@ from common.db.models import User
 from sales_trainer.models import (
     SalesTrainerAudioScorePrompt,
     SalesTrainerAudioScoreResult,
+    SalesTrainerAudioSubmission,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
     SalesTrainerUnit,
@@ -78,6 +80,56 @@ def _published_material(
     return material, version
 
 
+async def _publish_audio_path(
+    test_db: AsyncSession,
+    *,
+    admin: User,
+    unit: SalesTrainerUnit,
+    prompt: SalesTrainerAudioScorePrompt,
+    enabled: bool = True,
+    module_key: str = "ppt_explanation",
+    learner_level_required: list[str] | None = None,
+) -> None:
+    material, version = _published_material(admin, key_prefix="path-access")
+    config = dict(unit.config or {})
+    config["materials"] = {
+        "bindings": [
+            {
+                "material_id": material.material_id,
+                "locked_version_id": version.version_id,
+                "version_policy": "locked_version",
+            }
+        ]
+    }
+    unit.config = config
+    test_db.add_all([material, version])
+    await test_db.flush()
+
+    path_service = SalesTrainerPathConfigService(test_db)
+    await path_service.save_config(
+        NewcomerPathConfigSaveRequest(
+            title="新人训练路径",
+            reason="发布音频训练模块",
+            modules=[
+                NewcomerPathModuleConfig(
+                    module_key=module_key,
+                    module_type="audio_scoring",
+                    enabled=enabled,
+                    order_index=1,
+                    title="PPT 讲解录音",
+                    target_unit_id=unit.unit_id,
+                    scoring_prompt_id=prompt.prompt_id,
+                    learner_level_required=learner_level_required or [],
+                    disabled_reason=None if enabled else "暂不开放",
+                    completion_rule="scored",
+                )
+            ],
+        ),
+        actor=admin,
+    )
+    await path_service.publish_config(actor=admin, reason="音频训练路径生效")
+
+
 class _FakeTranscriptionService:
     async def transcribe_file(self, storage_key: str) -> TranscriptionResult:
         return TranscriptionResult(
@@ -109,6 +161,158 @@ class _CaptureScoringService:
             error_message=None,
             latency_ms=10,
         )
+
+
+@pytest.mark.asyncio
+async def test_should_fail_closed_instead_of_creating_legacy_audio_submission_without_active_path(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="旧单元评分标准",
+        purpose="general_audio_scoring",
+        system_prompt="你是销售训练评分员。",
+        scoring_template="请评分：{transcript}",
+        output_schema={},
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="未发布路径的 PPT 讲解录音",
+        unit_type="audio_scoring",
+        config={
+            "audio": {
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 80,
+                "purpose": "general_audio_scoring",
+            }
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    test_db.add_all([admin, learner, prompt, unit])
+    await test_db.commit()
+
+    with pytest.raises(AudioSubmissionServiceError) as exc_info:
+        await AudioSubmissionService(test_db).create_submission(
+            AudioSubmissionCreate(
+                unit_id=unit.unit_id,
+                purpose="general_audio_scoring",
+                original_filename="legacy.wav",
+                content_type="audio/wav",
+                size_bytes=1024,
+                storage_key="/tmp/legacy.wav",
+                auto_process=False,
+            ),
+            actor=learner,
+        )
+
+    assert exc_info.value.code == "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]"
+    submission_count = await test_db.scalar(
+        select(func.count()).select_from(SalesTrainerAudioSubmission)
+    )
+    assert submission_count == 0
+
+
+@pytest.mark.asyncio
+async def test_should_reject_audio_submission_for_unit_outside_active_path(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="Active path audio prompt",
+        purpose="general_audio_scoring",
+        system_prompt="评分。",
+        scoring_template="请评分：{transcript}",
+        output_schema={},
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    active_unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="Active audio",
+        unit_type="audio_scoring",
+        config={},
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    outside_unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="Outside audio",
+        unit_type="audio_scoring",
+        config={
+            "audio": {
+                "purpose": "general_audio_scoring",
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 80,
+            }
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    test_db.add_all([admin, learner, prompt, active_unit, outside_unit])
+    await test_db.commit()
+
+    path_service = SalesTrainerPathConfigService(test_db)
+    await path_service.save_config(
+        NewcomerPathConfigSaveRequest(
+            title="新人训练路径",
+            reason="发布 active path scope 测试",
+            modules=[
+                NewcomerPathModuleConfig(
+                    module_key="elevator_pitch",
+                    module_type="audio_scoring_group",
+                    enabled=True,
+                    order_index=1,
+                    title="电梯演讲",
+                    scoring_prompt_id=prompt.prompt_id,
+                    completion_rule="scored",
+                    duration_options=[
+                        {
+                            "option_key": "pitch_10m",
+                            "display_name": "10 分钟",
+                            "duration_minutes": 10,
+                            "target_unit_id": active_unit.unit_id,
+                            "order_index": 1,
+                        }
+                    ],
+                )
+            ],
+        ),
+        actor=admin,
+    )
+    await path_service.publish_config(actor=admin, reason="active path scope 生效")
+
+    with pytest.raises(AudioSubmissionServiceError) as exc_info:
+        await AudioSubmissionService(test_db).create_submission(
+            AudioSubmissionCreate(
+                unit_id=outside_unit.unit_id,
+                purpose="general_audio_scoring",
+                original_filename="outside.wav",
+                content_type="audio/wav",
+                size_bytes=1024,
+                storage_key="/tmp/outside.wav",
+                auto_process=False,
+            ),
+            actor=learner,
+        )
+
+    assert exc_info.value.code == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    assert exc_info.value.status_code == 404
+    submission_count = await test_db.scalar(
+        select(func.count()).select_from(SalesTrainerAudioSubmission)
+    )
+    assert submission_count == 0
 
 
 @pytest.mark.asyncio
@@ -457,6 +661,304 @@ async def test_should_use_effective_path_config_for_unit_brief_api(
     assert data["score_scheme"]["prompt_id"] == path_prompt.prompt_id
     assert data["materials"][0]["material_id"] == material.material_id
     assert data["materials"][0]["current_version"]["version_id"] == version.version_id
+    assert "storage_key" not in data["materials"][0]["current_version"]
+
+    non_learner_admin = _user("admin")
+    test_db.add(non_learner_admin)
+    await test_db.commit()
+    denied_response = await async_client.get(
+        f"/api/v1/sales-trainer/units/{unit.unit_id}/brief",
+        headers=_auth_headers(non_learner_admin),
+    )
+    assert denied_response.status_code == 403
+    denied_body = denied_response.json()
+    assert denied_body.get("data") is None
+    assert "[NEWCOMER_LEARNER_ROLE_REQUIRED]" in str(denied_body)
+
+    denied_units_response = await async_client.get(
+        "/api/v1/sales-trainer/units",
+        headers=_auth_headers(non_learner_admin),
+    )
+    assert denied_units_response.status_code == 403
+    assert "[NEWCOMER_LEARNER_ROLE_REQUIRED]" in str(denied_units_response.json())
+
+    denied_paths_response = await async_client.get(
+        "/api/v1/sales-trainer/paths",
+        headers=_auth_headers(non_learner_admin),
+    )
+    assert denied_paths_response.status_code == 403
+    assert "[NEWCOMER_LEARNER_ROLE_REQUIRED]" in str(denied_paths_response.json())
+
+    denied_journey_response = await async_client.get(
+        "/api/v1/sales-trainer/journey",
+        headers=_auth_headers(non_learner_admin),
+    )
+    assert denied_journey_response.status_code == 403
+    assert "[NEWCOMER_LEARNER_ROLE_REQUIRED]" in str(denied_journey_response.json())
+
+
+@pytest.mark.asyncio
+async def test_should_fail_closed_for_unit_brief_without_active_path(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="旧 brief 评分标准",
+        purpose="ppt_pitch",
+        system_prompt="旧系统提示词。",
+        scoring_template="旧评分：{transcript}",
+        output_schema={},
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="未发布路径的 PPT 讲解录音",
+        unit_type="audio_scoring",
+        config={
+            "audio": {
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 75,
+                "purpose": "ppt_pitch",
+            },
+            "task_brief": {"title": "PPT 讲解", "purpose": "讲清主胶片。"},
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    test_db.add_all([admin, learner, prompt, unit])
+    await test_db.commit()
+
+    unit_response = await async_client.get(
+        f"/api/v1/sales-trainer/units/{unit.unit_id}",
+        headers=_auth_headers(learner),
+    )
+    response = await async_client.get(
+        f"/api/v1/sales-trainer/units/{unit.unit_id}/brief",
+        headers=_auth_headers(learner),
+    )
+
+    assert unit_response.status_code == 404
+    assert unit_response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    assert response.status_code == 404
+    assert response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+
+    list_response = await async_client.get(
+        "/api/v1/sales-trainer/units",
+        headers=_auth_headers(learner),
+    )
+
+    assert list_response.status_code == 200
+    assert list_response.json()["data"]["items"] == []
+    assert list_response.json()["data"]["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_should_fail_closed_for_published_unit_outside_active_path(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="路径内评分标准",
+        purpose="ppt_pitch",
+        system_prompt="系统提示词。",
+        scoring_template="评分：{transcript}",
+        output_schema={},
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    active_unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="路径内 PPT 讲解录音",
+        unit_type="audio_scoring",
+        config={
+            "audio": {
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 75,
+                "purpose": "ppt_pitch",
+            }
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    outside_unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="路径外 PPT 讲解录音",
+        unit_type="audio_scoring",
+        config={
+            "audio": {
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 75,
+                "purpose": "ppt_pitch",
+            }
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    test_db.add_all([admin, learner, prompt, active_unit, outside_unit])
+    await test_db.commit()
+    await _publish_audio_path(test_db, admin=admin, unit=active_unit, prompt=prompt)
+
+    unit_response = await async_client.get(
+        f"/api/v1/sales-trainer/units/{outside_unit.unit_id}",
+        headers=_auth_headers(learner),
+    )
+    brief_response = await async_client.get(
+        f"/api/v1/sales-trainer/units/{outside_unit.unit_id}/brief",
+        headers=_auth_headers(learner),
+    )
+    list_response = await async_client.get(
+        "/api/v1/sales-trainer/units",
+        headers=_auth_headers(learner),
+    )
+
+    assert unit_response.status_code == 404
+    assert unit_response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    assert brief_response.status_code == 404
+    assert brief_response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    data = list_response.json()["data"]
+    assert data["total"] == 1
+    assert [item["unit_id"] for item in data["items"]] == [active_unit.unit_id]
+
+
+@pytest.mark.asyncio
+async def test_should_fail_closed_for_locked_published_unit_read(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="锁定模块评分标准",
+        purpose="ppt_pitch",
+        system_prompt="系统提示词。",
+        scoring_template="评分：{transcript}",
+        output_schema={},
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    locked_unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="锁定 PPT 讲解录音",
+        unit_type="audio_scoring",
+        config={
+            "audio": {
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 75,
+                "purpose": "ppt_pitch",
+            }
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    test_db.add_all([admin, learner, prompt, locked_unit])
+    await test_db.commit()
+    await _publish_audio_path(
+        test_db,
+        admin=admin,
+        unit=locked_unit,
+        prompt=prompt,
+        enabled=False,
+    )
+
+    unit_response = await async_client.get(
+        f"/api/v1/sales-trainer/units/{locked_unit.unit_id}",
+        headers=_auth_headers(learner),
+    )
+    brief_response = await async_client.get(
+        f"/api/v1/sales-trainer/units/{locked_unit.unit_id}/brief",
+        headers=_auth_headers(learner),
+    )
+    list_response = await async_client.get(
+        "/api/v1/sales-trainer/units",
+        headers=_auth_headers(learner),
+    )
+
+    assert unit_response.status_code == 404
+    assert unit_response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    assert brief_response.status_code == 404
+    assert brief_response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    assert list_response.json()["data"]["items"] == []
+    assert list_response.json()["data"]["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_should_hide_learner_level_locked_unit_from_unit_list(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="等级锁定模块评分标准",
+        purpose="ppt_pitch",
+        system_prompt="系统提示词。",
+        scoring_template="评分：{transcript}",
+        output_schema={},
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    locked_unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="等级锁定 PPT 讲解录音",
+        unit_type="audio_scoring",
+        config={
+            "audio": {
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 75,
+                "purpose": "ppt_pitch",
+            }
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    test_db.add_all([admin, learner, prompt, locked_unit])
+    await test_db.commit()
+    await _publish_audio_path(
+        test_db,
+        admin=admin,
+        unit=locked_unit,
+        prompt=prompt,
+        learner_level_required=["ready"],
+    )
+
+    unit_response = await async_client.get(
+        f"/api/v1/sales-trainer/units/{locked_unit.unit_id}",
+        headers=_auth_headers(learner),
+    )
+    brief_response = await async_client.get(
+        f"/api/v1/sales-trainer/units/{locked_unit.unit_id}/brief",
+        headers=_auth_headers(learner),
+    )
+    list_response = await async_client.get(
+        "/api/v1/sales-trainer/units",
+        headers=_auth_headers(learner),
+    )
+
+    assert unit_response.status_code == 404
+    assert unit_response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    assert brief_response.status_code == 404
+    assert brief_response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    assert list_response.status_code == 200
+    assert list_response.json()["data"]["items"] == []
+    assert list_response.json()["data"]["total"] == 0
 
 
 @pytest.mark.asyncio

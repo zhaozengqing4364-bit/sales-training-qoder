@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, usePathname } from "next/navigation";
 
 import { AdminDetailShell } from "@/components/admin/admin-layout-shells";
+import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { QuizAttemptRegradePanel } from "@/components/admin/sales-trainer/quiz-attempt-regrade-panel";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,12 @@ import {
     formatAdminRecordStatus,
     formatTrainingTaskDisplay,
 } from "@/lib/sales-trainer/admin-display";
-import type { SalesTrainerQuizAnswer, SalesTrainerQuizAttempt } from "@/lib/api/types";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
+import type {
+    SalesTrainerAdminCapabilities,
+    SalesTrainerQuizAnswer,
+    SalesTrainerQuizAttempt,
+} from "@/lib/api/types";
 
 function stringifyAnswer(value: unknown): string {
     if (Array.isArray(value)) {
@@ -97,23 +103,59 @@ export default function SalesTrainerQuizAttemptDetailPage() {
     const [attempt, setAttempt] = useState<SalesTrainerQuizAttempt | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessRecord = isSalesTrainerAdminPathAllowedForCapabilities(pathname, adminCapabilities);
+    const canRegradeHistory = Boolean(adminCapabilities?.capabilities.admin_full_access || adminCapabilities?.capabilities.regrade_history);
+
+    const loadCapabilities = useCallback(async () => {
+        setIsCapabilityLoading(true);
+        setCapabilityError(null);
+        try {
+            const result = await api.admin.salesTrainer.getCapabilities();
+            setAdminCapabilities(result);
+        } catch (loadError) {
+            setAdminCapabilities(null);
+            setCapabilityError(getApiErrorMessage(loadError));
+        } finally {
+            setIsCapabilityLoading(false);
+        }
+    }, []);
+
+    const loadAttempt = useCallback(async () => {
+        if (!canAccessRecord) {
+            return;
+        }
+        setIsLoading(true);
+        setError(null);
+        try {
+            const result = await api.admin.salesTrainer.getQuizAttempt(params.attemptId);
+            setAttempt(result);
+        } catch (loadError) {
+            setAttempt(null);
+            setError(getApiErrorMessage(loadError));
+        } finally {
+            setIsLoading(false);
+        }
+    }, [canAccessRecord, params.attemptId]);
 
     useEffect(() => {
-        async function loadAttempt() {
-            setIsLoading(true);
+        void loadCapabilities();
+    }, [loadCapabilities]);
+
+    useEffect(() => {
+        if (isCapabilityLoading) {
+            return;
+        }
+        if (!canAccessRecord) {
+            setAttempt(null);
             setError(null);
-            try {
-                const result = await api.admin.salesTrainer.getQuizAttempt(params.attemptId);
-                setAttempt(result);
-            } catch (loadError) {
-                setAttempt(null);
-                setError(getApiErrorMessage(loadError));
-            } finally {
-                setIsLoading(false);
-            }
+            setIsLoading(false);
+            return;
         }
         void loadAttempt();
-    }, [params.attemptId]);
+    }, [canAccessRecord, isCapabilityLoading, loadAttempt]);
 
     const badge = attempt ? getAttemptBadge(attempt) : null;
     const taskDisplay = attempt ? formatTrainingTaskDisplay(null, attempt.unit_id) : null;
@@ -123,13 +165,31 @@ export default function SalesTrainerQuizAttemptDetailPage() {
             backHref="/admin/sales-trainer/score-results"
             title="做题结果详情"
             description="查看提交当时的题目、选项、学员答案、正确或参考答案、解析、得分和 AI 评分反馈快照。"
-            actions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+            actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
         >
-            {isLoading ? (
+            {isCapabilityLoading ? (
+                <div className="py-12 text-center text-sm text-slate-500">正在校验做题结果权限...</div>
+            ) : capabilityError || !canAccessRecord ? (
+                <AdminLoadErrorCard
+                    title="做题结果权限不足"
+                    description="当前页不会在权限未确认时加载做题结果，避免把权限异常伪装成未找到记录。请联系管理员开通训练记录查看权限后重试。"
+                    message={capabilityError}
+                    retryLabel="重新校验权限"
+                    onRetry={() => void loadCapabilities()}
+                />
+            ) : isLoading ? (
                 <div className="py-12 text-center text-sm text-slate-500">正在加载做题结果...</div>
+            ) : error && !attempt ? (
+                <AdminLoadErrorCard
+                    title="做题结果加载失败"
+                    description="当前页不会把接口异常伪装成未找到记录。请核对对象级权限、测验记录状态或后端服务状态后重试。"
+                    message={error}
+                    retryLabel="重新加载做题结果"
+                    onRetry={() => void loadAttempt()}
+                />
             ) : !attempt ? (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {error || "未找到做题结果。"}
+                    未找到做题结果。
                 </div>
             ) : (
                 <div className="space-y-6">
@@ -165,7 +225,14 @@ export default function SalesTrainerQuizAttemptDetailPage() {
                         </div>
                     </GlassCard>
 
-                    <QuizAttemptRegradePanel attempt={attempt} />
+                    {canRegradeHistory ? (
+                        <QuizAttemptRegradePanel attempt={attempt} />
+                    ) : null}
+                    {!isCapabilityLoading && !canRegradeHistory ? (
+                        <GlassCard className="border-amber-100 bg-amber-50 p-4 text-sm text-amber-800">
+                            当前账号没有历史重评权限，不能预览或追加重评记录。
+                        </GlassCard>
+                    ) : null}
 
                     <div className="space-y-4">
                         {attempt.answers.map((answer, index) => {

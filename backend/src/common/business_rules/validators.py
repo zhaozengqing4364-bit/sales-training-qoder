@@ -16,7 +16,10 @@ from common.business_rules.defaults import (
     ROLEPLAY_EVAL_RELEASE_GATE_KEY,
     ROLEPLAY_SITUATION_PACKS_KEY,
     SALES_COMBINATION_RULES_KEY,
+    SALES_TRAINER_LEARNER_LEVEL_POLICY_KEY,
     SALES_TRAINER_PHASE2_CLOSED_LOOP_POLICY_KEY,
+    SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY,
+    SALES_TRAINER_ROLE_LEVEL_POLICY_KEY,
     get_business_rule_definition,
 )
 
@@ -83,11 +86,14 @@ _PHASE2_MANAGER_ACTION_CODES = {
 _PHASE2_REMEDIATION_RECORD_TYPES = {
     "audio_submission",
     "quiz_attempt",
+    "business_etiquette_quiz_attempt",
     "ai_coach_session",
     "default",
     "no_action",
 }
 _PRIORITY_VALUES = {"low", "medium", "high"}
+_REALTIME_PROVIDER_VALUES = {"stepfun_realtime", "phase4_local_stepfun", "mock"}
+_REALTIME_RUNTIME_OWNER_VALUES = {"training_runtime", "sales_bot"}
 
 
 class BusinessRuleValidationError(ValueError):
@@ -122,6 +128,12 @@ def validate_business_rule_value(key: str, value: dict[str, Any]) -> dict[str, A
         return _validate_admin_notification_settings(value)
     if key == SALES_TRAINER_PHASE2_CLOSED_LOOP_POLICY_KEY:
         return _validate_sales_trainer_phase2_policy(value)
+    if key == SALES_TRAINER_LEARNER_LEVEL_POLICY_KEY:
+        return _validate_sales_trainer_learner_level_policy(value)
+    if key == SALES_TRAINER_ROLE_LEVEL_POLICY_KEY:
+        return _validate_sales_trainer_role_level_policy(value)
+    if key == SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY:
+        return _validate_sales_trainer_realtime_provider_registry(value)
     raise BusinessRuleValidationError(f"unsupported business rule key: {key}")
 
 
@@ -537,6 +549,295 @@ def _validate_sales_trainer_phase2_policy(value: dict[str, Any]) -> dict[str, An
             + ", ".join(sorted(missing_record_types))
         )
     normalized["remediation_actions"] = normalized_remediation_actions
+    return normalized
+
+
+def _validate_sales_trainer_learner_level_policy(value: dict[str, Any]) -> dict[str, Any]:
+    return _validate_sales_trainer_level_policy(value, policy_name="learner")
+
+
+def _validate_sales_trainer_role_level_policy(value: dict[str, Any]) -> dict[str, Any]:
+    return _validate_sales_trainer_level_policy(value, policy_name="role")
+
+
+def _validate_sales_trainer_realtime_provider_registry(
+    value: dict[str, Any],
+) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", False))
+
+    descriptors = normalized.get("descriptors")
+    if not isinstance(descriptors, list) or not descriptors:
+        raise BusinessRuleValidationError("descriptors must be a non-empty list")
+
+    seen_descriptor_ids: set[str] = set()
+    normalized_descriptors: list[dict[str, Any]] = []
+    for index, descriptor in enumerate(descriptors):
+        if not isinstance(descriptor, dict):
+            raise BusinessRuleValidationError(f"descriptors[{index}] must be an object")
+        descriptor_id = _required_string(
+            descriptor,
+            "descriptor_id",
+            max_length=120,
+        )
+        if descriptor_id in seen_descriptor_ids:
+            raise BusinessRuleValidationError(
+                f"duplicate runtime descriptor id: {descriptor_id}"
+            )
+        seen_descriptor_ids.add(descriptor_id)
+        readiness = descriptor.get("readiness")
+        if not isinstance(readiness, dict):
+            raise BusinessRuleValidationError(
+                f"descriptors[{index}].readiness must be an object"
+            )
+        normalized_descriptors.append(
+            {
+                "descriptor_id": descriptor_id,
+                "label": _required_string(descriptor, "label", max_length=120),
+                "provider": _one_of(
+                    descriptor.get("provider"),
+                    field=f"descriptors[{index}].provider",
+                    allowed=_REALTIME_PROVIDER_VALUES,
+                ),
+                "runtime_owner": _one_of(
+                    descriptor.get("runtime_owner"),
+                    field=f"descriptors[{index}].runtime_owner",
+                    allowed=_REALTIME_RUNTIME_OWNER_VALUES,
+                ),
+                "enabled": bool(descriptor.get("enabled", False)),
+                "runtime_profile_id": _optional_string(
+                    descriptor,
+                    "runtime_profile_id",
+                    default=None,
+                    max_length=120,
+                ),
+                "config_revision_id": _required_string(
+                    descriptor,
+                    "config_revision_id",
+                    max_length=120,
+                ),
+                "rollback_to_descriptor_id": _optional_string(
+                    descriptor,
+                    "rollback_to_descriptor_id",
+                    default=None,
+                    max_length=120,
+                ),
+                "readiness": _validate_realtime_registry_readiness(
+                    readiness,
+                    index=index,
+                ),
+            }
+        )
+
+    descriptor_ids = {item["descriptor_id"] for item in normalized_descriptors}
+    for index, descriptor in enumerate(normalized_descriptors):
+        rollback_id = descriptor.get("rollback_to_descriptor_id")
+        if rollback_id is not None and rollback_id not in descriptor_ids:
+            raise BusinessRuleValidationError(
+                f"descriptors[{index}].rollback_to_descriptor_id must reference an existing descriptor"
+            )
+
+    normalized["descriptors"] = sorted(
+        normalized_descriptors,
+        key=lambda item: item["descriptor_id"],
+    )
+    return normalized
+
+
+def _validate_realtime_registry_readiness(
+    readiness: dict[str, Any],
+    *,
+    index: int,
+) -> dict[str, Any]:
+    ready = bool(readiness.get("ready", False))
+    failure_code = _optional_string(
+        readiness,
+        "failure_code",
+        default=None,
+        max_length=120,
+    )
+    failure_message = _optional_string(
+        readiness,
+        "failure_message",
+        default=None,
+        max_length=500,
+    )
+    if not ready and not (failure_code or failure_message):
+        raise BusinessRuleValidationError(
+            f"descriptors[{index}].readiness must include failure_code or failure_message when not ready"
+        )
+    return {
+        "ready": ready,
+        "checked_at": _optional_string(
+            readiness,
+            "checked_at",
+            default=None,
+            max_length=80,
+        ),
+        "failure_code": failure_code,
+        "failure_message": failure_message,
+    }
+
+
+def _validate_sales_trainer_level_policy(
+    value: dict[str, Any],
+    *,
+    policy_name: str,
+) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+
+    default_level = normalized.get("default_level")
+    if not isinstance(default_level, dict):
+        raise BusinessRuleValidationError("default_level must be an object")
+
+    levels = normalized.get("levels")
+    if not isinstance(levels, list) or not levels:
+        raise BusinessRuleValidationError("levels must be a non-empty list")
+
+    seen_level_keys: set[str] = set()
+    normalized_levels: list[dict[str, Any]] = []
+    for index, item in enumerate(levels):
+        if not isinstance(item, dict):
+            raise BusinessRuleValidationError(f"levels[{index}] must be an object")
+        level_key = _required_string(item, "key", max_length=80)
+        if level_key in seen_level_keys:
+            raise BusinessRuleValidationError(
+                f"duplicate {policy_name} level key: {level_key}"
+            )
+        seen_level_keys.add(level_key)
+        normalized_levels.append(
+            {
+                "key": level_key,
+                "label": _required_string(item, "label", max_length=120),
+                "rank": _integer_range(
+                    item.get("rank", index),
+                    field=f"levels[{index}].rank",
+                    minimum=0,
+                    maximum=10000,
+                ),
+                "description": _optional_string(
+                    item,
+                    "description",
+                    default=None,
+                    max_length=500,
+                ),
+            }
+        )
+
+    default_key = _required_string(default_level, "key", max_length=80)
+    if default_key not in seen_level_keys:
+        raise BusinessRuleValidationError("default_level.key must exist in levels")
+    normalized["default_level"] = next(
+        level for level in normalized_levels if level["key"] == default_key
+    )
+    normalized["levels"] = sorted(normalized_levels, key=lambda item: item["rank"])
+
+    rules = normalized.get("rules", [])
+    if not isinstance(rules, list):
+        raise BusinessRuleValidationError("rules must be a list")
+    seen_rule_keys: set[str] = set()
+    normalized_rules: list[dict[str, Any]] = []
+    for index, rule in enumerate(rules):
+        if not isinstance(rule, dict):
+            raise BusinessRuleValidationError(f"rules[{index}] must be an object")
+        rule_key = _required_string(rule, "key", max_length=80)
+        if rule_key in seen_rule_keys:
+            raise BusinessRuleValidationError(
+                f"duplicate {policy_name} level rule key: {rule_key}"
+            )
+        seen_rule_keys.add(rule_key)
+        level_key = _required_string(rule, "level_key", max_length=80)
+        if level_key not in seen_level_keys:
+            raise BusinessRuleValidationError(f"rules[{index}].level_key must exist in levels")
+        conditions = rule.get("conditions")
+        if not isinstance(conditions, dict) or not conditions:
+            raise BusinessRuleValidationError(f"rules[{index}].conditions must be a non-empty object")
+        normalized_rules.append(
+            {
+                "key": rule_key,
+                "level_key": level_key,
+                "priority": _integer_range(
+                    rule.get("priority", index + 1),
+                    field=f"rules[{index}].priority",
+                    minimum=1,
+                    maximum=10000,
+                ),
+                "enabled": bool(rule.get("enabled", True)),
+                "conditions": _validate_learner_level_conditions(conditions, index=index),
+                "description": _optional_string(
+                    rule,
+                    "description",
+                    default=None,
+                    max_length=500,
+                ),
+            }
+        )
+    normalized["rules"] = sorted(
+        normalized_rules,
+        key=lambda item: (item["priority"], item["key"]),
+    )
+    return normalized
+
+
+def _validate_learner_level_conditions(
+    conditions: dict[str, Any],
+    *,
+    index: int,
+) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    if "training_stage_in" in conditions:
+        normalized["training_stage_in"] = _non_empty_string_list(
+            conditions.get("training_stage_in"),
+            field=f"rules[{index}].conditions.training_stage_in",
+        )
+    if "department_in" in conditions:
+        normalized["department_in"] = _non_empty_string_list(
+            conditions.get("department_in"),
+            field=f"rules[{index}].conditions.department_in",
+        )
+    if "role_in" in conditions:
+        normalized["role_in"] = _non_empty_string_list(
+            conditions.get("role_in"),
+            field=f"rules[{index}].conditions.role_in",
+        )
+    if "min_pass_rate" in conditions:
+        normalized["min_pass_rate"] = _phase2_score_threshold(
+            conditions.get("min_pass_rate"),
+            field=f"rules[{index}].conditions.min_pass_rate",
+        )
+    if "max_pass_rate" in conditions:
+        normalized["max_pass_rate"] = _phase2_score_threshold(
+            conditions.get("max_pass_rate"),
+            field=f"rules[{index}].conditions.max_pass_rate",
+        )
+    if "min_completed_modules" in conditions:
+        normalized["min_completed_modules"] = _integer_range(
+            conditions.get("min_completed_modules"),
+            field=f"rules[{index}].conditions.min_completed_modules",
+            minimum=0,
+            maximum=1000,
+        )
+    if "min_passed_modules" in conditions:
+        normalized["min_passed_modules"] = _integer_range(
+            conditions.get("min_passed_modules"),
+            field=f"rules[{index}].conditions.min_passed_modules",
+            minimum=0,
+            maximum=1000,
+        )
+    if "max_failed_modules" in conditions:
+        normalized["max_failed_modules"] = _integer_range(
+            conditions.get("max_failed_modules"),
+            field=f"rules[{index}].conditions.max_failed_modules",
+            minimum=0,
+            maximum=1000,
+        )
+    if not normalized:
+        raise BusinessRuleValidationError(
+            f"rules[{index}].conditions must include at least one supported condition"
+        )
     return normalized
 
 
@@ -1070,24 +1371,6 @@ def _score(value: Any, *, field: str) -> float:
     if score < 0 or score > 100:
         raise BusinessRuleValidationError(f"{field} must be within [0, 100]")
     return round(score, 2)
-
-
-def _integer_range(
-    value: Any,
-    *,
-    field: str,
-    minimum: int,
-    maximum: int,
-) -> int:
-    try:
-        normalized = int(value)
-    except (TypeError, ValueError) as exc:
-        raise BusinessRuleValidationError(f"{field} must be an integer") from exc
-    if normalized < minimum or normalized > maximum:
-        raise BusinessRuleValidationError(
-            f"{field} must be within [{minimum}, {maximum}]"
-        )
-    return normalized
 
 
 def _one_of(value: Any, *, field: str, allowed: set[str]) -> str:

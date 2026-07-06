@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db.typing import json_dict_or_empty, orm_scalar
 from sales_trainer.models import (
     SalesTrainerAssetRevision,
     SalesTrainerExamPaper,
@@ -25,7 +26,7 @@ async def serialize_exam_paper(
     db: AsyncSession,
     paper: SalesTrainerExamPaper,
 ) -> dict[str, Any]:
-    unit = await UnitService(db).get_unit(paper.unit_id)
+    unit = await UnitService(db).get_unit(orm_scalar(paper.unit_id, str))
     if unit is None:
         raise ExamPaperSerializationError(
             "[PAPER_BACKING_UNIT_MISSING]",
@@ -42,12 +43,17 @@ async def serialize_exam_paper(
         resource_type="sales_trainer_exam_paper",
         logical_id=str(paper.paper_id),
     )
-    active_payload = active_revision.payload_json if active_revision is not None else {}
+    active_payload = (
+        json_dict_or_empty(active_revision.payload_json)
+        if active_revision is not None
+        else {}
+    )
     revision_questions = (
         paper_revision_questions_for_learner(active_payload)
-        if isinstance(active_payload, dict)
+        if active_payload
         else []
     )
+    pass_threshold = orm_scalar(paper.pass_threshold, Decimal, nullable=True)
     return {
         "paper_id": paper.paper_id,
         "paper_key": paper.paper_key,
@@ -55,7 +61,7 @@ async def serialize_exam_paper(
         "description": paper.description,
         "module_key": paper.module_key,
         "unit_id": paper.unit_id,
-        "pass_threshold": _decimal_to_float(paper.pass_threshold),
+        "pass_threshold": _decimal_to_float(pass_threshold),
         "status": paper.status,
         "created_by": paper.created_by,
         "updated_by": paper.updated_by,
@@ -87,7 +93,9 @@ async def serialize_paper_attempt(
         raise ExamPaperSerializationError("[PAPER_NOT_FOUND]", "考卷不存在。", 404)
     revision = await _paper_revision_by_id(db, str(attempt.paper_revision_id))
     payload = await QuizService(db).serialize_attempt(attempt)
-    paper_payload = revision.payload_json if revision is not None else {}
+    paper_payload: dict[str, Any] = (
+        json_dict_or_empty(revision.payload_json) if revision is not None else {}
+    )
     attempt_context = _attempt_context_from_answers(payload.get("answers"))
     return {
         **payload,

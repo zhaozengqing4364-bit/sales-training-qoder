@@ -14,6 +14,7 @@ from common.business_rules.defaults import (
 from common.business_rules.service import BusinessRuleConfigService
 from common.monitoring.logger import get_logger
 from curriculum_practice.models import SituationPack
+from curriculum_practice.services.orm_payload_typing import set_orm_field
 from curriculum_practice.services.roleplay.situation_pack_dto import SituationPackDTO
 from curriculum_practice.services.roleplay.situation_pack_hasher import (
     situation_pack_content_hash,
@@ -68,7 +69,7 @@ class SituationPackProjectionSyncService:
             if row is None:
                 row = SituationPack(code=code, label=dto.label)
                 if actor_id:
-                    row.created_by = actor_id
+                    set_orm_field(row, "created_by", actor_id)
                 self._db.add(row)
                 created_count += 1
             else:
@@ -122,25 +123,53 @@ def _apply_dto_to_row(
     content_hash: str,
     actor_id: str | None,
 ) -> None:
-    row.label = dto.label
-    row.version = dto.version
-    row.status = dto.status
-    row.content_hash = content_hash
-    row.relationship_context = dict(dto.relationship_context)
-    row.visible_information_scope = dict(dto.visible_information_scope)
-    row.forbidden_claim_patterns = list(dto.forbidden_claim_patterns)
-    row.forbidden_topic_codes = list(dto.forbidden_topic_codes)
-    row.forbidden_stage_codes = list(dto.forbidden_stage_codes)
-    row.conflict_response_strategy = dto.conflict_response_strategy
-    row.behavior_rules_for_prompt_only = list(dto.behavior_rules_for_prompt_only)
-    row.disclosure_policy = dict(dto.disclosure_policy)
-    row.runtime_violation_policy = dict(dto.runtime_violation_policy)
-    row.compatible_practice_modes = list(dto.compatible_practice_modes)
-    row.compatible_scenario_types = list(dto.compatible_scenario_types)
+    set_orm_field(row, "label", dto.label)
+    set_orm_field(row, "version", dto.version)
+    set_orm_field(row, "status", dto.status)
+    set_orm_field(row, "content_hash", content_hash)
+    set_orm_field(row, "relationship_context", dict(dto.relationship_context))
+    set_orm_field(
+        row,
+        "visible_information_scope",
+        dict(dto.visible_information_scope),
+    )
+    set_orm_field(
+        row,
+        "forbidden_claim_patterns",
+        list(dto.forbidden_claim_patterns),
+    )
+    set_orm_field(row, "forbidden_topic_codes", list(dto.forbidden_topic_codes))
+    set_orm_field(row, "forbidden_stage_codes", list(dto.forbidden_stage_codes))
+    set_orm_field(
+        row,
+        "conflict_response_strategy",
+        dto.conflict_response_strategy,
+    )
+    set_orm_field(
+        row,
+        "behavior_rules_for_prompt_only",
+        list(dto.behavior_rules_for_prompt_only),
+    )
+    set_orm_field(row, "disclosure_policy", dict(dto.disclosure_policy))
+    set_orm_field(
+        row,
+        "runtime_violation_policy",
+        dict(dto.runtime_violation_policy),
+    )
+    set_orm_field(
+        row,
+        "compatible_practice_modes",
+        list(dto.compatible_practice_modes),
+    )
+    set_orm_field(
+        row,
+        "compatible_scenario_types",
+        list(dto.compatible_scenario_types),
+    )
     if dto.status == "published":
         if row.published_at is None:
-            row.published_at = datetime.now(UTC)
+            set_orm_field(row, "published_at", datetime.now(UTC))
     else:
-        row.published_at = None
+        set_orm_field(row, "published_at", None)
     if actor_id:
-        row.updated_by = actor_id
+        set_orm_field(row, "updated_by", actor_id)

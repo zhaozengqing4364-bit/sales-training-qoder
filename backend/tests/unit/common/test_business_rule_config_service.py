@@ -10,9 +10,11 @@ from common.business_rules.defaults import (
     DEFAULT_RECOMMENDATION_RULESET,
     DEFAULT_ROLEPLAY_EVAL_RELEASE_GATE,
     DEFAULT_ROLEPLAY_SITUATION_PACKS,
+    DEFAULT_SALES_TRAINER_REALTIME_PROVIDER_REGISTRY,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
     ROLEPLAY_EVAL_RELEASE_GATE_KEY,
     ROLEPLAY_SITUATION_PACKS_KEY,
+    SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY,
     list_business_rule_definitions,
 )
 from common.business_rules.service import BusinessRuleConfigService
@@ -215,6 +217,81 @@ async def test_roleplay_situation_pack_ruleset_rejects_hidden_visible_overlap(te
             value=value,
             actor_id=str(admin.user_id),
             reason="invalid overlap",
+        )
+
+
+@pytest.mark.asyncio
+async def test_realtime_provider_registry_publishes_resolves_and_disables(test_db):
+    admin = await _admin(test_db)
+    value = deepcopy(DEFAULT_SALES_TRAINER_REALTIME_PROVIDER_REGISTRY)
+    value["version"] = "sales_trainer_realtime_provider_registry_custom_v1"
+    value["enabled"] = True
+    value["descriptors"][0] = {
+        **value["descriptors"][0],
+        "provider": "mock",
+        "enabled": True,
+        "config_revision_id": "runtime-config-rev-1",
+        "readiness": {
+            "ready": True,
+            "checked_at": "2026-06-27T00:00:00Z",
+            "failure_code": None,
+            "failure_message": None,
+        },
+    }
+
+    service = BusinessRuleConfigService(test_db)
+    draft = await service.create_or_update_draft(
+        key=SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY,
+        value=value,
+        actor_id=str(admin.user_id),
+        reason="enable realtime provider",
+    )
+    await service.publish(
+        key=SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY,
+        actor_id=str(admin.user_id),
+        config_id=str(draft.id),
+        reason="publish realtime provider registry",
+    )
+    await test_db.commit()
+
+    resolution = await service.resolve_active_config(
+        SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY
+    )
+    assert resolution.source == "database"
+    assert resolution.value["enabled"] is True
+    assert resolution.value["descriptors"][0]["readiness"]["ready"] is True
+
+    await service.disable(
+        key=SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY,
+        actor_id=str(admin.user_id),
+        reason="disable realtime provider",
+    )
+    await test_db.commit()
+
+    disabled = await service.resolve_active_config(
+        SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY
+    )
+    audits = await service.list_audit_logs(
+        key=SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY
+    )
+    assert disabled.source == "database_disabled"
+    assert disabled.value["enabled"] is False
+    assert [audit.action for audit in audits][:2] == ["disable", "publish"]
+
+
+@pytest.mark.asyncio
+async def test_realtime_provider_registry_rejects_invalid_descriptor(test_db):
+    admin = await _admin(test_db)
+    value = deepcopy(DEFAULT_SALES_TRAINER_REALTIME_PROVIDER_REGISTRY)
+    value["enabled"] = True
+    value["descriptors"][0]["provider"] = "unknown"
+
+    with pytest.raises(BusinessRuleValidationError):
+        await BusinessRuleConfigService(test_db).create_or_update_draft(
+            key=SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY,
+            value=value,
+            actor_id=str(admin.user_id),
+            reason="invalid provider",
         )
 
 

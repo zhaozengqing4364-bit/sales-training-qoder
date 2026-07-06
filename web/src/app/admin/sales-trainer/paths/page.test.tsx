@@ -5,10 +5,10 @@ import SalesTrainerPathsPage from "./page";
 import {
     defaultLearningContentsResponse,
     defaultMaterialsResponse,
-    defaultModuleArticle,
     defaultPapersResponse,
     defaultPathConfigResponse,
     defaultPathRevisionsResponse,
+    defaultPublishPreviewResponse,
     defaultScorePromptsResponse,
     defaultSettingsResponse,
     defaultUnitsResponse,
@@ -17,7 +17,7 @@ import {
 } from "./page.test-data";
 
 const {
-    getModuleArticleMock,
+    getCapabilitiesMock,
     getPathConfigMock,
     getSettingsMock,
     listPathConfigRevisionsMock,
@@ -26,12 +26,13 @@ const {
     listPapersMock,
     listScorePromptsMock,
     listUnitsMock,
+    previewPathConfigPublishMock,
     publishPathConfigMock,
     rollbackPathConfigMock,
     savePathConfigMock,
     searchParamsMock,
 } = vi.hoisted(() => ({
-    getModuleArticleMock: vi.fn(),
+    getCapabilitiesMock: vi.fn(),
     getPathConfigMock: vi.fn(),
     getSettingsMock: vi.fn(),
     listPathConfigRevisionsMock: vi.fn(),
@@ -40,6 +41,7 @@ const {
     listPapersMock: vi.fn(),
     listScorePromptsMock: vi.fn(),
     listUnitsMock: vi.fn(),
+    previewPathConfigPublishMock: vi.fn(),
     publishPathConfigMock: vi.fn(),
     rollbackPathConfigMock: vi.fn(),
     savePathConfigMock: vi.fn(),
@@ -62,6 +64,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     getSettings: getSettingsMock,
                     listMaterials: listMaterialsMock,
                     listScorePrompts: listScorePromptsMock,
@@ -72,6 +75,7 @@ vi.mock("@/lib/api/client", async () => {
                     getPathConfig: getPathConfigMock,
                     listPathConfigRevisions: listPathConfigRevisionsMock,
                     listPapers: listPapersMock,
+                    previewPathConfigPublish: previewPathConfigPublishMock,
                     publishPathConfig: publishPathConfigMock,
                     rollbackPathConfig: rollbackPathConfigMock,
                     savePathConfig: savePathConfigMock,
@@ -81,10 +85,6 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.learningContents,
                 list: listLearningContentsMock,
             },
-            newcomerTraining: {
-                ...actual.api.newcomerTraining,
-                getModuleArticle: getModuleArticleMock,
-            },
         },
     };
 });
@@ -92,15 +92,33 @@ vi.mock("@/lib/api/client", async () => {
 describe("SalesTrainerPathsPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_questions: false,
+                manage_modules: true,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_modules"],
+        });
         listUnitsMock.mockResolvedValue(defaultUnitsResponse());
         getPathConfigMock.mockResolvedValue(defaultPathConfigResponse());
         listPathConfigRevisionsMock.mockResolvedValue(defaultPathRevisionsResponse());
         listLearningContentsMock.mockResolvedValue(defaultLearningContentsResponse());
-        getModuleArticleMock.mockResolvedValue(defaultModuleArticle());
         listPapersMock.mockResolvedValue(defaultPapersResponse());
         listMaterialsMock.mockResolvedValue(defaultMaterialsResponse());
         listScorePromptsMock.mockResolvedValue(defaultScorePromptsResponse());
         getSettingsMock.mockResolvedValue(defaultSettingsResponse());
+        previewPathConfigPublishMock.mockResolvedValue(defaultPublishPreviewResponse());
         savePathConfigMock.mockResolvedValue(defaultPathConfigResponse());
         publishPathConfigMock.mockResolvedValue(defaultPathConfigResponse());
         rollbackPathConfigMock.mockResolvedValue(defaultPathConfigResponse());
@@ -118,9 +136,9 @@ describe("SalesTrainerPathsPage", () => {
         });
 
         expect(listLearningContentsMock).toHaveBeenCalled();
-        expect(getModuleArticleMock).toHaveBeenCalledWith("business_skills");
         expect(getPathConfigMock).toHaveBeenCalled();
         expect(listPathConfigRevisionsMock).toHaveBeenCalled();
+        expect(previewPathConfigPublishMock).not.toHaveBeenCalled();
         expect(listPapersMock).toHaveBeenCalledWith({ include_archived: true, limit: 100 });
         expect(listMaterialsMock).toHaveBeenCalledWith({ include_archived: true, limit: 100 });
         expect(listScorePromptsMock).toHaveBeenCalledWith({ include_archived: true });
@@ -175,15 +193,24 @@ describe("SalesTrainerPathsPage", () => {
         expect(screen.getByRole("region", { name: "正在配置 PPT 讲解录音" })).toBeTruthy();
     });
 
-    it("keeps the configuration center visible when the article binding check fails", async () => {
-        getModuleArticleMock.mockRejectedValueOnce(new Error("article binding check failed"));
+    it("keeps the configuration center visible and surfaces missing article binding content", async () => {
+        getPathConfigMock.mockResolvedValue({
+            ...defaultPathConfigResponse(),
+            path: {
+                ...defaultPathConfigResponse().path,
+                modules: [{
+                    ...defaultPathConfigResponse().path.modules[0],
+                    learning_content_id: "missing-content",
+                }],
+            },
+        });
 
         render(<SalesTrainerPathsPage />);
 
         expect(await screen.findByRole("heading", { name: "新人训练路径配置中心" })).toBeTruthy();
-        expect(screen.getByText("第一关")).toBeTruthy();
+        expect(await screen.findByText("第一关")).toBeTruthy();
         expect(screen.getByText("商务技巧新修订")).toBeTruthy();
-        expect(screen.getByText("学习文章：见客户前商务礼仪（1 节）")).toBeTruthy();
+        expect(screen.getByText("商务技巧文章绑定状态读取失败：当前路径配置绑定的商务技巧文章不在内容列表中：missing-content")).toBeTruthy();
         expect(screen.queryByText("缺少已发布商务技巧学习文章绑定。")).toBeNull();
         expect(screen.getByRole("link", { name: "配置商务技巧文章" }).getAttribute("href")).toBe(
             "/admin/sales-trainer/articles",
@@ -234,6 +261,30 @@ describe("SalesTrainerPathsPage", () => {
         expect(await screen.findByText("路径配置已发布生效；历史学员记录不会被改写。")).toBeTruthy();
     });
 
+    it("shows publish preview impact when a working revision exists", async () => {
+        getPathConfigMock.mockResolvedValue(pathConfigWithWorkingRevision());
+
+        render(<SalesTrainerPathsPage />);
+
+        expect((await screen.findAllByText("发布预览")).length).toBeGreaterThan(0);
+        expect(previewPathConfigPublishMock).toHaveBeenCalled();
+        expect(screen.getAllByText(/medium 风险/).length).toBeGreaterThan(0);
+        expect(screen.getByText("medium 风险 / 影响 business_skills")).toBeTruthy();
+    });
+
+    it("keeps the center visible when publish preview fails provider readiness", async () => {
+        getPathConfigMock.mockResolvedValue(pathConfigWithWorkingRevision());
+        previewPathConfigPublishMock.mockRejectedValue(
+            new Error("[NEWCOMER_REALTIME_PROVIDER_NOT_READY] provider 未就绪"),
+        );
+
+        render(<SalesTrainerPathsPage />);
+
+        expect(await screen.findByRole("heading", { name: "新人训练路径配置中心" })).toBeTruthy();
+        expect(await screen.findByText(/发布预览失败/)).toBeTruthy();
+        expect(screen.getAllByText(/\[NEWCOMER_REALTIME_PROVIDER_NOT_READY\] provider 未就绪/).length).toBeGreaterThan(0);
+    });
+
     it("rolls back a non-active path revision through the future-only rollback API", async () => {
         listPathConfigRevisionsMock.mockResolvedValue(pathRevisionsWithRollbackTarget());
 
@@ -255,5 +306,22 @@ describe("SalesTrainerPathsPage", () => {
             });
         });
         expect(await screen.findByText("路径配置已回滚；回滚只影响后续学员。")).toBeTruthy();
+    });
+
+    it("fails closed before loading path config when capabilities are unavailable", async () => {
+        getCapabilitiesMock.mockRejectedValueOnce(new Error("capability unavailable"));
+
+        render(<SalesTrainerPathsPage />);
+
+        expect(await screen.findByText("页面访问受限")).toBeTruthy();
+        expect(screen.getByText("capability unavailable")).toBeTruthy();
+        expect(listUnitsMock).not.toHaveBeenCalled();
+        expect(getPathConfigMock).not.toHaveBeenCalled();
+        expect(listPathConfigRevisionsMock).not.toHaveBeenCalled();
+        expect(listLearningContentsMock).not.toHaveBeenCalled();
+        expect(listPapersMock).not.toHaveBeenCalled();
+        expect(listMaterialsMock).not.toHaveBeenCalled();
+        expect(listScorePromptsMock).not.toHaveBeenCalled();
+        expect(getSettingsMock).not.toHaveBeenCalled();
     });
 });

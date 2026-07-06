@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -15,6 +15,7 @@ SalesTrainerPathModuleType = Literal[
     "audio_scoring",
     "article_exam",
     "audio_scoring_group",
+    "realtime_roleplay",
     "realtime_placeholder",
 ]
 NewcomerPathCompletionRule = Literal["passed", "scored", "submitted"]
@@ -53,6 +54,13 @@ BusinessEtiquetteQuestionDraftStatus = Literal[
     "pending_review", "approved", "rejected", "converted"
 ]
 BusinessEtiquetteCapabilityStatus = Literal["draft", "published", "archived"]
+SalesTrainerRoleplayObservationSource = Literal["heuristic", "llm_evaluator"]
+SalesTrainerRoleplayObservationStatus = Literal[
+    "pending",
+    "completed",
+    "failed",
+    "ignored",
+]
 
 
 class SalesTrainerPathConfig(BaseModel):
@@ -75,12 +83,14 @@ class SalesTrainerPathConfig(BaseModel):
     scoring_prompt_id: str | None = Field(None, min_length=1, max_length=36)
     disabled_reason: str | None = Field(None, max_length=300)
     unlock_after_unit_ids: list[str] = Field(default_factory=list)
+    learner_level_required: list[str] = Field(default_factory=list)
     completion_rule: NewcomerPathCompletionRule = "passed"
     primary_action_label: str | None = Field(None, max_length=40)
     retry_action_label: str | None = Field(None, max_length=40)
     review_action_label: str | None = Field(None, max_length=40)
     guidance_templates: dict[str, str] = Field(default_factory=dict)
     ai_coach: dict[str, Any] | None = None
+    runtime_binding: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def validate_guidance_templates(self) -> SalesTrainerPathConfig:
@@ -106,6 +116,19 @@ class SalesTrainerPathConfig(BaseModel):
                     "guidance_templates values must be strings <= 300 chars"
                 )
         return self
+
+    @field_validator("learner_level_required")
+    @classmethod
+    def validate_learner_level_required(cls, values: list[str]) -> list[str]:
+        stripped = [value.strip() for value in values if value.strip()]
+        if len(stripped) > 20:
+            raise ValueError("learner_level_required must contain <= 20 items")
+        if len(set(stripped)) != len(stripped):
+            raise ValueError("learner_level_required cannot contain duplicates")
+        for value in stripped:
+            if len(value) > 80:
+                raise ValueError("learner_level_required items must be <= 80 chars")
+        return stripped
 
 
 class NewcomerPathDurationOptionConfig(BaseModel):
@@ -208,6 +231,67 @@ class SalesTrainerLearnerRubric(BaseModel):
         return self
 
 
+class SalesTrainerAudioScoreOutputFieldSchema(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    type: str | list[str] | None = None
+    description: str | None = Field(None, max_length=1000)
+    enum: list[str | int | float | bool | None] | None = None
+    items: dict[str, Any] | None = None
+    properties: dict[str, Any] | None = None
+    required: list[str] | None = None
+
+
+class SalesTrainerAudioScoreOutputSchema(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    schema_version: str = Field("audio_score_output_v1", min_length=1, max_length=80)
+    type: Literal["object"] = "object"
+    properties: dict[str, SalesTrainerAudioScoreOutputFieldSchema] = Field(
+        default_factory=dict
+    )
+    required: list[str] = Field(default_factory=list)
+    additional_properties: bool | dict[str, Any] | None = Field(
+        None, alias="additionalProperties"
+    )
+
+    @model_validator(mode="after")
+    def validate_required_fields(self) -> SalesTrainerAudioScoreOutputSchema:
+        if len(self.properties) > 100:
+            raise ValueError("output_schema.properties must contain <= 100 fields")
+        if len(self.required) > 100:
+            raise ValueError("output_schema.required must contain <= 100 fields")
+        if len(set(self.required)) != len(self.required):
+            raise ValueError("output_schema.required cannot contain duplicates")
+        missing = [field for field in self.required if field not in self.properties]
+        if missing:
+            raise ValueError(
+                "output_schema.required fields must be declared in output_schema.properties"
+            )
+        for key in self.properties:
+            if not key.strip() or len(key) > 120:
+                raise ValueError(
+                    "output_schema.properties keys must be non-empty strings <= 120 chars"
+                )
+        return self
+
+
+def _coerce_legacy_learner_rubric(
+    value: Any,
+) -> SalesTrainerLearnerRubric | dict[str, Any]:
+    if isinstance(value, SalesTrainerLearnerRubric):
+        return value
+    if not isinstance(value, dict):
+        return {}
+    try:
+        return cast(
+            SalesTrainerLearnerRubric,
+            SalesTrainerLearnerRubric.model_validate(value),
+        )
+    except ValueError:
+        return {}
+
+
 class ShortAnswerAiScoringConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -304,12 +388,15 @@ class SalesTrainerPathLevelResponse(BaseModel):
     unit_type: SalesTrainerUnitType
     module_key: str | None = None
     module_type: SalesTrainerPathModuleType | None = None
+    learning_content_id: str | None = None
+    exam_paper_id: str | None = None
     order_index: int
     level_title: str
     level_description: str | None = None
     locked: bool
     lock_reason: str | None = None
     status: Literal["locked", "available", "in_progress", "completed"]
+    learner_level_required: list[str] = Field(default_factory=list)
     completion_rule: NewcomerPathCompletionRule
     primary_action_label: str
     retry_action_label: str
@@ -421,10 +508,17 @@ AiCoachRemediationStrategyV1 = Literal[
     "ask_user_choice",
     "simplify_then_retry",
 ]
+AiCoachInteractionTypeV1 = Literal["single_choice", "multiple_choice", "short_answer"]
 AiCoachTrainingCardTypeV1 = Literal[
     "scenario_judgment",
     "expression_rewrite",
     "role_response",
+]
+AiCoachUiEventTypeV1 = Literal[
+    "quiz_card",
+    "explanation_card",
+    "summary_card",
+    "followup_prompt",
 ]
 
 
@@ -443,6 +537,32 @@ def _default_ai_coach_next_actions() -> list[AiCoachNextActionV1]:
 def _default_ai_coach_training_card_types() -> list[AiCoachTrainingCardTypeV1]:
     return [
         "scenario_judgment",
+    ]
+
+
+def _default_ai_coach_interaction_types() -> list[AiCoachInteractionTypeV1]:
+    return [
+        "single_choice",
+        "multiple_choice",
+    ]
+
+
+def _default_ai_coach_ui_event_types() -> list[AiCoachUiEventTypeV1]:
+    return [
+        "quiz_card",
+        "explanation_card",
+        "summary_card",
+        "followup_prompt",
+    ]
+
+
+def _default_business_etiquette_question_draft_types() -> list[
+    BusinessEtiquetteQuestionDraftType
+]:
+    return [
+        "single_choice",
+        "multiple_choice",
+        "short_answer",
     ]
 
 
@@ -466,13 +586,8 @@ class AiCoachConfig(BaseModel):
         "short_answer_drill",
         "mixed_drill",
     ] = "mixed_drill"
-    allowed_interaction_types: list[
-        Literal["single_choice", "multiple_choice", "short_answer"]
-    ] = Field(
-        default_factory=lambda: [
-            "single_choice",
-            "multiple_choice",
-        ]
+    allowed_interaction_types: list[AiCoachInteractionTypeV1] = Field(
+        default_factory=_default_ai_coach_interaction_types
     )
     allowed_training_card_types: list[AiCoachTrainingCardTypeV1] = Field(
         default_factory=_default_ai_coach_training_card_types,
@@ -480,20 +595,8 @@ class AiCoachConfig(BaseModel):
         max_length=3,
     )
     chat_enabled: bool = True
-    allowed_ui_event_types: list[
-        Literal[
-            "quiz_card",
-            "explanation_card",
-            "summary_card",
-            "followup_prompt",
-        ]
-    ] = Field(
-        default_factory=lambda: [
-            "quiz_card",
-            "explanation_card",
-            "summary_card",
-            "followup_prompt",
-        ]
+    allowed_ui_event_types: list[AiCoachUiEventTypeV1] = Field(
+        default_factory=_default_ai_coach_ui_event_types
     )
     max_cards_per_message: int = Field(1, ge=1, le=5)
     streaming_enabled: bool = True
@@ -1121,7 +1224,9 @@ class BusinessEtiquetteTrainingUnitConfig(BaseModel):
         if len(set(self.ai_coach_required_capability_keys)) != len(
             self.ai_coach_required_capability_keys
         ):
-            raise ValueError("ai_coach_required_capability_keys cannot contain duplicates")
+            raise ValueError(
+                "ai_coach_required_capability_keys cannot contain duplicates"
+            )
         for value in (
             *self.capability_keys,
             *self.unlock_after_unit_keys,
@@ -1147,9 +1252,7 @@ class BusinessEtiquetteTrainingUnitConfig(BaseModel):
                 "ai_coach_remediation_chapter_orders must contain <= 20 items"
             )
         if any(order < 1 for order in self.ai_coach_remediation_chapter_orders):
-            raise ValueError(
-                "ai_coach_remediation_chapter_orders values must be >= 1"
-            )
+            raise ValueError("ai_coach_remediation_chapter_orders values must be >= 1")
         if len(set(self.ai_coach_remediation_chapter_orders)) != len(
             self.ai_coach_remediation_chapter_orders
         ):
@@ -1167,6 +1270,84 @@ class BusinessEtiquetteTrainingUnitConfig(BaseModel):
         return self
 
 
+class NewcomerRealtimeProviderReadinessSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["stepfun_realtime", "legacy", "mock"]
+    ready: bool
+    checked_at: str = Field(..., min_length=1, max_length=80)
+    config_revision_id: str | None = Field(None, min_length=1, max_length=120)
+    failure_code: str | None = Field(None, min_length=1, max_length=120)
+    failure_message: str | None = Field(None, min_length=1, max_length=500)
+
+
+class NewcomerRealtimePermissionPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    learner_enter: Literal["sales_trainer.enter_realtime"] = (
+        "sales_trainer.enter_realtime"
+    )
+    admin_configure: Literal["sales_trainer.manage_modules"] = (
+        "sales_trainer.manage_modules"
+    )
+    admin_provider_health: Literal["sales_trainer.view_settings"] = (
+        "sales_trainer.view_settings"
+    )
+
+
+class NewcomerRealtimeFailurePolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    terminal_codes: list[str] = Field(default_factory=list, max_length=50)
+    transient_codes: list[str] = Field(default_factory=list, max_length=50)
+    voluntary_codes: list[str] = Field(default_factory=list, max_length=50)
+    terminal_retry_allowed: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_codes(self) -> NewcomerRealtimeFailurePolicy:
+        for values in (self.terminal_codes, self.transient_codes, self.voluntary_codes):
+            if len(set(values)) != len(values):
+                raise ValueError("failure policy codes cannot contain duplicates")
+            for value in values:
+                if not isinstance(value, str) or not value.strip() or len(value) > 120:
+                    raise ValueError(
+                        "failure policy codes must be non-empty strings <= 120 chars"
+                    )
+        return self
+
+
+class NewcomerRealtimeRollbackPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rollback_via_active_revision: Literal[True] = True
+    disable_module_on_invalid_binding: Literal[True] = True
+    fallback_to_placeholder: Literal[False] = False
+
+
+class NewcomerRealtimeRuntimeBinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    binding_key: Literal["newcomer_realtime_roleplay_v1"]
+    runtime_owner: Literal["training_runtime"]
+    runtime_descriptor_id: str = Field(..., min_length=1, max_length=120)
+    scenario_key: str = Field(..., min_length=1, max_length=120)
+    practice_template_id: str | None = Field(None, min_length=1, max_length=36)
+    runtime_config_revision_id: str = Field(..., min_length=1, max_length=120)
+    roleplay_contract_revision_id: str | None = Field(
+        None, min_length=1, max_length=120
+    )
+    provider_readiness_snapshot: NewcomerRealtimeProviderReadinessSnapshot
+    permission_policy: NewcomerRealtimePermissionPolicy = Field(
+        default_factory=NewcomerRealtimePermissionPolicy
+    )
+    failure_policy: NewcomerRealtimeFailurePolicy = Field(
+        default_factory=NewcomerRealtimeFailurePolicy
+    )
+    rollback_policy: NewcomerRealtimeRollbackPolicy = Field(
+        default_factory=NewcomerRealtimeRollbackPolicy
+    )
+
+
 class NewcomerPathModuleConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1175,6 +1356,7 @@ class NewcomerPathModuleConfig(BaseModel):
         "audio_scoring",
         "article_exam",
         "audio_scoring_group",
+        "realtime_roleplay",
         "realtime_placeholder",
     ] = "audio_scoring"
     enabled: bool = True
@@ -1189,12 +1371,14 @@ class NewcomerPathModuleConfig(BaseModel):
     scoring_prompt_id: str | None = Field(None, min_length=1, max_length=36)
     disabled_reason: str | None = Field(None, max_length=300)
     unlock_after_unit_ids: list[str] = Field(default_factory=list)
+    learner_level_required: list[str] = Field(default_factory=list)
     completion_rule: NewcomerPathCompletionRule = "passed"
     primary_action_label: str | None = Field(None, max_length=40)
     retry_action_label: str | None = Field(None, max_length=40)
     review_action_label: str | None = Field(None, max_length=40)
     guidance_templates: dict[str, str] = Field(default_factory=dict)
     ai_coach: AiCoachConfig | None = None
+    runtime_binding: NewcomerRealtimeRuntimeBinding | None = None
     learning_units: list[BusinessEtiquetteTrainingUnitConfig] = Field(
         default_factory=list
     )
@@ -1204,6 +1388,18 @@ class NewcomerPathModuleConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_module_collections(self) -> NewcomerPathModuleConfig:
+        if len(self.learner_level_required) > 20:
+            raise ValueError("learner_level_required must contain <= 20 items")
+        learner_levels = [
+            value.strip() for value in self.learner_level_required if value.strip()
+        ]
+        if len(set(learner_levels)) != len(learner_levels):
+            raise ValueError("learner_level_required cannot contain duplicate values")
+        if len(learner_levels) != len(self.learner_level_required):
+            raise ValueError("learner_level_required cannot contain blank values")
+        for value in learner_levels:
+            if len(value) > 80:
+                raise ValueError("learner_level_required items must be <= 80 chars")
         if len(self.learning_units) > 30:
             raise ValueError("learning_units must contain <= 30 items")
         unit_keys = [unit.unit_key for unit in self.learning_units]
@@ -1213,11 +1409,17 @@ class NewcomerPathModuleConfig(BaseModel):
             raise ValueError("duration_options must contain <= 12 items")
         option_keys = [option.option_key for option in self.duration_options]
         if len(set(option_keys)) != len(option_keys):
-            raise ValueError("duration_options cannot contain duplicate option_key values")
+            raise ValueError(
+                "duration_options cannot contain duplicate option_key values"
+            )
         target_unit_ids = [option.target_unit_id for option in self.duration_options]
         if len(set(target_unit_ids)) != len(target_unit_ids):
             raise ValueError(
                 "duration_options cannot contain duplicate target_unit_id values"
+            )
+        if self.runtime_binding is not None and self.module_type != "realtime_roleplay":
+            raise ValueError(
+                "runtime_binding is only supported for realtime_roleplay modules"
             )
         return self
 
@@ -1248,6 +1450,30 @@ class NewcomerPathRollbackPreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     revision_id: str = Field(..., min_length=1, max_length=36)
+
+
+class NewcomerPathPublishPreviewResponse(BaseModel):
+    action: Literal["newcomer_path_config.publish"]
+    permission: Literal["sales_trainer.manage_modules"]
+    requires_reason: bool
+    requires_trace_id: bool
+    future_only: bool
+    risk_level: Literal["low", "medium", "high"]
+    risk_reasons: list[str] = Field(default_factory=list)
+    change_class: Literal[
+        "non_semantic",
+        "semantic",
+        "binding",
+        "scoring_high_risk",
+    ]
+    target_revision_id: str
+    target_revision_no: int
+    target_revision_status: Literal["working", "published", "archived"]
+    impact_scope: dict[str, Any]
+    before_snapshot: dict[str, Any] | None = None
+    after_snapshot: dict[str, Any]
+    audit_event: dict[str, Any]
+    rollback_hint: dict[str, Any]
 
 
 class NewcomerPathRollbackPreviewResponse(BaseModel):
@@ -1289,8 +1515,71 @@ class NewcomerPathRevisionSummary(BaseModel):
     published_at: object | None = None
 
 
+class NewcomerPathConfigPermissionPolicyDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    view: Literal["sales_trainer.manage_modules"]
+    save: Literal["sales_trainer.manage_modules"]
+    publish: Literal["sales_trainer.manage_modules"]
+    rollback: Literal["sales_trainer.manage_modules"]
+    high_risk_ai_coach: Literal["sales_trainer.manage_prompts"]
+    regrade: Literal["sales_trainer.regrade_history"]
+
+
+class NewcomerPathConfigHighRiskActionDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    requires_reason: Literal[True]
+    requires_trace_id: Literal[True]
+    audit_action: str = Field(..., min_length=1, max_length=120)
+    impact_scope: str = Field(..., min_length=1, max_length=80)
+    preview_endpoint: str | None = Field(None, min_length=1, max_length=200)
+    history_overwrite: bool | None = None
+
+
+class NewcomerPathConfigHighRiskActionsDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    publish: NewcomerPathConfigHighRiskActionDiagnostics
+    rollback: NewcomerPathConfigHighRiskActionDiagnostics
+    regrade: NewcomerPathConfigHighRiskActionDiagnostics
+
+
+class NewcomerRealtimeProviderReadinessDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    module_key: Literal["realtime_roleplay", "realtime_roleplay_placeholder"]
+    module_type: Literal["realtime_roleplay", "realtime_placeholder"]
+    title: str = Field(..., min_length=1, max_length=120)
+    enabled: bool
+    runtime_descriptor_id: str | None = Field(None, min_length=1, max_length=120)
+    provider_readiness_snapshot: NewcomerRealtimeProviderReadinessSnapshot | None = None
+    ready: bool
+    failure_code: str | None = Field(None, min_length=1, max_length=120)
+    failure_message: str | None = Field(None, min_length=1, max_length=500)
+
+
+class NewcomerPathConfigDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    surface_key: Literal["newcomer_training_path_v1"]
+    resource_type: Literal["newcomer_training_path"]
+    source: Literal["active_revision", "legacy_migration_snapshot"]
+    legacy_snapshot_only: bool
+    fallback_applied: bool
+    fallback_reason: Literal["active_revision_missing"] | None = None
+    realtime_provider_readiness: list[NewcomerRealtimeProviderReadinessDiagnostics] = (
+        Field(default_factory=list)
+    )
+    management_entry: Literal["/admin/newcomer-training/path-config"]
+    permission_policy: NewcomerPathConfigPermissionPolicyDiagnostics
+    active_revision: NewcomerPathRevisionSummary | None = None
+    working_revision: NewcomerPathRevisionSummary | None = None
+    high_risk_actions: NewcomerPathConfigHighRiskActionsDiagnostics
+
+
 class NewcomerPathConfigResponse(BaseModel):
-    source: Literal["active_revision", "unit_backfill"]
+    source: Literal["active_revision", "legacy_migration_snapshot"]
     fallback_reason: str | None = None
     legacy_snapshot_only: bool = False
     management_entry: str = "/admin/newcomer-training/path-config"
@@ -1302,12 +1591,68 @@ class NewcomerPathConfigResponse(BaseModel):
     working_revision_id: str | None = None
     working_revision_no: int | None = None
     has_unpublished_revision: bool = False
-    diagnostics: dict[str, Any] = Field(default_factory=dict)
+    diagnostics: NewcomerPathConfigDiagnostics
 
 
 class NewcomerPathRevisionListResponse(BaseModel):
     items: list[NewcomerPathRevisionSummary]
     total: int
+
+
+class NewcomerDeadDataDiagnosticIssue(BaseModel):
+    severity: Literal["info", "warning", "error"]
+    code: str
+    source: str
+    revision_id: str | None = None
+    revision_no: int | None = None
+    module_key: str | None = None
+    resource_type: str
+    resource_id: str | None = None
+    message: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class NewcomerDeadDataCandidateAction(BaseModel):
+    issue_code: str
+    source: str
+    resource_type: str
+    resource_id: str | None = None
+    action: str
+    reason: str
+    mutates_history: bool = False
+    safe_to_apply_automatically: bool = False
+    requires_manual_approval: bool = True
+
+
+class NewcomerDeadDataManualDecision(BaseModel):
+    decision_key: str
+    owner: str
+    required_before: str
+    issue_codes: list[str] = Field(default_factory=list)
+    reason: str
+
+
+class NewcomerDeadDataRollbackPlan(BaseModel):
+    required: bool = False
+    reason: str
+    apply_endpoint: str | None = None
+    rollback_endpoint: str | None = None
+
+
+class NewcomerDeadDataDiagnosticsResponse(BaseModel):
+    mode: Literal["dry_run"] = "dry_run"
+    mutates_history: bool = False
+    requires_manual_approval: bool = True
+    permission: str = "sales_trainer.manage_modules"
+    generated_at: str
+    summary: dict[str, int]
+    scanned: dict[str, Any]
+    issues: list[NewcomerDeadDataDiagnosticIssue] = Field(default_factory=list)
+    candidate_actions: list[NewcomerDeadDataCandidateAction] = Field(
+        default_factory=list
+    )
+    manual_decisions: list[NewcomerDeadDataManualDecision] = Field(default_factory=list)
+    rollback_plan: NewcomerDeadDataRollbackPlan
 
 
 class QuizAnswerSubmit(BaseModel):
@@ -1531,9 +1876,7 @@ class LearningContentPathBindingImpact(BaseModel):
     revision_id: str
     revision_no: int
     learner_effective: bool
-    learning_units: list[LearningContentBindingUnitImpact] = Field(
-        default_factory=list
-    )
+    learning_units: list[LearningContentBindingUnitImpact] = Field(default_factory=list)
     impacted_chapter_orders: list[int] = Field(default_factory=list)
 
 
@@ -1671,7 +2014,9 @@ class BusinessEtiquetteChapterCapabilityBinding(BaseModel):
             raise ValueError("capability_keys cannot contain duplicates")
         for value in self.capability_keys:
             if not value.strip() or len(value) > 80:
-                raise ValueError("capability_keys must be non-empty strings <= 80 chars")
+                raise ValueError(
+                    "capability_keys must be non-empty strings <= 80 chars"
+                )
         return self
 
 
@@ -1759,9 +2104,7 @@ class BusinessEtiquetteCapabilitySnapshotSaveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     training_pack_key: str | None = Field(None, min_length=1, max_length=80)
-    capabilities: list[BusinessEtiquetteCapabilityConfig] = Field(
-        default_factory=list
-    )
+    capabilities: list[BusinessEtiquetteCapabilityConfig] = Field(default_factory=list)
     chapter_bindings: list[BusinessEtiquetteChapterCapabilityBinding] = Field(
         default_factory=list
     )
@@ -1784,9 +2127,7 @@ class BusinessEtiquetteCapabilitySnapshotResponse(BaseModel):
     active_revision_no: int | None = None
     has_unpublished_revision: bool
     schema_version: int
-    capabilities: list[BusinessEtiquetteCapabilityConfig] = Field(
-        default_factory=list
-    )
+    capabilities: list[BusinessEtiquetteCapabilityConfig] = Field(default_factory=list)
     chapter_bindings: list[BusinessEtiquetteChapterCapabilityBinding] = Field(
         default_factory=list
     )
@@ -1811,11 +2152,7 @@ class BusinessEtiquetteQuestionDraftGenerateRequest(BaseModel):
     chapter_order: int = Field(..., ge=1, le=100)
     prompt_template_id: str = Field(..., min_length=1, max_length=36)
     question_types: list[BusinessEtiquetteQuestionDraftType] = Field(
-        default_factory=lambda: [
-            "single_choice",
-            "multiple_choice",
-            "short_answer",
-        ]
+        default_factory=_default_business_etiquette_question_draft_types
     )
     draft_count: int = Field(3, ge=1, le=10)
     capability_keys: list[str] = Field(default_factory=list)
@@ -1957,9 +2294,7 @@ class BusinessEtiquetteUnitQuizResponse(BaseModel):
     allow_retake: bool
     max_attempts: int | None = None
     capabilities: list[BusinessEtiquetteCapabilityConfig] = Field(default_factory=list)
-    questions: list[BusinessEtiquetteQuizQuestionResponse] = Field(
-        default_factory=list
-    )
+    questions: list[BusinessEtiquetteQuizQuestionResponse] = Field(default_factory=list)
 
 
 class BusinessEtiquetteQuizAnswerSubmit(BaseModel):
@@ -2198,9 +2533,9 @@ class BusinessEtiquetteReleaseImpactResponse(BaseModel):
     impacted_question_drafts: list[
         BusinessEtiquetteReleaseQuestionDraftImpactResponse
     ] = Field(default_factory=list)
-    impacted_capabilities: list[
-        BusinessEtiquetteReleaseCapabilityImpactResponse
-    ] = Field(default_factory=list)
+    impacted_capabilities: list[BusinessEtiquetteReleaseCapabilityImpactResponse] = (
+        Field(default_factory=list)
+    )
     impacted_ai_coach_configs: list[
         BusinessEtiquetteReleaseAiCoachConfigImpactResponse
     ] = Field(default_factory=list)
@@ -2373,6 +2708,51 @@ class SalesTrainerMaterialVersionResponse(BaseModel):
     updated_at: object
 
 
+class SalesTrainerLearnerMaterialVersionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    version_id: str
+    material_id: str
+    version_label: str
+    title: str
+    file_name: str
+    content_type: str
+    file_size_bytes: int
+    file_hash: str | None = None
+    release_notes: str | None = None
+    status: SalesTrainerStatus
+    published_at: object | None = None
+
+
+class SalesTrainerMaterialVersionRollbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_version_id: str = Field(..., min_length=1, max_length=36)
+    reason: str = Field(..., min_length=1, max_length=1000)
+
+
+class SalesTrainerMaterialVersionRollbackPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_version_id: str = Field(..., min_length=1, max_length=36)
+
+
+class SalesTrainerMaterialVersionRollbackPreviewResponse(BaseModel):
+    action: Literal["material_version.rollback"]
+    permission: Literal["sales_trainer.manage_modules"]
+    requires_reason: bool
+    future_only: bool
+    mutates_history: bool
+    target_material_id: str
+    current_version_id: str | None = None
+    target_version: SalesTrainerMaterialVersionResponse
+    future_material_current_version_changed: bool
+    historical_submissions_changed: bool
+    historical_replay_preserved: bool
+    active_or_working_path_refs: list[dict[str, Any]] = Field(default_factory=list)
+    rollback_plan: dict[str, Any]
+
+
 class SalesTrainerMaterialResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -2408,27 +2788,1017 @@ class SalesTrainerUnitMaterialBriefItem(BaseModel):
     confirmation_required: bool
     learner_note: str | None = None
     display_order: int
-    current_version: SalesTrainerMaterialVersionResponse
+    current_version: SalesTrainerLearnerMaterialVersionResponse
 
 
 class SalesTrainerUnitBriefResponse(BaseModel):
     unit: SalesTrainerUnitResponse
-    task_brief: dict[str, Any]
+    task_brief: SalesTrainerTaskBriefConfig
     materials: list[SalesTrainerUnitMaterialBriefItem]
     score_scheme: dict[str, Any] | None = None
 
 
-class SalesTrainerTrainingRecordResponse(BaseModel):
+TrainingJourneyStage = Literal[
+    "not_started",
+    "in_progress",
+    "waiting_upload",
+    "processing",
+    "scored",
+    "passed",
+    "failed",
+    "needs_remediation",
+    "manual_review",
+    "disabled",
+    "archived",
+    "error_terminal",
+    "error_transient",
+]
+TrainingJourneyModuleKind = Literal[
+    "audio_submission",
+    "quiz_attempt",
+    "ai_coach",
+    "realtime_roleplay",
+]
+TrainingJourneyOutcomeRecordType = Literal[
+    "audio_submission",
+    "quiz_attempt",
+    "business_etiquette_quiz_attempt",
+    "ai_coach_session",
+    "realtime_roleplay_session",
+    "remediation",
+    "regrade",
+]
+
+
+class TrainingJourneyDiagnostic(BaseModel):
+    code: str
+    message: str
+    severity: Literal["info", "warning", "error"] = "error"
+    terminal: bool
+
+
+class TrainingJourneyRoleCapability(BaseModel):
+    capability_key: str
+    allowed: bool
+    scope: Literal["own", "department", "global", "none"]
+    reason_code: str | None = None
+
+
+class TrainingJourneyLearnerLevel(BaseModel):
+    level_key: str
+    label: str
+    source: Literal[
+        "user_profile",
+        "org_rule",
+        "admin_assignment",
+        "training_projection",
+    ]
+    rank: int
+    effective_from: object | None = None
+    effective_to: object | None = None
+    config_revision_id: str | None = None
+    description: str | None = None
+    fallback_applied: bool = False
+    fallback_reason: str | None = None
+    policy_key: str | None = None
+    policy_version: str | None = None
+    management_entry: str | None = None
+
+
+class TrainingJourneyOutcomeEvidence(BaseModel):
     record_id: str
-    record_type: Literal["audio_submission", "quiz_attempt", "ai_coach_session"]
+    record_type: TrainingJourneyOutcomeRecordType
+    occurred_at: object | None = None
+
+
+class TrainingJourneySnapshotRef(BaseModel):
+    snapshot_type: Literal[
+        "path_revision",
+        "submission_snapshot",
+        "attempt_snapshot",
+        "session_snapshot",
+        "runtime_outcome_snapshot",
+        "regrade_snapshot",
+    ]
+    legacy_snapshot_only: bool
+    regrade_unavailable: bool | None = None
+
+
+class TrainingJourneyModuleOutcome(BaseModel):
+    outcome_id: str
+    record_type: TrainingJourneyOutcomeRecordType
+    source_record_id: str
+    module_key: str
+    module_type: str
+    kind: TrainingJourneyModuleKind
+    status: TrainingJourneyStage
+    score: float | None = None
+    max_score: float | None = None
+    passed: bool | None = None
+    failure_type: Literal["terminal", "transient", "voluntary"] | None = None
+    failure_code: str | None = None
+    submitted_at: object | None = None
+    completed_at: object | None = None
+    path_revision_id: str
+    path_revision_no: int | None = None
+    snapshot_ref: TrainingJourneySnapshotRef
+    evidence: TrainingJourneyOutcomeEvidence
+
+
+class TrainingJourneyNextAction(BaseModel):
+    action_key: Literal[
+        "start_ai_coach",
+        "continue_ai_coach",
+        "start_realtime_roleplay",
+    ]
+    label: str
+    target_path: str | None = None
+    disabled: bool
+    disabled_reason: str | None = None
+
+
+class TrainingJourneyModuleProgress(BaseModel):
+    module_key: str
+    title: str
+    display_name: str
+    kind: TrainingJourneyModuleKind
+    module_type: str
+    order_index: int
+    target_unit_id: str | None = None
+    target_unit_ids: list[str] = Field(default_factory=list)
+    learning_content_id: str | None = None
+    exam_paper_id: str | None = None
+    enabled: bool
+    status: TrainingJourneyStage
+    stage: TrainingJourneyStage
+    passed: bool | None = None
+    score: float | None = None
+    max_score: float | None = None
+    required: bool
+    completion_satisfied: bool
+    locked: bool
+    block_reason: str | None = None
+    learner_level_required: list[str] = Field(default_factory=list)
+    completion_rule: NewcomerPathCompletionRule | Literal["passed"]
+    source: dict[str, Any]
+    latest_outcome: TrainingJourneyModuleOutcome | None = None
+    outcome_history: list[TrainingJourneyModuleOutcome] = Field(default_factory=list)
+    unmet_reasons: list[TrainingJourneyDiagnostic] = Field(default_factory=list)
+    diagnostics: list[TrainingJourneyDiagnostic] = Field(default_factory=list)
+    next_action: TrainingJourneyNextAction | None = None
+
+
+class TrainingJourneyOverallProgress(BaseModel):
+    total_modules: int
+    completed_modules: int
+    passed_modules: int
+    failed_modules: int
+    needs_remediation_modules: int
+
+
+class TrainingJourneyResponse(BaseModel):
+    journey_id: str
+    learner_id: str
+    learner_name: str | None = None
+    department: str | None = None
+    path_key: str
+    path_revision_id: str
+    path_revision_no: int
+    source: Literal["active_revision"]
+    legacy_snapshot_only: bool
+    role_capabilities: list[TrainingJourneyRoleCapability] = Field(default_factory=list)
+    learner_level: TrainingJourneyLearnerLevel
+    role_level: TrainingJourneyLearnerLevel
+    training_stage: TrainingJourneyStage
+    modules: list[TrainingJourneyModuleProgress] = Field(default_factory=list)
+    overall_progress: TrainingJourneyOverallProgress
+    diagnostics: list[TrainingJourneyDiagnostic] = Field(default_factory=list)
+    generated_at: object
+
+
+class TrainingJourneyListResponse(BaseModel):
+    items: list[TrainingJourneyResponse] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int
+
+
+class TrainingJourneyAnalyticsSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    learner_count: int
+    loaded_learner_count: int
+    passed_learner_count: int
+    risk_learner_count: int
+    pass_rate: float | None = None
+
+
+class TrainingJourneyAnalyticsFunnelEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage: TrainingJourneyStage
+    learner_count: int
+    rate: float | None = None
+
+
+class TrainingJourneyAnalyticsModuleSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    module_key: str
+    title: str
+    kind: str | None = None
+    module_type: str | None = None
+    learner_count: int
+    passed_count: int
+    failed_count: int
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    pass_rate: float | None = None
+    average_score: float | None = None
+
+
+class TrainingJourneyAnalyticsWeaknessHeatmapEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    heatmap_key: str
+    module_key: str
+    title: str
+    kind: str | None = None
+    module_type: str | None = None
+    learner_count: int
+    risk_count: int
+    passed_count: int
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    risk_rate: float | None = None
+    pass_rate: float | None = None
+    average_score: float | None = None
+
+
+class TrainingJourneyAnalyticsTrendPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    date: str
+    outcome_count: int
+    passed_outcome_count: int
+    risk_outcome_count: int
+    active_learner_count: int
+    pass_rate: float | None = None
+    average_score: float | None = None
+
+
+class TrainingJourneyAnalyticsLevelSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    label: str
+    learner_count: int
+    passed_count: int
+    pass_rate: float | None = None
+    source: str | None = None
+
+
+class TrainingJourneyAnalyticsRiskLearner(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    learner_id: str
+    learner_name: str | None = None
+    department: str | None = None
+    training_stage: TrainingJourneyStage
+    risk_reasons: list[str] = Field(default_factory=list)
+    risk_module_count: int
+    risk_module_keys: list[str] = Field(default_factory=list)
+
+
+class TrainingJourneyAnalyticsSignalKeyCount(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    count: int
+
+
+class TrainingJourneyAnalyticsAdditiveObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    storage_ready: bool
+    migration_applied: bool
+    session_count: int
+    observed_session_count: int
+    observation_count: int
+    source_counts: dict[str, int] = Field(default_factory=dict)
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    top_signal_keys: list[TrainingJourneyAnalyticsSignalKeyCount] = Field(
+        default_factory=list
+    )
+    high_risk_session_count: int
+    latest_observed_at: object | None = None
+
+
+class TrainingJourneyAnalyticsFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    department: str | None = None
+    training_stage: str | None = None
+    module_key: str | None = None
+    learner_level: str | None = None
+    role_level: str | None = None
+    limit: int
+
+
+class TrainingJourneyAnalyticsResponse(BaseModel):
+    generated_at: object
+    summary: TrainingJourneyAnalyticsSummary
+    funnel: list[TrainingJourneyAnalyticsFunnelEntry] = Field(default_factory=list)
+    module_summaries: list[TrainingJourneyAnalyticsModuleSummary] = Field(
+        default_factory=list
+    )
+    weakness_heatmap: list[TrainingJourneyAnalyticsWeaknessHeatmapEntry] = Field(
+        default_factory=list
+    )
+    trend_data: list[TrainingJourneyAnalyticsTrendPoint] = Field(default_factory=list)
+    learner_level_summaries: list[TrainingJourneyAnalyticsLevelSummary] = Field(
+        default_factory=list
+    )
+    role_level_summaries: list[TrainingJourneyAnalyticsLevelSummary] = Field(
+        default_factory=list
+    )
+    risk_learners: list[TrainingJourneyAnalyticsRiskLearner] = Field(
+        default_factory=list
+    )
+    additive_observation: TrainingJourneyAnalyticsAdditiveObservation
+    filters: TrainingJourneyAnalyticsFilters
+
+
+class RealtimeRoleplayStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    module_key: Literal["realtime_roleplay"] = "realtime_roleplay"
+
+
+class RealtimeRoleplayRegistryReadinessSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ready: bool
+    checked_at: str | None = Field(None, max_length=80)
+    failure_code: str | None = Field(None, max_length=120)
+    failure_message: str | None = Field(None, max_length=500)
+
+
+class RealtimeRoleplayRegistryDescriptorSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    descriptor_id: str = Field(..., min_length=1, max_length=120)
+    label: str | None = Field(None, max_length=120)
+    provider: Literal["stepfun_realtime", "phase4_local_stepfun", "mock"]
+    runtime_owner: str = Field(..., min_length=1, max_length=120)
+    enabled: bool
+    runtime_profile_id: str | None = Field(None, min_length=1, max_length=120)
+    config_revision_id: str | None = Field(None, min_length=1, max_length=120)
+    rollback_to_descriptor_id: str | None = Field(None, min_length=1, max_length=120)
+    readiness: RealtimeRoleplayRegistryReadinessSnapshot
+
+
+class RealtimeRoleplayRuntimeRegistrySnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    registry_key: Literal["sales_trainer.realtime_provider.registry"]
+    config_id: str | None = None
+    version: int | None = None
+    source: str = Field(..., min_length=1, max_length=80)
+    status: str | None = Field(None, max_length=80)
+    fallback_reason: str | None = Field(None, max_length=300)
+    descriptor: RealtimeRoleplayRegistryDescriptorSnapshot
+
+
+class RealtimeRoleplayExternalBindingSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    owner: Literal["sales_trainer"]
+    path_key: Literal["newcomer_training_path_v1"]
+    path_revision_id: str
+    path_revision_no: int
+    module_key: Literal["realtime_roleplay"]
+    binding_key: Literal["newcomer_realtime_roleplay_v1"]
+    runtime_descriptor_id: str
+    scenario_key: str
+    runtime_config_revision_id: str
+    runtime_registry: RealtimeRoleplayRuntimeRegistrySnapshot
+    roleplay_contract_revision_id: str | None = None
+    practice_template_id: str
+    provider_readiness_snapshot: NewcomerRealtimeProviderReadinessSnapshot
+    failure_policy: NewcomerRealtimeFailurePolicy
+    started_by_user_id: str
+    started_at: str
+
+
+class RealtimeRoleplayStartResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    module_key: Literal["realtime_roleplay"]
+    path_key: Literal["newcomer_training_path_v1"]
+    path_revision_id: str
+    path_revision_no: int
+    practice_url: str
+    runtime_descriptor_id: str
+    runtime_registry: RealtimeRoleplayRuntimeRegistrySnapshot
+    provider_readiness_snapshot: NewcomerRealtimeProviderReadinessSnapshot
+    external_binding: RealtimeRoleplayExternalBindingSnapshot
+
+
+class SalesTrainerAiCoachArticleChapterSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    title: str | None = None
+
+
+class SalesTrainerAiCoachArticleSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    title: str | None = None
+    chapters: list[SalesTrainerAiCoachArticleChapterSnapshot] = Field(
+        default_factory=list
+    )
+
+
+class SalesTrainerAiCoachPathConfigSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    module_key: str | None = None
+    module_type: str | None = None
+    title: str | None = None
+    learning_content_id: str | None = None
+    exam_paper_id: str | None = None
+
+
+class SalesTrainerAiCoachConfigSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    enabled: bool | None = None
+    chat_enabled: bool | None = None
+    min_turns: int | None = None
+    max_turns: int | None = None
+    mastery_threshold: float | None = None
+    prompt_template_id: str | None = None
+    prompt_revision_id: str | None = None
+    scoring_prompt_template_id: str | None = None
+    scoring_prompt_revision_id: str | None = None
+
+
+class SalesTrainerAiCoachStateSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    session_phase: str | None = None
+    active_event_id: str | None = None
+    answered_card_count: int | None = None
+    correct_streak: int | None = None
+    incorrect_streak: int | None = None
+    current_focus: str | None = None
+    difficulty: str | None = None
+    last_action: str | None = None
+    can_auto_advance: bool | None = None
+    stopped_reason: str | None = None
+    business_etiquette_progress: dict[str, Any] | None = None
+
+
+class SalesTrainerAiCoachRecordSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    module_key: str | None = None
+    path_key: str | None = None
+    path_revision_id: str | None = None
+    path_revision_no: int | None = None
+    article_snapshot: SalesTrainerAiCoachArticleSnapshot | None = None
+    path_config_snapshot: SalesTrainerAiCoachPathConfigSnapshot | None = None
+    config_snapshot: SalesTrainerAiCoachConfigSnapshot | None = None
+    coach_state: SalesTrainerAiCoachStateSnapshot | None = None
+    prompt_template_id: str | None = None
+    prompt_revision_id: str | None = None
+    prompt_contract_hash: str | None = None
+    mastery_state: str | None = None
+    total_score: float | None = None
+    max_score: float | None = None
+    status: str
+    trace_id: str | None = None
+    created_at: object | None = None
+    updated_at: object | None = None
+
+
+class SalesTrainerRealtimeRecordExternalBindingSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    owner: Literal["sales_trainer"]
+    path_key: str | None = None
+    path_revision_id: str | None = None
+    path_revision_no: int | None = None
+    module_key: str | None = None
+    binding_key: str | None = None
+    runtime_descriptor_id: str | None = None
+    scenario_key: str | None = None
+    runtime_config_revision_id: str | None = None
+    runtime_registry: SalesTrainerRealtimeRecordRuntimeRegistrySnapshot | None = None
+    roleplay_contract_revision_id: str | None = None
+    practice_template_id: str | None = None
+    provider_readiness_snapshot: (
+        SalesTrainerRealtimeRecordProviderReadinessSnapshot | None
+    ) = None
+    failure_policy: SalesTrainerRealtimeRecordFailurePolicySnapshot | None = None
+    started_by_user_id: str | None = None
+    started_at: str | None = None
+
+
+class SalesTrainerRealtimeRecordRegistryReadinessSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    ready: bool | None = None
+    checked_at: str | None = None
+    failure_code: str | None = None
+    failure_message: str | None = None
+
+
+class SalesTrainerRealtimeRecordRegistryDescriptorSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    descriptor_id: str | None = None
+    label: str | None = None
+    provider: str | None = None
+    runtime_owner: str | None = None
+    enabled: bool | None = None
+    runtime_profile_id: str | None = None
+    config_revision_id: str | None = None
+    rollback_to_descriptor_id: str | None = None
+    readiness: SalesTrainerRealtimeRecordRegistryReadinessSnapshot | None = None
+
+
+class SalesTrainerRealtimeRecordRuntimeRegistrySnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    registry_key: str | None = None
+    config_id: str | None = None
+    version: int | None = None
+    source: str | None = None
+    status: str | None = None
+    fallback_reason: str | None = None
+    descriptor: SalesTrainerRealtimeRecordRegistryDescriptorSnapshot | None = None
+
+
+class SalesTrainerRealtimeRecordProviderReadinessSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    provider: str | None = None
+    ready: bool | None = None
+    checked_at: str | None = None
+    config_revision_id: str | None = None
+    failure_code: str | None = None
+    failure_message: str | None = None
+
+
+class SalesTrainerRealtimeRecordFailurePolicySnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    terminal_codes: list[str] = Field(default_factory=list)
+    transient_codes: list[str] = Field(default_factory=list)
+    voluntary_codes: list[str] = Field(default_factory=list)
+    terminal_retry_allowed: bool | None = None
+
+
+class SalesTrainerRealtimeRecordScoresSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    logic_score: float | None = None
+    accuracy_score: float | None = None
+    completeness_score: float | None = None
+
+
+class SalesTrainerRealtimeRecordVoicePolicySnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    external_binding: SalesTrainerRealtimeRecordExternalBindingSnapshot | None = None
+    voice_mode: str | None = None
+    runtime_profile_id: str | None = None
+    model_name: str | None = None
+
+
+class SalesTrainerRealtimeRecordEffectivenessSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    summary: str | None = None
+    evaluable: bool | None = None
+    main_issue: dict[str, Any] | None = None
+    dimension_scores: dict[str, Any] | None = None
+
+
+class SalesTrainerRealtimeRecordRuntimeStateSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    state: str | None = None
+    session_status: str | None = None
+    ai_state: str | None = None
+    turn_count: int | None = None
+
+
+class SalesTrainerRealtimeRuntimeOutcomeSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    external_binding: SalesTrainerRealtimeRecordExternalBindingSnapshot
+    voice_policy_snapshot: SalesTrainerRealtimeRecordVoicePolicySnapshot = Field(
+        default_factory=SalesTrainerRealtimeRecordVoicePolicySnapshot
+    )
+    effectiveness_snapshot: SalesTrainerRealtimeRecordEffectivenessSnapshot = Field(
+        default_factory=SalesTrainerRealtimeRecordEffectivenessSnapshot
+    )
+    runtime_state: SalesTrainerRealtimeRecordRuntimeStateSnapshot = Field(
+        default_factory=SalesTrainerRealtimeRecordRuntimeStateSnapshot
+    )
+    scores: SalesTrainerRealtimeRecordScoresSnapshot
+
+
+class SalesTrainerRealtimeRoleplayRecordSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    module_key: str | None = None
+    status: str
+    score: float | None = None
+    max_score: float | None = None
+    passed: bool | None = None
+    submitted_at: object | None = None
+    completed_at: object | None = None
+    external_binding: SalesTrainerRealtimeRecordExternalBindingSnapshot
+    snapshot: SalesTrainerRealtimeRuntimeOutcomeSnapshot
+
+
+class SalesTrainerRoleplayObservationErrorSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    code: str | None = None
+    message: str | None = None
+
+
+class SalesTrainerRoleplayObservationWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str = Field(..., min_length=1, max_length=36)
+    source_record_id: str | None = Field(None, min_length=1, max_length=36)
+    source: SalesTrainerRoleplayObservationSource
+    turn_index: int = Field(0, ge=0)
+    evaluator_status: SalesTrainerRoleplayObservationStatus = "completed"
+    dimensions: list[dict[str, Any]] = Field(default_factory=list)
+    signals: list[dict[str, Any]] = Field(default_factory=list)
+    error: SalesTrainerRoleplayObservationErrorSnapshot | dict[str, Any] | None = None
+    trace_id: str | None = Field(None, max_length=100)
+
+
+class SalesTrainerRoleplayObservationWriteResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stored: bool
+    deduplicated: bool = False
+    observation_id: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+class SalesTrainerRoleplayObservationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    observation_id: str
+    session_id: str
+    source_record_id: str
+    source: SalesTrainerRoleplayObservationSource
+    turn_index: int = Field(..., ge=0)
+    evaluator_status: SalesTrainerRoleplayObservationStatus
+    dimensions: list[dict[str, Any]] = Field(default_factory=list)
+    signals: list[dict[str, Any]] = Field(default_factory=list)
+    error: SalesTrainerRoleplayObservationErrorSnapshot | None = None
+    trace_id: str | None = None
+    created_at: object
+    updated_at: object
+
+
+class SalesTrainerRoleplayObservationSessionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    source_record_id: str
+    total: int = Field(..., ge=0)
+    latest_turn_index: int | None = Field(None, ge=0)
+    source_counts: dict[str, int] = Field(default_factory=dict)
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    items: list[SalesTrainerRoleplayObservationResponse] = Field(default_factory=list)
+
+
+class SalesTrainerBusinessEtiquetteCapabilitySnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    capabilities: list[Any] = Field(default_factory=list)
+    chapter_bindings: list[Any] = Field(default_factory=list)
+
+
+class SalesTrainerBusinessEtiquetteQuestionSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    question_id: str | None = None
+    title: str | None = None
+    stem: str | None = None
+    question_type: str | None = None
+    options: list[Any] = Field(default_factory=list)
+    reference_answer: str | None = None
+    explanation: str | None = None
+    scoring_dimensions: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    points: float | None = None
+    order_index: int | None = None
+    version: int | None = None
+    content_hash: str | None = None
+
+
+class SalesTrainerBusinessEtiquetteAnswerSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    question_id: str | None = None
+    question_type: str | None = None
+    answer_payload: Any | None = None
+    is_correct: bool | None = None
+    score: float | None = None
+    max_score: float | None = None
+    capability_keys: list[str] = Field(default_factory=list)
+    question_snapshot: SalesTrainerBusinessEtiquetteQuestionSnapshot | None = None
+    analysis: str | None = None
+    scoring_source: str | None = None
+    scoring_provider: str | None = None
+    scoring_model: str | None = None
+    scoring_latency_ms: int | None = None
+
+
+class SalesTrainerBusinessEtiquetteCapabilityScoreSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    capability_key: str
+    display_name: str | None = None
+    score: float | None = None
+    max_score: float | None = None
+    normalized_score: float | None = None
+    threshold: float | None = None
+    mastered: bool | None = None
+    mastery_level_key: str | None = None
+    mastery_level_name: str | None = None
+
+
+class SalesTrainerBusinessEtiquetteQuizRecordSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    attempt_id: str
+    training_pack_key: str
+    learning_unit_key: str
+    learning_unit_title: str
+    user_id: str
+    path_revision_id: str | None = None
+    path_revision_no: int | None = None
+    training_pack_revision_id: str | None = None
+    training_pack_revision_no: int | None = None
+    capability_snapshot: SalesTrainerBusinessEtiquetteCapabilitySnapshot = Field(
+        default_factory=SalesTrainerBusinessEtiquetteCapabilitySnapshot
+    )
+    question_snapshots: list[SalesTrainerBusinessEtiquetteQuestionSnapshot] = Field(
+        default_factory=list
+    )
+    answers: list[SalesTrainerBusinessEtiquetteAnswerSnapshot] = Field(
+        default_factory=list
+    )
+    capability_scores: list[SalesTrainerBusinessEtiquetteCapabilityScoreSnapshot] = (
+        Field(default_factory=list)
+    )
+    weak_capability_keys: list[str] = Field(default_factory=list)
+    recommended_chapter_orders: list[int] = Field(default_factory=list)
+    total_score: float | None = None
+    max_score: float | None = None
+    passed: bool | None = None
+    status: str
+    submitted_at: object | None = None
+
+
+class SalesTrainerTrainingRecordOperationLogContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path_key: str | None = None
+    path_revision_id: str | None = None
+    path_revision_no: int | None = None
+    training_stage: TrainingJourneyStage | None = None
+    learner_level: TrainingJourneyLearnerLevel | None = None
+    role_level: TrainingJourneyLearnerLevel | None = None
+
+
+class SalesTrainerTrainingRecordOperationLog(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    log_id: str
+    actor_id: str | None = None
+    actor_role: str | None = None
+    action: str
+    target_type: str
+    target_id: str | None = None
+    request_id: str | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: object
+    training_context: SalesTrainerTrainingRecordOperationLogContext | None = None
+
+
+class SalesTrainerEffectiveScoreSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    score: float | None = None
+    max_score: float | None = None
+    passed: bool | None = None
+    source: Literal["original_record", "latest_regrade"]
+    original_score: float | None = None
+    original_max_score: float | None = None
+    original_passed: bool | None = None
+    score_delta: float | None = None
+    latest_regrade_run_id: str | None = None
+    latest_regrade_error_code: str | None = None
+    history_overwrite: Literal[False] = False
+
+
+class SalesTrainerLatestRegradeSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    regrade_run_id: str
+    target_type: str
+    target_revision_id: str | None = None
+    status: str
+    reason: str | None = None
+    trace_id: str | None = None
+    created_at: object | None = None
+    before_snapshot: dict[str, Any] | None = None
+    after_snapshot: dict[str, Any] | None = None
+
+
+class SalesTrainerScoreExplanationItem(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    type: str | None = None
+    key: str | None = None
+    label: str | None = None
+    text: str | None = None
+    score: float | None = None
+    max_score: float | None = None
+    is_weak: bool | None = None
+
+
+class SalesTrainerScoreExplanationSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    basis: str
+    summary: str | None = None
+    dimensions: list[SalesTrainerScoreExplanationItem] = Field(default_factory=list)
+    evidence: list[SalesTrainerScoreExplanationItem] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    issues: list[SalesTrainerScoreExplanationItem] = Field(default_factory=list)
+    next_actions: list[SalesTrainerScoreExplanationItem] = Field(default_factory=list)
+
+
+class SalesTrainerAbilityProfileSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    basis: Literal["sales_trainer_phase2_projection_v1"]
+    overall_score: float | None = None
+    overall_passed: bool | None = None
+    dimensions: list[SalesTrainerScoreExplanationItem] = Field(default_factory=list)
+    weak_dimensions: list[SalesTrainerScoreExplanationItem] = Field(
+        default_factory=list
+    )
+    evidence_count: int = Field(0, ge=0)
+
+
+class SalesTrainerRemediationSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    needed: bool
+    reason: str
+    action_label: str
+    target_path: str
+    priority: Literal["low", "medium", "high"]
+    weak_dimension_keys: list[str] = Field(default_factory=list)
+
+
+class SalesTrainerMaterialSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    version: int | None = None
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    confirmed_material_version_id: str | None = None
+    frozen_at: str | None = None
+
+
+class SalesTrainerScoreSchemePromptSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    prompt_id: str | None = None
+    name: str | None = None
+    purpose: str | None = None
+    system_prompt: str | None = None
+    scoring_template: str | None = None
+    output_schema: SalesTrainerAudioScoreOutputSchema = Field(
+        default_factory=SalesTrainerAudioScoreOutputSchema
+    )
+    learner_rubric: SalesTrainerLearnerRubric = Field(
+        default_factory=SalesTrainerLearnerRubric
+    )
+    version: int | None = None
+    status: str | None = None
+
+    @field_validator("output_schema", mode="before")
+    @classmethod
+    def coerce_output_schema(
+        cls, value: Any
+    ) -> SalesTrainerAudioScoreOutputSchema | dict[str, Any]:
+        if isinstance(value, SalesTrainerAudioScoreOutputSchema):
+            return value
+        if not isinstance(value, dict):
+            return {}
+        try:
+            return cast(
+                SalesTrainerAudioScoreOutputSchema,
+                SalesTrainerAudioScoreOutputSchema.model_validate(value),
+            )
+        except ValueError:
+            return {}
+
+    @field_validator("learner_rubric", mode="before")
+    @classmethod
+    def coerce_learner_rubric(
+        cls, value: Any
+    ) -> SalesTrainerLearnerRubric | dict[str, Any]:
+        return _coerce_legacy_learner_rubric(value)
+
+
+class SalesTrainerScoreSchemeSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    prompt_id: str | None = None
+    name: str | None = None
+    purpose: str | None = None
+    version: int | None = None
+    status: str | None = None
+    learner_rubric: SalesTrainerLearnerRubric = Field(
+        default_factory=SalesTrainerLearnerRubric
+    )
+    pass_threshold: float | None = None
+    prompt_snapshot: SalesTrainerScoreSchemePromptSnapshot | None = None
+
+    @field_validator("learner_rubric", mode="before")
+    @classmethod
+    def coerce_learner_rubric(
+        cls, value: Any
+    ) -> SalesTrainerLearnerRubric | dict[str, Any]:
+        return _coerce_legacy_learner_rubric(value)
+
+
+class SalesTrainerTaskBriefSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    enabled: bool | None = None
+    title: str | None = None
+    purpose: str | None = None
+    scenario: str | None = None
+    instructions: list[Any] = Field(default_factory=list)
+    success_criteria: list[Any] = Field(default_factory=list)
+    common_mistakes: list[Any] = Field(default_factory=list)
+    upload_guidance: str | None = None
+    submission_context: dict[str, Any] | None = None
+
+
+class SalesTrainerTrainingRecordResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record_id: str
+    record_type: Literal[
+        "audio_submission",
+        "quiz_attempt",
+        "ai_coach_session",
+        "business_etiquette_quiz_attempt",
+        "realtime_roleplay_session",
+    ]
     path_key: str | None = None
     path_revision_id: str | None = None
     path_revision_no: int | None = None
     module_key: str | None = None
     legacy_snapshot_only: bool = True
+    training_stage: TrainingJourneyStage | None = None
+    learner_level: TrainingJourneyLearnerLevel | None = None
+    role_level: TrainingJourneyLearnerLevel | None = None
     unit_id: str
     unit_name: str | None = None
-    unit_type: SalesTrainerUnitType | Literal["ai_coach"]
+    unit_type: (
+        SalesTrainerUnitType
+        | Literal[
+            "ai_coach",
+            "business_etiquette_quiz",
+            "realtime_roleplay",
+        ]
+    )
     user_id: str
     user_name: str | None = None
     user_email: str | None = None
@@ -2438,18 +3808,24 @@ class SalesTrainerTrainingRecordResponse(BaseModel):
     max_score: float | None = None
     passed: bool | None = None
     submitted_at: object | None = None
-    material_snapshot: dict[str, Any] | None = None
-    score_scheme_snapshot: dict[str, Any] | None = None
-    task_brief_snapshot: dict[str, Any] | None = None
-    audio_submission: dict[str, Any] | None = None
-    quiz_attempt: dict[str, Any] | None = None
-    ai_coach_session: dict[str, Any] | None = None
-    operation_logs: list[dict[str, Any]] = Field(default_factory=list)
-    effective_score: dict[str, Any] | None = None
-    latest_regrade: dict[str, Any] | None = None
-    score_explanation: dict[str, Any] | None = None
-    ability_profile: dict[str, Any] | None = None
-    remediation: dict[str, Any] | None = None
+    material_snapshot: SalesTrainerMaterialSnapshot | None = None
+    score_scheme_snapshot: SalesTrainerScoreSchemeSnapshot | None = None
+    task_brief_snapshot: SalesTrainerTaskBriefSnapshot | None = None
+    audio_submission: AudioSubmissionResponse | None = None
+    quiz_attempt: QuizAttemptResponse | None = None
+    ai_coach_session: SalesTrainerAiCoachRecordSnapshot | None = None
+    business_etiquette_quiz_attempt: (
+        SalesTrainerBusinessEtiquetteQuizRecordSnapshot | None
+    ) = None
+    realtime_roleplay_session: SalesTrainerRealtimeRoleplayRecordSnapshot | None = None
+    operation_logs: list[SalesTrainerTrainingRecordOperationLog] = Field(
+        default_factory=list
+    )
+    effective_score: SalesTrainerEffectiveScoreSnapshot | None = None
+    latest_regrade: SalesTrainerLatestRegradeSnapshot | None = None
+    score_explanation: SalesTrainerScoreExplanationSnapshot | None = None
+    ability_profile: SalesTrainerAbilityProfileSnapshot | None = None
+    remediation: SalesTrainerRemediationSnapshot | None = None
 
 
 class SalesTrainerTrainingRecordListResponse(BaseModel):
@@ -2457,14 +3833,104 @@ class SalesTrainerTrainingRecordListResponse(BaseModel):
     total: int
 
 
+class SalesTrainerManagerDashboardSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record_count: int = Field(..., ge=0)
+    loaded_record_count: int = Field(..., ge=0)
+    learner_count: int = Field(..., ge=0)
+    completed_record_count: int = Field(..., ge=0)
+    completion_rate: float | None = None
+    pass_rate: float | None = None
+    low_score_record_count: int = Field(..., ge=0)
+    repeat_practice_learner_count: int = Field(..., ge=0)
+
+
+class SalesTrainerManagerDashboardModuleSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    module_key: str
+    module_name: str
+    record_count: int = Field(..., ge=0)
+    completed_count: int = Field(..., ge=0)
+    pass_rate: float | None = None
+    average_score: float | None = None
+    weak_record_count: int = Field(..., ge=0)
+
+
+class SalesTrainerManagerDashboardWeakDimension(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dimension_key: str
+    dimension_label: str
+    record_count: int = Field(..., ge=0)
+    learner_count: int = Field(..., ge=0)
+    average_score: float | None = None
+
+
+class SalesTrainerManagerDashboardRiskLearner(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    user_name: str | None = None
+    user_department: str | None = None
+    risk_reasons: list[str] = Field(default_factory=list)
+    latest_submitted_at: object | None = None
+    lowest_score: float | None = None
+    record_count: int = Field(..., ge=0)
+    suggested_action: str
+    suggested_action_code: str
+    priority: Literal["low", "medium", "high"]
+
+
+class SalesTrainerManagerDashboardInterventionSuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    user_name: str | None = None
+    priority: Literal["low", "medium", "high"]
+    action: str
+    reason_codes: list[str] = Field(default_factory=list)
+
+
+class SalesTrainerPhase2PolicyResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: Literal["sales_trainer.phase2.closed_loop_policy"]
+    version: str
+    enabled: bool
+    low_score_threshold: float = Field(..., ge=0, le=100)
+    repeat_practice_threshold: int = Field(..., ge=1, le=20)
+    dashboard_record_limit: int = Field(..., ge=1, le=5000)
+    source: Literal["database", "database_previous", "default"]
+    config_id: str | None = None
+    config_version: int | None = None
+    status: str | None = None
+    fallback_applied: bool
+    fallback_reason: str | None = None
+    management_entry: Literal["/admin/business-rules/sales-trainer-phase2"]
+    permission: Literal["admin_publish_only"]
+    effective_timing: Literal["request_time"]
+
+
 class SalesTrainerManagerDashboardResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     generated_at: object
-    policy: dict[str, Any]
-    summary: dict[str, Any]
-    module_summaries: list[dict[str, Any]] = Field(default_factory=list)
-    weak_dimensions: list[dict[str, Any]] = Field(default_factory=list)
-    risk_learners: list[dict[str, Any]] = Field(default_factory=list)
-    intervention_suggestions: list[dict[str, Any]] = Field(default_factory=list)
+    policy: SalesTrainerPhase2PolicyResponse
+    summary: SalesTrainerManagerDashboardSummary
+    module_summaries: list[SalesTrainerManagerDashboardModuleSummary] = Field(
+        default_factory=list
+    )
+    weak_dimensions: list[SalesTrainerManagerDashboardWeakDimension] = Field(
+        default_factory=list
+    )
+    risk_learners: list[SalesTrainerManagerDashboardRiskLearner] = Field(
+        default_factory=list
+    )
+    intervention_suggestions: list[
+        SalesTrainerManagerDashboardInterventionSuggestion
+    ] = Field(default_factory=list)
 
 
 class AudioScorePromptCreate(BaseModel):
@@ -2474,17 +3940,17 @@ class AudioScorePromptCreate(BaseModel):
     purpose: str = Field("general_audio_scoring", min_length=1, max_length=50)
     system_prompt: str = Field(..., min_length=1)
     scoring_template: str = Field(..., min_length=1)
-    output_schema: dict[str, Any] = Field(default_factory=dict)
-    learner_rubric: SalesTrainerLearnerRubric | dict[str, Any] = Field(
-        default_factory=dict
+    output_schema: SalesTrainerAudioScoreOutputSchema = Field(
+        default_factory=SalesTrainerAudioScoreOutputSchema
+    )
+    learner_rubric: SalesTrainerLearnerRubric = Field(
+        default_factory=SalesTrainerLearnerRubric
     )
 
     @model_validator(mode="after")
     def validate_template_variables(self) -> AudioScorePromptCreate:
         if "{transcript}" not in self.scoring_template:
             raise ValueError("scoring_template must include {transcript}")
-        if isinstance(self.learner_rubric, dict):
-            SalesTrainerLearnerRubric.model_validate(self.learner_rubric)
         return self
 
 
@@ -2495,8 +3961,8 @@ class AudioScorePromptUpdate(BaseModel):
     purpose: str | None = Field(None, min_length=1, max_length=50)
     system_prompt: str | None = Field(None, min_length=1)
     scoring_template: str | None = Field(None, min_length=1)
-    output_schema: dict[str, Any] | None = None
-    learner_rubric: SalesTrainerLearnerRubric | dict[str, Any] | None = None
+    output_schema: SalesTrainerAudioScoreOutputSchema | None = None
+    learner_rubric: SalesTrainerLearnerRubric | None = None
 
     @model_validator(mode="after")
     def validate_template_variables(self) -> AudioScorePromptUpdate:
@@ -2505,8 +3971,6 @@ class AudioScorePromptUpdate(BaseModel):
             and "{transcript}" not in self.scoring_template
         ):
             raise ValueError("scoring_template must include {transcript}")
-        if isinstance(self.learner_rubric, dict):
-            SalesTrainerLearnerRubric.model_validate(self.learner_rubric)
         return self
 
 
@@ -2518,14 +3982,66 @@ class AudioScorePromptResponse(BaseModel):
     purpose: str
     system_prompt: str
     scoring_template: str
-    output_schema: dict[str, Any]
-    learner_rubric: dict[str, Any]
+    output_schema: SalesTrainerAudioScoreOutputSchema
+    learner_rubric: SalesTrainerLearnerRubric
     version: int
     status: SalesTrainerStatus
     created_by: str | None = None
     updated_by: str | None = None
     created_at: object
     updated_at: object
+
+
+class AudioScorePromptRevisionResponse(BaseModel):
+    revision_id: str
+    revision_no: int
+    status: Literal["working", "published", "archived"]
+    change_class: Literal["non_semantic", "semantic", "binding", "scoring_high_risk"]
+    name: str | None = None
+    purpose: str | None = None
+    is_active: bool
+    is_working: bool
+    source_revision_id: str | None = None
+    payload_hash: str
+    reason: str | None = None
+    trace_id: str | None = None
+    created_by: str | None = None
+    published_by: str | None = None
+    created_at: object
+    published_at: object | None = None
+
+
+class AudioScorePromptRevisionListResponse(BaseModel):
+    items: list[AudioScorePromptRevisionResponse]
+    total: int
+
+
+class AudioScorePromptRollbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_revision_id: str = Field(..., min_length=1, max_length=36)
+    reason: str = Field(..., min_length=1, max_length=1000)
+
+
+class AudioScorePromptRollbackPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_revision_id: str = Field(..., min_length=1, max_length=36)
+
+
+class AudioScorePromptRollbackPreviewResponse(BaseModel):
+    action: Literal["audio_score_prompt.rollback"]
+    permission: Literal["sales_trainer.manage_modules"]
+    requires_reason: bool
+    future_only: bool
+    mutates_history: bool
+    target_prompt_id: str
+    current_revision_id: str | None = None
+    target_revision: AudioScorePromptRevisionResponse
+    changed_fields: list[str] = Field(default_factory=list)
+    historical_submissions_changed: bool
+    historical_regrade_required: bool
+    rollback_plan: dict[str, Any]
 
 
 class AudioTranscriptResponse(BaseModel):
@@ -2681,6 +4197,8 @@ class SalesTrainerQuestionListResponse(BaseModel):
 
 
 class SalesTrainerSettingsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     storage_backend: str
     direct_upload_supported: bool
     cos_configured: bool
@@ -2694,7 +4212,7 @@ class SalesTrainerSettingsResponse(BaseModel):
     max_file_size_mb: int
     allowed_mime_types: list[str]
     file_url_expires_seconds: int
-    phase2_policy: dict[str, Any] = Field(default_factory=dict)
+    phase2_policy: SalesTrainerPhase2PolicyResponse | None = None
 
 
 class AudioSubmissionResponse(BaseModel):
@@ -2716,9 +4234,9 @@ class AudioSubmissionResponse(BaseModel):
     source_page: str | None = None
     confirmed_material_version_id: str | None = None
     confirmed_material_at: object | None = None
-    material_snapshot: dict[str, Any] | None = None
-    score_scheme_snapshot: dict[str, Any] | None = None
-    task_brief_snapshot: dict[str, Any] | None = None
+    material_snapshot: SalesTrainerMaterialSnapshot | None = None
+    score_scheme_snapshot: SalesTrainerScoreSchemeSnapshot | None = None
+    task_brief_snapshot: SalesTrainerTaskBriefSnapshot | None = None
     path_key: str | None = None
     path_revision_id: str | None = None
     path_revision_no: int | None = None

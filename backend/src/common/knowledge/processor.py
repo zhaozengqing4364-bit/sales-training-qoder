@@ -1150,7 +1150,7 @@ class DocumentProcessor:
     def _ocr_with_tesseract(self, image: Any, source: str) -> str | None:
         """Fallback OCR implementation using pytesseract."""
         try:
-            import pytesseract  # type: ignore[import-not-found]
+            import pytesseract  # type: ignore[import-not-found,import-untyped]
         except ImportError:
             logger.debug("pytesseract not installed, tesseract OCR disabled")
             return None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, TypedDict
@@ -17,6 +18,7 @@ from common.db.models import (
     SupervisorReview,
     TrainingReportSnapshot,
 )
+from common.error_handling.result import Result
 from common.recommendations.next_practice import NextPracticeRecommendationService
 from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.schemas import CurriculumPlanSchema, CurriculumPlanStage
@@ -26,6 +28,7 @@ from curriculum_practice.services.examiner_report_service import (
 from curriculum_practice.services.learning_progress_service import (
     LearningProgressService,
 )
+from curriculum_practice.services.orm_payload_typing import orm_dict
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,12 @@ class _ExamAttemptStats(TypedDict):
     lowest_score: float | None
     latest_score: float | None
     attempt_count: int
+
+
+class _ExamReportMetrics(TypedDict):
+    score: float
+    passed: bool | None
+    answered_count: int
 
 
 class _StageCompletionEvidence(TypedDict):
@@ -89,7 +98,8 @@ class LearningPathService:
 
     async def next_task_for_user(self, user_id: str, *, lookback: int = 3) -> dict[str, Any]:
         path = await self.build_for_user(user_id, lookback=lookback)
-        return path["next_task"]
+        next_task = path.get("next_task")
+        return dict(next_task) if isinstance(next_task, dict) else {}
 
     async def build_from_evidence(
         self,
@@ -172,7 +182,9 @@ class LearningPathService:
             "generated_at": self._generated_at(),
         }
 
-    async def _build_recommendation_for_session(self, session: PracticeSession):
+    async def _build_recommendation_for_session(
+        self, session: PracticeSession
+    ) -> Result[dict[str, Any]]:
         if self.db is None:
             return self.recommendation_service.build_for_session(session)
         return await self.recommendation_service.build_for_session_with_db(
@@ -224,7 +236,7 @@ class LearningPathService:
             "estimated_duration_minutes": None,
             "failure_reason": None,
             "retry_action": None,
-            "learning_content_id": content.learning_content_id,
+            "learning_content_id": str(content.learning_content_id),
         }
 
     async def _review_outcomes_for_sessions(
@@ -332,7 +344,7 @@ class LearningPathService:
                     continue
                 weak_dimensions.extend(
                     self._weak_dimensions_from_report_payload(
-                        report_payload=snapshot.report_payload,
+                        report_payload=orm_dict(snapshot.report_payload),
                         source_report_id=str(snapshot.snapshot_id),
                     )
                 )
@@ -358,6 +370,7 @@ class LearningPathService:
         *, report_payload: dict[str, Any], source_report_id: str, threshold: float = 5.0
     ) -> list[dict[str, Any]]:
         raw_dimensions = report_payload.get("dimensions")
+        items: Iterable[tuple[object, object]]
         if isinstance(raw_dimensions, dict):
             items = raw_dimensions.items()
         elif isinstance(raw_dimensions, list):
@@ -367,7 +380,7 @@ class LearningPathService:
                 if isinstance(item, dict)
             )
         else:
-            items = []
+            items = ()
 
         weak_dimensions: list[dict[str, Any]] = []
         for name, value in items:
@@ -660,12 +673,13 @@ class LearningPathService:
                     )["score"],
                 )
             exam_sessions_by_agent_id[agent_id] = best_session
+            latest_metrics = LearningPathService._exam_report_metrics(latest)
             exam_stats_by_agent_id[agent_id] = {
                 "best_score": max(scores) if scores else None,
                 "lowest_score": min(scores) if scores else None,
                 "latest_score": (
-                    LearningPathService._exam_report_metrics(latest) or {}
-                ).get("score"),
+                    latest_metrics["score"] if latest_metrics is not None else None
+                ),
                 "attempt_count": len(agent_sessions),
             }
         return {
@@ -675,10 +689,8 @@ class LearningPathService:
         }
 
     @staticmethod
-    def _exam_report_metrics(session: PracticeSession) -> dict[str, Any] | None:
-        runtime_state = (
-            session.runtime_state if isinstance(session.runtime_state, dict) else {}
-        )
+    def _exam_report_metrics(session: PracticeSession) -> _ExamReportMetrics | None:
+        runtime_state: dict[str, Any] = orm_dict(session.runtime_state)
         report = runtime_state.get("examiner_report")
         if not isinstance(report, dict):
             return None
@@ -686,9 +698,10 @@ class LearningPathService:
             score = float(report.get("overall_score") or 0)
         except (TypeError, ValueError):
             score = 0.0
+        passed = report.get("passed")
         return {
             "score": score,
-            "passed": report.get("passed"),
+            "passed": passed if isinstance(passed, bool) else None,
             "answered_count": int(report.get("answered_count") or 0),
         }
 
@@ -736,8 +749,8 @@ class LearningPathService:
                 completion_policy
             )
         if LearningPathService._completion_policy_participation_unlock(completion_policy):
-            return metrics.get("answered_count", 0) > 0 or metrics.get("score", 0) >= 0
-        if metrics.get("passed") is False:
+            return metrics["answered_count"] > 0 or metrics["score"] >= 0
+        if metrics["passed"] is False:
             return False
         try:
             min_score = float(completion_policy.get("min_score") or 0)
@@ -787,7 +800,7 @@ class LearningPathService:
             if exam_session is None:
                 exam_session = evidence["exam_sessions_by_agent_id"].get(asset_id)
             if exam_session is not None:
-                return examiner_report_frontend_path(str(exam_session.session_id))
+                return str(examiner_report_frontend_path(str(exam_session.session_id)))
         return LearningPathService._report_url_for_template(asset_id, completed_sessions)
 
     @staticmethod
@@ -931,7 +944,7 @@ class LearningPathService:
         for session in sessions:
             if str(session.practice_template_id) != template_id:
                 continue
-            snapshot = session.effectiveness_snapshot if isinstance(session.effectiveness_snapshot, dict) else {}
+            snapshot: dict[str, Any] = orm_dict(session.effectiveness_snapshot)
             reason = snapshot.get("failure_reason") or snapshot.get("non_evaluable_reason")
             if reason:
                 return str(reason)
@@ -944,7 +957,7 @@ class LearningPathService:
         for session in sessions:
             if str(session.practice_template_id) != template_id:
                 continue
-            runtime_state = session.runtime_state if isinstance(session.runtime_state, dict) else {}
+            runtime_state: dict[str, Any] = orm_dict(session.runtime_state)
             progress = runtime_state.get("template_stage_context")
             if isinstance(progress, dict):
                 stage_progress = progress.get("template_stage_progress")
@@ -957,7 +970,7 @@ class LearningPathService:
             for snapshot in snapshots:
                 if not isinstance(snapshot, TrainingReportSnapshot):
                     continue
-                payload = snapshot.report_payload if isinstance(snapshot.report_payload, dict) else {}
+                payload: dict[str, Any] = orm_dict(snapshot.report_payload)
                 lineage = payload.get("lineage")
                 if not isinstance(lineage, dict):
                     continue
@@ -979,7 +992,8 @@ class LearningPathService:
     def _failure_reason_for_template(stages: list[dict[str, Any]], template_id: str) -> str | None:
         for stage in stages:
             if str(stage.get("template_id")) == template_id:
-                return stage.get("failure_reason")
+                reason = stage.get("failure_reason")
+                return str(reason) if reason else None
         return None
 
     @staticmethod

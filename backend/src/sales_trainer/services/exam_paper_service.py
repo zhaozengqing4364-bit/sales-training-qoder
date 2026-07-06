@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.db.typing import orm_scalar
 from sales_trainer.models import SalesTrainerExamPaper, SalesTrainerQuizAttempt
 from sales_trainer.schemas import (
     ExamPaperCreate,
@@ -171,7 +172,7 @@ class ExamPaperService:
         )
         revision = await SalesTrainerAssetRevisionService(self._db).active_revision(
             resource_type=PAPER_RESOURCE_TYPE,
-            logical_id=paper.paper_id,
+            logical_id=orm_scalar(paper.paper_id, str),
         )
         revision_payload = revision.payload_json if revision is not None else {}
         if (

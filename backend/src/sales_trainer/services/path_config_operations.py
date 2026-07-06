@@ -80,7 +80,8 @@ async def load_published_path_units(db: AsyncSession) -> list[PathBackfillUnit]:
     selected: dict[str, PathBackfillUnit] = {}
     allowed_path_keys = {NEWCOMER_PATH_LOGICAL_ID, *LEGACY_NEWCOMER_PATH_KEYS}
     for unit in result.scalars().all():
-        config = path_config(unit.config or {})
+        raw_config = unit.config
+        config = path_config(raw_config) if isinstance(raw_config, dict) else None
         if config is None or config.path_key not in allowed_path_keys:
             continue
         key_and_priority = canonical_path_module_key(unit, config)

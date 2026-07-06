@@ -4,6 +4,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
+from typing import cast
 
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,9 +14,11 @@ from sales_trainer.ai_coach_chat_schemas import (
     AiCoachChatEventAnswerSubmit,
     AiCoachChatMessageCreate,
     AiCoachChatSessionCreate,
+    AiCoachChatSessionPublicV1,
     AiCoachChatStreamAssistantTextDeltaEventV1,
     AiCoachChatStreamErrorEventV1,
     AiCoachChatStreamEventV1,
+    AiCoachChatStreamPhaseV1,
     AiCoachChatStreamReasoningTextDeltaEventV1,
     AiCoachChatStreamSessionSnapshotEventV1,
     AiCoachChatStreamStatusEventV1,
@@ -28,8 +31,15 @@ from sales_trainer.services.ai_coach_chat_errors import (
 )
 from sales_trainer.services.ai_coach_chat_generation_streaming import (
     AiCoachGenerationDelta,
+    AiCoachGenerationDeltaHandler,
 )
 from sales_trainer.services.ai_coach_chat_service import AiCoachChatService
+
+AiCoachChatStreamDeltaEventV1 = (
+    AiCoachChatStreamReasoningTextDeltaEventV1
+    | AiCoachChatStreamAssistantTextDeltaEventV1
+    | AiCoachChatStreamUiEventDeltaEventV1
+)
 
 
 class AiCoachChatStreamService:
@@ -303,7 +313,7 @@ class AiCoachChatStreamService:
 
     @staticmethod
     def _status(
-        phase,
+        phase: AiCoachChatStreamPhaseV1,
         message: str,
         *,
         session_id: str | None = None,
@@ -316,9 +326,9 @@ class AiCoachChatStreamService:
 
     @staticmethod
     def _snapshot(
-        session,
+        session: AiCoachChatSessionPublicV1,
         *,
-        phase,
+        phase: AiCoachChatStreamPhaseV1,
     ) -> AiCoachChatStreamSessionSnapshotEventV1:
         return AiCoachChatStreamSessionSnapshotEventV1(
             phase=phase,
@@ -329,13 +339,12 @@ class AiCoachChatStreamService:
     def _delta_queue(
         *,
         session_id: str,
-        phase,
-    ):
-        queue: asyncio.Queue[
-            AiCoachChatStreamReasoningTextDeltaEventV1
-            | AiCoachChatStreamAssistantTextDeltaEventV1
-            | AiCoachChatStreamUiEventDeltaEventV1
-        ] = asyncio.Queue()
+        phase: AiCoachChatStreamPhaseV1,
+    ) -> tuple[
+        asyncio.Queue[AiCoachChatStreamDeltaEventV1],
+        AiCoachGenerationDeltaHandler,
+    ]:
+        queue: asyncio.Queue[AiCoachChatStreamDeltaEventV1] = asyncio.Queue()
 
         async def on_delta(delta: AiCoachGenerationDelta) -> None:
             if delta.delta_type == "reasoning_text" and delta.text:
@@ -373,17 +382,8 @@ class AiCoachChatStreamService:
     @staticmethod
     async def _poll_delta(
         task: asyncio.Task,
-        queue: asyncio.Queue[
-            AiCoachChatStreamReasoningTextDeltaEventV1
-            | AiCoachChatStreamAssistantTextDeltaEventV1
-            | AiCoachChatStreamUiEventDeltaEventV1
-        ],
-    ) -> (
-        AiCoachChatStreamReasoningTextDeltaEventV1
-        | AiCoachChatStreamAssistantTextDeltaEventV1
-        | AiCoachChatStreamUiEventDeltaEventV1
-        | None
-    ):
+        queue: asyncio.Queue[AiCoachChatStreamDeltaEventV1],
+    ) -> AiCoachChatStreamDeltaEventV1 | None:
         if task.done() and queue.empty():
             return None
         try:
@@ -405,12 +405,15 @@ class AiCoachChatStreamService:
         )
 
     @staticmethod
-    def _actor_snapshot(actor: User | None):
+    def _actor_snapshot(actor: User | None) -> User | None:
         if actor is None:
             return None
-        return SimpleNamespace(
-            user_id=str(actor.user_id),
-            role=str(getattr(actor, "role", "")),
+        return cast(
+            User,
+            SimpleNamespace(
+                user_id=str(actor.user_id),
+                role=str(getattr(actor, "role", "")),
+            ),
         )
 
     @staticmethod

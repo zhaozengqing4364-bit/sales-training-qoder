@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.response import error_response, success_response
@@ -42,6 +43,10 @@ def _api_error(
     )
 
 
+def _path_service_error_response(exc: SalesTrainerPathConfigError) -> JSONResponse:
+    return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
+
+
 @router.get("/{module_key}/ai-coach/config")
 async def get_ai_coach_config(
     module_key: str,
@@ -57,27 +62,46 @@ async def get_ai_coach_config(
         )
 
     path_service = SalesTrainerPathConfigService(db)
-    path_response = await path_service.get_config()
+    try:
+        path_response = await path_service.get_config()
+    except SalesTrainerPathConfigError as exc:
+        return _path_service_error_response(exc)
     path_payload = path_response.get("path")
 
-    ai_coach_config: dict[str, Any] | None = None
-    if path_payload is not None:
-        from sales_trainer.schemas import NewcomerPathConfigPayload
+    if path_payload is None:
+        return _api_error(
+            "[NEWCOMER_PATH_CONFIG_NOT_FOUND]",
+            status_code=404,
+            message="新人训练路径配置不存在。",
+        )
 
-        try:
-            payload = NewcomerPathConfigPayload.model_validate(path_payload)
-            for module in payload.modules:
-                if module.module_key == module_key:
-                    ai_coach_config = (
-                        module.ai_coach.model_dump(mode="json")
-                        if module.ai_coach
-                        else AiCoachConfig().model_dump(mode="json")
-                    )
-                    break
-        except Exception:
-            pass
+    from sales_trainer.schemas import NewcomerPathConfigPayload
 
-    ai_coach_config = dict(ai_coach_config or AiCoachConfig().model_dump(mode="json"))
+    try:
+        payload = NewcomerPathConfigPayload.model_validate(path_payload)
+    except ValidationError:
+        return _api_error(
+            "[NEWCOMER_PATH_CONFIG_INVALID]",
+            status_code=500,
+            message="新人训练路径配置格式错误。",
+        )
+
+    module_config = next(
+        (module for module in payload.modules if module.module_key == module_key),
+        None,
+    )
+    if module_config is None:
+        return _api_error(
+            "[NEWCOMER_MODULE_NOT_FOUND]",
+            status_code=404,
+            message="模块不存在。",
+        )
+
+    ai_coach_config = dict(
+        module_config.ai_coach.model_dump(mode="json")
+        if module_config.ai_coach
+        else AiCoachConfig().model_dump(mode="json")
+    )
     ai_coach_config["output_schema_version"] = AI_COACH_INTERACTION_SCHEMA_VERSION
     ai_coach_config["prompt_contract_hash"] = None
     ai_coach_config["scoring_contract_hash"] = None

@@ -11,7 +11,12 @@ from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_trace_id
-from sales_trainer.permissions import can_manage_sales_trainer
+from sales_trainer.permissions import (
+    can_manage_sales_trainer,
+    can_view_sales_trainer_records,
+    is_sales_trainer_admin,
+    team_scope_department,
+)
 from sales_trainer.schemas import (
     BusinessEtiquetteAiCoachProgressResponse,
     BusinessEtiquetteCapabilityActionRequest,
@@ -50,6 +55,7 @@ from sales_trainer.services.business_etiquette_import_service import (
     BusinessEtiquetteImportServiceError,
 )
 from sales_trainer.services.business_etiquette_learning_service import (
+    BUSINESS_SKILLS_MODULE_KEY,
     BusinessEtiquetteLearningService,
     BusinessEtiquetteLearningServiceError,
 )
@@ -64,6 +70,10 @@ from sales_trainer.services.business_etiquette_quiz_service import (
 from sales_trainer.services.business_etiquette_release_service import (
     BusinessEtiquetteReleaseService,
     BusinessEtiquetteReleaseServiceError,
+)
+from sales_trainer.services.learner_unit_access import (
+    LearnerUnitAccessError,
+    require_learner_active_path_module_access,
 )
 
 business_etiquette_router = APIRouter(
@@ -94,11 +104,40 @@ def _require_manager(user: User) -> JSONResponse | None:
     return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号权限不足。")
 
 
+def _require_records_viewer(user: User) -> JSONResponse | None:
+    if can_view_sales_trainer_records(user):
+        return None
+    return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号无权查看学员记录。")
+
+
+def _require_retraining_assigner(user: User) -> JSONResponse | None:
+    if is_sales_trainer_admin(user) or can_view_sales_trainer_records(user):
+        return None
+    return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号无权指定学员重练。")
+
+
+async def _require_business_etiquette_module_access(
+    db: AsyncSession,
+    current_user: User,
+) -> JSONResponse | None:
+    try:
+        await require_learner_active_path_module_access(
+            db,
+            actor=current_user,
+            module_key=BUSINESS_SKILLS_MODULE_KEY,
+        )
+    except LearnerUnitAccessError as exc:
+        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
+    return None
+
+
 @business_etiquette_router.get("/learning-units", response_model=None)
 async def get_business_etiquette_learning_units(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | JSONResponse:
+    if error := await _require_business_etiquette_module_access(db, current_user):
+        return error
     try:
         result = await BusinessEtiquetteLearningService(db).get_learning_units(
             user_id=str(current_user.user_id),
@@ -123,6 +162,8 @@ async def get_business_etiquette_unit_quiz(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | JSONResponse:
+    if error := await _require_business_etiquette_module_access(db, current_user):
+        return error
     try:
         result = await BusinessEtiquetteQuizService(db).get_unit_quiz(
             unit_key,
@@ -151,6 +192,8 @@ async def submit_business_etiquette_unit_quiz_attempt(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | JSONResponse:
+    if error := await _require_business_etiquette_module_access(db, current_user):
+        return error
     try:
         result = await BusinessEtiquetteQuizService(db).submit_attempt(
             unit_key,
@@ -182,6 +225,8 @@ async def list_my_business_etiquette_unit_quiz_attempts(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | JSONResponse:
+    if error := await _require_business_etiquette_module_access(db, current_user):
+        return error
     try:
         result = await BusinessEtiquetteQuizService(db).list_attempts(
             user_id=str(current_user.user_id),
@@ -234,6 +279,8 @@ async def start_business_etiquette_retraining_session(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | JSONResponse:
+    if error := await _require_business_etiquette_module_access(db, current_user):
+        return error
     trace_id = get_trace_id()
     try:
         session_id = await BusinessEtiquetteReleaseService(
@@ -356,7 +403,7 @@ async def assign_business_etiquette_retraining(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | JSONResponse:
-    if error := _require_manager(current_user):
+    if error := _require_retraining_assigner(current_user):
         return error
     trace_id = get_trace_id()
     try:
@@ -654,6 +701,31 @@ async def reject_business_etiquette_question_draft(
 
 
 @business_etiquette_admin_router.get(
+    "/learning-units",
+    response_model=None,
+)
+async def list_admin_business_etiquette_learning_units(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if error := _require_manager(current_user):
+        return error
+    try:
+        result = await BusinessEtiquetteLearningService(db).get_learning_units(
+            user_id=None,
+        )
+    except BusinessEtiquetteLearningServiceError as exc:
+        return _api_error(
+            exc.code,
+            status_code=exc.status_code,
+            message=exc.message,
+        )
+    return success_response(
+        BusinessEtiquetteLearningUnitsResponse.model_validate(result).model_dump()
+    )
+
+
+@business_etiquette_admin_router.get(
     "/learning-units/{unit_key}/quiz-preview",
     response_model=None,
 )
@@ -688,12 +760,13 @@ async def list_business_etiquette_quiz_attempts(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | JSONResponse:
-    if error := _require_manager(current_user):
+    if error := _require_records_viewer(current_user):
         return error
     try:
         result = await BusinessEtiquetteQuizService(db).list_attempts(
             user_id=user_id,
             learning_unit_key=learning_unit_key,
+            team_department=team_scope_department(current_user),
             limit=limit,
             offset=offset,
         )

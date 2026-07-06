@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+    NewcomerPathConfigDiagnostics,
     NewcomerPathConfigResponse,
     SalesTrainerAudioScorePrompt,
     SalesTrainerMaterial,
@@ -8,6 +9,52 @@ import type {
 } from "@/lib/api/types";
 
 import { buildNewcomerConfigCenter } from "./config-center";
+
+function pathConfigDiagnostics(): NewcomerPathConfigDiagnostics {
+    return {
+        surface_key: "newcomer_training_path_v1",
+        resource_type: "newcomer_training_path",
+        source: "active_revision",
+        legacy_snapshot_only: false,
+        fallback_applied: false,
+        fallback_reason: null,
+        realtime_provider_readiness: [],
+        management_entry: "/admin/newcomer-training/path-config",
+        permission_policy: {
+            view: "sales_trainer.manage_modules",
+            save: "sales_trainer.manage_modules",
+            publish: "sales_trainer.manage_modules",
+            rollback: "sales_trainer.manage_modules",
+            high_risk_ai_coach: "sales_trainer.manage_prompts",
+            regrade: "sales_trainer.regrade_history",
+        },
+        active_revision: null,
+        working_revision: null,
+        high_risk_actions: {
+            publish: {
+                requires_reason: true,
+                requires_trace_id: true,
+                audit_action: "newcomer_path_config.publish",
+                impact_scope: "future_learners_only",
+                preview_endpoint: "/api/v1/admin/newcomer-training/path-config/publish/preview",
+            },
+            rollback: {
+                requires_reason: true,
+                requires_trace_id: true,
+                audit_action: "newcomer_path_config.rollback",
+                impact_scope: "future_learners_only",
+                preview_endpoint: "/api/v1/admin/newcomer-training/path-config/rollback/preview",
+            },
+            regrade: {
+                requires_reason: true,
+                requires_trace_id: true,
+                audit_action: "historical_regrade.completed",
+                impact_scope: "append_only_history",
+                history_overwrite: false,
+            },
+        },
+    };
+}
 
 function settings(): SalesTrainerSettings {
     return {
@@ -79,6 +126,10 @@ const material: SalesTrainerMaterial = {
 
 const pathConfig: NewcomerPathConfigResponse = {
     source: "active_revision",
+    fallback_reason: null,
+    legacy_snapshot_only: false,
+    management_entry: "/admin/newcomer-training/path-config",
+    permission: "sales_trainer.manage_modules",
     path: {
         path_key: "newcomer_training_path_v1",
         title: "新人训练路径",
@@ -114,6 +165,7 @@ const pathConfig: NewcomerPathConfigResponse = {
     working_revision_id: null,
     working_revision_no: null,
     has_unpublished_revision: false,
+    diagnostics: pathConfigDiagnostics(),
 };
 
 describe("buildNewcomerConfigCenter audio path bindings", () => {

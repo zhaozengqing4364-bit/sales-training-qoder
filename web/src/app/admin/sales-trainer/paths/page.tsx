@@ -16,12 +16,14 @@ import {
     businessBindingValueForModule,
     isAudioEditableModuleKey,
 } from "@/lib/sales-trainer/path-config-editing";
+import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 import { usePathConfigCenterWorkflow } from "./use-path-config-center-workflow";
 
 export default function SalesTrainerPathsPage() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const focusedModuleKey = searchParams.get("module");
+    const routeAccess = useSalesTrainerAdminRouteAccess(pathname);
     const {
         actionMessage,
         changeReason,
@@ -37,7 +39,7 @@ export default function SalesTrainerPathsPage() {
         setChangeReason,
         updateAudioBinding,
         updateBusinessBinding,
-    } = usePathConfigCenterWorkflow();
+    } = usePathConfigCenterWorkflow({ enabled: routeAccess.canAccess });
 
     const renderModuleEditor = useCallback((module: NewcomerConfigModuleSummary) => {
         if (!data?.pathConfig) {
@@ -79,10 +81,26 @@ export default function SalesTrainerPathsPage() {
                     title="新人训练路径配置中心"
                     description="统一查看四个关卡的启用、绑定、缺失配置、学员端预览和运维诊断；管理员不需要再到模块单元编辑页理解抽象路径字段。"
                     icon={<Route className="h-7 w-7 text-slate-800" />}
-                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={routeAccess.capabilities} />}
                 />
             )}
         >
+            {routeAccess.denialMessage ? (
+                <GlassCard className="border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+                    <div className="space-y-3">
+                        <p className="font-bold text-amber-950">页面访问受限</p>
+                        <p>当前页不会在能力接口失败或权限不足时继续加载路径配置，避免把不可访问状态伪装成空配置。</p>
+                        <p>{routeAccess.denialMessage}</p>
+                        <button
+                            type="button"
+                            className="rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900"
+                            onClick={routeAccess.reloadCapabilities}
+                        >
+                            重新检查权限
+                        </button>
+                    </div>
+                </GlassCard>
+            ) : null}
             {error ? (
                 <GlassCard className="border-red-100 bg-red-50 p-4 text-sm font-medium text-red-700">
                     新人训练路径配置加载失败：{error}
@@ -94,7 +112,7 @@ export default function SalesTrainerPathsPage() {
                 </GlassCard>
             ) : null}
 
-            {isLoading && !model ? (
+            {!routeAccess.denialMessage && (routeAccess.isLoading || isLoading) && !model ? (
                 <GlassCard className="p-8 text-center text-sm text-slate-500">
                     正在加载新人训练路径配置...
                 </GlassCard>

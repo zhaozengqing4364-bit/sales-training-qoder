@@ -15,7 +15,9 @@ from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
+import sales_bot.websocket.components.stepfun_turn_transcript_capture as transcript_capture_module
 import sales_bot.websocket.stepfun_realtime_handler as stepfun_module
+import sales_bot.websocket.stepfun_realtime_sales_stage as sales_stage_module
 from common.error_handling.result import Result
 from common.websocket.session_state_service import SessionStateSnapshot
 from sales_bot.websocket.components.stepfun_roleplay_runtime_helpers import (
@@ -29,6 +31,7 @@ from sales_bot.websocket.stepfun_realtime_handler import (
     RealtimeResponseState,
     StepFunRealtimeHandler,
 )
+from sales_bot.websocket.stepfun_realtime_policy import StepFunRealtimePolicyMixin
 from sales_bot.websocket.stepfun_tool_execution import (
     StepFunToolExecutionModule,
     ToolRoutingDecision,
@@ -65,6 +68,7 @@ def test_stepfun_transport_builds_session_update_payload_with_transcription_and_
     assert payload == {
         "type": "session.update",
         "session": {
+            "modalities": ["text", "audio"],
             "voice": "qingchunshaonv",
             "temperature": 0.42,
             "input_audio_format": "pcm16",
@@ -78,6 +82,10 @@ def test_stepfun_transport_builds_session_update_payload_with_transcription_and_
             "tools": [{"type": "function", "name": "search_internal_knowledge"}],
         },
     }
+
+
+def test_policy_mixin_must_not_own_stepfun_upstream_connection():
+    assert "_connect_upstream" not in StepFunRealtimePolicyMixin.__dict__
 
 
 @pytest.mark.asyncio
@@ -120,6 +128,7 @@ async def test_connect_upstream_delegates_connection_to_shared_stepfun_transport
     handler._send_upstream.assert_awaited_once()
     payload = handler._send_upstream.await_args.args[0]
     assert payload["type"] == "session.update"
+    assert payload["session"]["modalities"] == ["text", "audio"]
     assert payload["session"]["voice"] == "voice-default"
     assert payload["session"]["turn_detection"] == {"type": "server_vad"}
     assert payload["session"]["input_audio_transcription"] == {
@@ -230,7 +239,7 @@ def test_stepfun_realtime_handler_defaults_to_latest_realtime_model(
 
     handler = StepFunRealtimeHandler()
 
-    assert handler._stepfun_model == "step-audio-2"
+    assert handler._stepfun_model == "stepaudio-2.5-realtime"
 
 
 def test_handler_applies_voice_runtime_profile_from_policy_snapshot() -> None:
@@ -5330,3 +5339,171 @@ async def test_capability_pipeline_fails_does_not_change_training_session_status
 
     assert handler.session_status == "in_progress"
     assert handler._coach_health == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_handle_upstream_response_audio_transcript_done_dispatches_capture_without_blocking():
+    release_sink = asyncio.Event()
+    captured: list[dict[str, Any]] = []
+
+    async def sink(payload: dict[str, Any]) -> None:
+        captured.append(payload)
+        await release_sink.wait()
+
+    handler = StepFunRealtimeHandler(transcript_capture_sink=sink)
+    handler.session_id = "session-turn-capture"
+    handler.turn_count = 2
+    handler._effective_policy = {
+        "instruction_contract_hash": "policy-hash-1",
+        "knowledge_base_ids": ["kb-1"],
+    }
+    handler._latest_knowledge_answer_diagnostics = {
+        "mode": "grounded_strict",
+        "answerability": "sufficient",
+        "source_status": "hit",
+        "audit_run_id": "run-1",
+        "citations": [
+            {
+                "knowledge_base_id": "kb-1",
+                "knowledge_base_name": "产品知识库",
+                "document_title": "产品手册",
+                "snippet": "不应泄露到 capture",
+                "claim": "不应泄露到 capture",
+                "score": 0.91,
+            }
+        ],
+    }
+    handler._active_response = RealtimeResponseState(
+        request_id=2,
+        stream_id="stream-2",
+        response_id="resp-2",
+    )
+    handler._handle_emotion_event = AsyncMock()
+    handler._handle_thinking_event = AsyncMock()
+
+    await asyncio.wait_for(
+        handler._handle_upstream_event(
+            {
+                "type": "response.audio_transcript.done",
+                "response_id": "resp-2",
+                "transcript": "这是最终的销售回答。",
+                "thinking": "不能进入采集 payload",
+            }
+        ),
+        timeout=0.1,
+    )
+
+    assert len(captured) == 1
+    payload = captured[0]
+    assert payload["speaker"] == "assistant"
+    assert payload["transcript"] == "这是最终的销售回答。"
+    assert payload["response_id"] == "resp-2"
+    assert payload["turn_id"] == "2"
+    assert payload["turn_index"] == 2
+    assert payload["instruction_contract_hash"] == "policy-hash-1"
+    assert "thinking" not in payload
+    assert payload["grounding_metadata"] == {
+        "knowledge_base_ids": ["kb-1"],
+        "mode": "grounded_strict",
+        "answerability": "sufficient",
+        "source_status": "hit",
+        "audit_run_id": "run-1",
+        "citation_count": 1,
+        "citations": [
+            {
+                "knowledge_base_id": "kb-1",
+                "knowledge_base_name": "产品知识库",
+                "document_title": "产品手册",
+                "score": 0.91,
+            }
+        ],
+    }
+
+    release_sink.set()
+    await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_response_done_capture_sink_failure_does_not_interrupt_flush(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def failing_sink(_payload: dict[str, Any]) -> None:
+        raise RuntimeError("sink down")
+
+    capture_logger = MagicMock()
+    monkeypatch.setattr(transcript_capture_module, "logger", capture_logger)
+
+    handler = StepFunRealtimeHandler(transcript_capture_sink=failing_sink)
+    handler.session_id = "session-capture-failure"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._send_status = AsyncMock()
+    handler._sales_stage_context = None
+    handler._feedback_context = None
+    handler.turn_count = 1
+    handler._handle_emotion_event = AsyncMock()
+    handler._handle_thinking_event = AsyncMock()
+    handler._active_response = RealtimeResponseState(
+        request_id=1,
+        stream_id="stream-1",
+        response_id="resp-1",
+    )
+    handler._active_response.text_parts = ["您好，这是最终回复。"]
+    save_message = AsyncMock(return_value=True)
+    monkeypatch.setattr(sales_stage_module, "save_stepfun_message", save_message)
+
+    await handler._handle_upstream_event(
+        {"type": "response.done", "response": {"id": "resp-1", "output": []}}
+    )
+
+    handler.manager.send_json.assert_awaited_once()
+    save_message.assert_awaited_once()
+    capture_logger.warning.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_transcript_final_dispatches_learner_capture() -> None:
+    captured: list[dict[str, Any]] = []
+    handler = StepFunRealtimeHandler(transcript_capture_sink=captured.append)
+    handler.session_id = "session-learner-capture"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._resolve_user_turn_number_for_transcript = MagicMock(return_value=3)
+
+    await handler._send_transcript("客户更关心实施周期。", is_final=True)
+
+    assert len(captured) == 1
+    payload = captured[0]
+    assert payload["speaker"] == "learner"
+    assert payload["transcript"] == "客户更关心实施周期。"
+    assert payload["response_id"] is None
+    assert payload["turn_id"] is None
+    assert payload["turn_index"] == 3
+    assert payload["source_event_type"] == "input_audio_transcription.completed"
+
+
+@pytest.mark.asyncio
+async def test_handle_upstream_response_audio_transcript_done_skips_blank_capture():
+    captured: list[dict[str, Any]] = []
+    handler = StepFunRealtimeHandler(transcript_capture_sink=captured.append)
+    handler.session_id = "session-empty-capture"
+    handler.turn_count = 1
+    handler._active_response = RealtimeResponseState(
+        request_id=1,
+        stream_id="stream-1",
+        response_id="resp-1",
+    )
+    handler._handle_emotion_event = AsyncMock()
+    handler._handle_thinking_event = AsyncMock()
+
+    await handler._handle_upstream_event(
+        {
+            "type": "response.audio_transcript.done",
+            "response_id": "resp-1",
+            "transcript": "   ",
+        }
+    )
+
+    assert captured == []

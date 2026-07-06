@@ -70,9 +70,10 @@ class AiCoachChatNextActionGenerator:
             history=history,
         )
         max_attempts = config.retry_policy.max_retries + 1
+        llm_service = LLMService()
         if on_generation_delta is not None:
             streamed = await emit_streamed_response(
-                llm=LLMService(),
+                llm=llm_service,
                 parser=self._parser,
                 contract=contract,
                 config=config,
@@ -85,13 +86,18 @@ class AiCoachChatNextActionGenerator:
                     decision.action,
                 ),
             )
+            streamed.response.runtime_audit = AiCoachChatGenerator._llm_runtime_audit(
+                llm_service,
+                None,
+                session_id=str(session.session_id),
+            )
             return streamed.response
         last_error: AiCoachChatGenerationError | None = None
         for attempt in range(max_attempts):
             prompt = prompt_for_attempt(contract.rendered_prompt, last_error)
-            result = await LLMService().generate(
+            result = await llm_service.generate(
                 prompt=prompt,
-                session_id=session.session_id,
+                session_id=str(session.session_id),
                 system_message=contract.system_message,
                 allow_fallback_response=False,
                 response_format=AI_COACH_JSON_RESPONSE_FORMAT,
@@ -106,6 +112,11 @@ class AiCoachChatNextActionGenerator:
             try:
                 parsed = self._parser.parse_model_response(str(result.value), config)
                 self._validate_response_for_action(parsed, decision.action)
+                parsed.runtime_audit = AiCoachChatGenerator._llm_runtime_audit(
+                    llm_service,
+                    None,
+                    session_id=str(session.session_id),
+                )
                 return parsed
             except AiCoachChatGenerationError as exc:
                 last_error = exc
@@ -134,7 +145,11 @@ class AiCoachChatNextActionGenerator:
         try:
             resolution = await resolver.resolve(
                 template_id=str(session.prompt_template_id),
-                prompt_revision_id=session.prompt_revision_id,
+                prompt_revision_id=(
+                    str(session.prompt_revision_id)
+                    if session.prompt_revision_id is not None
+                    else None
+                ),
             )
         except PromptTemplateRevisionResolverError as exc:
             raise self._resolver_error(exc) from exc
@@ -183,7 +198,11 @@ class AiCoachChatNextActionGenerator:
         answered_event_payload: dict[str, Any],
         history: list[SalesTrainerAiCoachChatMessage],
     ) -> dict[str, Any]:
-        article = session.article_snapshot or {}
+        article: dict[str, Any] = (
+            dict(session.article_snapshot)
+            if isinstance(session.article_snapshot, dict)
+            else {}
+        )
         chapters = article.get("chapters") if isinstance(article, dict) else []
         raw_path_config = getattr(session, "path_config_snapshot", None)
         path_config = raw_path_config if isinstance(raw_path_config, dict) else {}
@@ -246,12 +265,20 @@ class AiCoachChatNextActionGenerator:
         allowed_cards = ", ".join(
             AiCoachChatPromptCompiler.compatible_training_card_types(config)
         )
+        action_rule = (
+            "continue_drill 与 increase_difficulty 必须生成且只能生成 1 张 quiz_card；"
+            "remediate 可生成 1 张 explanation_card，并在需要巩固时生成 1 张 quiz_card；"
+            "switch_scenario 可生成 1 张 explanation_card 和 1 张 quiz_card；"
+            "ask_user_choice 只能生成 1 个 followup_prompt；"
+            "summarize/end_session 必须生成 summary_card。"
+        )
         return (
             "你是商务技巧 AI 教练，不是固定出题器。后端已经决定 next_action="
-            f"{decision.action}，你必须只服务这个动作，但可以先自然聊天、解释或追问。只能输出 JSON，"
+            f"{decision.action}，你必须只服务这个动作。只能输出 JSON，"
             f"ui_events 只能使用这些 type: {allowed_ui}。"
             f"quiz_card.payload.interaction.training_card_type 只能使用这些值: {allowed_cards}。"
-            "每轮最多生成 1 张 quiz_card；当 assistant_text 已能完成讲解或追问时，可以不生成 quiz_card。"
+            "每轮最多生成 1 张 quiz_card。"
+            f"{action_rule}"
             "把 quiz_card 当成工具调用结果：需要检测理解时用单选/多选，需要表达训练时用 short_answer。"
             "不得输出 HTML、JSX、CSS、脚本或任意组件树。"
         )
@@ -279,12 +306,12 @@ class AiCoachChatNextActionGenerator:
         match action:
             case "continue_drill" | "increase_difficulty":
                 if (
-                    counts["quiz_card"] > 1
+                    counts["quiz_card"] != 1
                     or counts["explanation_card"] != 0
                     or counts["summary_card"] != 0
                     or counts["followup_prompt"] > 1
                 ):
-                    invalid("该 next_coach_action 最多生成 1 张 quiz_card，可附 1 个 followup_prompt。")
+                    invalid("该 next_coach_action 必须生成且只能生成 1 张 quiz_card，可附 1 个 followup_prompt。")
             case "remediate":
                 if (
                     counts["quiz_card"] > 1

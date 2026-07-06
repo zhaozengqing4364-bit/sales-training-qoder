@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import Literal, TypedDict, cast
 
 from common.db.models import User
 from sales_trainer.models import SalesTrainerMaterial
@@ -17,17 +17,38 @@ class MaterialMetadataSnapshot(TypedDict):
     current_version_id: str | None
 
 
+MaterialMetadataField = Literal[
+    "material_key",
+    "name",
+    "material_type",
+    "description",
+    "purpose",
+    "status",
+    "current_version_id",
+]
+
+_MATERIAL_METADATA_FIELDS: tuple[MaterialMetadataField, ...] = (
+    "material_key",
+    "name",
+    "material_type",
+    "description",
+    "purpose",
+    "status",
+    "current_version_id",
+)
+
+
 def material_metadata_snapshot(
     material: SalesTrainerMaterial,
 ) -> MaterialMetadataSnapshot:
     return {
-        "material_key": material.material_key,
-        "name": material.name,
-        "material_type": material.material_type,
-        "description": material.description,
-        "purpose": material.purpose,
-        "status": material.status,
-        "current_version_id": material.current_version_id,
+        "material_key": cast(str, material.material_key),
+        "name": cast(str, material.name),
+        "material_type": cast(str, material.material_type),
+        "description": cast(str | None, material.description),
+        "purpose": cast(str, material.purpose),
+        "status": cast(str, material.status),
+        "current_version_id": cast(str | None, material.current_version_id),
     }
 
 
@@ -35,7 +56,7 @@ def changed_material_metadata_fields(
     before: MaterialMetadataSnapshot,
     after: MaterialMetadataSnapshot,
 ) -> list[str]:
-    return [field for field, value in after.items() if before[field] != value]
+    return [field for field in _MATERIAL_METADATA_FIELDS if before[field] != after[field]]
 
 
 async def record_material_metadata_update(
@@ -52,7 +73,7 @@ async def record_material_metadata_update(
         actor=actor,
         action="material_metadata_updated",
         target_type="sales_trainer_material",
-        target_id=material.material_id,
+        target_id=str(material.material_id),
         request_id=trace_id,
         metadata={
             "before": before,

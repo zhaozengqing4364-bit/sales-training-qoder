@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { AlertTriangle } from "lucide-react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
@@ -15,7 +16,11 @@ import {
     formatAdminStatus,
     formatScorePromptPurpose,
 } from "@/lib/sales-trainer/admin-display";
-import type { SalesTrainerAudioScorePrompt } from "@/lib/api/types";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
+import type {
+    SalesTrainerAdminCapabilities,
+    SalesTrainerAudioScorePrompt,
+} from "@/lib/api/types";
 
 export default function SalesTrainerScoreStandardsPage() {
     const pathname = usePathname();
@@ -25,8 +30,15 @@ export default function SalesTrainerScoreStandardsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [publishingPrompt, setPublishingPrompt] = useState<SalesTrainerAudioScorePrompt | null>(null);
     const [isPublishing, setIsPublishing] = useState(false);
+    const [capabilities, setCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessScoreStandards = isSalesTrainerAdminPathAllowedForCapabilities(pathname, capabilities);
 
     const loadPrompts = useCallback(async () => {
+        if (!canAccessScoreStandards) {
+            return;
+        }
         setIsLoading(true);
         try {
             const result = await api.admin.salesTrainer.listScorePrompts({ include_archived: true });
@@ -36,11 +48,42 @@ export default function SalesTrainerScoreStandardsPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [toast]);
+    }, [canAccessScoreStandards, toast]);
 
     useEffect(() => {
+        let isCurrent = true;
+        void api.admin.salesTrainer.getCapabilities()
+            .then((result) => {
+                if (!isCurrent) return;
+                setCapabilities(result);
+                setCapabilityError(null);
+            })
+            .catch((error) => {
+                if (!isCurrent) return;
+                setCapabilities(null);
+                setCapabilityError(getApiErrorMessage(error));
+            })
+            .finally(() => {
+                if (!isCurrent) return;
+                setIsCapabilityLoading(false);
+            });
+        return () => {
+            isCurrent = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (isCapabilityLoading) {
+            return;
+        }
+        if (!canAccessScoreStandards) {
+            setItems([]);
+            setPublishingPrompt(null);
+            setIsLoading(false);
+            return;
+        }
         void loadPrompts();
-    }, [loadPrompts]);
+    }, [canAccessScoreStandards, isCapabilityLoading, loadPrompts]);
 
     async function publishPrompt() {
         if (!publishingPrompt) {
@@ -65,15 +108,15 @@ export default function SalesTrainerScoreStandardsPage() {
                 <AdminPageHeader
                     title="新人训练路径录音评分标准"
                     description="评分方案同时管理 AI 评分 prompt 和学员可见 rubric；创建与编辑都在独立页面。"
-                    primaryAction={(
+                    primaryAction={canAccessScoreStandards ? (
                         <Button
                             className="rounded-full bg-slate-900 text-white"
                             onClick={() => router.push("/admin/sales-trainer/score-standards/new")}
                         >
                             新建评分标准
                         </Button>
-                    )}
-                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+                    ) : null}
+                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={capabilities} />}
                 />
             )}
         >
@@ -87,7 +130,29 @@ export default function SalesTrainerScoreStandardsPage() {
                 isLoading={isPublishing}
             />
 
-            <GlassCard className="overflow-hidden p-0">
+            {isCapabilityLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                    正在校验评分标准管理权限...
+                </div>
+            ) : capabilityError || !canAccessScoreStandards ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
+                        <div>
+                            <h2 className="font-bold text-amber-950">评分标准管理权限不足</h2>
+                            <p className="mt-1 text-sm leading-6">
+                                当前页不会在权限未确认时展示评分标准写入入口。请联系管理员开通内容管理权限后重试。
+                            </p>
+                            {capabilityError ? (
+                                <p className="mt-2 text-sm font-medium">{capabilityError}</p>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {canAccessScoreStandards ? (
+                <GlassCard className="overflow-hidden p-0">
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="border-b border-slate-100 text-left text-slate-500">
@@ -137,6 +202,7 @@ export default function SalesTrainerScoreStandardsPage() {
                     </tbody>
                 </table>
             </GlassCard>
+            ) : null}
         </AdminIndexShell>
     );
 }

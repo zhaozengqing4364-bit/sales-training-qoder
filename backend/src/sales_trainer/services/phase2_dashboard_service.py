@@ -140,7 +140,7 @@ class SalesTrainerPhase2DashboardService:
         records: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         repeated = self._repeated_practice_keys(records)
-        repeated_by_user = defaultdict(int)
+        repeated_by_user: defaultdict[str, int] = defaultdict(int)
         for user_id, _ in repeated:
             repeated_by_user[user_id] += 1
         buckets: dict[str, dict[str, Any]] = {}

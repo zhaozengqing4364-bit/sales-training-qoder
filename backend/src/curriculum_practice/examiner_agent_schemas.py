@@ -7,12 +7,16 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from curriculum_practice.schema_types import ExaminerAgentStatus, LearnerLevel
 
 
+def _default_allowed_levels() -> list[LearnerLevel]:
+    return ["conservative", "beginner", "intermediate", "advanced"]
+
+
 class ExaminerLearnerLevelStrategy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     default_level: LearnerLevel = "conservative"
     allowed_levels: list[LearnerLevel] = Field(
-        default_factory=lambda: ["conservative", "beginner", "intermediate", "advanced"],
+        default_factory=_default_allowed_levels,
         min_length=1,
     )
 

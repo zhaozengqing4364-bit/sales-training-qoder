@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
-import { BookOpenCheck, RefreshCcw } from "lucide-react";
+import { AlertTriangle, BookOpenCheck, RefreshCcw } from "lucide-react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
@@ -11,9 +11,11 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 import type {
     BusinessEtiquetteLearningUnit,
     BusinessEtiquetteUnitQuiz,
+    SalesTrainerAdminCapabilities,
 } from "@/lib/api/types";
 
 const QUESTION_TYPE_LABELS = {
@@ -31,6 +33,10 @@ export default function BusinessEtiquetteQuizPreviewPage() {
     const [loadError, setLoadError] = useState("");
     const [isLoadingUnits, setIsLoadingUnits] = useState(true);
     const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+    const [capabilities, setCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessQuestions = isSalesTrainerAdminPathAllowedForCapabilities(pathname, capabilities);
 
     const selectedUnit = useMemo(
         () => units.find((unit) => unit.unit_key === selectedUnitKey) ?? null,
@@ -38,7 +44,7 @@ export default function BusinessEtiquetteQuizPreviewPage() {
     );
 
     const fetchQuizUnits = useCallback(async () => {
-        const response = await api.newcomerTraining.getBusinessEtiquetteLearningUnits();
+        const response = await api.admin.salesTrainer.getBusinessEtiquetteLearningUnits();
         return response.units.filter((unit) => unit.enabled && unit.require_quiz);
     }, []);
 
@@ -47,6 +53,9 @@ export default function BusinessEtiquetteQuizPreviewPage() {
     }, []);
 
     const loadUnits = useCallback(async () => {
+        if (!canAccessQuestions) {
+            return;
+        }
         setIsLoadingUnits(true);
         setLoadError("");
         try {
@@ -72,11 +81,48 @@ export default function BusinessEtiquetteQuizPreviewPage() {
         } finally {
             setIsLoadingUnits(false);
         }
-    }, [fetchQuizUnits, showToastError]);
+    }, [canAccessQuestions, fetchQuizUnits, showToastError]);
 
     useEffect(() => {
         let isCurrent = true;
+        void api.admin.salesTrainer.getCapabilities()
+            .then((result) => {
+                if (!isCurrent) return;
+                setCapabilities(result);
+                setCapabilityError(null);
+            })
+            .catch((error) => {
+                if (!isCurrent) return;
+                setCapabilities(null);
+                setCapabilityError(getApiErrorMessage(error));
+            })
+            .finally(() => {
+                if (!isCurrent) return;
+                setIsCapabilityLoading(false);
+            });
+        return () => {
+            isCurrent = false;
+        };
+    }, []);
 
+    useEffect(() => {
+        let isCurrent = true;
+        if (isCapabilityLoading) {
+            return () => {
+                isCurrent = false;
+            };
+        }
+        if (!canAccessQuestions) {
+            setUnits([]);
+            setSelectedUnitKey("");
+            setQuiz(null);
+            setLoadError("");
+            setIsLoadingUnits(false);
+            setIsLoadingPreview(false);
+            return () => {
+                isCurrent = false;
+            };
+        }
         void fetchQuizUnits()
             .then((quizUnits) => {
                 if (!isCurrent) return;
@@ -109,10 +155,10 @@ export default function BusinessEtiquetteQuizPreviewPage() {
         return () => {
             isCurrent = false;
         };
-    }, [fetchQuizUnits, showToastError]);
+    }, [canAccessQuestions, fetchQuizUnits, isCapabilityLoading, showToastError]);
 
     useEffect(() => {
-        if (!selectedUnitKey) return;
+        if (!canAccessQuestions || !selectedUnitKey) return;
         let isCurrent = true;
 
         void fetchPreview(selectedUnitKey)
@@ -134,7 +180,7 @@ export default function BusinessEtiquetteQuizPreviewPage() {
         return () => {
             isCurrent = false;
         };
-    }, [fetchPreview, selectedUnitKey]);
+    }, [canAccessQuestions, fetchPreview, selectedUnitKey]);
 
     return (
         <AdminIndexShell
@@ -145,16 +191,36 @@ export default function BusinessEtiquetteQuizPreviewPage() {
                         title="小测组卷预览"
                         description="按学员端真实规则预览当前小单元会抽到哪些已发布题目；这里不保存、不提交、不占用学员作答次数。"
                         primaryAction={(
-                            <Button variant="outline" onClick={() => void loadUnits()}>
+                            canAccessQuestions ? <Button variant="outline" onClick={() => void loadUnits()}>
                                 <RefreshCcw className="mr-2 h-4 w-4" />
                                 刷新
-                            </Button>
+                            </Button> : null
                         )}
                     />
-                    <SalesTrainerAdminModuleNav currentPath={pathname} />
+                    <SalesTrainerAdminModuleNav currentPath={pathname} capabilities={capabilities} />
                 </div>
             )}
         >
+            {isCapabilityLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                    正在校验题库管理权限...
+                </div>
+            ) : capabilityError || !canAccessQuestions ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
+                        <div>
+                            <h2 className="font-bold text-amber-950">题库管理权限不足</h2>
+                            <p className="mt-1 text-sm leading-6">
+                                当前页不会在权限未确认时加载小测预览。请联系管理员开通题库管理权限后重试。
+                            </p>
+                            {capabilityError ? (
+                                <p className="mt-2 text-sm font-medium">{capabilityError}</p>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+            ) : (
             <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
                 <aside className="space-y-5">
                     <GlassCard className="space-y-4 p-5">
@@ -270,6 +336,7 @@ export default function BusinessEtiquetteQuizPreviewPage() {
                     ) : null}
                 </GlassCard>
             </div>
+            )}
         </AdminIndexShell>
     );
 }

@@ -4,10 +4,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BusinessSkillsExamPage from "./page";
 
-const { getArticleMock, getArticleProgressMock, getPaperMock, listUnitsMock, pushMock, submitAttemptMock, useRouterMock, useSearchParamsMock } = vi.hoisted(() => ({
+const {
+    getArticleMock,
+    getArticleProgressMock,
+    getJourneyMock,
+    getPaperMock,
+    listPathsMock,
+    listUnitsMock,
+    pushMock,
+    submitAttemptMock,
+    useRouterMock,
+    useSearchParamsMock,
+} = vi.hoisted(() => ({
     getArticleMock: vi.fn(),
     getArticleProgressMock: vi.fn(),
+    getJourneyMock: vi.fn(),
     getPaperMock: vi.fn(),
+    listPathsMock: vi.fn(),
     listUnitsMock: vi.fn(),
     pushMock: vi.fn(),
     submitAttemptMock: vi.fn(),
@@ -40,6 +53,8 @@ vi.mock("@/lib/api/client", async () => {
             ...actual.api,
             salesTrainer: {
                 ...actual.api.salesTrainer,
+                getJourney: getJourneyMock,
+                listPaths: listPathsMock,
                 listUnits: listUnitsMock,
             },
             newcomerTraining: {
@@ -53,16 +68,92 @@ vi.mock("@/lib/api/client", async () => {
     };
 });
 
+function journeyResponse(
+    unitId: string | null = "business-unit",
+    overrides: { learningContentId?: string | null; examPaperId?: string | null } = {},
+) {
+    const learningContentId = overrides.learningContentId === undefined ? "article-1" : overrides.learningContentId;
+    const examPaperId = overrides.examPaperId === undefined ? "paper-1" : overrides.examPaperId;
+    return {
+        journey_id: "journey-user-1",
+        learner_id: "user-1",
+        learner_name: "新人",
+        department: "销售部",
+        path_key: "newcomer_training_path_v1",
+        path_revision_id: "path-revision-1",
+        path_revision_no: 1,
+        source: "active_revision",
+        legacy_snapshot_only: false,
+        role_capabilities: [],
+        learner_level: {
+            level_key: "unassigned",
+            label: "未分配",
+            source: "training_projection",
+            rank: 0,
+        },
+        role_level: {
+            level_key: "learner",
+            label: "学员",
+            source: "training_projection",
+            rank: 0,
+        },
+        training_stage: "in_progress",
+        modules: [{
+            module_key: "business_skills",
+            title: "商务技巧",
+            kind: "quiz_attempt",
+            module_type: "article_exam",
+            display_name: "商务技巧",
+            order_index: 2,
+            target_unit_id: unitId,
+            target_unit_ids: unitId ? [unitId] : [],
+            learning_content_id: learningContentId,
+            exam_paper_id: examPaperId,
+            enabled: true,
+            status: "not_started",
+            stage: "not_started",
+            passed: null,
+            score: null,
+            max_score: null,
+            required: true,
+            completion_satisfied: false,
+            locked: false,
+            block_reason: null,
+            completion_rule: "passed",
+            source: {
+                path_revision_id: "path-revision-1",
+                path_revision_no: 1,
+            },
+            learner_level_required: null,
+            unmet_reasons: [],
+            diagnostics: [],
+            next_action: null,
+            latest_outcome: null,
+            outcome_history: [],
+        }],
+        overall_progress: {
+            total_modules: 1,
+            completed_modules: 0,
+            passed_modules: 0,
+            failed_modules: 0,
+            needs_remediation_modules: 0,
+        },
+        diagnostics: [],
+        generated_at: "2026-06-29T00:00:00Z",
+    };
+}
+
 describe("BusinessSkillsExamPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         window.localStorage.clear();
         useSearchParamsMock.mockReturnValue(new URLSearchParams("unitId=business-unit"));
         useRouterMock.mockReturnValue({ push: pushMock });
+        getJourneyMock.mockResolvedValue(journeyResponse());
         listUnitsMock.mockResolvedValue({
             items: [{
                 unit_id: "business-unit",
-                config: { path: { learning_content_id: "article-1", exam_paper_id: "paper-1" } },
+                config: { path: { learning_content_id: "article-stale", exam_paper_id: "paper-stale" } },
             }],
             total: 1,
         });
@@ -131,15 +222,11 @@ describe("BusinessSkillsExamPage", () => {
         });
     });
 
-    it("loads and submits the business skills paper on the dedicated exam page", async () => {
-        window.localStorage.setItem(
-            "newcomer-business-skills:article-1:completed-chapters",
-            JSON.stringify(["chapter-1", "chapter-2"]),
-        );
-
+    it("loads and submits the business skills paper from the active Journey module", async () => {
         render(<BusinessSkillsExamPage />);
 
         expect(await screen.findByRole("heading", { name: "商务技巧考试" })).toBeTruthy();
+        expect(listPathsMock).not.toHaveBeenCalled();
         expect(screen.getByText("商务技巧考卷")).toBeTruthy();
         expect(screen.getByLabelText("正确")).toBeTruthy();
         expect(screen.getByLabelText("错误")).toBeTruthy();
@@ -163,9 +250,7 @@ describe("BusinessSkillsExamPage", () => {
             });
         });
         await waitFor(() => {
-            expect(pushMock).toHaveBeenCalledWith(
-                "/sales-trainer/quiz/result/attempt-1",
-            );
+            expect(pushMock).toHaveBeenCalledWith("/sales-trainer/quiz/result/attempt-1");
         });
     });
 
@@ -190,15 +275,97 @@ describe("BusinessSkillsExamPage", () => {
     });
 
     it("shows missing-paper configuration instead of fake success", async () => {
-        listUnitsMock.mockResolvedValueOnce({
-            items: [{ unit_id: "business-unit", config: { path: {} } }],
-            total: 1,
-        });
+        getJourneyMock.mockResolvedValueOnce(journeyResponse("business-unit", { examPaperId: null }));
 
         render(<BusinessSkillsExamPage />);
 
         expect(await screen.findByText("暂未绑定商务技巧考卷")).toBeTruthy();
         expect(screen.getByText(/新人训练路径配置中心 → 商务技巧 → 考卷管理/)).toBeTruthy();
         expect(getPaperMock).not.toHaveBeenCalled();
+    });
+
+    it("resolves missing unitId from the active Journey module", async () => {
+        useSearchParamsMock.mockReturnValue(new URLSearchParams(""));
+
+        render(<BusinessSkillsExamPage />);
+
+        expect(await screen.findByRole("heading", { name: "商务技巧考试" })).toBeTruthy();
+        expect(screen.getByText("商务技巧考卷")).toBeTruthy();
+        expect(getJourneyMock).toHaveBeenCalled();
+        expect(listPathsMock).not.toHaveBeenCalled();
+        expect(getPaperMock).toHaveBeenCalledWith("paper-1");
+        expect(screen.getByRole("link", { name: "返回商务技巧学习" }).getAttribute("href")).toBe(
+            "/sales-trainer/business-skills?unitId=business-unit",
+        );
+    });
+
+    it("uses active Journey bindings instead of stale unit path config", async () => {
+        render(<BusinessSkillsExamPage />);
+
+        expect(await screen.findByRole("heading", { name: "商务技巧考试" })).toBeTruthy();
+        expect(getArticleMock).toHaveBeenCalledWith("business_skills", {
+            learning_content_id: "article-1",
+        });
+        expect(getPaperMock).toHaveBeenCalledWith("paper-1");
+    });
+
+    it("does not borrow another unit's paper when the requested unit has no paper binding", async () => {
+        getJourneyMock.mockResolvedValueOnce(journeyResponse("business-unit", { examPaperId: null }));
+        listUnitsMock.mockResolvedValueOnce({
+            items: [
+                {
+                    unit_id: "business-unit",
+                    config: {
+                        path: {
+                            learning_content_id: "article-1",
+                            module_key: "business_skills",
+                        },
+                    },
+                },
+                {
+                    unit_id: "other-unit",
+                    config: {
+                        path: {
+                            learning_content_id: "article-2",
+                            exam_paper_id: "paper-from-other-unit",
+                            module_key: "business_skills",
+                        },
+                    },
+                },
+            ],
+            total: 2,
+        });
+
+        render(<BusinessSkillsExamPage />);
+
+        expect(await screen.findByText("暂未绑定商务技巧考卷")).toBeTruthy();
+        expect(getPaperMock).not.toHaveBeenCalled();
+        expect(getArticleMock).not.toHaveBeenCalled();
+        expect(getArticleProgressMock).not.toHaveBeenCalled();
+    });
+
+    it("does not infer the exam paper from stale unit path config when unitId is missing", async () => {
+        useSearchParamsMock.mockReturnValue(new URLSearchParams(""));
+        getJourneyMock.mockResolvedValueOnce(journeyResponse("business-unit"));
+        listUnitsMock.mockResolvedValueOnce({
+            items: [{
+                unit_id: "legacy-business-unit",
+                config: {
+                    path: {
+                        module_key: "business_skills",
+                        learning_content_id: "article-legacy",
+                        exam_paper_id: "paper-legacy",
+                    },
+                },
+            }],
+            total: 1,
+        });
+
+        render(<BusinessSkillsExamPage />);
+
+        expect(await screen.findByText(/active path revision 指向的商务技巧训练单元不存在/)).toBeTruthy();
+        expect(getPaperMock).not.toHaveBeenCalled();
+        expect(getArticleMock).not.toHaveBeenCalled();
+        expect(getArticleProgressMock).not.toHaveBeenCalled();
     });
 });

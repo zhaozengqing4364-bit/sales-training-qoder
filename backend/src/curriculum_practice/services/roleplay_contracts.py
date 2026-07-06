@@ -493,13 +493,17 @@ class RoleplayContractCompiler:
             return {}
         return _as_dict(await self._read_reference(asset_type, asset_id_text))
 
-    async def _read_reference(self, asset_type: str, asset_id: str) -> object | None:
+    async def _read_reference(
+        self, asset_type: str, asset_id: str
+    ) -> dict[str, Any] | None:
         if self._reference_reader is None:
             return None
         reference = self._reference_reader(asset_type, asset_id)
         if isawaitable(reference):
-            return await reference
-        return reference
+            reference = await reference
+        if reference is None:
+            return None
+        return _as_dict(reference)
 
     def _legacy_contract(
         self,

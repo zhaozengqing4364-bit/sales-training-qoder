@@ -1,2 +1,0 @@
-$ npx tsc --noEmit
-$ npx eslint src/lib/api/domains/sales-trainer.ts src/lib/api/domains/newcomer-training.ts src/lib/api/types/sales-trainer.ts src/lib/api/types/newcomer-training.ts

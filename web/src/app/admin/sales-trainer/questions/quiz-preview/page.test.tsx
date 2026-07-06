@@ -10,10 +10,12 @@ import type {
 import BusinessEtiquetteQuizPreviewPage from "./page";
 
 const {
+    getAdminCapabilitiesMock,
     getLearningUnitsMock,
     getQuizPreviewMock,
     toastErrorMock,
 } = vi.hoisted(() => ({
+    getAdminCapabilitiesMock: vi.fn(),
     getLearningUnitsMock: vi.fn(),
     getQuizPreviewMock: vi.fn(),
     toastErrorMock: vi.fn(),
@@ -36,14 +38,12 @@ vi.mock("@/lib/api/client", async () => {
         ...actual,
         api: {
             ...actual.api,
-            newcomerTraining: {
-                ...actual.api.newcomerTraining,
-                getBusinessEtiquetteLearningUnits: getLearningUnitsMock,
-            },
             admin: {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getAdminCapabilitiesMock,
+                    getBusinessEtiquetteLearningUnits: getLearningUnitsMock,
                     getBusinessEtiquetteUnitQuizPreview: getQuizPreviewMock,
                 },
             },
@@ -159,9 +159,31 @@ function quizPreview(): BusinessEtiquetteUnitQuiz {
     };
 }
 
+function adminCapabilities(canManageQuestions = true) {
+    return {
+        role: canManageQuestions ? "admin" : "viewer",
+        role_label: canManageQuestions ? "管理员" : "只读人员",
+        capabilities: {
+            admin_full_access: false,
+            manage_content: false,
+            manage_questions: canManageQuestions,
+            manage_modules: false,
+            manage_prompts: false,
+            view_records: false,
+            view_global_records: false,
+            retry_jobs: false,
+            regrade_history: false,
+            view_logs: false,
+            view_settings: false,
+        },
+        capability_keys: canManageQuestions ? ["manage_questions"] : [],
+    };
+}
+
 describe("BusinessEtiquetteQuizPreviewPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        getAdminCapabilitiesMock.mockResolvedValue(adminCapabilities());
         getLearningUnitsMock.mockResolvedValue(learningUnitsResponse());
         getQuizPreviewMock.mockResolvedValue(quizPreview());
     });
@@ -181,5 +203,28 @@ describe("BusinessEtiquetteQuizPreviewPage", () => {
         expect(await screen.findByText("迟到处理")).toBeTruthy();
         expect(await screen.findByText("单选题")).toBeTruthy();
         expect(screen.getAllByText("第 1 章").length).toBeGreaterThan(0);
+    });
+
+    it("fails closed before loading quiz preview when capabilities are unavailable", async () => {
+        getAdminCapabilitiesMock.mockRejectedValueOnce(new Error("权限服务不可用"));
+
+        render(<BusinessEtiquetteQuizPreviewPage />);
+
+        expect(await screen.findByText("题库管理权限不足")).toBeTruthy();
+        expect(screen.getByText("权限服务不可用")).toBeTruthy();
+        expect(getLearningUnitsMock).not.toHaveBeenCalled();
+        expect(getQuizPreviewMock).not.toHaveBeenCalled();
+        expect(screen.queryByRole("button", { name: "刷新" })).toBeNull();
+    });
+
+    it("does not load learner or admin quiz data without manage_questions", async () => {
+        getAdminCapabilitiesMock.mockResolvedValueOnce(adminCapabilities(false));
+
+        render(<BusinessEtiquetteQuizPreviewPage />);
+
+        expect(await screen.findByText("题库管理权限不足")).toBeTruthy();
+        expect(getLearningUnitsMock).not.toHaveBeenCalled();
+        expect(getQuizPreviewMock).not.toHaveBeenCalled();
+        expect(screen.queryByText("选择小单元")).toBeNull();
     });
 });

@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SalesTrainerNextStepPanel } from "./next-step-panel";
 
-const { listPathsMock } = vi.hoisted(() => ({
+const { getJourneyMock, listPathsMock } = vi.hoisted(() => ({
+    getJourneyMock: vi.fn(),
     listPathsMock: vi.fn(),
 }));
 
@@ -30,59 +31,86 @@ vi.mock("@/lib/api/client", async () => {
             ...actual.api,
             salesTrainer: {
                 ...actual.api.salesTrainer,
+                getJourney: getJourneyMock,
                 listPaths: listPathsMock,
             },
         },
     };
 });
 
-function pathResponse(aiCoachAvailable: boolean) {
+function journeyResponse(nextAction: null | {
+    label: string;
+    target_path: string;
+}) {
     return {
-        items: [{
-            path_key: "newcomer_training_path_v1",
-            title: "新人训练路径",
-            goal_title: "掌握新人训练路径",
-            total_levels: 1,
-            completed_levels: 0,
-            current_level_id: "business-unit",
-            next_level_id: "business-unit",
-            levels: [{
-                unit_id: "business-unit",
-                name: "商务技巧",
-                description: null,
-                unit_type: "quiz",
-                module_key: "business_skills",
-                module_type: "article_exam",
-                order_index: 2,
-                level_title: "第二关：商务技巧",
-                level_description: null,
-                locked: false,
-                lock_reason: null,
-                status: "available",
-                completion_rule: "passed",
-                primary_action_label: "开始学习",
-                retry_action_label: "重练本关",
-                review_action_label: "查看结果",
-                target_path: "/sales-trainer/business-skills",
-                ai_coach_availability: {
-                    enabled: aiCoachAvailable,
-                    configured: aiCoachAvailable,
-                    available: aiCoachAvailable,
-                    coach_path: aiCoachAvailable ? "/sales-trainer/business-skills/coach" : null,
-                    disabled_reason: aiCoachAvailable ? null : "AI 教练未启用。",
-                    allowed_interaction_types: aiCoachAvailable ? ["single_choice", "multiple_choice"] : [],
-                },
-                latest_result: null,
-            }],
-            goal_context: {
-                goal_title: "掌握新人训练路径",
-                score_basis: "sales_trainer_path_projection_v1",
-                evidence_items: [],
-                weak_points: [],
-                next_recommendation: null,
+        journey_id: "journey-user-1",
+        learner_id: "user-1",
+        learner_name: "新人",
+        department: "销售一部",
+        path_key: "newcomer_training_path_v1",
+        path_revision_id: "revision-1",
+        path_revision_no: 1,
+        source: "active_revision",
+        legacy_snapshot_only: false,
+        role_capabilities: [],
+        learner_level: {
+            level_key: "unassigned",
+            label: "未分配",
+            source: "training_projection",
+            rank: 0,
+        },
+        role_level: {
+            level_key: "learner",
+            label: "学员",
+            source: "training_projection",
+            rank: 0,
+        },
+        training_stage: "in_progress",
+        modules: [{
+            module_key: "business_skills",
+            title: "商务技巧",
+            kind: "quiz_attempt",
+            module_type: "article_exam",
+            display_name: "商务技巧",
+            order_index: 2,
+            enabled: true,
+            status: "in_progress",
+            stage: "in_progress",
+            passed: null,
+            score: null,
+            max_score: null,
+            required: true,
+            completion_satisfied: false,
+            locked: false,
+            block_reason: null,
+            completion_rule: "passed",
+            source: {
+                path_revision_id: "revision-1",
+                path_revision_no: 1,
             },
+            learner_level_required: null,
+            unmet_reasons: [],
+            diagnostics: [],
+            next_action: nextAction
+                ? {
+                    action_key: "continue_business_skills",
+                    label: nextAction.label,
+                    target_path: nextAction.target_path,
+                    disabled: false,
+                    disabled_reason: null,
+                }
+                : null,
+            latest_outcome: null,
+            outcome_history: [],
         }],
-        total: 1,
+        overall_progress: {
+            total_modules: 1,
+            completed_modules: 0,
+            passed_modules: 0,
+            failed_modules: 0,
+            needs_remediation_modules: 0,
+        },
+        diagnostics: [],
     };
 }
 
@@ -91,19 +119,23 @@ describe("SalesTrainerNextStepPanel", () => {
         vi.clearAllMocks();
     });
 
-    it("falls back to AI coach when current business skills level has no backend recommendation", async () => {
-        listPathsMock.mockResolvedValue(pathResponse(true));
+    it("uses the backend TrainingJourney next action", async () => {
+        getJourneyMock.mockResolvedValue(journeyResponse({
+            label: "继续训练",
+            target_path: "/sales-trainer/business-skills",
+        }));
 
         render(<SalesTrainerNextStepPanel unitId="business-unit" />);
 
-        expect(await screen.findByText("去 AI 教练练一轮")).toBeTruthy();
-        expect(screen.getByRole("link", { name: /进入 AI 教练/ }).getAttribute("href")).toBe(
-            "/sales-trainer/business-skills/coach",
+        expect(await screen.findByText("商务技巧")).toBeTruthy();
+        expect(screen.getByRole("link", { name: /继续训练/ }).getAttribute("href")).toBe(
+            "/sales-trainer/business-skills",
         );
+        expect(listPathsMock).not.toHaveBeenCalled();
     });
 
-    it("falls back to the learner home when AI coach is unavailable", async () => {
-        listPathsMock.mockResolvedValue(pathResponse(false));
+    it("does not synthesize an AI coach fallback when Journey has no next action", async () => {
+        getJourneyMock.mockResolvedValue(journeyResponse(null));
 
         render(<SalesTrainerNextStepPanel unitId="business-unit" />);
 
@@ -111,5 +143,7 @@ describe("SalesTrainerNextStepPanel", () => {
         expect(screen.getByRole("link", { name: "查看训练路径" }).getAttribute("href")).toBe(
             "/sales-trainer",
         );
+        expect(screen.queryByText("去 AI 教练练一轮")).toBeNull();
+        expect(listPathsMock).not.toHaveBeenCalled();
     });
 });

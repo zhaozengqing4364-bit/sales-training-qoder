@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from datetime import UTC, datetime
 from inspect import isawaitable
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +34,7 @@ from curriculum_practice.services.frozen_asset_refs import (
     FrozenSituationPackResolver,
     parse_published_asset_refs,
 )
+from curriculum_practice.services.roleplay.situation_pack_dto import SituationPackDTO
 from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
 )
@@ -258,7 +260,7 @@ class RuntimeSnapshotService:
     async def _read_reference(self, asset_type: str, asset_id: str) -> object | None:
         reference = self._reference_reader(asset_type, asset_id)
         if isawaitable(reference):
-            return await reference
+            return await cast(Awaitable[object | None], reference)
         return reference
 
     async def _stage_snapshots(
@@ -456,7 +458,7 @@ class RuntimeSnapshotService:
     async def _resolve_frozen_situation_pack(
         self,
         published_asset_refs: dict[str, PublishedAssetRef],
-    ):
+    ) -> SituationPackDTO | None:
         self._last_frozen_situation_pack_resolution_mode = None
         situation_pack_ref = published_asset_refs.get("situation_pack_ref")
         if (

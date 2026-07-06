@@ -22,6 +22,7 @@ def test_validate_production_config_rejects_unsafe_values() -> None:
             "ENVIRONMENT": "production",
             "DEV_LOGIN_ENABLED": "true",
             "SECRET_KEY": "change-me",
+            "JWT_SECRET": "change-me",
             "DEBUG": "true",
             "CORS_ORIGINS": "*",
         }
@@ -30,6 +31,7 @@ def test_validate_production_config_rejects_unsafe_values() -> None:
     assert {finding.code for finding in findings} == {
         "PROD_DEV_LOGIN_ENABLED",
         "PROD_SECRET_KEY_UNSAFE",
+        "PROD_JWT_SECRET_UNSAFE",
         "PROD_DEBUG_TRUE",
         "PROD_CORS_WIDE_OPEN",
     }
@@ -40,6 +42,7 @@ def test_validate_production_config_rejects_wide_open_cors_regex() -> None:
         {
             "ENVIRONMENT": "production",
             "SECRET_KEY": "production-secret-key-with-32-characters",
+            "JWT_SECRET": "production-jwt-secret-with-32-characters",
             "DEBUG": "false",
             "CORS_ALLOW_ORIGIN_REGEX": r"^https?://.*$",
         }
@@ -288,6 +291,7 @@ def test_run_release_readiness_checks_reports_secret_and_manifest_failures(
 
     assert report.passed is False
     assert "PROD_SECRET_KEY_UNSAFE" in {finding.code for finding in report.findings}
+    assert "PROD_JWT_SECRET_UNSAFE" in {finding.code for finding in report.findings}
     assert "PHASE4_ISSUE44_MANIFEST_MISSING" in {
         finding.code for finding in report.findings
     }

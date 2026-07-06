@@ -11,6 +11,7 @@ const {
     completeChapterMock,
     getArticleMock,
     getBusinessUnitsMock,
+    getJourneyMock,
     listQuizAttemptsMock,
     getUnitQuizMock,
     listPathsMock,
@@ -21,6 +22,7 @@ const {
     completeChapterMock: vi.fn(),
     getArticleMock: vi.fn(),
     getBusinessUnitsMock: vi.fn(),
+    getJourneyMock: vi.fn(),
     listQuizAttemptsMock: vi.fn(),
     getUnitQuizMock: vi.fn(),
     listPathsMock: vi.fn(),
@@ -53,6 +55,7 @@ vi.mock("@/lib/api/client", async () => {
             ...actual.api,
             salesTrainer: {
                 ...actual.api.salesTrainer,
+                getJourney: getJourneyMock,
                 listPaths: listPathsMock,
                 listUnits: listUnitsMock,
             },
@@ -171,53 +174,87 @@ function learningUnit({
     };
 }
 
-function pathResponse(coachPath: string | null = null) {
+function journeyResponse(
+    coachPath: string | null = null,
+    overrides: { unitId?: string | null; learningContentId?: string | null; examPaperId?: string | null } = {},
+) {
+    const unitId = overrides.unitId === undefined ? "business-unit" : overrides.unitId;
+    const learningContentId = overrides.learningContentId === undefined ? "article-1" : overrides.learningContentId;
+    const examPaperId = overrides.examPaperId === undefined ? "paper-1" : overrides.examPaperId;
     return {
-        items: [{
-            path_key: "newcomer_training_path_v1",
-            title: "新人训练路径",
-            goal_title: "掌握新人训练路径",
-            total_levels: 1,
-            completed_levels: 0,
-            current_level_id: "business-unit",
-            next_level_id: "business-unit",
-            levels: [{
-                unit_id: "business-unit",
-                name: "商务技巧",
-                description: null,
-                unit_type: "quiz",
-                module_key: "business_skills",
-                module_type: "article_exam",
-                order_index: 2,
-                level_title: "第二关：商务技巧",
-                level_description: null,
-                locked: false,
-                lock_reason: null,
-                status: "available",
-                completion_rule: "passed",
-                primary_action_label: "开始学习",
-                retry_action_label: "重练本关",
-                review_action_label: "查看结果",
-                target_path: "/sales-trainer/business-skills",
-                ai_coach_availability: coachPath ? {
-                    enabled: true,
-                    configured: true,
-                    available: true,
-                    coach_path: coachPath,
-                    disabled_reason: null,
-                    allowed_interaction_types: ["single_choice", "multiple_choice"],
-                } : null,
-                latest_result: null,
-            }],
-            goal_context: {
-                goal_title: "掌握新人训练路径",
-                score_basis: "sales_trainer_path_projection_v1",
-                evidence_items: [],
-                weak_points: [],
-                next_recommendation: null,
+        journey_id: "journey-user-1",
+        learner_id: "user-1",
+        learner_name: "新人",
+        department: "销售部",
+        path_key: "newcomer_training_path_v1",
+        path_revision_id: "path-revision-1",
+        path_revision_no: 1,
+        source: "active_revision",
+        legacy_snapshot_only: false,
+        role_capabilities: [],
+        learner_level: {
+            level_key: "unassigned",
+            label: "未分配",
+            source: "training_projection",
+            rank: 0,
+        },
+        role_level: {
+            level_key: "learner",
+            label: "学员",
+            source: "training_projection",
+            rank: 0,
+        },
+        training_stage: "in_progress",
+        modules: [{
+            module_key: "business_skills",
+            title: "商务技巧",
+            kind: "quiz_attempt",
+            module_type: "article_exam",
+            display_name: "商务技巧",
+            order_index: 2,
+            target_unit_id: unitId,
+            target_unit_ids: unitId ? [unitId] : [],
+            learning_content_id: learningContentId,
+            exam_paper_id: examPaperId,
+            enabled: true,
+            status: "needs_remediation",
+            stage: "needs_remediation",
+            passed: false,
+            score: 60,
+            max_score: 100,
+            required: true,
+            completion_satisfied: false,
+            locked: false,
+            block_reason: null,
+            completion_rule: "passed",
+            source: {
+                path_revision_id: "path-revision-1",
+                path_revision_no: 1,
             },
+            learner_level_required: null,
+            unmet_reasons: [],
+            diagnostics: [],
+            next_action: coachPath
+                ? {
+                    action_key: "start_ai_coach",
+                    label: "进入 AI 教练",
+                    target_path: coachPath,
+                    disabled: false,
+                    disabled_reason: null,
+                }
+                : null,
+            latest_outcome: null,
+            outcome_history: [],
         }],
-        total: 1,
+        overall_progress: {
+            total_modules: 1,
+            completed_modules: 0,
+            passed_modules: 0,
+            failed_modules: 1,
+            needs_remediation_modules: 1,
+        },
+        diagnostics: [],
+        generated_at: "2026-06-29T00:00:00Z",
     };
 }
 
@@ -339,7 +376,7 @@ describe("BusinessSkillsPage", () => {
             }],
             total: 1,
         });
-        listPathsMock.mockResolvedValue(pathResponse());
+        getJourneyMock.mockResolvedValue(journeyResponse());
         getBusinessUnitsMock.mockResolvedValue(learningUnitsResponse());
         getUnitQuizMock.mockResolvedValue(unitQuizResponse());
         listQuizAttemptsMock.mockResolvedValue({ items: [], total: 0 });
@@ -441,13 +478,7 @@ describe("BusinessSkillsPage", () => {
     });
 
     it("falls back to module article binding when selected unit has no article binding", async () => {
-        listUnitsMock.mockResolvedValueOnce({
-            items: [{
-                unit_id: "business-unit",
-                config: { path: { exam_paper_id: "paper-1" } },
-            }],
-            total: 1,
-        });
+        getJourneyMock.mockResolvedValueOnce(journeyResponse(null, { learningContentId: null }));
 
         render(<BusinessSkillsPage />);
 
@@ -455,8 +486,48 @@ describe("BusinessSkillsPage", () => {
         expect(getArticleMock).toHaveBeenCalledWith("business_skills", undefined);
     });
 
-    it("shows the AI coach entry when path availability is enabled", async () => {
-        listPathsMock.mockResolvedValueOnce(pathResponse("/sales-trainer/business-skills/coach"));
+    it("resolves missing unitId from the active path projection instead of catalog config", async () => {
+        useSearchParamsMock.mockReturnValue(new URLSearchParams(""));
+
+        render(<BusinessSkillsPage />);
+
+        expect(await screen.findByText("见客户前商务礼仪")).toBeTruthy();
+        expect(getJourneyMock).toHaveBeenCalled();
+        expect(listPathsMock).not.toHaveBeenCalled();
+        expect(getArticleMock).toHaveBeenCalledWith("business_skills", {
+            learning_content_id: "article-1",
+        });
+        expect(screen.getByRole("button", { name: /职业信任底座/ })).toBeTruthy();
+    });
+
+    it("does not infer the business skills unit from stale unit path config when unitId is missing", async () => {
+        useSearchParamsMock.mockReturnValue(new URLSearchParams(""));
+        getJourneyMock.mockResolvedValueOnce(journeyResponse(null, { unitId: "business-unit" }));
+        listUnitsMock.mockResolvedValueOnce({
+            items: [{
+                unit_id: "legacy-business-unit",
+                config: {
+                    path: {
+                        module_key: "business_skills",
+                        learning_content_id: "article-legacy",
+                        exam_paper_id: "paper-legacy",
+                    },
+                },
+            }],
+            total: 1,
+        });
+
+        render(<BusinessSkillsPage />);
+
+        expect(await screen.findByText("商务礼仪训练内容暂不可用")).toBeTruthy();
+        expect(screen.getByText(/active path revision 指向的商务技巧训练单元不存在/)).toBeTruthy();
+        expect(getArticleMock).not.toHaveBeenCalled();
+        expect(getBusinessUnitsMock).not.toHaveBeenCalled();
+        expect(listPathsMock).not.toHaveBeenCalled();
+    });
+
+    it("shows the AI coach entry from the Journey next action", async () => {
+        getJourneyMock.mockResolvedValueOnce(journeyResponse("/sales-trainer/business-skills/coach"));
 
         render(<BusinessSkillsPage />);
 
@@ -464,6 +535,27 @@ describe("BusinessSkillsPage", () => {
         expect(screen.getByRole("link", { name: "先去 AI 教练练一轮" }).getAttribute("href")).toBe(
             "/sales-trainer/business-skills/coach",
         );
+    });
+
+    it("does not render an AI coach entry from path catalog availability without a Journey action", async () => {
+        getJourneyMock.mockResolvedValueOnce(journeyResponse(null));
+
+        render(<BusinessSkillsPage />);
+
+        expect(await screen.findByText("见客户前商务礼仪")).toBeTruthy();
+        expect(screen.queryByRole("link", { name: "先去 AI 教练练一轮" })).toBeNull();
+    });
+
+    it("fails closed when active path loading fails", async () => {
+        getJourneyMock.mockRejectedValueOnce(new Error("journey unavailable"));
+
+        render(<BusinessSkillsPage />);
+
+        expect(await screen.findByText("商务礼仪训练内容暂不可用")).toBeTruthy();
+        expect(screen.getByText("journey unavailable")).toBeTruthy();
+        expect(screen.queryByRole("link", { name: "先去 AI 教练练一轮" })).toBeNull();
+        expect(getArticleMock).not.toHaveBeenCalled();
+        expect(listPathsMock).not.toHaveBeenCalled();
     });
 
     it("loads, submits, and renders the configured unit quiz result", async () => {

@@ -24,10 +24,6 @@ export function readLearnerConfig(
     return learner as SalesTrainerLearnerConfig;
 }
 
-const DEFAULT_AUDIO_PASS_THRESHOLD = 70;
-
-const INTERNAL_UNIT_NAME_PATTERN = /E2E|Goal验收|测试|test/i;
-
 const SUBMISSION_STATUS_LABELS: Record<SalesTrainerAudioSubmissionStatus, string> = {
     uploaded: "已上传",
     transcribing: "正在转写",
@@ -50,52 +46,9 @@ export function isTerminalSubmissionStatus(status: SalesTrainerAudioSubmissionSt
     return status === "scored" || status === "transcription_failed" || status === "scoring_failed";
 }
 
-export function collectPathUnitIds(paths: SalesTrainerPath[]): Set<string> {
-    const unitIds = new Set<string>();
-    for (const path of paths) {
-        for (const level of path.levels) {
-            unitIds.add(level.unit_id);
-        }
-    }
-    return unitIds;
-}
-
-export function isLikelyInternalUnit(unit: SalesTrainerUnit): boolean {
-    return INTERNAL_UNIT_NAME_PATTERN.test(unit.name);
-}
-
-export function partitionUnits(
-    units: SalesTrainerUnit[],
-    pathUnitIds: Set<string>,
-): { pathUnits: SalesTrainerUnit[]; extraUnits: SalesTrainerUnit[] } {
-    const pathUnits: SalesTrainerUnit[] = [];
-    const extraUnits: SalesTrainerUnit[] = [];
-
-    for (const unit of units) {
-        if (pathUnitIds.has(unit.unit_id)) {
-            pathUnits.push(unit);
-        } else {
-            extraUnits.push(unit);
-        }
-    }
-
-    return { pathUnits, extraUnits };
-}
-
-export function sortExtraUnits(units: SalesTrainerUnit[]): SalesTrainerUnit[] {
-    return [...units].sort((left, right) => {
-        const leftInternal = isLikelyInternalUnit(left);
-        const rightInternal = isLikelyInternalUnit(right);
-        if (leftInternal !== rightInternal) {
-            return leftInternal ? 1 : -1;
-        }
-        return left.name.localeCompare(right.name, "zh-CN");
-    });
-}
-
-export function getAudioPassThreshold(unit: SalesTrainerUnit | null | undefined): number {
+export function getAudioPassThreshold(unit: SalesTrainerUnit | null | undefined): number | null {
     const threshold = unit?.config.audio?.pass_threshold;
-    return typeof threshold === "number" && Number.isFinite(threshold) ? threshold : DEFAULT_AUDIO_PASS_THRESHOLD;
+    return typeof threshold === "number" && Number.isFinite(threshold) ? threshold : null;
 }
 
 export function findFocusLevel(path: SalesTrainerPath): SalesTrainerPathLevel | undefined {

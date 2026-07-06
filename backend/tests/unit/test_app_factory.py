@@ -7,6 +7,7 @@ import types
 from collections import Counter
 
 import pytest
+from fastapi import FastAPI
 from fastapi.routing import APIWebSocketRoute
 from httpx import ASGITransport, AsyncClient
 
@@ -155,6 +156,7 @@ def test_create_app_does_not_duplicate_method_path_routes() -> None:
 def test_create_app_cors_defaults_fail_closed_in_production(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("SECRET_KEY", "production-secret-key-with-32-characters")
+    monkeypatch.setenv("JWT_SECRET", "production-jwt-secret-with-32-characters")
     monkeypatch.setenv("DEBUG", "false")
     monkeypatch.delenv("CORS_ORIGINS", raising=False)
     monkeypatch.delenv("CORS_ALLOW_ORIGIN_REGEX", raising=False)
@@ -173,6 +175,7 @@ def test_create_app_rejects_unsafe_production_config(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("DEV_LOGIN_ENABLED", "true")
     monkeypatch.setenv("SECRET_KEY", "change-me")
+    monkeypatch.setenv("JWT_SECRET", "change-me")
     monkeypatch.setenv("DEBUG", "true")
     monkeypatch.setenv("CORS_ORIGINS", "*")
 
@@ -185,8 +188,38 @@ def test_create_app_rejects_unsafe_production_config(monkeypatch) -> None:
 
     assert "PROD_DEV_LOGIN_ENABLED" in message
     assert "PROD_SECRET_KEY_UNSAFE" in message
+    assert "PROD_JWT_SECRET_UNSAFE" in message
     assert "PROD_DEBUG_TRUE" in message
     assert "PROD_CORS_WIDE_OPEN" in message
+
+
+@pytest.mark.asyncio
+async def test_lifespan_rejects_unsafe_production_jwt_secret(monkeypatch) -> None:
+    import app_lifespan as app_lifespan_module
+    import common.auth.service as auth_service
+    from common.config import settings
+
+    init_db_called = False
+
+    async def fail_if_called() -> None:
+        nonlocal init_db_called
+        init_db_called = True
+
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(
+        settings,
+        "SECRET_KEY",
+        "production-secret-key-with-32-characters",
+    )
+    monkeypatch.setattr(auth_service, "JWT_SECRET", "change-me")
+    monkeypatch.setattr(app_lifespan_module, "initialize_otel", lambda _app: None)
+    monkeypatch.setattr(app_lifespan_module, "init_db", fail_if_called)
+
+    with pytest.raises(RuntimeError, match="JWT_SECRET must be explicit"):
+        async with app_lifespan_module.lifespan(FastAPI()):
+            pass
+
+    assert init_db_called is False
 
 
 def test_create_app_cors_appends_dev_origins_only_in_dev(monkeypatch) -> None:

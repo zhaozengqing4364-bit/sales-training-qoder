@@ -119,7 +119,8 @@ def _isoformat(value: Any) -> str:
         return ""
     if hasattr(value, "isoformat"):
         try:
-            return value.isoformat()
+            iso_value = value.isoformat()
+            return iso_value if isinstance(iso_value, str) else str(iso_value)
         except Exception:  # pragma: no cover - defensive
             return str(value)
     return str(value)

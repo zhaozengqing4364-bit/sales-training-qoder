@@ -30,6 +30,12 @@ export function issueActionLabel(code: string): string {
     if (code === "article_missing" || code === "article_chapters_missing") {
         return "配置学习文章";
     }
+    if (code === "runtime_binding_missing") {
+        return "配置运行时绑定";
+    }
+    if (code === "provider_readiness_not_ready") {
+        return "查看配置健康";
+    }
     return "去配置";
 }
 
@@ -42,6 +48,9 @@ export function remediationLabel(module: NewcomerConfigModuleSummary): string {
     }
     if (module.moduleKey === "elevator_pitch") {
         return "选择电梯演讲材料";
+    }
+    if (module.moduleKey === "realtime_roleplay") {
+        return "配置实时对练";
     }
     return "配置占位说明";
 }

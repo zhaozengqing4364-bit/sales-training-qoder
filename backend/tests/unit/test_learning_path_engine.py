@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.config import settings
 from common.db.models import (
     PracticeSession,
     Scenario,
@@ -14,7 +15,6 @@ from common.db.models import (
     TrainingReportSnapshot,
 )
 from curriculum_practice.models import PracticeTemplate
-from common.config import settings
 from curriculum_practice.services.learning_path import LearningPathService
 
 

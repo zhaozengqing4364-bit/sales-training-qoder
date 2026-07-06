@@ -11,20 +11,23 @@ References:
 - Voice Practice Optimization: Streaming TTS (Requirements 2.1, 2.6)
 """
 
+import importlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, cast
 
+_EDGE_TTS_MODULE: Any
+
 try:
-    import edge_tts as _edge_tts
+    _EDGE_TTS_MODULE = importlib.import_module("edge_tts")
 
     _EDGE_TTS_IMPORT_ERROR: Exception | None = None
 except Exception as exc:  # pragma: no cover - depends on optional runtime deps
-    _edge_tts = SimpleNamespace(Communicate=None)
+    _EDGE_TTS_MODULE = SimpleNamespace(Communicate=None)
     _EDGE_TTS_IMPORT_ERROR = exc
 
-edge_tts = _edge_tts
+edge_tts: Any = _EDGE_TTS_MODULE
 
 from common.ai.config_manager import get_config_manager  # noqa: E402
 from common.ai.models import ModelConfig, ModelType  # noqa: E402

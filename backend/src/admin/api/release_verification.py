@@ -12,7 +12,8 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from dataclasses import asdict
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -26,6 +27,9 @@ from common.analytics.release_verification_service import (
     CheckType as ReleaseCheckType,
 )
 from common.analytics.release_verification_service import (
+    ReleaseVerificationReport,
+    VerificationRecordView,
+    VerificationSummaryView,
     release_verification_service,
 )
 from common.db.models import User
@@ -78,12 +82,14 @@ class GoNoGoDecisionRequest(BaseModel):
     reason: str
 
 
-def success_response(data: Any, trace_id: str | None = None) -> dict:
+def success_response(data: Any, trace_id: str | None = None) -> dict[str, Any]:
     """Create unified success response"""
     return {"success": True, "data": data, "trace_id": trace_id or get_trace_id()}
 
 
-def error_response(error_code: str, message: str, trace_id: str | None = None) -> dict:
+def error_response(
+    error_code: str, message: str, trace_id: str | None = None
+) -> dict[str, Any]:
     """Create unified error response"""
     return {
         "success": False,
@@ -149,9 +155,8 @@ async def create_release_candidate(
             result.fallback or "[CREATE_FAILED]", "Failed to create release candidate"
         )
 
-    from dataclasses import asdict
-
-    return success_response(asdict(result.value))
+    summary = cast(VerificationSummaryView, result.value)
+    return success_response(asdict(summary))
 
 
 @router.get("/candidates", response_model=dict)
@@ -183,10 +188,9 @@ async def list_release_candidates(
             result.fallback or "[LIST_FAILED]", "Failed to list release candidates"
         )
 
-    from dataclasses import asdict
-
+    candidates = cast(list[VerificationSummaryView], result.value)
     return success_response(
-        {"candidates": [asdict(c) for c in result.value], "total": len(result.value)}
+        {"candidates": [asdict(c) for c in candidates], "total": len(candidates)}
     )
 
 
@@ -211,9 +215,8 @@ async def get_latest_release_candidate(
     if result.value is None:
         return success_response({"candidate": None})
 
-    from dataclasses import asdict
-
-    return success_response({"candidate": asdict(result.value)})
+    candidate = cast(VerificationSummaryView, result.value)
+    return success_response({"candidate": asdict(candidate)})
 
 
 @router.get("/candidates/{release_candidate_id}/report", response_model=dict)
@@ -250,9 +253,7 @@ async def get_verification_report(
             result.fallback or "[REPORT_FAILED]", "Failed to get verification report"
         )
 
-    from dataclasses import asdict
-
-    report = result.value
+    report = cast(ReleaseVerificationReport, result.value)
     return success_response(
         {
             "summary": asdict(report.summary),
@@ -307,9 +308,8 @@ async def update_check_result(
             result.fallback or "[UPDATE_FAILED]", "Failed to update check result"
         )
 
-    from dataclasses import asdict
-
-    return success_response(asdict(result.value))
+    record = cast(VerificationRecordView, result.value)
+    return success_response(asdict(record))
 
 
 @router.post("/candidates/{release_candidate_id}/decision", response_model=dict)
@@ -353,9 +353,8 @@ async def make_go_no_go_decision(
             result.fallback or "[DECISION_FAILED]", "Failed to make go/no-go decision"
         )
 
-    from dataclasses import asdict
-
-    return success_response(asdict(result.value))
+    summary = cast(VerificationSummaryView, result.value)
+    return success_response(asdict(summary))
 
 
 @router.post("/candidates/{release_candidate_id}/run-verification", response_model=dict)
@@ -419,11 +418,12 @@ async def run_automated_verification(
         "Automated verification completed",
         extra={
             "release_candidate_id": release_candidate_id,
-            "summary": result.value.get("summary", {}),
+            "summary": cast(dict[str, Any], result.value).get("summary", {}),
         },
     )
 
-    return success_response(result.value)
+    verification_result = cast(dict[str, Any], result.value)
+    return success_response(verification_result)
 
 
 @router.get("/candidates/{release_candidate_id}/quality-gate", response_model=dict)
@@ -502,6 +502,5 @@ async def make_automated_decision(
             result.fallback or "Failed to make automated decision",
         )
 
-    from dataclasses import asdict
-
-    return success_response(asdict(result.value))
+    summary = cast(VerificationSummaryView, result.value)
+    return success_response(asdict(summary))

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
 from common.db.models import User
-from sales_trainer.models import SalesTrainerAiCoachSession
+from sales_trainer.models import SalesTrainerAiCoachSession, SalesTrainerUnit
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
@@ -73,7 +73,21 @@ def _training_pack_payload(*, chapter_hash: str) -> dict[str, object]:
     }
 
 
-async def _seed_active_path(test_db: AsyncSession, *, admin: User) -> None:
+async def _seed_active_path(
+    test_db: AsyncSession,
+    *,
+    admin: User,
+    learner_level_required: list[str] | None = None,
+) -> None:
+    unit = SalesTrainerUnit(
+        unit_id=f"be-release-{uuid.uuid4().hex[:8]}",
+        name="商务礼仪考试",
+        unit_type="quiz",
+        status="published",
+        config={},
+    )
+    test_db.add(unit)
+    await test_db.flush()
     payload = {
         "path_key": NEWCOMER_PATH_LOGICAL_ID,
         "title": "新人训练路径",
@@ -88,8 +102,9 @@ async def _seed_active_path(test_db: AsyncSession, *, admin: User) -> None:
                 "order_index": 1,
                 "title": "商务礼仪",
                 "description": "按小单元完成商务礼仪训练。",
-                "target_unit_id": None,
+                "target_unit_id": unit.unit_id,
                 "learning_content_id": None,
+                "learner_level_required": learner_level_required or [],
                 "exam_paper_id": None,
                 "material_id": None,
                 "material_version_id": None,
@@ -241,3 +256,55 @@ async def test_should_start_voluntary_retraining_session_via_api(
     assert session is not None
     assert session.user_id == str(learner.user_id)
     assert session.module_key == "business_skills"
+
+
+@pytest.mark.asyncio
+async def test_should_fail_closed_voluntary_retraining_when_module_locked(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    test_db.add_all([admin, learner])
+    await test_db.commit()
+    await _seed_active_path(
+        test_db,
+        admin=admin,
+        learner_level_required=["ready"],
+    )
+
+    response = await async_client.post(
+        "/api/v1/newcomer-training/business-etiquette/retraining-sessions",
+        headers=_auth_headers(learner),
+        json={"reason": "尝试绕过锁定模块"},
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    session = await test_db.scalar(select(SalesTrainerAiCoachSession))
+    assert session is None
+
+
+@pytest.mark.asyncio
+async def test_should_reject_content_admin_retraining_assignment(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    content_admin = _user("content_admin")
+    learner = _user("user")
+    test_db.add_all([content_admin, learner])
+    await test_db.commit()
+
+    response = await async_client.post(
+        "/api/v1/admin/newcomer-training/business-etiquette/retraining-assignments",
+        headers=_auth_headers(content_admin),
+        json={
+            "user_ids": [str(learner.user_id)],
+            "reason": "内容管理员不得指定学员重练",
+        },
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["error"] == "[ROLE_REQUIRED]"
+    session = await test_db.scalar(select(SalesTrainerAiCoachSession))
+    assert session is None

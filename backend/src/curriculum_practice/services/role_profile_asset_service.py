@@ -24,6 +24,11 @@ from curriculum_practice.services.content_asset_payloads import (
 from curriculum_practice.services.content_asset_references import (
     list_published_template_references,
 )
+from curriculum_practice.services.orm_payload_typing import (
+    orm_optional_str,
+    orm_str,
+    set_orm_field,
+)
 from curriculum_practice.services.role_profile_revision_service import (
     RoleProfileRevisionService,
 )
@@ -84,7 +89,7 @@ class RoleProfileAssetService:
             return item
         for field, value in payload.model_dump().items():
             setattr(item, field, value)
-        item.updated_by = actor_id
+        set_orm_field(item, "updated_by", actor_id)
         await self._db.commit()
         await self._db.refresh(item)
         return item
@@ -92,8 +97,8 @@ class RoleProfileAssetService:
     async def archive_role_profile(
         self, item: RoleProfile, *, actor_id: str | None
     ) -> RoleProfile:
-        item.status = "archived"
-        item.updated_by = actor_id
+        set_orm_field(item, "status", "archived")
+        set_orm_field(item, "updated_by", actor_id)
         await self._db.commit()
         await self._db.refresh(item)
         return item
@@ -118,10 +123,14 @@ class RoleProfileAssetService:
         )
         if not result.ok or not result.voice_id:
             return result
-        item.voice_id = result.voice_id
-        item.voice_sample_url = voice_sample_url
-        item.content_hash = role_profile_content_hash(role_profile_payload(item))
-        item.updated_by = actor_id
+        set_orm_field(item, "voice_id", result.voice_id)
+        set_orm_field(item, "voice_sample_url", voice_sample_url)
+        set_orm_field(
+            item,
+            "content_hash",
+            role_profile_content_hash(role_profile_payload(item)),
+        )
+        set_orm_field(item, "updated_by", actor_id)
         await self._db.commit()
         await self._db.refresh(item)
         return result
@@ -142,14 +151,17 @@ class RoleProfileAssetService:
                 "content_hash_mismatch",
                 "RoleProfile content_hash does not match current content.",
             )
-        await self._ensure_persona_ref_available(item.persona_ref)
-        item.status = "published"
-        item.published_by = actor_id
-        item.published_at = datetime.now(UTC)
-        item.updated_by = actor_id
-        actor = await self._optional_actor(actor_id)
-        if actor is not None:
-            await revision_service.ensure_initial_published_revision(item, actor=actor)
+        await self._ensure_persona_ref_available(orm_optional_str(item.persona_ref))
+        set_orm_field(item, "status", "published")
+        set_orm_field(item, "published_by", actor_id)
+        set_orm_field(item, "published_at", datetime.now(UTC))
+        set_orm_field(item, "updated_by", actor_id)
+        initial_actor = await self._optional_actor(actor_id)
+        if initial_actor is not None:
+            await revision_service.ensure_initial_published_revision(
+                item,
+                actor=initial_actor,
+            )
         await self._db.commit()
         await self._db.refresh(item)
         return item
@@ -158,7 +170,7 @@ class RoleProfileAssetService:
         self, item: RoleProfile, *, actor_id: str | None
     ) -> RoleProfile:
         payload = role_profile_payload(item)
-        payload["role_name"] = copy_suffix(item.role_name)
+        payload["role_name"] = copy_suffix(orm_str(item.role_name))
         content_hash = role_profile_content_hash(payload)
         duplicate = RoleProfile(
             role_profile_id=str(uuid.uuid4()),
@@ -195,10 +207,10 @@ class RoleProfileAssetService:
         )
         if references and not acknowledge:
             raise ContentAssetReferencedByTemplatesError(references)
-        item.status = "draft"
-        item.published_at = None
-        item.published_by = None
-        item.updated_by = actor_id
+        set_orm_field(item, "status", "draft")
+        set_orm_field(item, "published_at", None)
+        set_orm_field(item, "published_by", None)
+        set_orm_field(item, "updated_by", actor_id)
         await self._db.commit()
         await self._db.refresh(item)
         return item

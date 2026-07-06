@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import pytest
-
-from admin.config_assets.natural_keys import derive_natural_key, slugify_name, topology_ref
+from admin.config_assets.natural_keys import (
+    derive_natural_key,
+    slugify_name,
+    topology_ref,
+)
 
 
 def test_should_slugify_ascii_name_to_natural_key() -> None:

@@ -101,19 +101,20 @@ def build_config_asset_center_overview_payload(
 ) -> dict[str, object]:
     dual_read = get_dual_read_observability_snapshot()
     gate_payload = promotion_gate or build_default_promotion_gate_payload()
+    blocked_reasons = _as_string_list(gate_payload.get("blocked_reasons"))
     dual_read = {
         **dual_read,
         "promotion_ready": bool(gate_payload.get("promotion_ready")),
-        "blocked_reasons": list(gate_payload.get("blocked_reasons") or []),
+        "blocked_reasons": blocked_reasons,
         "approval_id": gate_payload.get("approval_id"),
         "window_start": gate_payload.get("window_start"),
         "window_end": gate_payload.get("window_end"),
     }
-    mismatch_count = int(dual_read.get("mismatch_count") or 0)
+    mismatch_count = _as_int(dual_read.get("mismatch_count"))
     enabled = bool(dual_read.get("enabled"))
     if not enabled:
         status = "unknown"
-    elif dual_read.get("blocked_reasons"):
+    elif blocked_reasons:
         status = "warning"
     elif mismatch_count > 0:
         status = "warning"
@@ -133,3 +134,18 @@ def reset_dual_read_observability_for_tests() -> None:
         _mismatch_count = 0
         _last_mismatch = None
         _sample_mismatches = []
+
+
+def _as_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item)]
+
+
+def _as_int(value: object) -> int:
+    if not isinstance(value, int | str):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0

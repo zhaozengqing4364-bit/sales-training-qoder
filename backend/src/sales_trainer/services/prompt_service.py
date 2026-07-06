@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from typing import cast
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
 from sales_trainer.models import SalesTrainerAudioScorePrompt
 from sales_trainer.schemas import AudioScorePromptCreate, AudioScorePromptUpdate
-from sales_trainer.services.material_service import normalize_learner_rubric
+from sales_trainer.services.material_service import (
+    normalize_audio_score_output_schema,
+    normalize_learner_rubric,
+)
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.prompt_revision_payloads import prompt_lifecycle_snapshot
 from sales_trainer.services.prompt_revision_service import (
@@ -52,6 +57,65 @@ class AudioScorePromptService:
     async def get_prompt(self, prompt_id: str) -> SalesTrainerAudioScorePrompt | None:
         return await self._db.get(SalesTrainerAudioScorePrompt, prompt_id)
 
+    async def list_revisions(
+        self,
+        prompt: SalesTrainerAudioScorePrompt,
+    ) -> list[dict[str, object]]:
+        try:
+            return cast(
+                list[dict[str, object]],
+                await self._revisions.list_revisions(prompt),
+            )
+        except PromptRevisionServiceError as exc:
+            raise PromptServiceError(
+                exc.code,
+                exc.message,
+                exc.status_code,
+            ) from exc
+
+    async def preview_rollback(
+        self,
+        prompt: SalesTrainerAudioScorePrompt,
+        *,
+        target_revision_id: str,
+    ) -> dict[str, object]:
+        try:
+            return cast(
+                dict[str, object],
+                await self._revisions.preview_rollback(
+                    prompt,
+                    target_revision_id=target_revision_id,
+                ),
+            )
+        except PromptRevisionServiceError as exc:
+            raise PromptServiceError(
+                exc.code,
+                exc.message,
+                exc.status_code,
+            ) from exc
+
+    async def rollback_prompt(
+        self,
+        prompt: SalesTrainerAudioScorePrompt,
+        *,
+        target_revision_id: str,
+        reason: str,
+        actor: User,
+    ) -> SalesTrainerAudioScorePrompt:
+        try:
+            return await self._revisions.rollback_prompt(
+                prompt,
+                target_revision_id=target_revision_id,
+                reason=reason,
+                actor=actor,
+            )
+        except PromptRevisionServiceError as exc:
+            raise PromptServiceError(
+                exc.code,
+                exc.message,
+                exc.status_code,
+            ) from exc
+
     async def create_prompt(
         self, payload: AudioScorePromptCreate, *, actor: User
     ) -> SalesTrainerAudioScorePrompt:
@@ -60,7 +124,7 @@ class AudioScorePromptService:
             purpose=payload.purpose,
             system_prompt=payload.system_prompt,
             scoring_template=payload.scoring_template,
-            output_schema=payload.output_schema,
+            output_schema=normalize_audio_score_output_schema(payload.output_schema),
             learner_rubric=normalize_learner_rubric(payload.learner_rubric),
             created_by=str(actor.user_id),
             updated_by=str(actor.user_id),
@@ -71,7 +135,7 @@ class AudioScorePromptService:
             actor=actor,
             action="audio_score_prompt_created",
             target_type="sales_trainer_audio_score_prompt",
-            target_id=prompt.prompt_id,
+            target_id=str(prompt.prompt_id),
         )
         await self._db.commit()
         await self._db.refresh(prompt)
@@ -104,16 +168,20 @@ class AudioScorePromptService:
                 409,
             )
         data = payload.model_dump(exclude_unset=True)
+        if "output_schema" in data:
+            data["output_schema"] = normalize_audio_score_output_schema(
+                data["output_schema"]
+            )
         if "learner_rubric" in data:
             data["learner_rubric"] = normalize_learner_rubric(data["learner_rubric"])
         for key, value in data.items():
             setattr(prompt, key, value)
-        prompt.updated_by = str(actor.user_id)
+        setattr(prompt, "updated_by", str(actor.user_id))
         await self._logs.record(
             actor=actor,
             action="audio_score_prompt_updated",
             target_type="sales_trainer_audio_score_prompt",
-            target_id=prompt.prompt_id,
+            target_id=str(prompt.prompt_id),
         )
         await self._db.commit()
         await self._db.refresh(prompt)
@@ -145,8 +213,8 @@ class AudioScorePromptService:
                 ) from exc
             return prompt
         previous_snapshot = prompt_lifecycle_snapshot(prompt)
-        prompt.status = "published"
-        prompt.updated_by = str(actor.user_id)
+        setattr(prompt, "status", "published")
+        setattr(prompt, "updated_by", str(actor.user_id))
         try:
             await self._revisions.ensure_initial_published_revision(
                 prompt,

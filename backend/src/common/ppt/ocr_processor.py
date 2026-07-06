@@ -163,7 +163,7 @@ class OCRProcessor:
         Returns: Extracted text or Result.fail
         """
         try:
-            import pytesseract  # type: ignore[import-not-found]
+            import pytesseract  # type: ignore[import-not-found, import-untyped]
             from PIL import Image  # type: ignore[import-not-found]
 
             # Open image

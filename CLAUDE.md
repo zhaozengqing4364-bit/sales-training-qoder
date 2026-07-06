@@ -101,7 +101,7 @@ TTS_ENABLE_WARMUP=true
 # ============================================
 STEPFUN_API_KEY=replace-with-stepfun-api-key
 STEPFUN_REALTIME_URL=wss://api.stepfun.com/v1/realtime
-STEPFUN_REALTIME_MODEL=step-audio-2  # step-audio-2 | step-audio-2-mini
+STEPFUN_REALTIME_MODEL=stepaudio-2.5-realtime  # 默认推荐 stepaudio-2.5-realtime；可按需切换 step-1o-audio | step-audio-2 | step-audio-2-mini
 DEFAULT_VOICE_MODE=stepfun_realtime  # legacy | stepfun_realtime
 STEPFUN_REALTIME_VOICE=qingchunshaonv
 STEPFUN_REALTIME_OUTPUT_SAMPLE_RATE=24000

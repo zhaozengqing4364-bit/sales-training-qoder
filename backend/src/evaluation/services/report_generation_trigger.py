@@ -126,6 +126,7 @@ class ReportGenerationTrigger:
             scenario_type: Type of scenario (sales/presentation)
         """
         evaluation_run = None
+        evaluation_run_id: str | None = None
         try:
             current_session = await self._get_session(session_id)
             if current_session is None:
@@ -182,7 +183,8 @@ class ReportGenerationTrigger:
                         scoring_projection=scoring_projection,
                     ),
                 )
-                await run_service.mark_running(evaluation_run.run_id)
+                evaluation_run_id = str(_runtime_field(evaluation_run, "run_id"))
+                await run_service.mark_running(evaluation_run_id)
 
                 if self._should_use_phase4_local_report():
                     payload = self._build_phase4_local_report_payload(
@@ -190,16 +192,16 @@ class ReportGenerationTrigger:
                         scoring_projection=scoring_projection,
                     )
                     await run_service.mark_succeeded(
-                        evaluation_run.run_id,
+                        evaluation_run_id,
                         result_payload=payload,
-                            result_summary=(
-                                "Phase 4 local Presentation E2E deterministic report"
-                                if normalized_scenario_type == "presentation"
-                                else "Phase 4 local Sales E2E deterministic report"
-                            ),
+                        result_summary=(
+                            "Phase 4 local Presentation E2E deterministic report"
+                            if normalized_scenario_type == "presentation"
+                            else "Phase 4 local Sales E2E deterministic report"
+                        ),
                     )
                     await TrainingReportSnapshotService(self.db).ensure_snapshot(
-                        evaluation_run_id=evaluation_run.run_id,
+                        evaluation_run_id=evaluation_run_id,
                         report_payload=payload,
                         **scoring_projection.snapshot_metadata,
                     )
@@ -218,12 +220,12 @@ class ReportGenerationTrigger:
                     reason = scoring_projection.not_evaluable_reason or "not_evaluable"
                     payload = scoring_projection.build_non_evaluable_payload()
                     await run_service.mark_non_evaluable(
-                        evaluation_run.run_id,
+                        evaluation_run_id,
                         reason=reason,
                         result_payload=payload,
                     )
                     await TrainingReportSnapshotService(self.db).ensure_snapshot(
-                        evaluation_run_id=evaluation_run.run_id,
+                        evaluation_run_id=evaluation_run_id,
                         report_payload=payload,
                         **scoring_projection.snapshot_metadata,
                     )
@@ -253,20 +255,23 @@ class ReportGenerationTrigger:
             if result.is_success:
                 generated_report = result.value
                 if evaluation_run is not None:
+                    run_id = evaluation_run_id or str(
+                        _runtime_field(evaluation_run, "run_id")
+                    )
                     payload = self._build_report_payload(
                         generated_report,
                         projection=projection,
                         scoring_projection=scoring_projection,
                     )
                     await EvaluationRunService(self.db).mark_succeeded(
-                        evaluation_run.run_id,
+                        run_id,
                         result_payload=payload,
                         result_summary=str(
                             getattr(generated_report, "detailed_feedback", "") or ""
                         ),
                     )
                     await TrainingReportSnapshotService(self.db).ensure_snapshot(
-                        evaluation_run_id=evaluation_run.run_id,
+                        evaluation_run_id=run_id,
                         report_payload=payload,
                         **(
                             scoring_projection.snapshot_metadata
@@ -292,7 +297,7 @@ class ReportGenerationTrigger:
                 error_msg = result.fallback or "Unknown error"
                 if evaluation_run is not None:
                     await EvaluationRunService(self.db).mark_failed(
-                        evaluation_run.run_id,
+                        evaluation_run_id or str(_runtime_field(evaluation_run, "run_id")),
                         error_message=error_msg,
                     )
                 await self._update_report_status(
@@ -317,7 +322,7 @@ class ReportGenerationTrigger:
             try:
                 if evaluation_run is not None:
                     await EvaluationRunService(self.db).mark_failed(
-                        evaluation_run.run_id,
+                        evaluation_run_id or str(_runtime_field(evaluation_run, "run_id")),
                         error_message=str(e),
                     )
             except Exception:  # noqa: BLE001

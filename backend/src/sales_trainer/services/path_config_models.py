@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Final, Literal, assert_never
 
@@ -7,24 +8,17 @@ from pydantic import ValidationError
 
 from sales_trainer.models import SalesTrainerAssetRevision, SalesTrainerUnit
 from sales_trainer.schemas import (
+    AiCoachConfig,
     NewcomerPathConfigPayload,
     NewcomerPathModuleConfig,
+    NewcomerRealtimeRuntimeBinding,
     SalesTrainerPathConfig,
     SalesTrainerPathModuleType,
 )
 from sales_trainer.services.asset_revision_service import AssetChangeClass
 from sales_trainer.services.path_config_audio_refs import audio_refs_from_unit
 
-PathModuleBindingRef = tuple[
-    str,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-    tuple[tuple[str, str, int, str, int], ...],
-]
+PathModuleBindingRef = tuple[Any, ...]
 
 NEWCOMER_PATH_RESOURCE_TYPE = "newcomer_training_path"
 NEWCOMER_PATH_LOGICAL_ID = "newcomer_training_path_v1"
@@ -34,9 +28,17 @@ CANONICAL_NEWCOMER_MODULE_KEYS: Final = frozenset(
         "ppt_explanation",
         "business_skills",
         "elevator_pitch",
+        "realtime_roleplay",
         "realtime_roleplay_placeholder",
     }
 )
+CANONICAL_NEWCOMER_MODULE_TYPES: Final = {
+    "ppt_explanation": "audio_scoring",
+    "business_skills": "article_exam",
+    "elevator_pitch": "audio_scoring_group",
+    "realtime_roleplay": "realtime_roleplay",
+    "realtime_roleplay_placeholder": "realtime_placeholder",
+}
 LEGACY_NEWCOMER_MODULE_KEY_MAP: Final = {
     "ppt_explain": "ppt_explanation",
     "pyramid_speech": "elevator_pitch",
@@ -75,6 +77,71 @@ class SalesTrainerPathConfigError(Exception):
         super().__init__(message)
 
 
+def validate_path_payload_for_write(payload: NewcomerPathConfigPayload) -> None:
+    if payload.path_key in LEGACY_NEWCOMER_PATH_KEYS:
+        raise SalesTrainerPathConfigError(
+            "[NEWCOMER_PATH_CONFIG_ALIAS_READ_ONLY]",
+            "新人训练路径兼容路径标识只允许读取，请在新人训练路径配置中心保存当前路径配置。",
+            409,
+        )
+    if payload.path_key != NEWCOMER_PATH_LOGICAL_ID:
+        raise SalesTrainerPathConfigError(
+            "[NEWCOMER_PATH_CONFIG_INVALID]",
+            f"新人训练路径 path_key 必须为 {NEWCOMER_PATH_LOGICAL_ID}。",
+            422,
+        )
+    if not payload.enabled:
+        raise SalesTrainerPathConfigError(
+            "[NEWCOMER_PATH_CONFIG_INVALID]",
+            "新人训练路径顶层 enabled=false 暂不支持，请停用具体模块而不是停用整条路径。",
+            422,
+        )
+
+    seen_module_keys: set[str] = set()
+    seen_order_indexes: set[int] = set()
+    for module in payload.modules:
+        legacy_module_key = LEGACY_NEWCOMER_MODULE_KEY_MAP.get(module.module_key)
+        if legacy_module_key is not None:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_PATH_CONFIG_INVALID]",
+                (
+                    f"模块 {module.title} 使用了兼容 module_key {module.module_key}，"
+                    f"请改用 {legacy_module_key}。"
+                ),
+                422,
+            )
+        if module.module_key not in CANONICAL_NEWCOMER_MODULE_KEYS:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_PATH_CONFIG_INVALID]",
+                f"模块 {module.title} 使用了不受支持的 module_key：{module.module_key}。",
+                422,
+            )
+        expected_module_type = CANONICAL_NEWCOMER_MODULE_TYPES[module.module_key]
+        if module.module_type != expected_module_type:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_PATH_CONFIG_INVALID]",
+                (
+                    f"模块 {module.title} 的 module_key={module.module_key} "
+                    f"必须使用 module_type={expected_module_type}。"
+                ),
+                422,
+            )
+        if module.module_key in seen_module_keys:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_PATH_CONFIG_INVALID]",
+                f"新人训练路径存在重复 module_key：{module.module_key}。",
+                422,
+            )
+        seen_module_keys.add(module.module_key)
+        if module.order_index in seen_order_indexes:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_PATH_CONFIG_INVALID]",
+                f"新人训练路径存在重复 order_index：{module.order_index}。",
+                422,
+            )
+        seen_order_indexes.add(module.order_index)
+
+
 def path_config(config: dict[str, Any]) -> SalesTrainerPathConfig | None:
     raw_path = config.get("path")
     if not isinstance(raw_path, dict):
@@ -98,7 +165,10 @@ def module_from_unit(
         enabled=config.enabled,
         order_index=config.order_index,
         title=config.level_title or str(unit.name),
-        description=config.level_description or unit.description,
+        description=(
+            config.level_description
+            or (str(unit.description) if unit.description is not None else None)
+        ),
         target_unit_id=config.target_unit_id or str(unit.unit_id),
         learning_content_id=config.learning_content_id,
         exam_paper_id=config.exam_paper_id,
@@ -107,12 +177,22 @@ def module_from_unit(
         scoring_prompt_id=config.scoring_prompt_id or audio_refs.scoring_prompt_id,
         disabled_reason=config.disabled_reason,
         unlock_after_unit_ids=config.unlock_after_unit_ids,
+        learner_level_required=config.learner_level_required,
         completion_rule=config.completion_rule,
         primary_action_label=config.primary_action_label,
         retry_action_label=config.retry_action_label,
         review_action_label=config.review_action_label,
         guidance_templates=config.guidance_templates,
-        ai_coach=config.ai_coach,
+        ai_coach=(
+            AiCoachConfig.model_validate(config.ai_coach)
+            if config.ai_coach is not None
+            else None
+        ),
+        runtime_binding=(
+            NewcomerRealtimeRuntimeBinding.model_validate(config.runtime_binding)
+            if config.runtime_binding is not None
+            else None
+        ),
     )
 
 
@@ -157,12 +237,18 @@ def path_config_from_module(
         scoring_prompt_id=module.scoring_prompt_id,
         disabled_reason=module.disabled_reason,
         unlock_after_unit_ids=module.unlock_after_unit_ids,
+        learner_level_required=module.learner_level_required,
         completion_rule=module.completion_rule,
         primary_action_label=module.primary_action_label,
         retry_action_label=module.retry_action_label,
         review_action_label=module.review_action_label,
         guidance_templates=module.guidance_templates,
         ai_coach=module.ai_coach.model_dump(mode="json") if module.ai_coach else None,
+        runtime_binding=(
+            module.runtime_binding.model_dump(mode="json")
+            if module.runtime_binding
+            else None
+        ),
     )
 
 
@@ -227,6 +313,7 @@ def _module_refs(payload: NewcomerPathConfigPayload) -> list[PathModuleBindingRe
             module.material_id,
             module.material_version_id,
             module.scoring_prompt_id,
+            _stable_runtime_binding(module.runtime_binding),
             tuple(
                 (
                     option.option_key,
@@ -255,6 +342,8 @@ def _infer_module_key(
             return "business_skills"
         case "audio_scoring_group":
             return "elevator_pitch"
+        case "realtime_roleplay":
+            return "realtime_roleplay"
         case "realtime_placeholder":
             return "realtime_roleplay_placeholder"
         case "audio_scoring" | None:
@@ -264,7 +353,8 @@ def _infer_module_key(
 
 
 def _infer_audio_module_key(unit: SalesTrainerUnit) -> str | None:
-    config = unit.config or {}
+    raw_config = unit.config
+    config: dict[str, Any] = raw_config if isinstance(raw_config, dict) else {}
     if not isinstance(config, dict):
         return None
     audio = config.get("audio")
@@ -278,3 +368,15 @@ def _infer_audio_module_key(unit: SalesTrainerUnit) -> str | None:
     if purpose.startswith(("pyramid_speech", "elevator_pitch")):
         return "elevator_pitch"
     return None
+
+
+def _stable_runtime_binding(binding: Any) -> str | None:
+    if binding is None:
+        return None
+    if hasattr(binding, "model_dump"):
+        payload = binding.model_dump(mode="json")
+    elif isinstance(binding, dict):
+        payload = binding
+    else:
+        payload = str(binding)
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)

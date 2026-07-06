@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Eye, Plus, Sparkles } from "lucide-react";
+import { AlertTriangle, Eye, Plus, RefreshCw, Sparkles } from "lucide-react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
@@ -12,7 +12,12 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import { NEWCOMER_QUESTION_TAG } from "@/lib/sales-trainer/question-scope";
-import type { SalesTrainerQuestion, SalesTrainerQuestionCategory } from "@/lib/api/types";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
+import type {
+    SalesTrainerAdminCapabilities,
+    SalesTrainerQuestion,
+    SalesTrainerQuestionCategory,
+} from "@/lib/api/types";
 
 type ConfirmState =
     | { type: "publish"; question: SalesTrainerQuestion }
@@ -31,7 +36,12 @@ export default function SalesTrainerQuestionsPage() {
     const [tag, setTag] = useState(NEWCOMER_QUESTION_TAG);
     const [isLoading, setIsLoading] = useState(true);
     const [isOperating, setIsOperating] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+    const [capabilities, setCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessQuestions = isSalesTrainerAdminPathAllowedForCapabilities(pathname, capabilities);
 
     const categoryNameById = useMemo(
         () => new Map(categories.map((category) => [category.category_id, category.name])),
@@ -71,16 +81,55 @@ export default function SalesTrainerQuestionsPage() {
 
     useEffect(() => {
         let isCurrent = true;
+        void api.admin.salesTrainer.getCapabilities()
+            .then((result) => {
+                if (!isCurrent) return;
+                setCapabilities(result);
+                setCapabilityError(null);
+            })
+            .catch((error) => {
+                if (!isCurrent) return;
+                setCapabilities(null);
+                setCapabilityError(getApiErrorMessage(error));
+            })
+            .finally(() => {
+                if (!isCurrent) return;
+                setIsCapabilityLoading(false);
+            });
+        return () => {
+            isCurrent = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        let isCurrent = true;
+        if (isCapabilityLoading) {
+            return () => {
+                isCurrent = false;
+            };
+        }
+        if (!canAccessQuestions) {
+            setQuestions([]);
+            setCategories([]);
+            setLoadError(null);
+            setIsLoading(false);
+            return () => {
+                isCurrent = false;
+            };
+        }
 
         void fetchQuestionData()
             .then((result) => {
                 if (!isCurrent) return;
                 setQuestions(result.questions);
                 setCategories(result.categories);
+                setLoadError(null);
             })
             .catch((loadError) => {
                 if (!isCurrent) return;
-                showToastError(getApiErrorMessage(loadError));
+                const message = getApiErrorMessage(loadError);
+                setLoadError(message);
+                showToastError(message);
             })
             .finally(() => {
                 if (!isCurrent) return;
@@ -90,20 +139,27 @@ export default function SalesTrainerQuestionsPage() {
         return () => {
             isCurrent = false;
         };
-    }, [fetchQuestionData, showToastError]);
+    }, [canAccessQuestions, fetchQuestionData, isCapabilityLoading, showToastError]);
 
     const loadData = useCallback(async () => {
+        if (!canAccessQuestions) {
+            return;
+        }
         setIsLoading(true);
+        setLoadError(null);
         try {
             const result = await fetchQuestionData();
             setQuestions(result.questions);
             setCategories(result.categories);
+            setLoadError(null);
         } catch (loadError) {
-            showToastError(getApiErrorMessage(loadError));
+            const message = getApiErrorMessage(loadError);
+            setLoadError(message);
+            showToastError(message);
         } finally {
             setIsLoading(false);
         }
-    }, [fetchQuestionData, showToastError]);
+    }, [canAccessQuestions, fetchQuestionData, showToastError]);
 
     async function handleConfirm() {
         if (!confirmState) return;
@@ -133,7 +189,7 @@ export default function SalesTrainerQuestionsPage() {
                     <AdminPageHeader
                         title="正式题目库"
                         description="AI 草稿审核后会进入这里；只有发布后的题目才会被学员端小测抽取。"
-                        primaryAction={(
+                        primaryAction={canAccessQuestions ? (
                             <div className="flex flex-wrap gap-2">
                                 <Button variant="outline" onClick={() => router.push("/admin/sales-trainer/questions/drafts")}>
                                     <Sparkles className="mr-2 h-4 w-4" />
@@ -148,9 +204,9 @@ export default function SalesTrainerQuestionsPage() {
                                     新建题目
                                 </Button>
                             </div>
-                        )}
+                        ) : null}
                     />
-                    <SalesTrainerAdminModuleNav currentPath={pathname} />
+                    <SalesTrainerAdminModuleNav currentPath={pathname} capabilities={capabilities} />
                 </div>
             )}
         >
@@ -166,26 +222,71 @@ export default function SalesTrainerQuestionsPage() {
                 isLoading={isOperating}
             />
 
-            <QuestionGovernanceWorkspace
-                aiScoredCount={aiScoredCount}
-                categories={scopedCategories}
-                categoryId={categoryId}
-                categoryNameById={categoryNameById}
-                difficulty={difficulty}
-                isLoading={isLoading}
-                onArchive={(question) => setConfirmState({ type: "archive", question })}
-                onCategoryChange={setCategoryId}
-                onDifficultyChange={setDifficulty}
-                onEdit={(questionId) => router.push(`/admin/sales-trainer/questions/${questionId}/edit`)}
-                onPublish={(question) => setConfirmState({ type: "publish", question })}
-                onRefresh={() => void loadData()}
-                onStatusChange={setStatus}
-                onTagChange={setTag}
-                publishedCount={publishedCount}
-                questions={questions}
-                status={status}
-                tag={tag}
-            />
+            {isCapabilityLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                    正在校验题库管理权限...
+                </div>
+            ) : capabilityError || !canAccessQuestions ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
+                        <div>
+                            <h2 className="font-bold text-amber-950">题库管理权限不足</h2>
+                            <p className="mt-1 text-sm leading-6">
+                                当前页不会在权限未确认时展示题目写入入口。请联系管理员开通题库管理权限后重试。
+                            </p>
+                            {capabilityError ? (
+                                <p className="mt-2 text-sm font-medium">{capabilityError}</p>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+            ) : loadError ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
+                        <div className="space-y-3">
+                            <div>
+                                <h2 className="font-bold text-amber-950">题目加载失败</h2>
+                                <p className="mt-1 text-sm leading-6">
+                                    当前页不会把接口异常伪装成空题库。请核对权限、筛选条件或后端服务状态后重试。
+                                </p>
+                                <p className="mt-2 text-sm font-medium">{loadError}</p>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="bg-white"
+                                onClick={() => void loadData()}
+                            >
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                重新加载题目
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <QuestionGovernanceWorkspace
+                    aiScoredCount={aiScoredCount}
+                    categories={scopedCategories}
+                    categoryId={categoryId}
+                    categoryNameById={categoryNameById}
+                    difficulty={difficulty}
+                    isLoading={isLoading}
+                    onArchive={(question) => setConfirmState({ type: "archive", question })}
+                    onCategoryChange={setCategoryId}
+                    onDifficultyChange={setDifficulty}
+                    onEdit={(questionId) => router.push(`/admin/sales-trainer/questions/${questionId}/edit`)}
+                    onPublish={(question) => setConfirmState({ type: "publish", question })}
+                    onRefresh={() => void loadData()}
+                    onStatusChange={setStatus}
+                    onTagChange={setTag}
+                    publishedCount={publishedCount}
+                    questions={questions}
+                    status={status}
+                    tag={tag}
+                />
+            )}
         </AdminIndexShell>
     );
 }

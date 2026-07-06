@@ -87,7 +87,7 @@ class PaperSnapshotAttemptService:
             actor=actor,
             action="quiz_submitted",
             target_type="sales_trainer_quiz_attempt",
-            target_id=attempt.attempt_id,
+            target_id=str(attempt.attempt_id),
             metadata={
                 "unit_id": paper.unit_id,
                 "paper_id": paper.paper_id,
@@ -161,16 +161,18 @@ class PaperSnapshotAttemptService:
                     ),
                     is_correct=is_correct,
                     score=Decimal(str(score)) if score is not None else None,
-                )
+            )
             )
         if scored_values and not has_unscored:
-            attempt.total_score = Decimal(str(sum(scored_values)))
-            attempt.max_score = Decimal(str(max_score))
+            setattr(attempt, "total_score", Decimal(str(sum(scored_values))))
+            setattr(attempt, "max_score", Decimal(str(max_score)))
             threshold = float_or_none(revision_payload.get("pass_threshold"))
-            attempt.passed = (
-                sum(scored_values) >= threshold if threshold is not None else None
+            setattr(
+                attempt,
+                "passed",
+                sum(scored_values) >= threshold if threshold is not None else None,
             )
-            attempt.status = "scored"
+            setattr(attempt, "status", "scored")
 
 
 class PaperSnapshotAttemptError(Exception):

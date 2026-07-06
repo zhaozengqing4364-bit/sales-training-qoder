@@ -108,7 +108,7 @@ def _not_found() -> JSONResponse:
     )
 
 
-def _audit_payload(audit) -> dict[str, Any] | None:
+def _audit_payload(audit: Any) -> dict[str, Any] | None:
     if audit is None:
         return None
     return {
@@ -158,7 +158,7 @@ async def list_config_bundle_versions(
     bundle_key: str,
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_READ_PERMISSION)),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     _ = current_user
     adapter = next(
         (
@@ -187,7 +187,7 @@ async def create_config_bundle_draft(
     payload: ConfigBundleValueRequest,
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_DRAFT_PERMISSION)),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     service = ConfigBundleLifecycleService(db)
     try:
         result = await service.create_draft(
@@ -218,7 +218,7 @@ async def validate_config_bundle_value(
     payload: ConfigBundleValueRequest,
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_VALIDATE_PERMISSION)),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     service = ConfigBundleLifecycleService(db)
     try:
         result = await service.validate(
@@ -244,7 +244,7 @@ async def preview_config_bundle_value(
     payload: ConfigBundleValueRequest,
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_PREVIEW_PERMISSION)),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     service = ConfigBundleLifecycleService(db)
     try:
         result = await service.preview(
@@ -270,7 +270,7 @@ async def publish_config_bundle_version(
     payload: ConfigBundlePublishRequest,
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_PUBLISH_PERMISSION)),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     service = ConfigBundleLifecycleService(db)
     try:
         result = await service.publish(
@@ -301,7 +301,7 @@ async def rollback_config_bundle_version(
     payload: ConfigBundleRollbackRequest,
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_ROLLBACK_PERMISSION)),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     service = ConfigBundleLifecycleService(db)
     try:
         result = await service.rollback(
@@ -333,7 +333,7 @@ async def disable_config_bundle_version(
     payload: ConfigBundleDisableRequest,
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_DISABLE_PERMISSION)),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     service = ConfigBundleLifecycleService(db)
     try:
         result = await service.disable(

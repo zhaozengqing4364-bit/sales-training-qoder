@@ -7,9 +7,12 @@ Implements Constitution Principles:
 """
 
 import inspect
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,7 +50,9 @@ def _normalize_leaderboard_mode(leaderboard_mode: str | None) -> str:
     return mode
 
 
-def _supported_service_kwargs(service_method, **kwargs: object) -> dict[str, object]:
+def _supported_service_kwargs(
+    service_method: Callable[..., Any], **kwargs: Any
+) -> dict[str, Any]:
     """Pass Phase 6E params when the service supports them; stay compatible until then."""
     try:
         parameters = inspect.signature(service_method).parameters
@@ -63,14 +68,14 @@ def _supported_service_kwargs(service_method, **kwargs: object) -> dict[str, obj
     return {key: value for key, value in kwargs.items() if key in parameters}
 
 
-def _value(source: object, field_name: str, default: object = None) -> object:
+def _value(source: object, field_name: str, default: Any = None) -> Any:
     """Read dataclass/object or dict fields for service response compatibility."""
     if isinstance(source, dict):
         return source.get(field_name, default)
     return getattr(source, field_name, default)
 
 
-def _leaderboard_eligibility(leaderboard_mode: str) -> dict[str, object]:
+def _leaderboard_eligibility(leaderboard_mode: str) -> dict[str, Any]:
     """Describe the shared eligibility gate exposed by the leaderboard API."""
     return {
         "completed_sessions_only": True,
@@ -81,9 +86,9 @@ def _leaderboard_eligibility(leaderboard_mode: str) -> dict[str, object]:
     }
 
 
-def _serialize_leaderboard_entry(entry: object) -> dict[str, object]:
+def _serialize_leaderboard_entry(entry: object) -> dict[str, Any]:
     """Serialize score entries plus optional Phase 6E mode-specific fields."""
-    payload: dict[str, object] = {
+    payload: dict[str, Any] = {
         "rank": _value(entry, "rank"),
         "user_id": str(_value(entry, "user_id")),
         "username": _value(entry, "username", "Anonymous") or "Anonymous",
@@ -121,10 +126,10 @@ def _serialize_leaderboard_entry(entry: object) -> dict[str, object]:
 
 
 def _rank_payload_with_mode(
-    rank_payload: dict[str, object],
+    rank_payload: dict[str, Any],
     leaderboard_mode: str,
     issue_type: str | None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Ensure rank responses echo the selected mode before/after service rollout."""
     payload = dict(rank_payload)
     payload.setdefault("leaderboard_mode", leaderboard_mode)
@@ -163,7 +168,7 @@ class FrontendCustomEvent(BaseModel):
 
 
 @router.post("/analytics/error", status_code=202)
-async def ingest_frontend_error(event: FrontendErrorEvent):
+async def ingest_frontend_error(event: FrontendErrorEvent) -> dict[str, Any]:
     """Accept frontend route and boundary error beacons on a real backend sink."""
     track_frontend_analytics_event("error")
     logger.warning(
@@ -180,7 +185,9 @@ async def ingest_frontend_error(event: FrontendErrorEvent):
 
 
 @router.post("/analytics/performance", status_code=202)
-async def ingest_frontend_performance_metric(event: FrontendPerformanceEvent):
+async def ingest_frontend_performance_metric(
+    event: FrontendPerformanceEvent,
+) -> dict[str, Any]:
     """Accept Web Vitals beacons on a real backend sink."""
     track_frontend_analytics_event("performance")
     logger.info(
@@ -197,7 +204,7 @@ async def ingest_frontend_performance_metric(event: FrontendPerformanceEvent):
 
 
 @router.post("/analytics/custom", status_code=202)
-async def ingest_frontend_custom_metric(event: FrontendCustomEvent):
+async def ingest_frontend_custom_metric(event: FrontendCustomEvent) -> dict[str, Any]:
     """Accept custom frontend metrics on a real backend sink."""
     track_frontend_analytics_event("custom")
     logger.info(
@@ -240,8 +247,8 @@ def _server_error(
     message: str,
     *,
     exc: Exception | None = None,
-    **context: object,
-):
+    **context: Any,
+) -> JSONResponse:
     return build_server_error(error_code, message=message, exc=exc, **context)
 
 
@@ -256,7 +263,7 @@ async def get_leaderboard(
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get leaderboard rankings."""
     try:
         normalized_scenario_type = _normalize_scenario_type(scenario_type)
@@ -284,8 +291,8 @@ async def get_leaderboard(
                 issue_type=issue_type,
             )
 
-        stats = result.value
-        response_payload = {
+        stats = result.unwrap()
+        response_payload: dict[str, Any] = {
             "scenario_type": normalized_scenario_type,
             "time_period": _value(stats, "time_period", normalized_time_period),
             "leaderboard_mode": normalized_leaderboard_mode,
@@ -325,7 +332,7 @@ async def get_leaderboard(
             )
             if my_rank_result.is_success:
                 response_payload["my_rank"] = _rank_payload_with_mode(
-                    my_rank_result.value,
+                    cast(dict[str, Any], my_rank_result.unwrap()),
                     normalized_leaderboard_mode,
                     issue_type,
                 )
@@ -359,7 +366,7 @@ async def get_my_rank(
     issue_type: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get current user's rank."""
     try:
         normalized_scenario_type = _normalize_scenario_type(scenario_type)
@@ -388,7 +395,7 @@ async def get_my_rank(
             )
 
         return _rank_payload_with_mode(
-            result.value,
+            cast(dict[str, Any], result.unwrap()),
             normalized_leaderboard_mode,
             issue_type,
         )
@@ -411,7 +418,7 @@ async def get_dashboard_stats(
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get dashboard analytics statistics (admin only)"""
     try:
         result = await analytics_service.get_dashboard_stats(
@@ -426,7 +433,7 @@ async def get_dashboard_stats(
                 days=days,
             )
 
-        stats = result.value
+        stats = result.unwrap()
 
         return {
             "scenario_type": scenario_type,
@@ -473,7 +480,7 @@ async def get_score_distribution(
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get score distribution"""
     try:
         result = await analytics_service.get_score_distribution(
@@ -488,7 +495,7 @@ async def get_score_distribution(
                 days=days,
             )
 
-        dist = result.value
+        dist = result.unwrap()
 
         return {
             "scenario_type": scenario_type,
@@ -518,7 +525,7 @@ async def get_trend_data(
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get trend data for charts"""
     try:
         result = await analytics_service.get_trend_data(
@@ -533,7 +540,7 @@ async def get_trend_data(
                 days=days,
             )
 
-        return result.value
+        return result.unwrap()
 
     except HTTPException:
         raise
@@ -554,13 +561,13 @@ async def get_analytics_practice_history(
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get current user's practice history snapshot for analytics views."""
     try:
         normalized_scenario_type = _normalize_scenario_type(scenario_type)
         result = await history_service.get_user_history(
             db=db,
-            user_id=current_user.user_id,
+            user_id=cast(UUID, current_user.user_id),
             scenario_type=normalized_scenario_type,
             limit=limit,
             offset=offset,
@@ -575,7 +582,7 @@ async def get_analytics_practice_history(
                 offset=offset,
             )
 
-        sessions = result.value
+        sessions = result.unwrap()
 
         items = [
             {
@@ -628,11 +635,11 @@ async def get_analytics_practice_history(
 @router.get("/practice/history/statistics")
 async def get_history_statistics(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+) -> Any:
     """Get current user's practice statistics"""
     try:
         result = await history_service.get_statistics(
-            db=db, user_id=current_user.user_id
+            db=db, user_id=cast(UUID, current_user.user_id)
         )
 
         if not result.is_success:
@@ -641,7 +648,7 @@ async def get_history_statistics(
                 "Failed to fetch statistics",
             )
 
-        return result.value
+        return result.unwrap()
 
     except HTTPException:
         raise
@@ -659,11 +666,11 @@ async def get_score_trends(
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get current user's score trends"""
     try:
         result = await history_service.get_score_trends(
-            db=db, user_id=current_user.user_id, days=days
+            db=db, user_id=cast(UUID, current_user.user_id), days=days
         )
 
         if not result.is_success:
@@ -673,7 +680,7 @@ async def get_score_trends(
                 days=days,
             )
 
-        return {"trends": result.value}
+        return {"trends": result.unwrap()}
 
     except HTTPException:
         raise
@@ -691,7 +698,7 @@ async def get_score_trends(
 async def get_storage_stats(
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get audio storage statistics (admin only)"""
     try:
         # Role guard handled via get_current_admin_user dependency.
@@ -703,7 +710,7 @@ async def get_storage_stats(
                 "Failed to fetch storage stats",
             )
 
-        return result.value
+        return result.unwrap()
 
     except HTTPException:
         raise

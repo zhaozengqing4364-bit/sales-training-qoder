@@ -1,5 +1,0 @@
-scenario: S1
-criterion: diff hygiene
-surface: git diff
-exact invocation: git diff --check
-exit_code: 0

@@ -850,10 +850,11 @@ class ScoringRulesetService:
             )
             self.db.add(version)
         else:
-            version.version_label = str(row_any.version)
-            version.status = str(row_any.status)
-            version.snapshot_json = snapshot
-            version.source_updated_at = row_any.updated_at
+            version_any = cast(Any, version)
+            version_any.version_label = str(row_any.version)
+            version_any.status = str(row_any.status)
+            version_any.snapshot_json = snapshot
+            version_any.source_updated_at = row_any.updated_at
         await self.db.flush()
         return version
 

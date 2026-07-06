@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db.typing import json_dict_or_empty, orm_scalar
 from sales_trainer.models import SalesTrainerAssetRevision
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
@@ -19,11 +22,11 @@ class ExamPaperRevisionHistoryService:
         revision_service = SalesTrainerAssetRevisionService(self._db)
         active_revision = await revision_service.active_revision(
             resource_type=PAPER_RESOURCE_TYPE,
-            logical_id=paper.paper_id,
+            logical_id=orm_scalar(paper.paper_id, str),
         )
         revisions = await revision_service.list_revisions(
             resource_type=PAPER_RESOURCE_TYPE,
-            logical_id=paper.paper_id,
+            logical_id=orm_scalar(paper.paper_id, str),
         )
         active_revision_id = (
             str(active_revision.revision_id) if active_revision is not None else None
@@ -42,7 +45,7 @@ def _paper_revision_response_item(
     *,
     active_revision_id: str | None,
 ) -> dict[str, object]:
-    payload = revision.payload_json if isinstance(revision.payload_json, dict) else {}
+    payload: dict[str, Any] = json_dict_or_empty(revision.payload_json)
     questions = payload.get("questions")
     question_count = len(questions) if isinstance(questions, list) else 0
     revision_id = str(revision.revision_id)

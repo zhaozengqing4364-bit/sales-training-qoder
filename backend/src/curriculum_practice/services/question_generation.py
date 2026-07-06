@@ -14,6 +14,7 @@ from curriculum_practice.schemas import (
     QuestionGenerationDraft,
     QuestionItemCreate,
 )
+from curriculum_practice.services.orm_payload_typing import orm_str
 from curriculum_practice.services.test_bank import TestBankService
 
 GENERATION_EMPTY_OUTPUT = "[QUESTION_GENERATION_EMPTY_OUTPUT]"
@@ -65,8 +66,8 @@ class QuestionGenerationService:
         chapter = await self._db.get(LearningChapter, chapter_id)
         if chapter is None or chapter.learning_content_id != learning_content_id:
             return Result.fail(GENERATION_CHAPTER_NOT_FOUND)
-        if _contains_prompt_injection(chapter.title) or _contains_prompt_injection(
-            chapter.content
+        if _contains_prompt_injection(orm_str(chapter.title)) or _contains_prompt_injection(
+            orm_str(chapter.content)
         ):
             return Result.fail(GENERATION_UNSAFE_CONTENT)
 

@@ -12,17 +12,17 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { markdownComponents } from "@/components/sales-trainer/coo-markdown-components";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
+    SalesTrainerLearnerMaterialVersion,
     SalesTrainerLearnerRubric,
-    SalesTrainerPath,
     SalesTrainerUnit,
     SalesTrainerUnitBrief,
-    SalesTrainerMaterialVersion,
 } from "@/lib/api/types";
 import {
-    findLevelForUnit,
     formatPassThresholdLine,
     getAudioPassThreshold,
 } from "@/lib/sales-trainer/learner-presenter";
+
+const PASS_THRESHOLD_DIAGNOSTIC_TITLE = "评分标准配置缺失";
 
 type MaterialPreviewState = {
     versionId: string;
@@ -37,18 +37,6 @@ function getAudioPurpose(unit: SalesTrainerUnit): string {
         : "general_audio_scoring";
 }
 
-function getBriefText(brief: Record<string, unknown> | null | undefined, key: string): string {
-    const value = brief?.[key];
-    return typeof value === "string" ? value : "";
-}
-
-function getBriefList(brief: Record<string, unknown> | null | undefined, key: string): string[] {
-    const value = brief?.[key];
-    return Array.isArray(value)
-        ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-        : [];
-}
-
 function getRubric(brief: SalesTrainerUnitBrief | null): SalesTrainerLearnerRubric | null {
     const rubric = brief?.score_scheme?.learner_rubric;
     if (!rubric || typeof rubric !== "object" || Array.isArray(rubric)) {
@@ -57,24 +45,24 @@ function getRubric(brief: SalesTrainerUnitBrief | null): SalesTrainerLearnerRubr
     return rubric as SalesTrainerLearnerRubric;
 }
 
-function isTextPreview(version: SalesTrainerMaterialVersion): boolean {
+function isTextPreview(version: SalesTrainerLearnerMaterialVersion): boolean {
     const type = version.content_type.toLowerCase();
     return type.includes("markdown") || type.startsWith("text/");
 }
 
-function isAudioPreview(version: SalesTrainerMaterialVersion): boolean {
+function isAudioPreview(version: SalesTrainerLearnerMaterialVersion): boolean {
     return version.content_type.toLowerCase().startsWith("audio/");
 }
 
-function isVideoPreview(version: SalesTrainerMaterialVersion): boolean {
+function isVideoPreview(version: SalesTrainerLearnerMaterialVersion): boolean {
     return version.content_type.toLowerCase().startsWith("video/");
 }
 
-function isPdfPreview(version: SalesTrainerMaterialVersion): boolean {
+function isPdfPreview(version: SalesTrainerLearnerMaterialVersion): boolean {
     return version.content_type.toLowerCase() === "application/pdf";
 }
 
-function canPreviewInline(version: SalesTrainerMaterialVersion): boolean {
+function canPreviewInline(version: SalesTrainerLearnerMaterialVersion): boolean {
     return isTextPreview(version) || isAudioPreview(version) || isVideoPreview(version) || isPdfPreview(version);
 }
 
@@ -83,7 +71,6 @@ export default function SalesTrainerAudioUploadPage() {
     const router = useRouter();
     const [unit, setUnit] = useState<SalesTrainerUnit | null>(null);
     const [brief, setBrief] = useState<SalesTrainerUnitBrief | null>(null);
-    const [paths, setPaths] = useState<SalesTrainerPath[]>([]);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [confirmedMaterialVersionId, setConfirmedMaterialVersionId] = useState<string | null>(null);
     const [activeMaterialVersionId, setActiveMaterialVersionId] = useState<string | null>(null);
@@ -97,17 +84,12 @@ export default function SalesTrainerAudioUploadPage() {
             setIsLoading(true);
             setError(null);
             try {
-                const [briefResult, pathResult] = await Promise.all([
-                    api.salesTrainer.getUnitBrief(params.unitId),
-                    api.salesTrainer.listPaths(),
-                ]);
+                const briefResult = await api.salesTrainer.getUnitBrief(params.unitId);
                 setBrief(briefResult);
                 setUnit(briefResult.unit);
-                setPaths(pathResult.items);
             } catch (loadError) {
                 setBrief(null);
                 setUnit(null);
-                setPaths([]);
                 setError(getApiErrorMessage(loadError));
             } finally {
                 setIsLoading(false);
@@ -132,10 +114,6 @@ export default function SalesTrainerAudioUploadPage() {
     }, [previewUrl]);
 
     const materials = useMemo(() => brief?.materials ?? [], [brief?.materials]);
-    const levelContext = useMemo(
-        () => findLevelForUnit(paths, params.unitId),
-        [paths, params.unitId],
-    );
     const activeMaterialVersion = useMemo(() => {
         if (!activeMaterialVersionId) {
             return null;
@@ -197,12 +175,10 @@ export default function SalesTrainerAudioUploadPage() {
         ? materialPreview
         : null;
 
-    const pageTitle = getBriefText(brief?.task_brief, "title")
-        || levelContext?.level.level_title
+    const pageTitle = brief?.task_brief.title
         || unit?.name
         || "语音作业";
-    const pageDescription = getBriefText(brief?.task_brief, "purpose")
-        || levelContext?.level.level_description
+    const pageDescription = brief?.task_brief.purpose
         || unit?.description
         || "上传本次语音作业，系统会完成转写和评分。";
     const passThreshold = brief?.score_scheme?.pass_threshold ?? getAudioPassThreshold(unit);
@@ -213,11 +189,12 @@ export default function SalesTrainerAudioUploadPage() {
     const commonMistakes = Array.from(
         new Set([
             ...(rubric?.common_mistakes ?? []),
-            ...getBriefList(brief?.task_brief, "common_mistakes"),
+            ...(brief?.task_brief.common_mistakes ?? []),
         ]),
     );
     const canUpload = !isUploading
         && Boolean(selectedFile)
+        && passThreshold !== null
         && (!requiredMaterial || confirmedMaterialVersionId === requiredMaterial.current_version.version_id);
 
     async function handleUpload() {
@@ -227,6 +204,10 @@ export default function SalesTrainerAudioUploadPage() {
         }
         if (requiredMaterial && confirmedMaterialVersionId !== requiredMaterial.current_version.version_id) {
             setError("请先下载并确认当前最新版训练材料。");
+            return;
+        }
+        if (passThreshold === null) {
+            setError("当前训练单元缺少语音作业通过线配置，请联系管理员补齐评分标准后重试。");
             return;
         }
         setIsUploading(true);
@@ -279,24 +260,33 @@ export default function SalesTrainerAudioUploadPage() {
 
             <GlassCard className="space-y-3 p-6">
                 <h2 className="text-lg font-bold text-slate-900">任务简报</h2>
-                {getBriefText(brief?.task_brief, "scenario") ? (
-                    <p className="text-sm leading-6 text-slate-600">{getBriefText(brief?.task_brief, "scenario")}</p>
+                {brief?.task_brief.scenario ? (
+                    <p className="text-sm leading-6 text-slate-600">{brief.task_brief.scenario}</p>
                 ) : null}
-                {getBriefList(brief?.task_brief, "instructions").length ? (
+                {brief?.task_brief.instructions.length ? (
                     <ul className="space-y-2 text-sm leading-6 text-slate-600">
-                        {getBriefList(brief?.task_brief, "instructions").map((item) => (
+                        {brief.task_brief.instructions.map((item) => (
                             <li key={item}>{item}</li>
                         ))}
                     </ul>
                 ) : null}
-                {getBriefText(brief?.task_brief, "upload_guidance") ? (
-                    <p className="text-sm leading-6 text-slate-600">{getBriefText(brief?.task_brief, "upload_guidance")}</p>
+                {brief?.task_brief.upload_guidance ? (
+                    <p className="text-sm leading-6 text-slate-600">{brief.task_brief.upload_guidance}</p>
                 ) : null}
             </GlassCard>
 
             <GlassCard className="space-y-3 p-6">
                 <h2 className="text-lg font-bold text-slate-900">评分标准</h2>
-                <p className="text-sm leading-6 text-slate-600">{formatPassThresholdLine(passThreshold)}</p>
+                {passThreshold !== null ? (
+                    <p className="text-sm leading-6 text-slate-600">{formatPassThresholdLine(passThreshold)}</p>
+                ) : (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        <p className="font-semibold text-amber-900">{PASS_THRESHOLD_DIAGNOSTIC_TITLE}</p>
+                        <p className="mt-1">
+                            当前训练单元缺少语音作业通过线配置。页面不会使用默认分数兜底，请联系管理员补齐评分标准后再上传。
+                        </p>
+                    </div>
+                )}
                 {rubric?.criteria?.length ? (
                     <div className="grid gap-3 md:grid-cols-2">
                         {rubric.criteria.map((item) => (

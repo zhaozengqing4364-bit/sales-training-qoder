@@ -15,15 +15,19 @@ from __future__ import annotations
 
 import csv
 import io
+from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.analytics.admin_analytics_service import admin_analytics_service
+from common.analytics.admin_analytics_service import (
+    OverviewStats,
+    admin_analytics_service,
+)
 from common.auth.service import get_current_admin_user
 from common.db.models import User
 from common.db.session import get_db
@@ -131,12 +135,14 @@ class LeaderboardResponse(BaseModel):
     leaderboard: list[LeaderboardEntry]
 
 
-def success_response(data: Any, trace_id: str | None = None) -> dict:
+def success_response(data: Any, trace_id: str | None = None) -> dict[str, Any]:
     """Create unified success response"""
     return {"success": True, "data": data, "trace_id": trace_id or get_trace_id()}
 
 
-def error_response(error_code: str, message: str, trace_id: str | None = None) -> dict:
+def error_response(
+    error_code: str, message: str, trace_id: str | None = None
+) -> dict[str, Any]:
     """Create unified error response"""
     return {
         "success": False,
@@ -185,9 +191,8 @@ async def get_analytics_overview(
         )
 
     # Convert dataclass to dict
-    from dataclasses import asdict
-
-    data = asdict(result.value)
+    overview = cast(OverviewStats, result.value)
+    data = asdict(overview)
 
     return success_response(data)
 
@@ -376,9 +381,10 @@ async def get_runtime_metrics(
     - Completeness rate (NFR10: >=98%)
     - Session metrics and voice mode distribution
     """
-    from dataclasses import asdict
-
-    from common.analytics.runtime_metrics_service import runtime_metrics_service
+    from common.analytics.runtime_metrics_service import (
+        RuntimeMetrics,
+        runtime_metrics_service,
+    )
 
     logger.info(
         "Getting runtime metrics",
@@ -395,7 +401,8 @@ async def get_runtime_metrics(
             "Failed to load runtime metrics",
         )
 
-    return success_response(asdict(result.value))
+    metrics = cast(RuntimeMetrics, result.value)
+    return success_response(asdict(metrics))
 
 
 @router.get("/policy-effectiveness", response_model=dict)
@@ -412,9 +419,10 @@ async def get_policy_effectiveness(
 
     Returns metrics comparing different Agents and their policy effectiveness
     """
-    from dataclasses import asdict
-
-    from common.analytics.runtime_metrics_service import runtime_metrics_service
+    from common.analytics.runtime_metrics_service import (
+        PolicyEffectiveness,
+        runtime_metrics_service,
+    )
 
     logger.info(
         "Getting policy effectiveness",
@@ -435,7 +443,8 @@ async def get_policy_effectiveness(
             "Failed to load policy effectiveness",
         )
 
-    return success_response({"effectiveness": [asdict(item) for item in result.value]})
+    items = cast(list[PolicyEffectiveness], result.value)
+    return success_response({"effectiveness": [asdict(item) for item in items]})
 
 
 @router.get("/voice-mode-comparison", response_model=dict)
@@ -451,9 +460,10 @@ async def get_voice_mode_comparison(
 
     Returns comparison metrics for different voice modes
     """
-    from dataclasses import asdict
-
-    from common.analytics.runtime_metrics_service import runtime_metrics_service
+    from common.analytics.runtime_metrics_service import (
+        VoiceModeComparison,
+        runtime_metrics_service,
+    )
 
     logger.info(
         "Getting voice mode comparison",
@@ -470,7 +480,8 @@ async def get_voice_mode_comparison(
             "Failed to load voice mode comparison",
         )
 
-    return success_response({"comparison": [asdict(item) for item in result.value]})
+    items = cast(list[VoiceModeComparison], result.value)
+    return success_response({"comparison": [asdict(item) for item in items]})
 
 
 @router.get("/fallback-metrics", response_model=dict)
@@ -486,9 +497,10 @@ async def get_fallback_metrics(
 
     Returns metrics about TTS/ASR/LLM fallbacks and browser TTS usage
     """
-    from dataclasses import asdict
-
-    from common.analytics.runtime_metrics_service import runtime_metrics_service
+    from common.analytics.runtime_metrics_service import (
+        FallbackMetrics,
+        runtime_metrics_service,
+    )
 
     logger.info(
         "Getting fallback metrics",
@@ -505,7 +517,8 @@ async def get_fallback_metrics(
             "Failed to load fallback metrics",
         )
 
-    return success_response(asdict(result.value))
+    metrics = cast(FallbackMetrics, result.value)
+    return success_response(asdict(metrics))
 
 
 @router.get("/export")
@@ -547,9 +560,7 @@ async def export_analytics(
     writer.writerow(["指标", "数值"])
 
     if overview_result.is_success:
-        from dataclasses import asdict
-
-        overview = asdict(overview_result.value)
+        overview = asdict(cast(OverviewStats, overview_result.value))
         writer.writerow(["总用户数", overview["total_users"]])
         writer.writerow(["今日活跃用户", overview["active_users_today"]])
         writer.writerow(["本周活跃用户", overview["active_users_week"]])
@@ -566,7 +577,8 @@ async def export_analytics(
     writer.writerow(["等级", "数量"])
 
     if trends_result.is_success:
-        dist = trends_result.value.get("score_distribution", {})
+        trends = cast(dict[str, Any], trends_result.value)
+        dist = trends.get("score_distribution", {})
         writer.writerow(["优秀 (90-100)", dist.get("excellent", 0)])
         writer.writerow(["良好 (70-89)", dist.get("good", 0)])
         writer.writerow(["及格 (50-69)", dist.get("fair", 0)])
@@ -579,7 +591,8 @@ async def export_analytics(
     writer.writerow(["日期", "练习次数", "平均分", "活跃用户"])
 
     if trends_result.is_success:
-        for point in trends_result.value.get("trend_data", []):
+        trends = cast(dict[str, Any], trends_result.value)
+        for point in trends.get("trend_data", []):
             writer.writerow(
                 [
                     point["date"],
@@ -598,7 +611,8 @@ async def export_analytics(
     )
 
     if leaderboard_result.is_success:
-        for entry in leaderboard_result.value:
+        leaderboard = cast(list[dict[str, Any]], leaderboard_result.value)
+        for entry in leaderboard:
             writer.writerow(
                 [
                     entry["rank"],

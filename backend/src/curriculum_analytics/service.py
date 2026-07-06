@@ -261,7 +261,9 @@ def _top_weak_dimension(snapshots: list[TrainingReportSnapshot]) -> str | None:
 
 
 def _dimension_scores(snapshot: TrainingReportSnapshot) -> list[tuple[str, float]]:
-    payload = snapshot.report_payload if isinstance(snapshot.report_payload, dict) else {}
+    payload: dict[str, object] = (
+        snapshot.report_payload if isinstance(snapshot.report_payload, dict) else {}
+    )
     raw_scores = payload.get("dimension_scores")
     parsed = _parse_dimension_score_items(raw_scores)
     if parsed:
@@ -299,8 +301,10 @@ def _template_name_from_session(session: PracticeSession) -> str:
     snapshot = session.curriculum_snapshot
     if isinstance(snapshot, dict):
         template = snapshot.get("practice_template")
-        if isinstance(template, dict) and isinstance(template.get("name"), str):
-            return template["name"]
+        if isinstance(template, dict):
+            template_name = template.get("name")
+            if isinstance(template_name, str):
+                return template_name
     return str(session.practice_template_id)
 
 

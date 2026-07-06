@@ -11,6 +11,7 @@ from curriculum_practice.schemas import (
     LearningContentUpdate,
     PublishGateDecision,
 )
+from curriculum_practice.services.orm_payload_typing import set_orm_field
 from curriculum_practice.services.sales_trainer_revision_adapter import AssetChangeClass
 
 LEARNING_CONTENT_RESOURCE_TYPE: Final = "curriculum_learning_content"
@@ -60,17 +61,17 @@ def apply_learning_content_revision_payload(
     revision_no: int,
     published_at: datetime,
 ) -> None:
-    content.title = _required_str(payload, "title")
-    content.summary = _optional_str(payload, "summary")
-    content.owner = _optional_str(payload, "owner")
-    content.source = _optional_str(payload, "source")
-    content.safety_flagged = bool(payload.get("safety_flagged"))
-    content.version = revision_no
-    content.status = "published"
-    content.published_by = actor_id
-    content.published_at = published_at
-    content.content_hash = learning_content_payload_hash(payload)
-    content.updated_by = actor_id
+    set_orm_field(content, "title", _required_str(payload, "title"))
+    set_orm_field(content, "summary", _optional_str(payload, "summary"))
+    set_orm_field(content, "owner", _optional_str(payload, "owner"))
+    set_orm_field(content, "source", _optional_str(payload, "source"))
+    set_orm_field(content, "safety_flagged", bool(payload.get("safety_flagged")))
+    set_orm_field(content, "version", revision_no)
+    set_orm_field(content, "status", "published")
+    set_orm_field(content, "published_by", actor_id)
+    set_orm_field(content, "published_at", published_at)
+    set_orm_field(content, "content_hash", learning_content_payload_hash(payload))
+    set_orm_field(content, "updated_by", actor_id)
 
 
 def learning_content_publish_decision_from_payload(

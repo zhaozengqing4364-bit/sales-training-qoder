@@ -245,6 +245,7 @@ async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only
     session_payload = session_update["session"]
     assert set(session_payload).issubset(
         {
+            "modalities",
             "voice",
             "temperature",
             "input_audio_format",
@@ -255,6 +256,7 @@ async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only
             "tools",
         }
     )
+    assert session_payload["modalities"] == ["text", "audio"]
     assert session_payload["voice"] == "qingchunshaonv"
     assert session_payload["temperature"] == 0.4
     assert session_payload["input_audio_format"] == "pcm16"

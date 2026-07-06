@@ -8,7 +8,7 @@ Implements Constitution Principles:
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeAlias
+from typing import Any, TypeAlias, cast
 
 from prometheus_client import Counter, Gauge, Histogram, Info
 from prometheus_client.exposition import generate_latest
@@ -37,6 +37,12 @@ websocket_connections_active = Gauge(
     "websocket_connections_active", "Active WebSocket connections", ["scenario_type"]
 )
 
+websocket_connection_events_total = Counter(
+    "websocket_connection_events_total",
+    "Total WebSocket connection lifecycle events",
+    ["scenario_type", "event"],
+)
+
 websocket_messages_total = Counter(
     "websocket_messages_total",
     "Total WebSocket messages",
@@ -47,6 +53,18 @@ websocket_message_duration_seconds = Histogram(
     "websocket_message_duration_seconds",
     "WebSocket message processing latency",
     ["scenario_type", "message_type"],
+)
+
+websocket_send_failures_total = Counter(
+    "websocket_send_failures_total",
+    "Total WebSocket send failures",
+    ["scenario_type", "message_type", "error_type"],
+)
+
+websocket_errors_total = Counter(
+    "websocket_errors_total",
+    "Total WebSocket runtime errors",
+    ["scenario_type", "error_type"],
 )
 
 # Business metrics
@@ -92,7 +110,9 @@ asr_request_duration_seconds = Histogram(
     buckets=[0.1, 0.2, 0.5, 1, 2, 5],
 )
 
-tts_requests_total = Counter("tts_requests_total", "Total TTS requests", ["status"])
+tts_requests_total = Counter(
+    "tts_requests_total", "Total TTS requests", ["status", "provider"]
+)
 
 tts_request_duration_seconds = Histogram(
     "tts_request_duration_seconds",
@@ -218,13 +238,21 @@ def track_asr_request(status: str, duration: float) -> None:
 
 def track_tts_request(status: str, provider: str, duration: float) -> None:
     """Track TTS request metrics"""
-    tts_requests_total.labels(status=status).inc()
+    tts_requests_total.labels(status=status, provider=provider).inc()
     tts_request_duration_seconds.labels(provider=provider).observe(duration)
 
 
 def track_websocket_connection(scenario_type: str, delta: int) -> None:
     """Track active WebSocket connections"""
     websocket_connections_active.labels(scenario_type=scenario_type).inc(delta)
+
+
+def track_websocket_connection_event(scenario_type: str, event: str) -> None:
+    """Track WebSocket connection lifecycle events."""
+    websocket_connection_events_total.labels(
+        scenario_type=scenario_type,
+        event=event,
+    ).inc()
 
 
 def track_websocket_message(
@@ -245,9 +273,29 @@ def track_error(service: str, error_type: str) -> None:
     errors_total.labels(service=service, error_type=error_type).inc()
 
 
-def track_frontend_analytics_event(
-    event_type: str, status: str = "accepted"
+def track_websocket_send_failure(
+    scenario_type: str,
+    message_type: str,
+    error_type: str,
 ) -> None:
+    """Track WebSocket send failures with enough labels for triage."""
+    websocket_send_failures_total.labels(
+        scenario_type=scenario_type,
+        message_type=message_type,
+        error_type=error_type,
+    ).inc()
+
+
+def track_websocket_error(scenario_type: str, error_type: str) -> None:
+    """Track WebSocket runtime errors."""
+    websocket_errors_total.labels(
+        scenario_type=scenario_type,
+        error_type=error_type,
+    ).inc()
+    track_error(service=f"websocket:{scenario_type}", error_type=error_type)
+
+
+def track_frontend_analytics_event(event_type: str, status: str = "accepted") -> None:
     """Track frontend analytics beacons that reach the backend truth line."""
     frontend_analytics_events_total.labels(
         event_type=event_type,
@@ -302,7 +350,7 @@ def track_voice_policy_state_change(
 
 def get_metrics() -> bytes:
     """Get Prometheus metrics export"""
-    return generate_latest()
+    return cast(bytes, generate_latest())
 
 
 def initialize_metrics(version: str, environment: str) -> None:

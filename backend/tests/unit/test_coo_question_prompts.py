@@ -1,13 +1,14 @@
 import sys
 from pathlib import Path
 
-import pytest
-
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from coo_question_prompts import load_short_answer_prompts, resolve_short_answer_ai_scoring
+from coo_question_prompts import (  # noqa: E402
+    load_short_answer_prompts,
+    resolve_short_answer_ai_scoring,
+)
 
 
 def test_load_short_answer_prompts_includes_series_and_default() -> None:

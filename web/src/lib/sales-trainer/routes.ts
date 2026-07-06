@@ -115,6 +115,12 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
         icon: BarChart3,
         href: "/admin/sales-trainer/score-results",
     },
+    analytics: {
+        key: "analytics",
+        label: "Journey 分析",
+        icon: BarChart3,
+        href: "/admin/sales-trainer/analytics",
+    },
     settings: {
         key: "settings",
         label: "配置",
@@ -145,6 +151,7 @@ export const SALES_TRAINER_ADMIN_RECORD_NAV_ITEMS = [
     SALES_TRAINER_ADMIN_ROUTES.trainingRecords,
     SALES_TRAINER_ADMIN_ROUTES.audioSubmissions,
     SALES_TRAINER_ADMIN_ROUTES.scoreResults,
+    SALES_TRAINER_ADMIN_ROUTES.analytics,
 ] as const satisfies readonly SalesTrainerAdminRouteItem[];
 
 export const SALES_TRAINER_ADMIN_NAV_ITEMS = [
@@ -195,6 +202,16 @@ export const SALES_TRAINER_ADMIN_CAPABILITY_NAV = [
     readonly items: readonly SalesTrainerAdminRouteItem[];
 }>;
 
+const SALES_TRAINER_ADMIN_CAPABILITY_ACCESS_ROOTS = [
+    {
+        capability: "view_records",
+        roots: ["/admin/sales-trainer/quiz-attempts"],
+    },
+] as const satisfies ReadonlyArray<{
+    readonly capability: SalesTrainerAdminCapabilityKey;
+    readonly roots: readonly string[];
+}>;
+
 export function salesTrainerAdminItemsForCapabilities(
     capabilities: SalesTrainerAdminCapabilities | null | undefined,
 ): SalesTrainerAdminRouteItem[] {
@@ -219,6 +236,58 @@ export function salesTrainerAdminItemsForCapabilities(
         }
     }
     return items;
+}
+
+export function filterSalesTrainerAdminRouteItemsForCapabilities(
+    items: readonly SalesTrainerAdminRouteItem[],
+    capabilities: SalesTrainerAdminCapabilities | null | undefined,
+): SalesTrainerAdminRouteItem[] {
+    if (!capabilities) {
+        return [];
+    }
+    if (capabilities.capabilities.admin_full_access) {
+        return [...items];
+    }
+    const allowedHrefs = salesTrainerAdminItemsForCapabilities(capabilities)
+        .map((item) => item.href);
+    return items.filter((item) =>
+        allowedHrefs.some((href) =>
+            item.href === href
+            || (
+                href !== SALES_TRAINER_ADMIN_ROUTES.workbench.href
+                && item.href.startsWith(`${href}/`)
+            ),
+        ),
+    );
+}
+
+export function isSalesTrainerAdminPathAllowedForCapabilities(
+    currentPath: string,
+    capabilities: SalesTrainerAdminCapabilities | null | undefined,
+): boolean {
+    if (!capabilities) {
+        return false;
+    }
+    if (capabilities.capabilities.admin_full_access) {
+        return true;
+    }
+    const visibleRouteAllowed = salesTrainerAdminItemsForCapabilities(capabilities)
+        .some((item) =>
+            currentPath === item.href
+            || (
+                item.href !== SALES_TRAINER_ADMIN_ROUTES.workbench.href
+                && currentPath.startsWith(`${item.href}/`)
+            ),
+        );
+    if (visibleRouteAllowed) {
+        return true;
+    }
+    return SALES_TRAINER_ADMIN_CAPABILITY_ACCESS_ROOTS.some((entry) =>
+        capabilities.capabilities[entry.capability]
+        && entry.roots.some((root) =>
+            currentPath === root || currentPath.startsWith(`${root}/`),
+        ),
+    );
 }
 
 export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminContextNavGroup[] = [
@@ -342,6 +411,11 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
         ],
     },
     {
+        root: "/admin/sales-trainer/analytics",
+        label: "Journey 分析",
+        items: [SALES_TRAINER_ADMIN_ROUTES.analytics],
+    },
+    {
         root: "/admin/sales-trainer/settings",
         label: "配置",
         items: [
@@ -389,4 +463,18 @@ export function getSalesTrainerAdminContextNavGroup(
         ?? SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS[
             SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS.length - 1
         ];
+}
+
+export function getSalesTrainerAdminContextNavGroupForCapabilities(
+    currentPath: string,
+    capabilities: SalesTrainerAdminCapabilities | null | undefined,
+): SalesTrainerAdminContextNavGroup {
+    const group = getSalesTrainerAdminContextNavGroup(currentPath);
+    return {
+        ...group,
+        items: filterSalesTrainerAdminRouteItemsForCapabilities(
+            group.items,
+            capabilities,
+        ),
+    };
 }

@@ -4,6 +4,7 @@ from copy import deepcopy
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db.models import PracticeSession
 from common.services.practice_session_ports import (
     PracticeSessionCreateContext,
     PracticeSessionPortError,
@@ -21,7 +22,7 @@ from presentation_coach.services.coach_service import PresentationCoachService
 async def create_presentation_practice_session(
     db: AsyncSession,
     context: PracticeSessionCreateContext,
-):
+) -> PracticeSession:
     session_data = context.session_data
     if not session_data.presentation_id:
         raise PracticeSessionPortError("[PRESENTATION_ID_REQUIRED]", status_code=400)
@@ -54,18 +55,26 @@ async def create_presentation_practice_session(
             message="会话创建失败",
         )
     if context.agent_id_str:
-        session.agent_id = context.agent_id_str
+        setattr(session, "agent_id", context.agent_id_str)
     if context.persona_id_str:
-        session.persona_id = context.persona_id_str
-    session.voice_mode = context.effective_voice_policy.get(
-        "voice_mode", "stepfun_realtime"
+        setattr(session, "persona_id", context.persona_id_str)
+    setattr(
+        session,
+        "voice_mode",
+        str(context.effective_voice_policy.get("voice_mode", "stepfun_realtime")),
     )
-    session.voice_runtime_profile_id = context.effective_voice_policy.get(
-        "runtime_profile_id"
+    setattr(
+        session,
+        "voice_runtime_profile_id",
+        context.effective_voice_policy.get("runtime_profile_id"),
     )
-    session.voice_policy_snapshot = deepcopy(context.session_policy_snapshot)
+    setattr(
+        session,
+        "voice_policy_snapshot",
+        deepcopy(context.session_policy_snapshot),
+    )
     if context.requested_scenario:
-        session.scenario_id = context.requested_scenario.scenario_id
+        setattr(session, "scenario_id", context.requested_scenario.scenario_id)
     try:
         await apply_registered_practice_session_snapshot(
             db,
@@ -102,6 +111,12 @@ async def finish_presentation_practice_session(
         )
 
     session = coach_result.value
+    if session is None:
+        raise PracticeSessionPortError(
+            "[SESSION_END_FAILED]",
+            status_code=500,
+            message="会话结束失败",
+        )
     snapshot = ensure_effectiveness_snapshot(session)
     return PracticeSessionTerminalResult(session=session, snapshot=snapshot)
 

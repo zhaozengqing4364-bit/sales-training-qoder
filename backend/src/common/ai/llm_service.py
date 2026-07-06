@@ -11,9 +11,10 @@ References:
 """
 
 import os
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -26,6 +27,7 @@ from common.ai.models import ModelConfig, ModelProvider, ModelType
 from common.error_handling.result import Result
 from common.knowledge_engine.runtime_events import build_runtime_event
 from common.monitoring.logger import get_logger
+from common.monitoring.metrics import track_llm_request
 from prompt_templates.compiled_contract import CompiledPromptContract
 
 logger = get_logger(__name__)
@@ -96,7 +98,7 @@ class CostTrackingHandler(AsyncCallbackHandler):
         self.prompt_tokens = 0
         self.completion_tokens = 0
 
-    async def on_llm_end(self, response, **kwargs):
+    async def on_llm_end(self, response: Any, **kwargs: Any) -> None:
         """Track token usage"""
         if hasattr(response, "llm_output") and response.llm_output:
             if "token_usage" in response.llm_output:
@@ -149,7 +151,7 @@ class LLMService:
         self.session_runtime_events: dict[str, list[dict[str, Any]]] = {}
 
         # Initialize LLM client
-        self._llm = None
+        self._llm: Any = None
         self._init_client()
 
     def _init_client(self) -> None:
@@ -300,7 +302,9 @@ class LLMService:
         # Anthropic can be used via OpenAI-compatible interface
         # or via langchain_anthropic if installed
         try:
-            from langchain_anthropic import ChatAnthropic
+            from langchain_anthropic import (  # type: ignore[import-not-found]
+                ChatAnthropic,
+            )
 
             self._llm = ChatAnthropic(
                 anthropic_api_key=api_key,
@@ -333,14 +337,14 @@ class LLMService:
     def provider(self) -> str:
         """Get current provider name"""
         if self._effective_config:
-            return self._effective_config.get("provider", "unknown")
+            return cast(str, self._effective_config.get("provider", "unknown"))
         return "unknown"
 
     @property
     def model_name(self) -> str:
         """Get current model name"""
         if self._effective_config:
-            return self._effective_config.get("model_name", "unknown")
+            return cast(str, self._effective_config.get("model_name", "unknown"))
         return "unknown"
 
     @property
@@ -589,10 +593,12 @@ class LLMService:
     ) -> AsyncIterator[LLMStreamChunk]:
         """Stream LLM text plus provider reasoning chunks when available."""
         if self._is_performance_test_mode():
+            track_llm_request("performance_test", "fallback", 0.0, {})
             yield LLMStreamChunk(text=self._get_fallback_response(prompt, context))
             return
 
         if not self.is_configured:
+            track_llm_request(self.provider, "not_configured", 0.0, {})
             logger.error(
                 "LLM service not configured for streaming",
                 provider=self.provider,
@@ -608,8 +614,12 @@ class LLMService:
                 return
             raise RuntimeError("[LLM_NOT_CONFIGURED]")
 
+        started_at = time.perf_counter()
         try:
             cost_handler = CostTrackingHandler(session_id)
+            chunk_count = 0
+            text_length = 0
+            reasoning_length = 0
             if self._uses_deepseek_reasoning_stream():
                 async for chunk in self._stream_deepseek_reasoning_chunks(
                     prompt=prompt,
@@ -618,6 +628,9 @@ class LLMService:
                     context=context,
                     response_format=response_format,
                 ):
+                    chunk_count += 1
+                    text_length += len(chunk.text)
+                    reasoning_length += len(chunk.reasoning_text)
                     yield chunk
             else:
                 messages = self._build_messages(prompt, system_message, context)
@@ -628,10 +641,51 @@ class LLMService:
                     text = self._content_to_text(getattr(chunk, "content", ""))
                     reasoning_text = self._chunk_reasoning_to_text(chunk)
                     if text or reasoning_text:
-                        yield LLMStreamChunk(text=text, reasoning_text=reasoning_text)
+                        emitted = LLMStreamChunk(
+                            text=text,
+                            reasoning_text=reasoning_text,
+                        )
+                        chunk_count += 1
+                        text_length += len(emitted.text)
+                        reasoning_length += len(emitted.reasoning_text)
+                        yield emitted
+            latency_ms = int((time.perf_counter() - started_at) * 1000)
+            self._record_runtime_event(
+                session_id,
+                build_runtime_event(
+                    event_id="llm_provider_response_received",
+                    category=cast(Any, "runtime"),
+                    severity="info",
+                    status="received",
+                    source="llm.stream_generate",
+                    summary="Streaming LLM provider response was received.",
+                    details={
+                        "provider": self.provider,
+                        "model_name": self.model_name,
+                        "response_format": response_format,
+                        "fallback_used": False,
+                    },
+                    metrics={
+                        "latency_ms": latency_ms,
+                        "chunk_count": chunk_count,
+                        "response_text_length": text_length,
+                        "reasoning_text_length": reasoning_length,
+                    },
+                ),
+            )
             cost = (cost_handler.total_tokens / 1000) * self.cost_per_1k_tokens
             self.session_costs[session_id] = (
                 self.session_costs.get(session_id, 0) + cost
+            )
+            track_llm_request(
+                self.provider,
+                "success",
+                latency_ms / 1000,
+                {
+                    "prompt": cost_handler.prompt_tokens,
+                    "completion": cost_handler.completion_tokens,
+                    "total": cost_handler.total_tokens,
+                },
             )
             self._record_runtime_event(
                 session_id,
@@ -676,6 +730,12 @@ class LLMService:
                     else f"not_required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
                 ),
             )
+            track_llm_request(
+                self.provider,
+                f"error:{type(e).__name__}",
+                time.perf_counter() - started_at,
+                {},
+            )
             if allow_fallback_response:
                 yield LLMStreamChunk(text=self._get_fallback_response(prompt, context))
                 return
@@ -707,9 +767,11 @@ class LLMService:
             Result with response text or fallback
         """
         if self._is_performance_test_mode():
+            track_llm_request("performance_test", "fallback", 0.0, {})
             return Result.ok(self._get_fallback_response(prompt, context))
 
         if not self.is_configured:
+            track_llm_request(self.provider, "not_configured", 0.0, {})
             logger.error(
                 "LLM service not configured",
                 provider=self.provider,
@@ -740,6 +802,7 @@ class LLMService:
                 return Result.fail(self._get_fallback_response(prompt, context))
             return Result.fail("[LLM_NOT_CONFIGURED]")
 
+        started_at = time.perf_counter()
         try:
             messages = self._build_messages(prompt, system_message, context)
 
@@ -753,6 +816,46 @@ class LLMService:
             generation = result.generations[0][0]
             response_text = getattr(generation, "text", None) or getattr(
                 generation, "content", str(generation)
+            )
+            response_metadata = getattr(generation, "response_metadata", None)
+            if not isinstance(response_metadata, dict):
+                message = getattr(generation, "message", None)
+                response_metadata = getattr(message, "response_metadata", None)
+            if not isinstance(response_metadata, dict):
+                response_metadata = {}
+            latency_ms = int((time.perf_counter() - started_at) * 1000)
+            track_llm_request(
+                self.provider,
+                "success",
+                latency_ms / 1000,
+                {
+                    "prompt": cost_handler.prompt_tokens,
+                    "completion": cost_handler.completion_tokens,
+                    "total": cost_handler.total_tokens,
+                },
+            )
+            self._record_runtime_event(
+                session_id,
+                build_runtime_event(
+                    event_id="llm_provider_response_received",
+                    category=cast(Any, "runtime"),
+                    severity="info",
+                    status="received",
+                    source="llm.generate",
+                    summary="LLM provider response was received.",
+                    details={
+                        "provider": self.provider,
+                        "model_name": self.model_name,
+                        "response_format": response_format,
+                        "fallback_used": False,
+                        "response_metadata_keys": sorted(response_metadata.keys()),
+                    },
+                    metrics={
+                        "latency_ms": latency_ms,
+                        "generation_count": sum(len(items) for items in result.generations),
+                        "response_text_length": len(str(response_text or "")),
+                    },
+                ),
             )
 
             # Track cost
@@ -810,7 +913,7 @@ class LLMService:
                     ),
                 )
 
-            return Result.ok(response_text)
+            return Result.ok(cast(str, response_text))
 
         except (
             ConnectionError,
@@ -831,6 +934,12 @@ class LLMService:
                     if self._runtime_policy.get("base_url_required")
                     else f"not_required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
                 ),
+            )
+            track_llm_request(
+                self.provider,
+                f"error:{type(e).__name__}",
+                time.perf_counter() - started_at,
+                {},
             )
             # Return predefined fallback response
             fallback_response = self._get_fallback_response(prompt, context)
@@ -957,7 +1066,7 @@ class LLMService:
             return Result.fail(result.fallback or "[LLM_EVALUATION_FAILED]")
 
         try:
-            response_text = result.value.strip()
+            response_text = cast(str, result.value).strip()
             if response_text.startswith("```"):
                 response_text = (
                     response_text.split("\n", 1)[1]
@@ -1078,7 +1187,7 @@ class LLMService:
             )
             return Result.fail(result.fallback or "[REPORT_GENERATION_FAILED]")
 
-        return Result.ok(result.value)
+        return Result.ok(cast(str, result.value))
 
     def get_session_cost(self, session_id: str) -> float:
         """Get cost for a specific session"""

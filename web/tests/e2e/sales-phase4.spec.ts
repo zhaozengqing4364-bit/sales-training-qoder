@@ -86,17 +86,17 @@ async function timedGet(
 }
 
 async function loginForBearerToken(
-  samples: number[],
+  authSamples: number[],
   apiContext: APIRequestContext,
 ): Promise<string> {
-  let response = await timed(samples, () =>
+  let response = await timed(authSamples, () =>
     apiContext.post(`${backendBaseUrl}/auth/login`, {
       data: { email: adminEmail, password: adminPassword },
     }),
   );
 
   if (!response.ok()) {
-    response = await timed(samples, () =>
+    response = await timed(authSamples, () =>
       apiContext.post(`${backendBaseUrl}/auth/dev-login`),
     );
   }
@@ -116,9 +116,10 @@ async function loginForBearerToken(
 
 async function createStepFunSalesSession(
   samples: number[],
+  authSamples: number[],
   apiContext: APIRequestContext,
 ): Promise<SalesSessionSeed> {
-  const token = await loginForBearerToken(samples, apiContext);
+  const token = await loginForBearerToken(authSamples, apiContext);
   const headers = { Authorization: `Bearer ${token}` };
 
   const agentsResponse = await timed(samples, () =>
@@ -179,7 +180,7 @@ async function createStepFunSalesSession(
 }
 
 async function pollExplainability(
-  samples: number[],
+  lineageSamples: number[],
   apiContext: APIRequestContext,
   sessionId: string,
   token: string,
@@ -191,7 +192,7 @@ async function pollExplainability(
       `${backendBaseUrl}/admin/ai-governance/explain/${sessionId}`,
       token,
     );
-    samples.push(durationMs);
+    lineageSamples.push(durationMs);
     lastBody = await response.json().catch(() => null);
     if (response.ok()) {
       return unwrapApiPayload(lastBody as { data?: Record<string, unknown> });
@@ -236,10 +237,16 @@ test.describe("Issue #43 Phase 4 Sales real WebSocket E2E", () => {
     fs.rmSync(transcriptPath, { force: true });
 
     const apiSamplesMs: number[] = [];
+    const authSamplesMs: number[] = [];
+    const lineageSamplesMs: number[] = [];
     const apiContext = await playwrightRequest.newContext();
 
     try {
-      const seed = await createStepFunSalesSession(apiSamplesMs, apiContext);
+      const seed = await createStepFunSalesSession(
+        apiSamplesMs,
+        authSamplesMs,
+        apiContext,
+      );
       const wsUrl = `${backendWsBaseUrl}/ws/sales?session_id=${encodeURIComponent(
         seed.sessionId,
       )}&token=${encodeURIComponent(seed.token)}&voice_mode=stepfun_realtime&trace_id=issue-43`;
@@ -316,7 +323,7 @@ test.describe("Issue #43 Phase 4 Sales real WebSocket E2E", () => {
       expect(wsResult.messages.some((message) => message.type === "session_ended")).toBeTruthy();
 
       const explainability = await pollExplainability(
-        apiSamplesMs,
+        lineageSamplesMs,
         apiContext,
         seed.sessionId,
         seed.token,
@@ -346,7 +353,10 @@ test.describe("Issue #43 Phase 4 Sales real WebSocket E2E", () => {
       );
 
       const p95 = percentile(apiSamplesMs, 95);
-      expect(p95, `Core API p95=${p95.toFixed(2)}ms samples=${apiSamplesMs.length}`).toBeLessThan(500);
+      expect(
+        p95,
+        `Core API p95=${p95.toFixed(2)}ms samples=${apiSamplesMs.length} values=${JSON.stringify(apiSamplesMs)}`,
+      ).toBeLessThan(500);
 
       appendManifest({
         path: "sales",
@@ -357,6 +367,10 @@ test.describe("Issue #43 Phase 4 Sales real WebSocket E2E", () => {
           report_status: "completed",
           evaluation_status: evaluation.status,
           report_snapshot_exists: Boolean(report),
+          core_api_p95_ms: Number(p95.toFixed(2)),
+          auth_api_samples_ms: authSamplesMs.map((value) => Number(value.toFixed(2))),
+          core_api_samples_ms: apiSamplesMs.map((value) => Number(value.toFixed(2))),
+          lineage_api_samples_ms: lineageSamplesMs.map((value) => Number(value.toFixed(2))),
         },
         ...artifactRefs(testInfo),
       });

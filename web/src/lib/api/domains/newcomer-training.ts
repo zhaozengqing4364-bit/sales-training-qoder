@@ -51,9 +51,11 @@ import type {
     NewcomerPaperAttemptCreateRequest,
     NewcomerPaperRollbackRequest,
     NewcomerPathConfigActionRequest,
+    NewcomerPathPublishPreviewResponse,
     NewcomerPathConfigResponse,
     NewcomerPathConfigSaveRequest,
     NewcomerPathRevisionListResponse,
+    NewcomerPathRollbackPreviewResponse,
     NewcomerUnitRevisionListResponse,
     NewcomerUnitRollbackRequest,
     SalesTrainerPathListResponse,
@@ -407,6 +409,12 @@ export function createAdminNewcomerTrainingDomain({
             );
         },
 
+        getBusinessEtiquetteLearningUnits: async () => {
+            return request<BusinessEtiquetteLearningUnitsResponse>(
+                "/admin/newcomer-training/business-etiquette/learning-units",
+            );
+        },
+
         saveBusinessEtiquetteCapabilities: async (
             payload: BusinessEtiquetteCapabilitySnapshotSaveRequest,
         ) => {
@@ -606,6 +614,13 @@ export function createAdminNewcomerTrainingDomain({
             );
         },
 
+        previewPathConfigPublish: async () => {
+            return request<NewcomerPathPublishPreviewResponse>(
+                "/admin/newcomer-training/path-config/publish/preview",
+                { method: "POST" },
+            );
+        },
+
         publishPathConfig: async (payload: NewcomerPathConfigActionRequest) => {
             return request<NewcomerPathConfigResponse>(
                 "/admin/newcomer-training/path-config/publish",
@@ -620,6 +635,16 @@ export function createAdminNewcomerTrainingDomain({
             return request<NewcomerPathRevisionListResponse>(
                 "/admin/newcomer-training/path-config/revisions",
                 { method: "GET" },
+            );
+        },
+
+        previewPathConfigRollback: async (revisionId: string) => {
+            return request<NewcomerPathRollbackPreviewResponse>(
+                "/admin/newcomer-training/path-config/rollback/preview",
+                {
+                    method: "POST",
+                    body: JSON.stringify({ revision_id: revisionId }),
+                },
             );
         },
 

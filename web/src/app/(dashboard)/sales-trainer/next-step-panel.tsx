@@ -7,38 +7,37 @@ import { ArrowRight, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { SalesTrainerGoalNextRecommendation, SalesTrainerPath } from "@/lib/api/types";
-import { findBusinessSkillsCoachHref } from "@/lib/sales-trainer/ai-coach-availability";
+import type { TrainingJourneyModuleProgress, TrainingJourneyResponse } from "@/lib/api/types";
 
-const BUSINESS_SKILLS_COACH_RECOMMENDATION_COPY = {
-    title: "去 AI 教练练一轮",
-    reason: "商务技巧 AI 教练已启用，可先通过互动题巩固拜访前的关键动作。",
-    actionLabel: "进入 AI 教练",
-} as const;
+interface JourneyNextStepRecommendation {
+    title: string;
+    reason: string;
+    action_label: string;
+    target_path: string;
+}
 
-function findRecommendation(
-    paths: SalesTrainerPath[],
-    unitId: string,
-): SalesTrainerGoalNextRecommendation | null {
-    const currentPath = paths.find((path) =>
-        path.levels.some((level) => level.unit_id === unitId),
-    );
-    const recommendation = currentPath?.goal_context.next_recommendation ?? null;
-    if (recommendation) {
-        return recommendation;
-    }
-    const coachHref = findBusinessSkillsCoachHref(paths, unitId);
-    if (!coachHref) {
+function moduleHasAction(module: TrainingJourneyModuleProgress): boolean {
+    const action = module.next_action;
+    return Boolean(action && !action.disabled && action.target_path);
+}
+
+function moduleNeedsAttention(module: TrainingJourneyModuleProgress): boolean {
+    return module.stage !== "passed" && module.stage !== "disabled" && module.stage !== "archived";
+}
+
+function findRecommendation(journey: TrainingJourneyResponse): JourneyNextStepRecommendation | null {
+    const sortedModules = [...journey.modules].sort((left, right) => left.order_index - right.order_index);
+    const nextModule = sortedModules.find((item) => moduleNeedsAttention(item) && moduleHasAction(item))
+        ?? sortedModules.find(moduleHasAction);
+    const action = nextModule?.next_action;
+    if (!nextModule || !action?.target_path) {
         return null;
     }
     return {
-        title: BUSINESS_SKILLS_COACH_RECOMMENDATION_COPY.title,
-        reason: BUSINESS_SKILLS_COACH_RECOMMENDATION_COPY.reason,
-        action_label: BUSINESS_SKILLS_COACH_RECOMMENDATION_COPY.actionLabel,
-        target_path: coachHref,
-        unit_id: unitId,
-        level_title: "商务技巧",
-        recommendation_kind: "start_level",
+        title: nextModule.display_name,
+        reason: action.disabled_reason || `根据当前训练路径，继续完成“${nextModule.display_name}”。`,
+        action_label: action.label,
+        target_path: action.target_path,
     };
 }
 
@@ -47,7 +46,7 @@ interface SalesTrainerNextStepPanelProps {
 }
 
 export function SalesTrainerNextStepPanel({ unitId }: SalesTrainerNextStepPanelProps) {
-    const [recommendation, setRecommendation] = useState<SalesTrainerGoalNextRecommendation | null>(null);
+    const [recommendation, setRecommendation] = useState<JourneyNextStepRecommendation | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -57,9 +56,9 @@ export function SalesTrainerNextStepPanel({ unitId }: SalesTrainerNextStepPanelP
             setIsLoading(true);
             setError(null);
             try {
-                const response = await api.salesTrainer.listPaths();
+                const response = await api.salesTrainer.getJourney();
                 if (isMounted) {
-                    setRecommendation(findRecommendation(response.items, unitId));
+                    setRecommendation(findRecommendation(response));
                 }
             } catch (loadError) {
                 if (isMounted) {

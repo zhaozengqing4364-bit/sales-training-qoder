@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.db.typing import orm_scalar
 from sales_trainer.models import SalesTrainerExamPaper, SalesTrainerUnit
 from sales_trainer.schemas import ExamPaperCreate, ExamPaperUpdate
 from sales_trainer.services.audit_metadata import (
@@ -48,15 +49,17 @@ class ExamPaperLifecycleWorkflow:
         )
         self._db.add(paper)
         await self._db.flush()
-        questions = await UnitService(self._db).get_unit_questions(unit.unit_id)
+        unit_id = orm_scalar(unit.unit_id, str)
+        paper_id = orm_scalar(paper.paper_id, str)
+        questions = await UnitService(self._db).get_unit_questions(unit_id)
         await self._logs.record(
             actor=actor,
             action="exam_paper_created",
             target_type="sales_trainer_exam_paper",
-            target_id=paper.paper_id,
+            target_id=paper_id,
             metadata={
                 "paper_key": paper.paper_key,
-                "unit_id": unit.unit_id,
+                "unit_id": unit_id,
                 "next": paper_lifecycle_snapshot(
                     paper,
                     questions,
@@ -77,38 +80,42 @@ class ExamPaperLifecycleWorkflow:
     ) -> SalesTrainerExamPaper:
         unit = await require_backing_unit(self._db, paper)
         unit_service = UnitService(self._db)
+        unit_id = orm_scalar(unit.unit_id, str)
+        paper_id = orm_scalar(paper.paper_id, str)
         previous_snapshot = paper_lifecycle_snapshot(
             paper,
-            await unit_service.get_unit_questions(unit.unit_id),
+            await unit_service.get_unit_questions(unit_id),
             unit_status=str(unit.status),
         )
         data = payload.model_dump(exclude_unset=True)
         if "paper_key" in data and data["paper_key"] != paper.paper_key:
             await ensure_unique_paper_key(self._db, str(data["paper_key"]))
-            paper.paper_key = str(data["paper_key"])
+            setattr(paper, "paper_key", str(data["paper_key"]))
         if "title" in data:
-            paper.title = data["title"]
+            setattr(paper, "title", data["title"])
         if "description" in data:
-            paper.description = data["description"]
+            setattr(paper, "description", data["description"])
         if "module_key" in data:
-            paper.module_key = data["module_key"]
+            setattr(paper, "module_key", data["module_key"])
         if "pass_threshold" in data:
-            paper.pass_threshold = decimal_or_none(data["pass_threshold"])
-        paper.updated_by = str(actor.user_id)
+            setattr(paper, "pass_threshold", decimal_or_none(data["pass_threshold"]))
+        setattr(paper, "updated_by", str(actor.user_id))
         try:
-            await unit_service.update_unit(unit, paper_unit_update(payload), actor=actor)
+            await unit_service.update_unit(
+                unit, paper_unit_update(payload), actor=actor
+            )
         except SalesTrainerUnitError as exc:
             raise _paper_error(exc) from exc
         await self._logs.record(
             actor=actor,
             action="exam_paper_updated",
             target_type="sales_trainer_exam_paper",
-            target_id=paper.paper_id,
+            target_id=paper_id,
             metadata=paper_lifecycle_metadata(
                 previous_snapshot,
                 paper_lifecycle_snapshot(
                     paper,
-                    await unit_service.get_unit_questions(unit.unit_id),
+                    await unit_service.get_unit_questions(unit_id),
                     unit_status=str(unit.status),
                 ),
             ),
@@ -125,23 +132,24 @@ class ExamPaperLifecycleWorkflow:
     ) -> SalesTrainerExamPaper:
         paper = await require_paper(self._db, paper_id)
         unit_service = UnitService(self._db)
-        unit = await self._db.get(SalesTrainerUnit, paper.unit_id)
-        previous_questions = await unit_service.get_unit_questions(paper.unit_id)
+        paper_unit_id = orm_scalar(paper.unit_id, str)
+        unit = await self._db.get(SalesTrainerUnit, paper_unit_id)
+        previous_questions = await unit_service.get_unit_questions(paper_unit_id)
         previous_snapshot = paper_lifecycle_snapshot(
             paper,
             previous_questions,
             unit_status=str(unit.status) if unit is not None else None,
         )
-        paper.status = "archived"
-        paper.updated_by = str(actor.user_id)
+        setattr(paper, "status", "archived")
+        setattr(paper, "updated_by", str(actor.user_id))
         if unit is not None:
-            unit.status = "archived"
-            unit.updated_by = str(actor.user_id)
+            setattr(unit, "status", "archived")
+            setattr(unit, "updated_by", str(actor.user_id))
         await self._logs.record(
             actor=actor,
             action="exam_paper_archived",
             target_type="sales_trainer_exam_paper",
-            target_id=paper.paper_id,
+            target_id=orm_scalar(paper.paper_id, str),
             metadata=paper_lifecycle_metadata(
                 previous_snapshot,
                 paper_lifecycle_snapshot(

@@ -220,14 +220,16 @@ def _asset_id(ref: dict[str, Any]) -> str:
 
 
 def _asset_matches_ref(asset: object, ref: dict[str, Any]) -> bool:
-    return str(getattr(asset, "content_hash", "")) == str(ref.get("hash")) and int(
-        getattr(asset, "version", 0) or 0
-    ) == _int(ref.get("version"))
+    return str(getattr(asset, "content_hash", "")) == str(
+        ref.get("hash")
+    ) and _int(getattr(asset, "version", 0)) == _int(ref.get("version"))
 
 
 def _int(value: object) -> int:
+    if not isinstance(value, int | str):
+        return 0
     try:
-        return int(value)  # type: ignore[arg-type]
+        return int(value)
     except (TypeError, ValueError):
         return 0
 
@@ -280,6 +282,10 @@ def _join(value: object) -> str:
     return _text(value)
 
 
+def _as_dict(value: object) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def _case_instruction_lines(case_item: dict[str, Any]) -> list[str]:
     labels = {
         "industry": "行业",
@@ -305,17 +311,9 @@ def _roleplay_contract_section(contract: dict[str, Any] | None) -> str:
         return ""
     if contract.get("legacy_status") == LEGACY_ROLEPLAY_STATUS:
         return ""
-    situation = contract.get("situation") if isinstance(contract.get("situation"), dict) else {}
-    relationship = (
-        contract.get("relationship_context")
-        if isinstance(contract.get("relationship_context"), dict)
-        else {}
-    )
-    scope = (
-        contract.get("visible_information_scope")
-        if isinstance(contract.get("visible_information_scope"), dict)
-        else {}
-    )
+    situation = _as_dict(contract.get("situation"))
+    relationship = _as_dict(contract.get("relationship_context"))
+    scope = _as_dict(contract.get("visible_information_scope"))
     patterns = contract.get("forbidden_claim_patterns")
     conflict_strategy = _text(contract.get("conflict_response_strategy"))
     lines = [

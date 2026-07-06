@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerAudioResultPage from "./page";
 
-const { getAudioSubmissionMock, getUnitMock, listPathsMock } = vi.hoisted(() => ({
+const { getAudioSubmissionMock, getJourneyMock, getUnitMock, listPathsMock } = vi.hoisted(() => ({
     getAudioSubmissionMock: vi.fn(),
+    getJourneyMock: vi.fn(),
     getUnitMock: vi.fn(),
     listPathsMock: vi.fn(),
 }));
@@ -22,6 +23,7 @@ vi.mock("@/lib/api/client", async () => {
             salesTrainer: {
                 ...actual.api.salesTrainer,
                 getAudioSubmission: getAudioSubmissionMock,
+                getJourney: getJourneyMock,
                 getUnit: getUnitMock,
                 listPaths: listPathsMock,
             },
@@ -71,56 +73,76 @@ const scoredSubmission = {
 describe("SalesTrainerAudioResultPage", () => {
     beforeEach(() => {
         getAudioSubmissionMock.mockReset();
+        getJourneyMock.mockReset();
         getUnitMock.mockReset();
         listPathsMock.mockReset();
-        listPathsMock.mockResolvedValue({
-            items: [
-                {
-                    path_key: "new_seller",
-                    title: "新人销售闯关",
-                    goal_title: "掌握首次客户沟通",
-                    total_levels: 2,
-                    completed_levels: 1,
-                    current_level_id: "audio-unit",
-                    next_level_id: "audio-unit",
-                    levels: [
-                        {
-                            unit_id: "audio-unit",
-                            name: "录音单元",
-                            description: "录音训练",
-                            unit_type: "audio_scoring",
-                            order_index: 2,
-                            level_title: "第二关：录音表达",
-                            level_description: "上传讲解录音。",
-                            locked: false,
-                            lock_reason: null,
-                            status: "in_progress",
-                            completion_rule: "passed",
-                            primary_action_label: "上传语音作业",
-                            retry_action_label: "重练本关",
-                            review_action_label: "查看结果",
-                            target_path: "/sales-trainer/audio/audio-unit",
-                            latest_result: null,
-                        },
-                    ],
-                    goal_context: {
-                        goal_title: "掌握首次客户沟通",
-                        score_basis: "sales_trainer_path_projection_v1",
-                        evidence_items: [],
-                        weak_points: [],
-                        next_recommendation: {
-                            title: "重练：第二关：录音表达",
-                            reason: "表达结构还可以更清楚，建议重练本关。",
-                            action_label: "重练本关",
-                            target_path: "/sales-trainer/audio/audio-unit",
-                            unit_id: "audio-unit",
-                            level_title: "第二关：录音表达",
-                            recommendation_kind: "retry_level",
-                        },
-                    },
+        getJourneyMock.mockResolvedValue({
+            journey_id: "journey-user-1",
+            learner_id: "user-1",
+            learner_name: "新人",
+            department: "销售一部",
+            path_key: "newcomer_training_path_v1",
+            path_revision_id: "revision-1",
+            path_revision_no: 1,
+            source: "active_revision",
+            legacy_snapshot_only: false,
+            role_capabilities: [],
+            learner_level: {
+                level_key: "unassigned",
+                label: "未分配",
+                source: "training_projection",
+                rank: 0,
+            },
+            role_level: {
+                level_key: "learner",
+                label: "学员",
+                source: "training_projection",
+                rank: 0,
+            },
+            training_stage: "in_progress",
+            modules: [{
+                module_key: "audio-unit",
+                title: "重练：第二关：录音表达",
+                kind: "audio_submission",
+                module_type: "audio_scoring",
+                display_name: "重练：第二关：录音表达",
+                order_index: 2,
+                enabled: true,
+                status: "in_progress",
+                stage: "in_progress",
+                passed: false,
+                score: 88,
+                max_score: 100,
+                required: true,
+                completion_satisfied: false,
+                locked: false,
+                block_reason: null,
+                completion_rule: "passed",
+                source: {
+                    path_revision_id: "revision-1",
+                    path_revision_no: 1,
                 },
-            ],
-            total: 1,
+                learner_level_required: null,
+                unmet_reasons: [],
+                diagnostics: [],
+                next_action: {
+                    action_key: "retry_audio",
+                    label: "重练本关",
+                    target_path: "/sales-trainer/audio/audio-unit",
+                    disabled: false,
+                    disabled_reason: null,
+                },
+                latest_outcome: null,
+                outcome_history: [],
+            }],
+            overall_progress: {
+                total_modules: 1,
+                completed_modules: 0,
+                passed_modules: 0,
+                failed_modules: 1,
+                needs_remediation_modules: 1,
+            },
+            diagnostics: [],
         });
         getUnitMock.mockResolvedValue({
             unit_id: "audio-unit",
@@ -153,6 +175,29 @@ describe("SalesTrainerAudioResultPage", () => {
         expect(await screen.findByText("练完下一步")).toBeTruthy();
         expect(screen.getByText("重练：第二关：录音表达")).toBeTruthy();
         expect(screen.getByRole("link", { name: /重练本关/ }).getAttribute("href")).toBe("/sales-trainer/audio/audio-unit");
+        expect(listPathsMock).not.toHaveBeenCalled();
+    });
+
+    it("shows a diagnostic instead of defaulting to 70 when the pass threshold is missing", async () => {
+        getUnitMock.mockResolvedValueOnce({
+            unit_id: "audio-unit",
+            name: "录音单元",
+            description: "录音训练",
+            unit_type: "audio_scoring",
+            config: { audio: {} },
+            status: "published",
+            created_by: "admin-1",
+            updated_by: "admin-1",
+            created_at: "2026-05-28T00:00:00Z",
+            updated_at: "2026-05-28T00:00:00Z",
+            questions: [],
+        });
+
+        render(<SalesTrainerAudioResultPage />);
+
+        expect(await screen.findByText("评分标准配置不可用")).toBeTruthy();
+        expect(screen.getByText(/训练单元缺少语音作业通过线配置/)).toBeTruthy();
+        expect(screen.queryByText(/本关需达到 70 分通过/)).toBeNull();
     });
 
     it("polls until the submission reaches a terminal scored state", async () => {
@@ -229,6 +274,35 @@ describe("SalesTrainerAudioResultPage", () => {
         expect(await screen.findByText(/评分服务响应超时/)).toBeTruthy();
         expect(screen.getByText("待重试")).toBeTruthy();
         expect(screen.queryByText("[DEUCATE_TIMEOUT]")).toBeNull();
+    });
+
+    it("does not fabricate a 70-point pass threshold when the unit lookup fails", async () => {
+        getUnitMock.mockRejectedValueOnce(new Error("unit lookup failed"));
+
+        render(<SalesTrainerAudioResultPage />);
+
+        expect(await screen.findByText("语音作业反馈")).toBeTruthy();
+        expect(screen.queryByText(/本关需达到 70 分通过/)).toBeNull();
+        expect(await screen.findByText("评分标准配置不可用")).toBeTruthy();
+        expect(screen.getByText(/unit lookup failed/)).toBeTruthy();
+    });
+
+    it("keeps submission load failures recoverable instead of treating them as missing results", async () => {
+        getAudioSubmissionMock.mockRejectedValueOnce(new Error("submission lookup failed"));
+
+        render(<SalesTrainerAudioResultPage />);
+
+        expect(await screen.findByText("语音作业结果加载失败")).toBeTruthy();
+        expect(screen.getByText("submission lookup failed")).toBeTruthy();
+        expect(screen.queryByText("语音作业结果不存在。")).toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: "重新加载结果" }));
+
+        await waitFor(() => {
+            expect(getAudioSubmissionMock).toHaveBeenCalledTimes(2);
+        });
+        expect(await screen.findByText("语音作业反馈")).toBeTruthy();
+        expect(screen.queryByText("语音作业结果加载失败")).toBeNull();
     });
 
     it("shows improvement suggestions when the submission did not pass", async () => {

@@ -85,7 +85,7 @@ def build_llm_exam_scorer(
             )
             return await _default_scorer(question=question, answer_text=answer_text)
 
-        parsed = _parse_llm_score_payload(result.value)
+        parsed = _parse_llm_score_payload(result.value or "")
         if parsed is None:
             logger.warning(
                 "Examiner LLM scoring returned invalid JSON; falling back to keyword scorer",

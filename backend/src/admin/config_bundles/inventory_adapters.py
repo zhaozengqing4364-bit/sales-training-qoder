@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -48,7 +49,13 @@ class SalesTrainerPathConfigBundleAdapter:
             adapter_key=self.adapter_key,
             read_path="/api/v1/admin/newcomer-training/path-config",
             admin_entry="/admin/sales-trainer/paths",
-            status=active.status if active is not None else working.status if working is not None else "default",
+            status=(
+                str(active.status)
+                if active is not None
+                else str(working.status)
+                if working is not None
+                else "default"
+            ),
             overview=_path_overview(active=active, working=working),
             active_version=active_version,
         )
@@ -86,7 +93,13 @@ class SalesTrainerAiCoachConfigBundleAdapter:
             adapter_key=self.adapter_key,
             read_path="/api/v1/admin/newcomer-training/ai-coach/business_skills",
             admin_entry="/admin/sales-trainer/ai-coach",
-            status=active.status if active is not None else working.status if working is not None else "default",
+            status=(
+                str(active.status)
+                if active is not None
+                else str(working.status)
+                if working is not None
+                else "default"
+            ),
             overview=_ai_coach_overview(active=active, working=working),
             active_version=active_version,
         )
@@ -139,8 +152,8 @@ def _path_version(revision: SalesTrainerAssetRevision) -> ConfigVersionSnapshot:
         version_label=f"v{revision.revision_no}",
         status=str(revision.status),
         snapshot=payload.model_dump(mode="json"),
-        created_at=revision.created_at,
-        updated_at=revision.published_at,
+        created_at=_datetime_or_none(revision.created_at),
+        updated_at=_datetime_or_none(revision.published_at),
     )
 
 
@@ -163,8 +176,8 @@ def _ai_coach_version(revision: SalesTrainerAssetRevision) -> ConfigVersionSnaps
                 for module in payload.modules
             ],
         },
-        created_at=revision.created_at,
-        updated_at=revision.published_at,
+        created_at=_datetime_or_none(revision.created_at),
+        updated_at=_datetime_or_none(revision.published_at),
     )
 
 
@@ -207,7 +220,7 @@ def _ai_coach_overview(
 
 
 def _prompt_template_version(row: PromptTemplateRow) -> ConfigVersionSnapshot:
-    variables = row.variables if isinstance(row.variables, list) else []
+    variables: list[Any] = row.variables if isinstance(row.variables, list) else []
     snapshot = {
         "template_id": str(row.id),
         "name": row.name,
@@ -225,8 +238,8 @@ def _prompt_template_version(row: PromptTemplateRow) -> ConfigVersionSnapshot:
         version_label=str(row.name),
         status="published" if row.is_active else "disabled",
         snapshot=snapshot,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=_datetime_or_none(row.created_at),
+        updated_at=_datetime_or_none(row.updated_at),
     )
 
 
@@ -249,3 +262,7 @@ def _prompt_template_overview(
         ),
         "audit_carrier": "SystemLog",
     }
+
+
+def _datetime_or_none(value: object) -> datetime | None:
+    return value if isinstance(value, datetime) else None

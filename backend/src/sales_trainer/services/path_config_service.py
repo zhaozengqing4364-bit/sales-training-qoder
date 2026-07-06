@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 from typing import Any, Literal
+from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from prompt_templates.models import PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
+from prompt_templates.service import PromptTemplateService
+from sales_trainer.ai_coach_policy import (
+    changed_ai_coach_high_risk_fields,
+    save_request_from_path_payload,
+)
 from sales_trainer.models import (
     SalesTrainerAssetRevision,
     SalesTrainerAudioScorePrompt,
@@ -41,6 +49,7 @@ from sales_trainer.services.path_config_models import (
     path_config_from_module,
     payload_from_revision,
     revision_summary,
+    validate_path_payload_for_write,
 )
 from sales_trainer.services.path_config_operations import (
     get_path_revision,
@@ -48,6 +57,16 @@ from sales_trainer.services.path_config_operations import (
     record_path_config_event,
     units_by_id,
 )
+from sales_trainer.services.prompt_template_revision_resolver import (
+    RESULT_AUDIT_HISTORY_UNAVAILABLE,
+    RESULT_HEAD_USED_AS_FALLBACK,
+    RESULT_OK,
+    RESULT_REVISION_NOT_FOUND,
+    PromptTemplateRevisionResolver,
+    PromptTemplateRevisionResolverError,
+)
+
+AI_COACH_PROMPT_CATEGORY = "sales_trainer_ai_coach"
 
 
 class SalesTrainerPathConfigService:
@@ -65,10 +84,12 @@ class SalesTrainerPathConfigService:
             resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
             logical_id=NEWCOMER_PATH_LOGICAL_ID,
         )
-        source: Literal["active_revision", "unit_backfill"] = "active_revision"
+        source: Literal["active_revision", "legacy_migration_snapshot"] = (
+            "active_revision"
+        )
         if active is None:
             path = await self._backfill_payload()
-            source = "unit_backfill"
+            source = "legacy_migration_snapshot"
         else:
             path = payload_from_revision(active)
         legacy_snapshot_only = active is None
@@ -88,8 +109,10 @@ class SalesTrainerPathConfigService:
             "diagnostics": self._diagnostics(
                 source=source,
                 legacy_snapshot_only=legacy_snapshot_only,
+                fallback_reason="active_revision_missing" if active is None else None,
                 active=active,
                 working=working,
+                path_payload=path,
             ),
         }
 
@@ -101,6 +124,14 @@ class SalesTrainerPathConfigService:
         if active is None:
             return None
         payload = payload_from_revision(active)
+        if not payload.enabled:
+            return PathProjection(
+                source="active_revision",
+                path_key=payload.path_key,
+                revision_id=str(active.revision_id),
+                revision_no=int(active.revision_no),
+                items=(),
+            )
         items = await self._projection_items(payload)
         return PathProjection(
             source="active_revision",
@@ -117,9 +148,18 @@ class SalesTrainerPathConfigService:
         actor: User,
         trace_id: str | None = None,
     ) -> SalesTrainerAssetRevision:
-        path_payload = NewcomerPathConfigPayload.model_validate(
-            payload.model_dump(mode="json", exclude={"reason"})
-        )
+        try:
+            path_payload = NewcomerPathConfigPayload.model_validate(
+                payload.model_dump(mode="json", exclude={"reason"})
+            )
+        except ValidationError as exc:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_PATH_CONFIG_INVALID]",
+                "新人训练路径配置格式错误。",
+                422,
+            ) from exc
+        validate_path_payload_for_write(path_payload)
+        await self._validate_ai_coach_prompt_bindings(path_payload)
         active = await self._revisions.active_revision(
             resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
             logical_id=NEWCOMER_PATH_LOGICAL_ID,
@@ -162,34 +202,14 @@ class SalesTrainerPathConfigService:
         reason: str,
         trace_id: str | None = None,
     ) -> AssetPublishResult:
-        working = await self._revisions.latest_working_revision(
-            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-            logical_id=NEWCOMER_PATH_LOGICAL_ID,
-        )
-        publish_payload = (
-            await self._backfill_payload()
-            if working is None
-            else payload_from_revision(working)
-        )
-        await self._validate_publish_payload(publish_payload)
+        _, working, _ = await self._prepare_publish_target()
         try:
-            if working is None:
-                result = await self._revisions.create_published_revision(
-                    resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-                    logical_id=NEWCOMER_PATH_LOGICAL_ID,
-                    payload=publish_payload.model_dump(mode="json"),
-                    actor=actor,
-                    change_class="binding",
-                    reason=reason,
-                    trace_id=trace_id,
-                )
-            else:
-                result = await self._revisions.publish_working_revision(
-                    working,
-                    actor=actor,
-                    reason=reason,
-                    trace_id=trace_id,
-                )
+            result = await self._revisions.publish_working_revision(
+                working,
+                actor=actor,
+                reason=reason,
+                trace_id=trace_id,
+            )
         except SalesTrainerAssetRevisionError as exc:
             raise SalesTrainerPathConfigError(
                 exc.code,
@@ -208,6 +228,90 @@ class SalesTrainerPathConfigService:
         )
         await self._db.commit()
         return result
+
+    async def publish_preview(self) -> dict[str, Any]:
+        active, working, publish_payload = await self._prepare_publish_target()
+        active_payload = payload_from_revision(active) if active is not None else None
+        active_revision_id = str(active.revision_id) if active else None
+        working_revision_id = str(working.revision_id)
+        will_change_active_revision = active_revision_id != working_revision_id
+        changed_module_keys = self._changed_module_keys(active_payload, publish_payload)
+        affected_module_keys = self._affected_module_keys(active_payload, publish_payload)
+        path_fields_changed = self._path_fields_changed(active_payload, publish_payload)
+        high_risk_fields = sorted(
+            changed_ai_coach_high_risk_fields(
+                active_payload.model_dump(mode="json") if active_payload else None,
+                save_request_from_path_payload(publish_payload, reason="publish_preview"),
+            )
+        )
+        risk_level, risk_reasons = self._publish_preview_risk(
+            active=active,
+            working=working,
+            changed_module_keys=changed_module_keys,
+            path_fields_changed=path_fields_changed,
+            high_risk_fields=high_risk_fields,
+        )
+        rollback_available = active is not None and will_change_active_revision
+        return {
+            "action": "newcomer_path_config.publish",
+            "permission": "sales_trainer.manage_modules",
+            "requires_reason": True,
+            "requires_trace_id": True,
+            "future_only": True,
+            "risk_level": risk_level,
+            "risk_reasons": risk_reasons,
+            "change_class": str(working.change_class),
+            "target_revision_id": working_revision_id,
+            "target_revision_no": working.revision_no,
+            "target_revision_status": working.status,
+            "impact_scope": {
+                "active_revision_id": active_revision_id,
+                "working_revision_id": working_revision_id,
+                "will_change_active_revision": will_change_active_revision,
+                "future_learner_paths_changed": will_change_active_revision,
+                "historical_attempts_changed": False,
+                "historical_submissions_changed": False,
+                "historical_regrade_required": False,
+                "affected_module_keys": affected_module_keys,
+                "changed_module_keys": changed_module_keys,
+                "path_fields_changed": path_fields_changed,
+                "changed_ai_coach_high_risk_fields": high_risk_fields,
+                "realtime_provider_readiness": self._realtime_provider_readiness(
+                    publish_payload
+                ),
+                "rollback_available": rollback_available,
+            },
+            "before_snapshot": self._revisions.snapshot(active),
+            "after_snapshot": self._revisions.snapshot(working),
+            "audit_event": {
+                "action": "newcomer_path_config.publish",
+                "target_type": "newcomer_path_config",
+                "target_id": NEWCOMER_PATH_LOGICAL_ID,
+                "required_fields": [
+                    "actor_id",
+                    "reason",
+                    "trace_id",
+                    "before_revision_id",
+                    "after_revision_id",
+                    "impact_scope",
+                ],
+            },
+            "rollback_hint": {
+                "available": rollback_available,
+                "preview_endpoint": (
+                    "/api/v1/admin/newcomer-training/path-config/rollback/preview"
+                    if rollback_available
+                    else None
+                ),
+                "target_revision_id": active_revision_id,
+                "target_revision_no": active.revision_no if active else None,
+                "message": (
+                    "发布后可先对当前 active revision 执行回滚预览，再决定是否回滚。"
+                    if rollback_available
+                    else "当前没有可作为上一版的已发布 active revision，首次发布后暂无直接回滚目标。"
+                ),
+            },
+        }
 
     async def rollback_config(
         self,
@@ -312,14 +416,21 @@ class SalesTrainerPathConfigService:
         *,
         source: str,
         legacy_snapshot_only: bool,
+        fallback_reason: str | None,
         active: SalesTrainerAssetRevision | None,
         working: SalesTrainerAssetRevision | None,
+        path_payload: NewcomerPathConfigPayload,
     ) -> dict[str, Any]:
         return {
             "surface_key": NEWCOMER_PATH_LOGICAL_ID,
             "resource_type": NEWCOMER_PATH_RESOURCE_TYPE,
             "source": source,
             "legacy_snapshot_only": legacy_snapshot_only,
+            "fallback_applied": legacy_snapshot_only,
+            "fallback_reason": fallback_reason,
+            "realtime_provider_readiness": self._realtime_provider_readiness(
+                path_payload
+            ),
             "management_entry": "/admin/newcomer-training/path-config",
             "permission_policy": {
                 "view": "sales_trainer.manage_modules",
@@ -344,6 +455,9 @@ class SalesTrainerPathConfigService:
                     "requires_trace_id": True,
                     "audit_action": "newcomer_path_config.publish",
                     "impact_scope": "future_learners_only",
+                    "preview_endpoint": (
+                        "/api/v1/admin/newcomer-training/path-config/publish/preview"
+                    ),
                 },
                 "rollback": {
                     "requires_reason": True,
@@ -364,6 +478,150 @@ class SalesTrainerPathConfigService:
             },
         }
 
+    @staticmethod
+    def _realtime_provider_readiness(
+        path_payload: NewcomerPathConfigPayload,
+    ) -> list[dict[str, Any]]:
+        diagnostics: list[dict[str, Any]] = []
+        for module in path_payload.modules:
+            if module.module_type not in {"realtime_roleplay", "realtime_placeholder"}:
+                continue
+            binding = module.runtime_binding
+            readiness = (
+                binding.provider_readiness_snapshot.model_dump(mode="json")
+                if binding is not None
+                else None
+            )
+            diagnostics.append(
+                {
+                    "module_key": module.module_key,
+                    "module_type": module.module_type,
+                    "title": module.title,
+                    "enabled": module.enabled,
+                    "runtime_descriptor_id": (
+                        binding.runtime_descriptor_id if binding is not None else None
+                    ),
+                    "provider_readiness_snapshot": readiness,
+                    "ready": bool(readiness and readiness.get("ready") is True),
+                    "failure_code": (
+                        readiness.get("failure_code") if readiness is not None else None
+                    ),
+                    "failure_message": (
+                        readiness.get("failure_message") if readiness is not None else None
+                    ),
+                }
+            )
+        return diagnostics
+
+    async def _prepare_publish_target(
+        self,
+    ) -> tuple[
+        SalesTrainerAssetRevision | None,
+        SalesTrainerAssetRevision,
+        NewcomerPathConfigPayload,
+    ]:
+        active = await self._revisions.active_revision(
+            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+            logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        )
+        working = await self._revisions.latest_working_revision(
+            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+            logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        )
+        if working is None:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_PATH_WORKING_REVISION_REQUIRED]",
+                "发布新人训练路径前必须先保存一版待发布修订，禁止从 legacy backfill 直接发布。",
+                409,
+            )
+        publish_payload = payload_from_revision(working)
+        validate_path_payload_for_write(publish_payload)
+        await self._validate_ai_coach_prompt_bindings(publish_payload)
+        await self._validate_publish_payload(publish_payload)
+        return active, working, publish_payload
+
+    @staticmethod
+    def _path_fields_changed(
+        before: NewcomerPathConfigPayload | None,
+        after: NewcomerPathConfigPayload,
+    ) -> list[str]:
+        before_meta = {
+            "title": before.title if before is not None else None,
+            "goal_title": before.goal_title if before is not None else None,
+            "description": before.description if before is not None else None,
+        }
+        after_meta = {
+            "title": after.title,
+            "goal_title": after.goal_title,
+            "description": after.description,
+        }
+        return sorted(
+            field for field, value in after_meta.items() if before_meta.get(field) != value
+        )
+
+    @staticmethod
+    def _module_dump_by_key(
+        payload: NewcomerPathConfigPayload | None,
+    ) -> dict[str, dict[str, Any]]:
+        if payload is None:
+            return {}
+        return {
+            module.module_key: module.model_dump(mode="json")
+            for module in payload.modules
+        }
+
+    @classmethod
+    def _changed_module_keys(
+        cls,
+        before: NewcomerPathConfigPayload | None,
+        after: NewcomerPathConfigPayload,
+    ) -> list[str]:
+        before_modules = cls._module_dump_by_key(before)
+        after_modules = cls._module_dump_by_key(after)
+        return sorted(
+            key
+            for key in set(before_modules) | set(after_modules)
+            if before_modules.get(key) != after_modules.get(key)
+        )
+
+    @classmethod
+    def _affected_module_keys(
+        cls,
+        before: NewcomerPathConfigPayload | None,
+        after: NewcomerPathConfigPayload,
+    ) -> list[str]:
+        before_modules = cls._module_dump_by_key(before)
+        after_modules = cls._module_dump_by_key(after)
+        return sorted(set(before_modules) | set(after_modules))
+
+    @staticmethod
+    def _publish_preview_risk(
+        *,
+        active: SalesTrainerAssetRevision | None,
+        working: SalesTrainerAssetRevision,
+        changed_module_keys: list[str],
+        path_fields_changed: list[str],
+        high_risk_fields: list[str],
+    ) -> tuple[str, list[str]]:
+        reasons: list[str] = []
+        if active is None:
+            reasons.append("first_publish")
+        if high_risk_fields or str(working.change_class) == "scoring_high_risk":
+            reasons.append("ai_coach_high_risk_fields_changed")
+        if str(working.change_class) == "binding":
+            reasons.append("module_binding_changed")
+        elif changed_module_keys:
+            reasons.append("module_configuration_changed")
+        if path_fields_changed:
+            reasons.append("path_metadata_changed")
+        if not reasons:
+            reasons.append("no_effective_content_change")
+        if high_risk_fields or str(working.change_class) == "scoring_high_risk":
+            return "high", reasons
+        if active is None or changed_module_keys or path_fields_changed:
+            return "medium", reasons
+        return "low", reasons
+
     async def _backfill_payload(self) -> NewcomerPathConfigPayload:
         backfill_units = await load_published_path_units(self._db)
         modules = []
@@ -379,6 +637,7 @@ class SalesTrainerPathConfigService:
             path_key=NEWCOMER_PATH_LOGICAL_ID,
             title=path_title,
             goal_title=goal_title,
+            description=None,
             modules=sorted(modules, key=lambda item: item.order_index),
         )
 
@@ -411,7 +670,8 @@ class SalesTrainerPathConfigService:
         )
         options: list[dict[str, Any]] = []
         for unit in result.scalars().all():
-            config = unit.config or {}
+            raw_config = unit.config
+            config: dict[str, Any] = raw_config if isinstance(raw_config, dict) else {}
             if not isinstance(config, dict):
                 continue
             unit_path_config = path_config(config)
@@ -503,12 +763,208 @@ class SalesTrainerPathConfigService:
                     unit_ids.append(module.target_unit_id)
         return unit_ids
 
+    async def _validate_ai_coach_prompt_bindings(
+        self,
+        payload: NewcomerPathConfigPayload,
+    ) -> None:
+        prompt_service = PromptTemplateService(self._db)
+        resolver = PromptTemplateRevisionResolver(self._db, service=prompt_service)
+        for module in payload.modules:
+            if module.ai_coach is None:
+                continue
+            await self._validate_ai_coach_prompt_binding(
+                module=module,
+                template_id=module.ai_coach.prompt_template_id,
+                prompt_revision_id=module.ai_coach.prompt_revision_id,
+                template_field="prompt_template_id",
+                revision_field="prompt_revision_id",
+                expected_prompt_type="stage",
+                binding_label="AI 教练对话生成",
+                prompt_service=prompt_service,
+                resolver=resolver,
+            )
+            await self._validate_ai_coach_prompt_binding(
+                module=module,
+                template_id=module.ai_coach.scoring_prompt_template_id,
+                prompt_revision_id=module.ai_coach.scoring_prompt_revision_id,
+                template_field="scoring_prompt_template_id",
+                revision_field="scoring_prompt_revision_id",
+                expected_prompt_type="scoring",
+                binding_label="AI 教练简答评分",
+                prompt_service=prompt_service,
+                resolver=resolver,
+            )
+
+    async def _validate_ai_coach_prompt_binding(
+        self,
+        *,
+        module: NewcomerPathModuleConfig,
+        template_id: str | None,
+        prompt_revision_id: str | None,
+        template_field: str,
+        revision_field: str,
+        expected_prompt_type: str,
+        binding_label: str,
+        prompt_service: PromptTemplateService,
+        resolver: PromptTemplateRevisionResolver,
+    ) -> None:
+        if not template_id and not prompt_revision_id:
+            return
+        if prompt_revision_id and not template_id:
+            raise SalesTrainerPathConfigError(
+                "[AI_COACH_PROMPT_CONFIG_INVALID]",
+                f"{module.title} 的 {revision_field} 不能脱离 {template_field} 单独保存。",
+                409,
+            )
+        try:
+            template_uuid = UUID(str(template_id))
+        except (TypeError, ValueError) as exc:
+            raise SalesTrainerPathConfigError(
+                "[AI_COACH_PROMPT_CONFIG_INVALID]",
+                f"{module.title} 的 {template_field} 必须是合法 UUID。",
+                409,
+            ) from exc
+        template = await prompt_service.get_template(template_uuid)
+        if template is None:
+            raise SalesTrainerPathConfigError(
+                "[AI_COACH_PROMPT_REVISION_NOT_FOUND]",
+                f"{module.title} 绑定的 {binding_label} PromptTemplate 不存在。",
+                404,
+            )
+        if not bool(getattr(template, "is_active", False)):
+            raise SalesTrainerPathConfigError(
+                "[AI_COACH_PROMPT_CONFIG_INVALID]",
+                f"{module.title} 绑定的 {template_field} 已停用，不能用于 {binding_label}。",
+                409,
+            )
+        governance_issues = getattr(template, "governance_issues", []) or []
+        if governance_issues:
+            raise SalesTrainerPathConfigError(
+                "[AI_COACH_PROMPT_CONFIG_INVALID]",
+                f"{module.title} 绑定的 {template_field} 存在治理问题，修复后才能用于 {binding_label}。",
+                409,
+            )
+        if not self._matches_ai_coach_prompt_template(
+            template,
+            expected_prompt_type=expected_prompt_type,
+        ):
+            raise SalesTrainerPathConfigError(
+                "[AI_COACH_PROMPT_CONFIG_INVALID]",
+                (
+                    f"{module.title} 的 {template_field} 必须绑定"
+                    f"{binding_label}专用 PromptTemplate。"
+                ),
+                409,
+            )
+        if not prompt_revision_id:
+            return
+        try:
+            resolution = await resolver.resolve(
+                template_id=str(template_uuid),
+                prompt_revision_id=prompt_revision_id,
+            )
+        except PromptTemplateRevisionResolverError as exc:
+            raise self._prompt_resolver_config_error(
+                module=module,
+                template_field=template_field,
+                binding_label=binding_label,
+                exc=exc,
+            ) from exc
+        if resolution.status == RESULT_OK:
+            if not bool(getattr(resolution.snapshot.template, "is_active", False)):
+                raise SalesTrainerPathConfigError(
+                    "[AI_COACH_PROMPT_CONFIG_INVALID]",
+                    (
+                        f"{module.title} 的 {revision_field} 指向了已停用的"
+                        f"{binding_label} revision。"
+                    ),
+                    409,
+                )
+            return
+        if resolution.status == RESULT_REVISION_NOT_FOUND:
+            raise SalesTrainerPathConfigError(
+                "[AI_COACH_PROMPT_REVISION_NOT_FOUND]",
+                f"{module.title} 的 {revision_field} 不存在或不可用。",
+                404,
+            )
+        if resolution.status == RESULT_AUDIT_HISTORY_UNAVAILABLE:
+            raise SalesTrainerPathConfigError(
+                "[AI_COACH_PROMPT_REVISION_AUDIT_MISSING]",
+                f"{module.title} 的 {revision_field} 缺少可审计历史，禁止绑定。",
+                409,
+            )
+        if resolution.status == RESULT_HEAD_USED_AS_FALLBACK:
+            raise SalesTrainerPathConfigError(
+                "[AI_COACH_PROMPT_REVISION_FALLBACK]",
+                (
+                    f"{module.title} 的 {revision_field} 无法稳定解析到指定 revision，"
+                    "禁止回退到当前 head。"
+                ),
+                409,
+            )
+        raise SalesTrainerPathConfigError(
+            "[AI_COACH_PROMPT_CONFIG_INVALID]",
+            f"{module.title} 的 {revision_field} 校验失败。",
+            409,
+        )
+
+    @staticmethod
+    def _matches_ai_coach_prompt_template(
+        template: Any,
+        *,
+        expected_prompt_type: str,
+    ) -> bool:
+        prompt_type = SalesTrainerPathConfigService._enum_value(
+            getattr(template, "prompt_type", None)
+        )
+        category = str(getattr(template, "category", "") or "").strip()
+        business_purpose = SalesTrainerPathConfigService._enum_value(
+            getattr(template, "business_purpose", None)
+        )
+        if prompt_type != expected_prompt_type:
+            return False
+        if business_purpose:
+            return (
+                business_purpose == PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
+                and category == AI_COACH_PROMPT_CATEGORY
+            )
+        return category == AI_COACH_PROMPT_CATEGORY
+
+    @staticmethod
+    def _prompt_resolver_config_error(
+        *,
+        module: NewcomerPathModuleConfig,
+        template_field: str,
+        binding_label: str,
+        exc: PromptTemplateRevisionResolverError,
+    ) -> SalesTrainerPathConfigError:
+        if exc.code == "[PROMPT_TEMPLATE_NOT_FOUND]":
+            return SalesTrainerPathConfigError(
+                "[AI_COACH_PROMPT_REVISION_NOT_FOUND]",
+                f"{module.title} 绑定的 {binding_label} PromptTemplate 不存在。",
+                404,
+            )
+        return SalesTrainerPathConfigError(
+            "[AI_COACH_PROMPT_CONFIG_INVALID]",
+            f"{module.title} 的 {template_field} 非法：{exc.message}",
+            409,
+        )
+
+    @staticmethod
+    def _enum_value(value: Any) -> str:
+        if value is None:
+            return ""
+        return str(getattr(value, "value", value) or "").strip()
+
     async def _validate_publish_payload(
         self,
         payload: NewcomerPathConfigPayload,
     ) -> None:
         units = await units_by_id(self._db, self._publish_unit_ids(payload))
         for module in payload.modules:
+            if module.module_type == "realtime_roleplay":
+                self._validate_realtime_roleplay_module(module)
+                continue
             if module.module_type == "realtime_placeholder":
                 await self._validate_realtime_placeholder(module, units)
                 continue
@@ -542,7 +998,8 @@ class SalesTrainerPathConfigService:
     ) -> None:
         unit = await self._published_audio_unit_for_module(module, units)
         path_config = path_config_from_module(payload, module)
-        config = merge_audio_path_config(unit.config or {}, path_config)
+        unit_config = unit.config if isinstance(unit.config, dict) else None
+        config = merge_audio_path_config(unit_config, path_config)
         await self._validate_audio_prompt(module, config)
         await self._validate_audio_materials(module, config)
 
@@ -575,7 +1032,8 @@ class SalesTrainerPathConfigService:
                 level_title=option.display_name,
                 order_index=module.order_index,
             )
-            config = merge_audio_path_config(unit.config or {}, path_config)
+            unit_config = unit.config if isinstance(unit.config, dict) else None
+            config = merge_audio_path_config(unit_config, path_config)
             await self._validate_audio_prompt(module, config)
             await self._validate_audio_materials(module, config)
 
@@ -584,6 +1042,7 @@ class SalesTrainerPathConfigService:
         module: NewcomerPathModuleConfig,
         units: dict[str, SalesTrainerUnit],
     ) -> None:
+        self._validate_required_ai_coach_module(module)
         if not module.target_unit_id:
             raise SalesTrainerPathConfigError(
                 "[NEWCOMER_MODULE_BINDING_MISSING]",
@@ -621,6 +1080,54 @@ class SalesTrainerPathConfigService:
             raise SalesTrainerPathConfigError(
                 "[NEWCOMER_MODULE_CONFIG_INVALID]",
                 f"{module.title} 绑定的考试卷不存在或未发布。",
+                409,
+            )
+
+    @staticmethod
+    def _validate_required_ai_coach_module(
+        module: NewcomerPathModuleConfig,
+    ) -> None:
+        if module.module_key != "business_skills" or not module.enabled:
+            return
+        ai_coach = module.ai_coach
+        if ai_coach is None or not ai_coach.enabled:
+            raise SalesTrainerPathConfigError(
+                "[AI_COACH_NOT_CONFIGURED]",
+                f"{module.title} 必须启用 AI 教练后才能发布。",
+                409,
+            )
+        if not ai_coach.prompt_template_id:
+            raise SalesTrainerPathConfigError(
+                "[AI_COACH_NOT_CONFIGURED]",
+                f"{module.title} 必须绑定 AI 教练生成 Prompt 后才能发布。",
+                409,
+            )
+
+    def _validate_realtime_roleplay_module(
+        self,
+        module: NewcomerPathModuleConfig,
+    ) -> None:
+        if not module.enabled:
+            return
+        binding = module.runtime_binding
+        if binding is None:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_REALTIME_BINDING_INVALID]",
+                f"{module.title} 启用实时对练前必须配置 runtime binding。",
+                409,
+            )
+        readiness = binding.provider_readiness_snapshot
+        if not readiness.ready:
+            reason = readiness.failure_message or readiness.failure_code or "provider 未就绪"
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_REALTIME_PROVIDER_NOT_READY]",
+                f"{module.title} 的实时对练 provider readiness 未通过：{reason}。",
+                503,
+            )
+        if binding.rollback_policy.fallback_to_placeholder:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_REALTIME_BINDING_INVALID]",
+                f"{module.title} 的实时对练回滚策略不能回退为占位成功。",
                 409,
             )
 

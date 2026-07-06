@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -105,13 +105,14 @@ def _audit_log_payload(row: SystemLog) -> dict[str, Any]:
     import json
 
     details: dict[str, Any] = {}
-    if row.details:
+    raw_details = cast(str | None, row.details)
+    if raw_details:
         try:
-            parsed = json.loads(row.details)
+            parsed = json.loads(raw_details)
             if isinstance(parsed, dict):
                 details = parsed
         except json.JSONDecodeError:
-            details = {"raw": row.details}
+            details = {"raw": raw_details}
     return {
         "id": str(row.log_id),
         "action": row.action,
@@ -166,7 +167,7 @@ async def create_scoring_ruleset(
         require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     service = ScoringRulesetService(db)
     try:
         created = await service.create_ruleset(
@@ -199,7 +200,7 @@ async def update_scoring_ruleset(
         require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     service = ScoringRulesetService(db)
     try:
         updated = await service.update_ruleset(
@@ -235,7 +236,7 @@ async def publish_scoring_ruleset(
         require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     service = ScoringRulesetService(db)
     try:
         published = await service.publish_ruleset(
@@ -269,7 +270,7 @@ async def rollback_scoring_ruleset(
         require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     service = ScoringRulesetService(db)
     try:
         rolled_back = await service.rollback_to_ruleset(
@@ -302,7 +303,7 @@ async def dry_run_scoring_ruleset(
         require_admin_permission(SCORING_RULESET_DRY_RUN_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     service = ScoringRulesetService(db)
     try:
         result = await service.dry_run_session(

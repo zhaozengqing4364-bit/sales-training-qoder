@@ -8,6 +8,7 @@ References:
 - Design: Section 5 (Persona Service)
 """
 import json
+
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker

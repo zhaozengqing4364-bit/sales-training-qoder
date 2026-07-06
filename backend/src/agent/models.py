@@ -274,7 +274,7 @@ class VoiceRuntimeProfile(Base):
 
     # Runtime mode and model settings
     voice_mode = Column(String(32), nullable=False, default="stepfun_realtime")
-    model_name = Column(String(100), nullable=False, default="step-audio-2")
+    model_name = Column(String(100), nullable=False, default="stepaudio-2.5-realtime")
     voice_name = Column(String(100), nullable=False, default="qingchunshaonv")
     temperature = Column(Float, nullable=False, default=0.7)
     input_audio_format = Column(String(20), nullable=False, default="pcm16")

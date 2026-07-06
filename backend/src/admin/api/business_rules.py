@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse
@@ -37,6 +37,8 @@ from common.monitoring.logger import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/business-rules", tags=["admin-business-rules"])
+
+ApiResponse = Any
 
 
 class BusinessRuleValueRequest(BaseModel):
@@ -156,8 +158,8 @@ def _row_to_sales_ruleset(
     audits: list[BusinessRuleConfigAuditLog],
 ) -> dict[str, Any]:
     resolution = BusinessRuleResolution(
-        key=row.key,
-        domain=row.domain,
+        key=cast(str, row.key),
+        domain=cast(str, row.domain),
         value=dict(row.value_json or {}),
         source="database",
         config_id=str(row.id),
@@ -212,7 +214,11 @@ async def _sales_ruleset_row_by_public_id(
     for row in rows:
         if row.status not in statuses:
             continue
-        value = row.value_json if isinstance(row.value_json, dict) else {}
+        value: dict[str, Any] = (
+            cast(dict[str, Any], row.value_json)
+            if isinstance(row.value_json, dict)
+            else {}
+        )
         if (
             str(row.id) == ruleset_id
             or str(value.get("rule_set_id") or "") == ruleset_id
@@ -300,7 +306,7 @@ async def list_business_rule_definitions_api(
 async def seed_default_business_rules(
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     service = BusinessRuleConfigService(db)
     try:
         created = await service.seed_defaults(actor_id=str(current_user.user_id))
@@ -332,7 +338,7 @@ async def list_business_rules(
     include_audit: bool = Query(default=False),
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     _ = current_user
     service = BusinessRuleConfigService(db)
     try:
@@ -353,7 +359,7 @@ async def list_business_rules(
 async def list_sales_combination_rulesets(
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     service = BusinessRuleConfigService(db)
     rows = await service.list_configs(key=SALES_COMBINATION_RULES_KEY)
     audits = await service.list_audit_logs(key=SALES_COMBINATION_RULES_KEY, limit=100)
@@ -391,7 +397,7 @@ async def validate_sales_combination_ruleset(
     payload: dict[str, Any] = Body(...),
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     service = BusinessRuleConfigService(db)
     try:
         validate_business_rule_value(SALES_COMBINATION_RULES_KEY, payload)
@@ -419,7 +425,7 @@ async def preview_sales_combination_ruleset(
     payload: dict[str, Any] = Body(...),
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     service = BusinessRuleConfigService(db)
     try:
         normalized = validate_business_rule_value(SALES_COMBINATION_RULES_KEY, payload)
@@ -458,7 +464,7 @@ async def publish_sales_combination_ruleset(
         require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     service = BusinessRuleConfigService(db)
     try:
         target = await _sales_ruleset_row_by_public_id(
@@ -499,7 +505,7 @@ async def rollback_sales_combination_ruleset(
         require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     service = BusinessRuleConfigService(db)
     try:
         target = await _sales_ruleset_row_by_public_id(
@@ -538,7 +544,7 @@ async def get_active_business_rule(
     config_key: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     _ = current_user
     service = BusinessRuleConfigService(db)
     try:
@@ -554,7 +560,7 @@ async def get_business_rule_history(
     include_audit: bool = Query(default=True),
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     _ = current_user
     service = BusinessRuleConfigService(db)
     try:
@@ -578,7 +584,7 @@ async def create_or_update_business_rule_draft(
     payload: BusinessRuleValueRequest,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     service = BusinessRuleConfigService(db)
     try:
         row = await service.create_or_update_draft(
@@ -609,7 +615,7 @@ async def validate_business_rule(
     payload: BusinessRuleValueRequest,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     service = BusinessRuleConfigService(db)
     try:
         normalized = await service.validate_config_value(
@@ -631,7 +637,7 @@ async def preview_business_rule(
     payload: BusinessRuleValueRequest,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     service = BusinessRuleConfigService(db)
     try:
         preview = await service.preview(
@@ -655,7 +661,7 @@ async def publish_business_rule(
         require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     service = BusinessRuleConfigService(db)
     try:
         row = await service.publish(
@@ -688,7 +694,7 @@ async def rollback_business_rule(
         require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     service = BusinessRuleConfigService(db)
     try:
         row = await service.rollback(
@@ -722,7 +728,7 @@ async def disable_business_rule(
         require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     service = BusinessRuleConfigService(db)
     try:
         row = await service.disable(
@@ -746,7 +752,7 @@ async def delete_business_rule_draft(
         require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResponse:
     service = BusinessRuleConfigService(db)
     try:
         row = await service.delete_draft(

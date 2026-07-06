@@ -22,6 +22,7 @@ from curriculum_practice.services.content_asset_revision_metadata import (
     role_profile_change_class,
     role_profile_lifecycle_metadata,
 )
+from curriculum_practice.services.orm_payload_typing import orm_str
 from curriculum_practice.services.sales_trainer_revision_adapter import (
     OperationLogService,
     SalesTrainerAssetRevision,
@@ -170,7 +171,7 @@ class RoleProfileRevisionService:
         if not isinstance(persona_ref, str) or not persona_ref:
             return True
         persona = await self._db.get(Persona, persona_ref)
-        return persona is not None and persona.status == "active"
+        return persona is not None and orm_str(persona.status) == "active"
 
 
 def _snapshot_from_revision(

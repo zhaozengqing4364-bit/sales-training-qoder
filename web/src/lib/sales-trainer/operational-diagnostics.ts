@@ -5,11 +5,13 @@ import type {
     SalesTrainerAudioScoreResult,
     SalesTrainerAudioSubmission,
 } from "@/lib/api/types";
+import { readRealtimeProviderReadinessDiagnostics } from "@/lib/sales-trainer/realtime-provider-readiness";
 
 const FAILED_AUDIO_STATUSES = new Set<string>([
     "transcription_failed",
     "scoring_failed",
 ]);
+const RUNTIME_HEALTH_HREF = "/support/runtime";
 
 export interface NewcomerFailedTask {
     readonly id: string;
@@ -141,7 +143,7 @@ function buildConfigurationDiagnostics(
         legacySnapshotOnlyCount: legacySnapshotOnlyCount(input),
         moduleBindings: [...pathConfig.path.modules]
             .sort((left, right) => left.order_index - right.order_index)
-            .map(moduleBindingDiagnostic),
+            .map((module) => moduleBindingDiagnostic(module, pathConfig)),
     };
 }
 
@@ -154,6 +156,7 @@ function legacySnapshotOnlyCount(input: NewcomerOperationalDiagnosticsInput): nu
 
 function moduleBindingDiagnostic(
     module: NewcomerPathModuleConfig,
+    pathConfig: NewcomerPathConfigResponse,
 ): NewcomerModuleBindingDiagnostic {
     if (!module.enabled) {
         return moduleDiagnostic(module, "disabled", module.disabled_reason ?? "当前关卡已关闭。");
@@ -164,6 +167,8 @@ function moduleBindingDiagnostic(
         case "audio_scoring":
         case "audio_scoring_group":
             return audioScoringDiagnostic(module);
+        case "realtime_roleplay":
+            return realtimeRoleplayDiagnostic(module, pathConfig);
         case "realtime_placeholder":
             return moduleDiagnostic(module, "disabled", "当前占位关闭，不创建实时对练。");
         default:
@@ -205,15 +210,70 @@ function audioScoringDiagnostic(
     return moduleDiagnostic(module, "missing", "材料已绑定，缺少录音评分标准。");
 }
 
+function realtimeRoleplayDiagnostic(
+    module: NewcomerPathModuleConfig,
+    pathConfig: NewcomerPathConfigResponse,
+): NewcomerModuleBindingDiagnostic {
+    const projectedReadiness = realtimeProjectedReadiness(pathConfig, module.module_key);
+    if (projectedReadiness) {
+        if (!projectedReadiness.ready) {
+            return moduleDiagnostic(
+                module,
+                "missing",
+                `provider readiness 未通过：${projectedReadiness.failureReason}`,
+                RUNTIME_HEALTH_HREF,
+            );
+        }
+        return moduleDiagnostic(
+            module,
+            "ready",
+            `运行时 ${projectedReadiness.runtimeDescriptorId} 与 provider readiness 已就绪。`,
+            RUNTIME_HEALTH_HREF,
+        );
+    }
+    const binding = module.runtime_binding;
+    if (!binding) {
+        return moduleDiagnostic(module, "missing", "缺少实时对练运行时绑定。");
+    }
+    const readiness = binding.provider_readiness_snapshot;
+    if (!readiness.ready) {
+        return moduleDiagnostic(
+            module,
+            "missing",
+            `provider readiness 未通过：${readiness.failure_message ?? readiness.failure_code ?? "provider 未就绪"}`,
+            RUNTIME_HEALTH_HREF,
+        );
+    }
+    return moduleDiagnostic(
+        module,
+        "ready",
+        `运行时 ${binding.runtime_descriptor_id} 与 provider readiness 已就绪。`,
+        RUNTIME_HEALTH_HREF,
+    );
+}
+
+function realtimeProjectedReadiness(
+    pathConfig: NewcomerPathConfigResponse,
+    moduleKey: string,
+): {
+    readonly ready: boolean;
+    readonly runtimeDescriptorId: string;
+    readonly failureReason: string;
+} | null {
+    return readRealtimeProviderReadinessDiagnostics(pathConfig.diagnostics)
+        ?.find((record) => record.moduleKey === moduleKey) ?? null;
+}
+
 function moduleDiagnostic(
     module: NewcomerPathModuleConfig,
     status: NewcomerConfigurationDiagnosticStatus,
     detail: string,
+    href = `/admin/sales-trainer/paths?module=${encodeURIComponent(module.module_key)}`,
 ): NewcomerModuleBindingDiagnostic {
     return {
         title: module.title,
         status,
         detail,
-        href: `/admin/sales-trainer/paths?module=${encodeURIComponent(module.module_key)}`,
+        href,
     };
 }

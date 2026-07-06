@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db.typing import json_list_or_empty, orm_scalar
 from sales_trainer.models import (
     SalesTrainerAudioScoreResult,
     SalesTrainerAudioSubmission,
@@ -38,17 +39,22 @@ async def load_latest_quiz_progress(
     )
     progress: dict[str, UnitProgress] = {}
     for attempt in result.scalars().all():
-        unit_id = str(attempt.unit_id)
+        unit_id = orm_scalar(attempt.unit_id, str)
         if unit_id in progress:
             continue
+        attempt_id = orm_scalar(attempt.attempt_id, str)
         progress[unit_id] = UnitProgress(
-            status=str(attempt.status),
-            passed=attempt.passed,
-            score=_decimal_to_float(attempt.total_score),
-            max_score=_decimal_to_float(attempt.max_score),
-            submitted_at=attempt.submitted_at,
-            result_id=str(attempt.attempt_id),
-            target_path=f"/sales-trainer/quiz/result/{attempt.attempt_id}",
+            status=orm_scalar(attempt.status, str),
+            passed=orm_scalar(attempt.passed, bool, nullable=True),
+            score=_decimal_to_float(
+                orm_scalar(attempt.total_score, Decimal, nullable=True)
+            ),
+            max_score=_decimal_to_float(
+                orm_scalar(attempt.max_score, Decimal, nullable=True)
+            ),
+            submitted_at=orm_scalar(attempt.submitted_at, datetime, nullable=True),
+            result_id=attempt_id,
+            target_path=f"/sales-trainer/quiz/result/{attempt_id}",
         )
     return progress
 
@@ -72,17 +78,28 @@ async def load_latest_audio_progress(
     )
     progress: dict[str, UnitProgress] = {}
     for submission, score in result.all():
-        unit_id = str(submission.unit_id or "")
+        unit_id = orm_scalar(submission.unit_id, str, nullable=True) or ""
         if not unit_id or unit_id in progress:
             continue
+        submission_id = orm_scalar(submission.submission_id, str)
         progress[unit_id] = UnitProgress(
-            status=str(submission.status),
-            passed=score.passed if score is not None else None,
-            score=_decimal_to_float(score.total_score) if score is not None else None,
+            status=orm_scalar(submission.status, str),
+            passed=(
+                orm_scalar(score.passed, bool, nullable=True)
+                if score is not None
+                else None
+            ),
+            score=(
+                _decimal_to_float(
+                    orm_scalar(score.total_score, Decimal, nullable=True)
+                )
+                if score is not None
+                else None
+            ),
             max_score=None,
-            submitted_at=submission.created_at,
-            result_id=str(submission.submission_id),
-            target_path=f"/sales-trainer/audio/result/{submission.submission_id}",
+            submitted_at=orm_scalar(submission.created_at, datetime, nullable=True),
+            result_id=submission_id,
+            target_path=f"/sales-trainer/audio/result/{submission_id}",
             improvements=_string_tuple(score.improvements if score is not None else []),
         )
     return progress
@@ -93,6 +110,4 @@ def _decimal_to_float(value: Decimal | None) -> float | None:
 
 
 def _string_tuple(values: Any) -> tuple[str, ...]:
-    if not isinstance(values, list):
-        return ()
-    return tuple(str(item) for item in values if str(item).strip())
+    return tuple(str(item) for item in json_list_or_empty(values) if str(item).strip())

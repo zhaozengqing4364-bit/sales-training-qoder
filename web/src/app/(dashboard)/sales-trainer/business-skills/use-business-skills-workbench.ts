@@ -11,15 +11,19 @@ import type {
     NewcomerArticle,
     NewcomerArticleChapter,
     SalesTrainerUnit,
+    TrainingJourneyModuleProgress,
 } from "@/lib/api/types";
-import { findBusinessSkillsCoachHref } from "@/lib/sales-trainer/ai-coach-availability";
 
 import {
+    BUSINESS_SKILLS_ACTIVE_UNIT_MISSING_MESSAGE,
+    BUSINESS_SKILLS_ACTIVE_UNIT_NOT_FOUND_MESSAGE,
     BUSINESS_SKILLS_MODULE_KEY,
     businessSkillsArticleErrorMessage,
     businessSkillsExamHref,
-    learningContentIdFromUnit,
+    findBusinessSkillsModuleFromJourney,
+    learningContentIdFromJourneyModule,
     resolveBusinessSkillsUnit,
+    unitIdFromJourneyModule,
 } from "./config";
 
 type BusinessSkillsWorkbenchInput = {
@@ -37,16 +41,17 @@ function sortLearningUnits(
     return [...units].sort((left, right) => left.order_index - right.order_index);
 }
 
-async function resolveCoachHref(unitId: string | null): Promise<string | null> {
-    try {
-        const pathResponse = await api.salesTrainer.listPaths();
-        return findBusinessSkillsCoachHref(pathResponse.items, unitId);
-    } catch (loadError) {
-        if (loadError instanceof Error) {
-            return null;
-        }
-        throw loadError;
-    }
+function isBusinessSkillsCoachAction(moduleProgress: TrainingJourneyModuleProgress): boolean {
+    const action = moduleProgress.next_action;
+    return moduleProgress.module_key === BUSINESS_SKILLS_MODULE_KEY
+        && Boolean(action && !action.disabled && action.target_path)
+        && Boolean(action?.action_key.includes("coach") || action?.target_path?.includes("/coach"));
+}
+
+function resolveBusinessSkillsCoachHrefFromJourney(
+    modules: readonly TrainingJourneyModuleProgress[],
+): string | null {
+    return modules.find(isBusinessSkillsCoachAction)?.next_action?.target_path ?? null;
 }
 
 export function useBusinessSkillsWorkbench({
@@ -54,12 +59,14 @@ export function useBusinessSkillsWorkbench({
     unitId,
 }: BusinessSkillsWorkbenchInput) {
     const quizResultRef = useRef<HTMLDivElement | null>(null);
+    const [activeUnitId, setActiveUnitId] = useState<string | null>(unitId);
     const [units, setUnits] = useState<SalesTrainerUnit[]>([]);
     const [article, setArticle] = useState<NewcomerArticle | null>(null);
     const [learningUnits, setLearningUnits] = useState<BusinessEtiquetteLearningUnit[]>([]);
     const [selectedLearningUnitKey, setSelectedLearningUnitKey] = useState<string | null>(null);
     const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
     const [coachHref, setCoachHref] = useState<string | null>(null);
+    const [coachHrefError, setCoachHrefError] = useState<string | null>(null);
     const [quiz, setQuiz] = useState<BusinessEtiquetteUnitQuiz | null>(null);
     const [quizAttempt, setQuizAttempt] = useState<BusinessEtiquetteUnitQuizAttempt | null>(null);
     const [quizAttempts, setQuizAttempts] = useState<BusinessEtiquetteUnitQuizAttempt[]>([]);
@@ -74,8 +81,8 @@ export function useBusinessSkillsWorkbench({
     const [quizWorkflowError, setQuizWorkflowError] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const selectedUnit = useMemo(() => resolveBusinessSkillsUnit(units, unitId), [unitId, units]);
-    const examHref = businessSkillsExamHref(selectedUnit?.unit_id ?? unitId);
+    const selectedUnit = useMemo(() => resolveBusinessSkillsUnit(units, activeUnitId), [activeUnitId, units]);
+    const examHref = businessSkillsExamHref(selectedUnit?.unit_id ?? activeUnitId);
     const sortedArticleChapters = useMemo(
         () => article ? sortArticleChapters(article.chapters) : [],
         [article],
@@ -115,20 +122,34 @@ export function useBusinessSkillsWorkbench({
 
     useEffect(() => {
         let isActive = true;
-        void api.salesTrainer.listUnits()
-            .then(async (unitResponse) => {
-                const nextSelectedUnit = resolveBusinessSkillsUnit(unitResponse.items, unitId);
-                const learningContentId = learningContentIdFromUnit(nextSelectedUnit);
-                const [nextArticle, learningUnitResponse, nextCoachHref] = await Promise.all([
+        void Promise.all([
+            api.salesTrainer.listUnits(),
+            api.salesTrainer.getJourney(),
+        ])
+            .then(async ([unitResponse, journeyResponse]) => {
+                const activeModule = findBusinessSkillsModuleFromJourney(journeyResponse.modules, unitId);
+                const nextActiveUnitId = unitIdFromJourneyModule(activeModule);
+                if (!nextActiveUnitId) {
+                    throw new Error(BUSINESS_SKILLS_ACTIVE_UNIT_MISSING_MESSAGE);
+                }
+                const nextSelectedUnit = resolveBusinessSkillsUnit(unitResponse.items, nextActiveUnitId);
+                if (!nextSelectedUnit) {
+                    throw new Error(BUSINESS_SKILLS_ACTIVE_UNIT_NOT_FOUND_MESSAGE);
+                }
+                const learningContentId = learningContentIdFromJourneyModule(activeModule);
+                const [nextArticle, learningUnitResponse, coachResolution] = await Promise.all([
                     api.newcomerTraining.getModuleArticle(
                         BUSINESS_SKILLS_MODULE_KEY,
                         learningContentId ? { learning_content_id: learningContentId } : undefined,
                     ),
                     api.newcomerTraining.getBusinessEtiquetteLearningUnits(),
-                    resolveCoachHref(nextSelectedUnit?.unit_id ?? unitId),
+                    Promise.resolve({
+                        error: null,
+                        href: resolveBusinessSkillsCoachHrefFromJourney(journeyResponse.modules),
+                    }),
                 ]);
-                return { learningUnitResponse, nextArticle, nextCoachHref, unitResponse };
-            }).then(({ learningUnitResponse, nextArticle, nextCoachHref, unitResponse }) => {
+                return { coachResolution, learningUnitResponse, nextActiveUnitId, nextArticle, unitResponse };
+            }).then(({ coachResolution, learningUnitResponse, nextActiveUnitId, nextArticle, unitResponse }) => {
                 if (!isActive) {
                     return;
                 }
@@ -137,10 +158,12 @@ export function useBusinessSkillsWorkbench({
                     ?? nextLearningUnits.find((unit) => unit.enabled)
                     ?? nextLearningUnits[0]
                     ?? null;
+                setActiveUnitId(nextActiveUnitId);
                 setUnits(unitResponse.items);
                 setArticle(nextArticle);
                 setLearningUnits(nextLearningUnits);
-                setCoachHref(nextCoachHref);
+                setCoachHref(coachResolution.href);
+                setCoachHrefError(coachResolution.error);
                 setSelectedLearningUnitKey(nextSelectedUnit?.unit_key ?? null);
                 setSelectedChapterId(nextSelectedUnit?.chapters[0]?.chapter_id ?? null);
                 setError(null);
@@ -332,6 +355,7 @@ export function useBusinessSkillsWorkbench({
         article,
         canStartSelectedUnitQuiz,
         coachHref,
+        coachHrefError,
         completingChapterId,
         completeCurrentChapter,
         continueToNextLearningUnit,

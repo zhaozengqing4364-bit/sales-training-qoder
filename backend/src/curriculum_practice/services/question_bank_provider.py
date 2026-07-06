@@ -8,6 +8,7 @@ from common.question_bank.ports import (
     register_question_bank_provider,
 )
 from curriculum_practice.models import QuestionItem
+from curriculum_practice.services.orm_payload_typing import orm_optional_str
 
 SALES_TRAINER_QUESTION_SCOPE = "sales_trainer"
 
@@ -61,7 +62,7 @@ def _to_resolved_question(question: QuestionItem) -> ResolvedQuestion:
         question_id=str(question.question_id),
         title=str(question.title),
         stem=str(question.stem),
-        reference_answer=question.reference_answer,
+        reference_answer=orm_optional_str(question.reference_answer),
         scoring_criteria=dict(question.scoring_criteria or {}),
         scoring_dimensions=list(question.scoring_dimensions or []),
     )

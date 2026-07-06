@@ -4,9 +4,6 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from curriculum_practice.services.learning_progress_service import (
-    LearningProgressService,
-)
 from sales_trainer.schemas import (
     BusinessEtiquetteCapabilityConfig,
     BusinessEtiquetteLearningChapterResponse,
@@ -24,6 +21,10 @@ from sales_trainer.services.article_binding_service import (
 from sales_trainer.services.business_etiquette_capability_service import (
     BusinessEtiquetteCapabilityService,
     BusinessEtiquetteCapabilityServiceError,
+)
+from sales_trainer.services.curriculum_practice_adapter import (
+    LearningProgressAdapter,
+    LearningProgressChapterRef,
 )
 from sales_trainer.services.path_config_models import SalesTrainerPathConfigError
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
@@ -46,7 +47,7 @@ class BusinessEtiquetteLearningService:
     async def get_learning_units(
         self,
         *,
-        user_id: str,
+        user_id: str | None,
         module_key: str = BUSINESS_SKILLS_MODULE_KEY,
     ) -> BusinessEtiquetteLearningUnitsResponse:
         try:
@@ -90,21 +91,23 @@ class BusinessEtiquetteLearningService:
             ) from exc
 
         article_chapters = _article_chapters(article)
-        progress = await LearningProgressService(self._db).progress_for_user(
-            user_id=user_id,
-            content_id=str(article["learning_content_id"]),
-            chapters=[
-                type("Chapter", (), {"chapter_id": chapter["chapter_id"]})()
-                for chapter in article_chapters
-            ],
-        )
-        if not progress.is_success or progress.value is None:
-            raise BusinessEtiquetteLearningServiceError(
-                "[BUSINESS_ETIQUETTE_PROGRESS_UNAVAILABLE]",
-                "读取商务礼仪阅读进度失败。",
-                500,
+        completed_ids: set[str] = set()
+        if user_id is not None:
+            progress = await LearningProgressAdapter(self._db).progress_for_user(
+                user_id=user_id,
+                content_id=str(article["learning_content_id"]),
+                chapters=[
+                    LearningProgressChapterRef(chapter_id=str(chapter["chapter_id"]))
+                    for chapter in article_chapters
+                ],
             )
-        completed_ids = set(progress.value.completed_chapter_ids)
+            if not progress.is_success or progress.value is None:
+                raise BusinessEtiquetteLearningServiceError(
+                    "[BUSINESS_ETIQUETTE_PROGRESS_UNAVAILABLE]",
+                    "读取商务礼仪阅读进度失败。",
+                    500,
+                )
+            completed_ids = set(progress.value.completed_chapter_ids)
         chapters_by_order = {
             int(chapter["order_index"]): chapter for chapter in article_chapters
         }

@@ -12,7 +12,7 @@ import uuid
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NoReturn, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,7 @@ from common.db.schemas import (
     SessionUpdate,
 )
 from common.db.session_lifecycle import (
+    SessionLifecycleAction,
     SessionLifecycleService,
     SessionLifecycleTransition,
 )
@@ -164,6 +165,7 @@ class PracticeSessionCreateService:
         session_data: SessionCreate,
         *,
         current_user: User,
+        external_binding: dict[str, Any] | None = None,
     ) -> PracticeSessionCreateResult:
         scenario_type_value = self._resolve_scenario_type_value(session_data)
         raw_session_payload = session_data.model_dump(exclude_unset=True)
@@ -236,6 +238,8 @@ class PracticeSessionCreateService:
             )
         if focus_intent is not None:
             session_policy_snapshot["focus_intent"] = deepcopy(focus_intent)
+        if external_binding is not None:
+            session_policy_snapshot["external_binding"] = deepcopy(external_binding)
 
         self._enforce_sales_stepfun_only(
             scenario_type_value=scenario_type_value,
@@ -619,7 +623,7 @@ class PracticeSessionLifecycleApplicationService:
             transition = await self.lifecycle_service.transition(
                 session=session,
                 scenario_type=scenario_type,
-                action=action,
+                action=cast(SessionLifecycleAction, action),
             )
             result = PracticeLifecycleActionResult(transition=transition)
 
@@ -673,7 +677,7 @@ class PracticeSessionLifecycleApplicationService:
             )
 
         if update_data.current_page is not None:
-            session.current_page = update_data.current_page
+            setattr(session, "current_page", update_data.current_page)
 
         await self.db.commit()
         await self.db.refresh(session)
@@ -797,7 +801,7 @@ def ensure_effectiveness_snapshot(session: PracticeSession) -> dict[str, Any]:
     return ensure_session_evidence_snapshot(session)
 
 
-def _raise_practice_port_error(exc: PracticeSessionPortError) -> None:
+def _raise_practice_port_error(exc: PracticeSessionPortError) -> NoReturn:
     raise PracticeServiceError(
         exc.error_code,
         status_code=exc.status_code,
@@ -879,10 +883,14 @@ def _apply_sales_realtime_score_snapshot_to_session(
     )
     rollups = compatibility_readers.get("practice_session_rollup_fields_v1", {})
 
-    session.logic_score = float(rollups.get("logic_score") or 0.0)
-    session.accuracy_score = float(rollups.get("accuracy_score") or 0.0)
-    session.completeness_score = float(rollups.get("completeness_score") or 0.0)
-    session.effectiveness_snapshot = None
+    setattr(session, "logic_score", float(rollups.get("logic_score") or 0.0))
+    setattr(session, "accuracy_score", float(rollups.get("accuracy_score") or 0.0))
+    setattr(
+        session,
+        "completeness_score",
+        float(rollups.get("completeness_score") or 0.0),
+    )
+    setattr(session, "effectiveness_snapshot", None)
     return True
 
 
@@ -918,8 +926,12 @@ async def _sync_sales_realtime_terminal_evidence(
     ):
         return "stepfun_message_analysis"
 
-    session.effectiveness_snapshot = _build_sales_realtime_not_evaluable_snapshot(
-        reason="INSUFFICIENT_TURN_DATA"
+    setattr(
+        session,
+        "effectiveness_snapshot",
+        _build_sales_realtime_not_evaluable_snapshot(
+            reason="INSUFFICIENT_TURN_DATA"
+        ),
     )
     return "stepfun_insufficient_evidence"
 

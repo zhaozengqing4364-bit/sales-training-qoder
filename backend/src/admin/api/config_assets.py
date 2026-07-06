@@ -38,7 +38,7 @@ class ConfigAssetExportRequest(BaseModel):
     asset_refs: list[ConfigAssetRefRequest] = Field(..., min_length=1)
     source_instance: str | None = Field(default=None, max_length=120)
     notes: str | None = Field(default=None, max_length=2000)
-    record_export_audit: bool = False
+    record_export_audit: bool = True
 
 
 class ConfigAssetImportOptionsRequest(BaseModel):
@@ -106,8 +106,7 @@ async def export_config_assets(
     except (ConfigAssetSchemaError, ValueError) as exc:
         return _export_error(exc)
 
-    if body.record_export_audit:
-        await db.commit()
+    await db.commit()
     return JSONResponse(content=success_response(bundle))
 
 

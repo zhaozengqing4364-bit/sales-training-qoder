@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
+import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,12 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import { formatTrainingTaskDisplay } from "@/lib/sales-trainer/admin-display";
-import type { SalesTrainerAudioScoreResult, SalesTrainerQuizAttempt } from "@/lib/api/types";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
+import type {
+    SalesTrainerAdminCapabilities,
+    SalesTrainerAudioScoreResult,
+    SalesTrainerQuizAttempt,
+} from "@/lib/api/types";
 
 function formatLearner(attempt: SalesTrainerQuizAttempt): string {
     const primary = attempt.user_name || attempt.user_email || attempt.user_id;
@@ -83,8 +89,28 @@ export default function SalesTrainerScoreResultsPage() {
     const [isScoreLoading, setIsScoreLoading] = useState(true);
     const [quizError, setQuizError] = useState<string | null>(null);
     const [scoreError, setScoreError] = useState<string | null>(null);
+    const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessResults = isSalesTrainerAdminPathAllowedForCapabilities(pathname, adminCapabilities);
 
-    async function loadQuizAttempts(filters?: { user_id?: string; unit_id?: string }) {
+    const loadCapabilities = useCallback(async () => {
+        setIsCapabilityLoading(true);
+        setCapabilityError(null);
+        try {
+            setAdminCapabilities(await api.admin.salesTrainer.getCapabilities());
+        } catch (error) {
+            setAdminCapabilities(null);
+            setCapabilityError(getApiErrorMessage(error));
+        } finally {
+            setIsCapabilityLoading(false);
+        }
+    }, []);
+
+    const loadQuizAttempts = useCallback(async (filters?: { user_id?: string; unit_id?: string }) => {
+        if (!canAccessResults) {
+            return;
+        }
         setIsQuizLoading(true);
         setQuizError(null);
         try {
@@ -100,9 +126,12 @@ export default function SalesTrainerScoreResultsPage() {
         } finally {
             setIsQuizLoading(false);
         }
-    }
+    }, [canAccessResults]);
 
-    async function loadScoreResults(filters?: { user_id?: string; submission_id?: string }) {
+    const loadScoreResults = useCallback(async (filters?: { user_id?: string; submission_id?: string }) => {
+        if (!canAccessResults) {
+            return;
+        }
         setIsScoreLoading(true);
         setScoreError(null);
         try {
@@ -118,12 +147,28 @@ export default function SalesTrainerScoreResultsPage() {
         } finally {
             setIsScoreLoading(false);
         }
-    }
+    }, [canAccessResults]);
 
     useEffect(() => {
+        void loadCapabilities();
+    }, [loadCapabilities]);
+
+    useEffect(() => {
+        if (isCapabilityLoading) {
+            return;
+        }
+        if (!canAccessResults) {
+            setQuizItems([]);
+            setScoreItems([]);
+            setQuizError(null);
+            setScoreError(null);
+            setIsQuizLoading(false);
+            setIsScoreLoading(false);
+            return;
+        }
         void loadQuizAttempts();
         void loadScoreResults();
-    }, []);
+    }, [canAccessResults, isCapabilityLoading, loadQuizAttempts, loadScoreResults]);
 
     function applyQuizFilters(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -159,11 +204,22 @@ export default function SalesTrainerScoreResultsPage() {
                 <AdminPageHeader
                     title="新人训练路径学员结果"
                     description="统一查看做题结果和录音评分结果，核对题目快照、学员答案、AI 反馈和评分结论。"
-                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
                 />
             )}
         >
-            <div className="space-y-6">
+            {isCapabilityLoading ? (
+                <div className="py-12 text-center text-sm text-slate-500">正在校验学员结果权限...</div>
+            ) : capabilityError || !canAccessResults ? (
+                <AdminLoadErrorCard
+                    title="学员结果权限不足"
+                    description="当前页不会在权限未确认时加载做题结果或录音评分结果，避免把权限异常伪装为空结果。请联系管理员开通训练记录查看权限后重试。"
+                    message={capabilityError}
+                    retryLabel="重新校验权限"
+                    onRetry={() => void loadCapabilities()}
+                />
+            ) : (
+                <div className="space-y-6">
                 <GlassCard className="p-6">
                     <div className="mb-4">
                         <h2 className="text-lg font-bold text-slate-900">做题结果</h2>
@@ -226,6 +282,10 @@ export default function SalesTrainerScoreResultsPage() {
                             {isQuizLoading ? (
                                 <tr>
                                     <td colSpan={6} className="px-6 py-10 text-center text-slate-500">正在加载做题结果...</td>
+                                </tr>
+                            ) : quizError ? (
+                                <tr>
+                                    <td colSpan={6} className="px-6 py-10 text-center text-red-700">做题结果加载失败，请检查权限、筛选条件或后端接口后重试。</td>
                                 </tr>
                             ) : quizItems.length === 0 ? (
                                 <tr>
@@ -339,6 +399,10 @@ export default function SalesTrainerScoreResultsPage() {
                                 <tr>
                                     <td colSpan={7} className="px-6 py-10 text-center text-slate-500">正在加载评分结果...</td>
                                 </tr>
+                            ) : scoreError ? (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-10 text-center text-red-700">评分结果加载失败，请检查权限、筛选条件或后端接口后重试。</td>
+                                </tr>
                             ) : scoreItems.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="px-6 py-10 text-center text-slate-500">暂无评分结果</td>
@@ -370,6 +434,7 @@ export default function SalesTrainerScoreResultsPage() {
                     </table>
                 </GlassCard>
             </div>
+            )}
         </AdminIndexShell>
     );
 }

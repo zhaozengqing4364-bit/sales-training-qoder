@@ -83,6 +83,9 @@ from sales_bot.websocket.components.stepfun_emotion_analyzer import (
 from sales_bot.websocket.components.stepfun_thinking_capture import (
     StepFunThinkingCapture,
 )
+from sales_bot.websocket.components.stepfun_turn_transcript_capture import (
+    StepFunTurnTranscriptCapture,
+)
 from sales_bot.websocket.components.stepfun_event_payloads import (
     build_asr_transcript_event,
     build_error_event,
@@ -263,6 +266,7 @@ class StepFunRealtimeSharedHandler(
         stepfun_transport: StepFunTransport | None = None,
         db_session_factory: Callable[[], Any] | None = None,
         knowledge_service_factory: Callable[[AsyncSession], Any] | None = None,
+        transcript_capture_sink: Callable[[dict[str, Any]], Any] | None = None,
     ) -> None:
         super().__init__("sales")
         self.upstream_ws = None
@@ -297,7 +301,9 @@ class StepFunRealtimeSharedHandler(
         self._stepfun_url = os.getenv(
             "STEPFUN_REALTIME_URL", "wss://api.stepfun.com/v1/realtime"
         )
-        self._stepfun_model = os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-2")
+        self._stepfun_model = os.getenv(
+            "STEPFUN_REALTIME_MODEL", "stepaudio-2.5-realtime"
+        )
         self._stepfun_voice = os.getenv("STEPFUN_REALTIME_VOICE", "qingchunshaonv")
         self._stepfun_temperature = float(
             os.getenv("STEPFUN_REALTIME_TEMPERATURE", "0.7")
@@ -380,11 +386,19 @@ class StepFunRealtimeSharedHandler(
             turn_index=lambda: int(self.turn_count or 0),
             template_stage_key=self._current_template_stage_key,
         )
+        self._turn_transcript_capture = StepFunTurnTranscriptCapture(
+            session_id=lambda: str(self.session_id or ""),
+            template_stage_key=self._current_template_stage_key,
+            instruction_contract_hash=self._current_transcript_capture_instruction_contract_hash,
+            grounding_metadata=self._current_transcript_capture_grounding_metadata,
+            sink=transcript_capture_sink,
+        )
         self._objection_ledger: dict[str, Any] | None = None
         self._feedback_arbiter = RealtimeFeedbackArbiter()
         self._feedback_pacing_state = RealtimeFeedbackPacingState()
 
         self._feedback_context: AgentContext | None = None
+        self._assistant_transcript_capture_context: dict[str, Any] | None = None
         self._pending_grounding_context: str = ""
         self._pending_blocked_response_text: str = ""
         self._pending_response_after_commit = False
@@ -521,6 +535,91 @@ class StepFunRealtimeSharedHandler(
         self._function_call_states.clear()
         self._executed_call_ids.clear()
         self._thinking_capture.clear()
+        self._turn_transcript_capture.clear()
+        self._assistant_transcript_capture_context = None
+
+    def _current_transcript_capture_instruction_contract_hash(self) -> str | None:
+        try:
+            profile = self._active_voice_runtime_profile()
+        except AttributeError:
+            profile = None
+        if profile is not None:
+            contract_hash = str(profile.instruction_contract_hash or "").strip()
+            if contract_hash:
+                return contract_hash
+        effective_policy = self._effective_policy if isinstance(self._effective_policy, dict) else {}
+        contract_hash = str(
+            effective_policy.get("instruction_contract_hash")
+            or self._instruction_contract_hash
+            or ""
+        ).strip()
+        return contract_hash or None
+
+    def _current_transcript_capture_grounding_metadata(self) -> dict[str, Any] | None:
+        metadata: dict[str, Any] = {}
+        effective_policy = (
+            self._effective_policy if isinstance(self._effective_policy, dict) else {}
+        )
+        raw_kb_ids = effective_policy.get("knowledge_base_ids")
+        if isinstance(raw_kb_ids, list):
+            knowledge_base_ids = [
+                str(item).strip() for item in raw_kb_ids if str(item).strip()
+            ]
+            if knowledge_base_ids:
+                metadata["knowledge_base_ids"] = knowledge_base_ids
+
+        diagnostics = (
+            self._latest_knowledge_answer_diagnostics
+            if isinstance(self._latest_knowledge_answer_diagnostics, dict)
+            else {}
+        )
+        for key in (
+            "mode",
+            "answerability",
+            "source_status",
+            "audit_run_id",
+            "live_audit_run_id",
+            "shadow_audit_run_id",
+        ):
+            value = diagnostics.get(key)
+            if isinstance(value, str) and value.strip():
+                metadata[key] = value.strip()
+
+        raw_citations = diagnostics.get("citations")
+        citations: list[dict[str, Any]] = []
+        if isinstance(raw_citations, list):
+            for item in raw_citations:
+                if not isinstance(item, dict):
+                    continue
+                safe_citation: dict[str, Any] = {}
+                for key in (
+                    "knowledge_base_id",
+                    "knowledge_base_name",
+                    "document_title",
+                ):
+                    value = item.get(key)
+                    if isinstance(value, str) and value.strip():
+                        safe_citation[key] = value.strip()
+                score = item.get("score")
+                if isinstance(score, (int, float)):
+                    safe_citation["score"] = float(score)
+                if safe_citation:
+                    citations.append(safe_citation)
+        if citations:
+            metadata["citation_count"] = len(citations)
+            metadata["citations"] = citations
+        return metadata or None
+
+    def _current_transcript_capture_turn_id(self) -> str | None:
+        if self._active_response is not None:
+            return str(self._active_response.request_id)
+        current_turn = self._turn_coordinator.get_current_turn()
+        if current_turn is None:
+            return None
+        return str(current_turn.turn_id)
+
+    def _current_transcript_capture_turn_index(self) -> int:
+        return max(1, int(self.turn_count or 0))
 
     @staticmethod
     def _build_answerability_instruction_overlay(
@@ -1167,9 +1266,97 @@ class StepFunRealtimeHandler(
     StepFunRealtimeSalesStageMixin,
     StepFunRealtimeSharedHandler,
 ):
-    pass
+    async def _handle_upstream_event(self, event: dict[str, Any]) -> None:
+        event_type = str(event.get("type") or "")
+        self._turn_transcript_capture.on_upstream_event(
+            event,
+            active_response=self._active_response,
+            turn_id=self._current_transcript_capture_turn_id(),
+            turn_index=self._current_transcript_capture_turn_index(),
+        )
+        await super()._handle_upstream_event(event)
+        if (
+            event_type == "response.created"
+            and self._active_response is not None
+            and self._active_response.response_id
+        ):
+            self._assistant_transcript_capture_context = {
+                "response_id": self._active_response.response_id,
+                "turn_id": str(self._active_response.request_id),
+                "turn_index": self._current_transcript_capture_turn_index(),
+                "source_event_type": "response.done",
+            }
+        elif event_type == "response.done":
+            self._assistant_transcript_capture_context = None
+
+    async def _send_transcript(self, text: str, is_final: bool) -> None:
+        await super()._send_transcript(text, is_final)
+        if not is_final:
+            return
+        self._turn_transcript_capture.capture_learner_transcript(
+            transcript=text,
+            turn_id=None,
+            turn_index=self._resolve_user_turn_number_for_transcript(),
+            source_event_type="input_audio_transcription.completed",
+        )
+
+    async def _persist_message(
+        self,
+        *,
+        turn_number: int,
+        role: str,
+        content: str,
+        sales_stage: str | None = None,
+        analysis_data: dict[str, Any] | None = None,
+    ) -> None:
+        await super()._persist_message(
+            turn_number=turn_number,
+            role=role,
+            content=content,
+            sales_stage=sales_stage,
+            analysis_data=analysis_data,
+        )
+        if role != "assistant":
+            return
+        context = (
+            self._assistant_transcript_capture_context
+            if isinstance(self._assistant_transcript_capture_context, dict)
+            else {}
+        )
+        self._turn_transcript_capture.capture_assistant_transcript(
+            transcript=content,
+            response_id=cast(str | None, context.get("response_id")),
+            turn_id=cast(str | None, context.get("turn_id")),
+            turn_index=max(1, int(context.get("turn_index") or turn_number or 0)),
+            source_event_type=str(
+                context.get("source_event_type") or "assistant_message_persisted"
+            ),
+        )
+
+    async def _send_roleplay_repair_audio(
+        self,
+        response_state: RealtimeResponseState,
+    ) -> None:
+        already_sent = response_state.roleplay_repair_sent
+        await super()._send_roleplay_repair_audio(response_state)
+        if already_sent or not response_state.roleplay_repair_sent:
+            return
+        repair_text = self._roleplay_repair_message(
+            self._roleplay_contract(),
+            response_state.roleplay_violation_decision or {},
+        )
+        self._turn_transcript_capture.capture_assistant_transcript(
+            transcript=repair_text,
+            response_id=response_state.response_id,
+            turn_id=str(response_state.request_id),
+            turn_index=self._current_transcript_capture_turn_index(),
+            source_event_type="roleplay_repair_audio",
+        )
 
 
-def create_stepfun_realtime_handler() -> StepFunRealtimeHandler:
+def create_stepfun_realtime_handler(
+    *,
+    transcript_capture_sink: Callable[[dict[str, Any]], Any] | None = None,
+) -> StepFunRealtimeHandler:
     """Factory for router registration."""
-    return StepFunRealtimeHandler()
+    return StepFunRealtimeHandler(transcript_capture_sink=transcript_capture_sink)

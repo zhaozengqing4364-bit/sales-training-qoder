@@ -1,14 +1,21 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LearningContent, LearningContentRevisionState } from "@/lib/api/types";
+import type {
+    LearningContent,
+    LearningContentRevisionState,
+    NewcomerPathConfigDiagnostics,
+    NewcomerPathConfigResponse,
+} from "@/lib/api/types";
 
 import NewcomerArticleBindingPage from "./page";
 
 const {
     bindModuleArticleMock,
     createLearningContentMock,
+    getCapabilitiesMock,
     getModuleArticleMock,
+    getPathConfigMock,
     listLearningContentsMock,
     pushMock,
     toastErrorMock,
@@ -16,7 +23,9 @@ const {
 } = vi.hoisted(() => ({
     bindModuleArticleMock: vi.fn(),
     createLearningContentMock: vi.fn(),
+    getCapabilitiesMock: vi.fn(),
     getModuleArticleMock: vi.fn(),
+    getPathConfigMock: vi.fn(),
     listLearningContentsMock: vi.fn(),
     pushMock: vi.fn(),
     toastErrorMock: vi.fn(),
@@ -52,8 +61,13 @@ vi.mock("@/lib/api/client", async () => {
             },
             admin: {
                 ...actual.api.admin,
+                salesTrainer: {
+                    ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
+                },
                 newcomerTraining: {
                     ...actual.api.admin.newcomerTraining,
+                    getPathConfig: getPathConfigMock,
                     bindModuleArticle: bindModuleArticleMock,
                 },
             },
@@ -103,9 +117,114 @@ function makeLearningContent(overrides: Partial<LearningContent> = {}): Learning
     };
 }
 
+function makePathConfig(boundContentId: string | null = "article-1"): NewcomerPathConfigResponse {
+    return {
+        source: "active_revision",
+        fallback_reason: null,
+        legacy_snapshot_only: false,
+        management_entry: "/admin/newcomer-training/path-config",
+        permission: "sales_trainer.manage_modules",
+        path: {
+            path_key: "newcomer_training_path_v1",
+            title: "新人训练路径",
+            goal_title: "完成新人训练",
+            description: null,
+            enabled: true,
+            modules: [{
+                module_key: "business_skills",
+                module_type: "article_exam",
+                enabled: true,
+                order_index: 2,
+                title: "商务技巧",
+                description: null,
+                target_unit_id: "business-unit",
+                learning_content_id: boundContentId,
+                exam_paper_id: null,
+                disabled_reason: null,
+                unlock_after_unit_ids: [],
+                completion_rule: "submitted",
+                primary_action_label: null,
+                retry_action_label: null,
+                review_action_label: null,
+                guidance_templates: {},
+            }],
+        },
+        active_revision_id: "path-revision-1",
+        active_revision_no: 1,
+        working_revision_id: null,
+        working_revision_no: null,
+        has_unpublished_revision: false,
+        diagnostics: pathConfigDiagnostics(),
+    };
+}
+
+function pathConfigDiagnostics(): NewcomerPathConfigDiagnostics {
+    return {
+        surface_key: "newcomer_training_path_v1",
+        resource_type: "newcomer_training_path",
+        source: "active_revision",
+        legacy_snapshot_only: false,
+        fallback_applied: false,
+        fallback_reason: null,
+        realtime_provider_readiness: [],
+        management_entry: "/admin/newcomer-training/path-config",
+        permission_policy: {
+            view: "sales_trainer.manage_modules",
+            save: "sales_trainer.manage_modules",
+            publish: "sales_trainer.manage_modules",
+            rollback: "sales_trainer.manage_modules",
+            high_risk_ai_coach: "sales_trainer.manage_prompts",
+            regrade: "sales_trainer.regrade_history",
+        },
+        active_revision: null,
+        working_revision: null,
+        high_risk_actions: {
+            publish: {
+                requires_reason: true,
+                requires_trace_id: true,
+                audit_action: "newcomer_path_config.publish",
+                impact_scope: "future_learners_only",
+                preview_endpoint: "/api/v1/admin/newcomer-training/path-config/publish/preview",
+            },
+            rollback: {
+                requires_reason: true,
+                requires_trace_id: true,
+                audit_action: "newcomer_path_config.rollback",
+                impact_scope: "future_learners_only",
+                preview_endpoint: "/api/v1/admin/newcomer-training/path-config/rollback/preview",
+            },
+            regrade: {
+                requires_reason: true,
+                requires_trace_id: true,
+                audit_action: "historical_regrade.completed",
+                impact_scope: "append_only_history",
+                history_overwrite: false,
+            },
+        },
+    };
+}
+
 describe("NewcomerArticleBindingPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: true,
+                manage_questions: false,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_content"],
+        });
         listLearningContentsMock.mockResolvedValue({
             items: [
                 makeLearningContent(),
@@ -139,15 +258,8 @@ describe("NewcomerArticleBindingPage", () => {
             ],
             total: 4,
         });
-        getModuleArticleMock.mockResolvedValue({
-            module_key: "business_skills",
-            learning_content_id: "article-1",
-            title: "见客户前商务礼仪",
-            summary: "学习商务拜访前礼仪。",
-            owner: "新人训练路径",
-            source: "manual",
-            chapters: [],
-        });
+        getModuleArticleMock.mockResolvedValue({});
+        getPathConfigMock.mockResolvedValue(makePathConfig());
         bindModuleArticleMock.mockResolvedValue({
             module_key: "business_skills",
             learning_content_id: "article-2",
@@ -169,6 +281,8 @@ describe("NewcomerArticleBindingPage", () => {
         render(<NewcomerArticleBindingPage />);
 
         expect(await screen.findByText("当前生效学习页绑定")).toBeTruthy();
+        expect(getPathConfigMock).toHaveBeenCalledTimes(1);
+        expect(getModuleArticleMock).not.toHaveBeenCalled();
         expect(screen.getAllByText("见客户前商务礼仪").length).toBeGreaterThan(0);
         expect(screen.getAllByText("1 节").length).toBeGreaterThan(0);
         expect(screen.getAllByRole("link", { name: /编辑章节/ })[0].getAttribute("href")).toBe(
@@ -231,5 +345,59 @@ describe("NewcomerArticleBindingPage", () => {
         expect(within(draftRow).getByRole("button", { name: "保存为待发布绑定" }).hasAttribute("disabled")).toBe(true);
         expect(screen.queryByText("课程训练其他文章")).toBeNull();
         expect(screen.getAllByRole("link", { name: /编辑章节/ })[1].querySelector("button")).toBeNull();
+    });
+
+    it("shows an unbound state from admin path config without calling learner article API", async () => {
+        getPathConfigMock.mockResolvedValueOnce(makePathConfig(null));
+
+        render(<NewcomerArticleBindingPage />);
+
+        expect(await screen.findByText("可绑定学习内容")).toBeTruthy();
+        expect(screen.queryByText("当前生效学习页绑定")).toBeNull();
+        expect(getPathConfigMock).toHaveBeenCalledTimes(1);
+        expect(getModuleArticleMock).not.toHaveBeenCalled();
+    });
+
+    it("surfaces admin path config failures instead of treating them as learner empty bindings", async () => {
+        getPathConfigMock.mockRejectedValueOnce(new Error("path config unavailable"));
+
+        render(<NewcomerArticleBindingPage />);
+
+        expect(await screen.findByText("path config unavailable")).toBeTruthy();
+        expect(screen.queryByText("当前生效学习页绑定")).toBeNull();
+        expect(getModuleArticleMock).not.toHaveBeenCalled();
+    });
+
+    it("fails closed without content management capability", async () => {
+        getCapabilitiesMock.mockResolvedValueOnce({
+            role: "viewer",
+            role_label: "只读人员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_questions: true,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_questions"],
+        });
+
+        render(<NewcomerArticleBindingPage />);
+
+        expect(await screen.findByText("文章管理权限不足")).toBeTruthy();
+        expect(listLearningContentsMock).not.toHaveBeenCalled();
+        expect(getPathConfigMock).not.toHaveBeenCalled();
+        expect(getModuleArticleMock).not.toHaveBeenCalled();
+        expect(createLearningContentMock).not.toHaveBeenCalled();
+        expect(bindModuleArticleMock).not.toHaveBeenCalled();
+        expect(screen.queryByRole("button", { name: "新建商务技巧文章" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "保存为待发布绑定" })).toBeNull();
+        expect(screen.queryByRole("link", { name: /编辑章节/ })).toBeNull();
     });
 });

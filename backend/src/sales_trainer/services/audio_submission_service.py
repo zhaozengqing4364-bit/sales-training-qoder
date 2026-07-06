@@ -37,11 +37,18 @@ from sales_trainer.services.audio_submission_lineage import (
 )
 from sales_trainer.services.deucate_scoring_service import DeucateScoringService
 from sales_trainer.services.effective_audio_training_config import (
+    EffectiveAudioTrainingConfigError,
     EffectiveAudioTrainingConfigResolver,
+)
+from sales_trainer.services.learner_unit_access import (
+    LearnerUnitAccessError,
+    require_learner_active_path_unit_access,
 )
 from sales_trainer.services.material_service import (
     MaterialServiceError,
     SalesTrainerMaterialService,
+    normalize_audio_score_output_schema,
+    normalize_learner_rubric,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_attempt_context_service import (
@@ -105,35 +112,41 @@ class AudioSubmissionService:
         backend = os.getenv("SALES_TRAINER_AUDIO_STORAGE_BACKEND", "local").lower()
         if backend == "oss":
             try:
-                signer = get_oss_signing_service()
+                oss_signer = get_oss_signing_service()
             except OssConfigError as exc:
                 raise AudioSubmissionServiceError(
                     "[OSS_NOT_CONFIGURED]",
                     str(exc),
                     status_code=503,
                 ) from exc
-            presigned = signer.generate_put_url(object_key, content_type=content_type)
+            oss_presigned = oss_signer.generate_put_url(
+                object_key,
+                content_type=content_type,
+            )
             return {
-                "upload_url": presigned.url,
-                "storage_key": f"oss://{presigned.object_key}",
-                "expires_at": presigned.expires_at,
+                "upload_url": oss_presigned.url,
+                "storage_key": f"oss://{oss_presigned.object_key}",
+                "expires_at": oss_presigned.expires_at,
                 "content_type": content_type,
                 "storage_backend": "oss",
             }
         if backend == "cos":
             try:
-                signer = get_cos_signing_service()
+                cos_signer = get_cos_signing_service()
             except CosConfigError as exc:
                 raise AudioSubmissionServiceError(
                     "[COS_NOT_CONFIGURED]",
                     str(exc),
                     status_code=503,
                 ) from exc
-            presigned = signer.generate_put_url(object_key, content_type=content_type)
+            cos_presigned = cos_signer.generate_put_url(
+                object_key,
+                content_type=content_type,
+            )
             return {
-                "upload_url": presigned.url,
-                "storage_key": f"cos://{presigned.object_key}",
-                "expires_at": presigned.expires_at,
+                "upload_url": cos_presigned.url,
+                "storage_key": f"cos://{cos_presigned.object_key}",
+                "expires_at": cos_presigned.expires_at,
                 "content_type": content_type,
                 "storage_backend": "cos",
             }
@@ -218,9 +231,28 @@ class AudioSubmissionService:
                     "[SALES_TRAINER_UNIT_TYPE_MISMATCH]",
                     "该训练单元不是音频评分模块。",
                 )
-            effective = await EffectiveAudioTrainingConfigResolver(
-                self._db
-            ).resolve_for_unit(unit)
+            try:
+                effective = await EffectiveAudioTrainingConfigResolver(
+                    self._db
+                ).resolve_for_unit(unit, allow_legacy=False)
+            except EffectiveAudioTrainingConfigError as exc:
+                raise AudioSubmissionServiceError(
+                    exc.code,
+                    exc.message,
+                    status_code=exc.status_code,
+                ) from exc
+            try:
+                await require_learner_active_path_unit_access(
+                    self._db,
+                    actor=actor,
+                    unit_id=str(unit.unit_id),
+                )
+            except LearnerUnitAccessError as exc:
+                raise AudioSubmissionServiceError(
+                    exc.code,
+                    exc.message,
+                    status_code=exc.status_code,
+                ) from exc
             try:
                 self._require_material_binding_for_ppt(
                     unit,
@@ -275,7 +307,7 @@ class AudioSubmissionService:
             actor=actor,
             action="audio_uploaded",
             target_type="sales_trainer_audio_submission",
-            target_id=submission.submission_id,
+            target_id=str(submission.submission_id),
             metadata={
                 "unit_id": payload.unit_id,
                 "purpose": payload.purpose,
@@ -289,9 +321,10 @@ class AudioSubmissionService:
         await self._db.commit()
         await self._db.refresh(submission)
         if payload.auto_process:
-            await self.process_submission(submission.submission_id, actor=actor)
+            await self.process_submission(str(submission.submission_id), actor=actor)
             refreshed = await self._db.get(
-                SalesTrainerAudioSubmission, submission.submission_id
+                SalesTrainerAudioSubmission,
+                str(submission.submission_id),
             )
             if refreshed is not None:
                 return refreshed
@@ -334,16 +367,19 @@ class AudioSubmissionService:
         self, submission_id: str, *, actor: User
     ) -> SalesTrainerAudioSubmission:
         submission = await self._require_submission(submission_id)
-        transcript = await self._get_transcript(submission.submission_id)
+        transcript = await self._get_transcript(str(submission.submission_id))
         if transcript is None or not transcript.transcript_text.strip():
             raise AudioSubmissionServiceError(
                 "[AUDIO_TRANSCRIPT_REQUIRED]",
                 "音频尚无可用于评分的转写结果，请先重试转写。",
                 409,
             )
-        submission.status = "transcribed"
-        submission.error_code = None
-        submission.error_message = None
+        _set_orm_fields(
+            submission,
+            status="transcribed",
+            error_code=None,
+            error_message=None,
+        )
         await self._db.flush()
         return await self.score_submission(submission_id, actor=actor)
 
@@ -536,8 +572,9 @@ class AudioSubmissionService:
     async def serialize_submission(
         self, submission: SalesTrainerAudioSubmission
     ) -> dict[str, Any]:
-        transcript = await self._get_transcript(submission.submission_id)
-        score = await self._get_latest_score(submission.submission_id)
+        submission_id = str(submission.submission_id)
+        transcript = await self._get_transcript(submission_id)
+        score = await self._get_latest_score(submission_id)
         user = await self._db.get(User, submission.user_id)
         task_brief_snapshot = (
             submission.task_brief_snapshot
@@ -626,14 +663,18 @@ class AudioSubmissionService:
         *,
         actor: User | None,
     ) -> None:
-        submission.status = "transcribing"
-        submission.error_code = None
-        submission.error_message = None
+        submission_id = str(submission.submission_id)
+        _set_orm_fields(
+            submission,
+            status="transcribing",
+            error_code=None,
+            error_message=None,
+        )
         await self._logs.record(
             actor=actor,
             action="audio_transcription_started",
             target_type="sales_trainer_audio_submission",
-            target_id=submission.submission_id,
+            target_id=submission_id,
         )
         await self._db.flush()
         started_at = datetime.now(UTC)
@@ -641,36 +682,42 @@ class AudioSubmissionService:
             result = await self._transcription.transcribe_file(str(submission.storage_key))
         except RuntimeError as exc:
             code = str(exc) if str(exc).startswith("[") else "[TRANSCRIPTION_FAILED]"
-            submission.status = "transcription_failed"
-            submission.error_code = code
-            submission.error_message = str(exc)
+            _set_orm_fields(
+                submission,
+                status="transcription_failed",
+                error_code=code,
+                error_message=str(exc),
+            )
             await self._logs.record(
                 actor=actor,
                 action="audio_transcription_failed",
                 target_type="sales_trainer_audio_submission",
-                target_id=submission.submission_id,
+                target_id=submission_id,
                 metadata={"error_code": code},
             )
             return
 
         if not result.transcript_text.strip():
-            submission.status = "transcription_failed"
-            submission.error_code = "[TRANSCRIPT_EMPTY]"
-            submission.error_message = "转写文本为空。"
+            _set_orm_fields(
+                submission,
+                status="transcription_failed",
+                error_code="[TRANSCRIPT_EMPTY]",
+                error_message="转写文本为空。",
+            )
             await self._logs.record(
                 actor=actor,
                 action="audio_transcription_failed",
                 target_type="sales_trainer_audio_submission",
-                target_id=submission.submission_id,
+                target_id=submission_id,
                 metadata={"error_code": "[TRANSCRIPT_EMPTY]"},
             )
             return
 
-        existing = await self._get_transcript(submission.submission_id)
+        existing = await self._get_transcript(submission_id)
         if existing is None:
             self._db.add(
                 SalesTrainerAudioTranscript(
-                    submission_id=submission.submission_id,
+                    submission_id=submission_id,
                     provider=result.provider,
                     transcript_text=result.transcript_text,
                     raw_payload=result.raw_payload,
@@ -679,17 +726,20 @@ class AudioSubmissionService:
                 )
             )
         else:
-            existing.provider = result.provider
-            existing.transcript_text = result.transcript_text
-            existing.raw_payload = result.raw_payload
-            existing.started_at = started_at
-            existing.completed_at = datetime.now(UTC)
-        submission.status = "transcribed"
+            _set_orm_fields(
+                existing,
+                provider=result.provider,
+                transcript_text=result.transcript_text,
+                raw_payload=result.raw_payload,
+                started_at=started_at,
+                completed_at=datetime.now(UTC),
+            )
+        _set_orm_fields(submission, status="transcribed")
         await self._logs.record(
             actor=actor,
             action="audio_transcription_succeeded",
             target_type="sales_trainer_audio_submission",
-            target_id=submission.submission_id,
+            target_id=submission_id,
         )
 
     async def _score(
@@ -700,7 +750,8 @@ class AudioSubmissionService:
     ) -> None:
         if submission.status != "transcribed":
             return
-        transcript = await self._get_transcript(submission.submission_id)
+        submission_id = str(submission.submission_id)
+        transcript = await self._get_transcript(submission_id)
         if transcript is None:
             return
         unit = (
@@ -713,7 +764,13 @@ class AudioSubmissionService:
             if isinstance(submission.score_scheme_snapshot, dict)
             else None
         )
-        prompt_id = _resolve_scoring_prompt_id_from_snapshot(score_scheme_snapshot)
+        prompt = _resolve_scoring_prompt_from_snapshot(score_scheme_snapshot)
+        prompt_source = "submission_snapshot" if prompt is not None else "current_prompt_row"
+        prompt_id = (
+            str(prompt.prompt_id)
+            if prompt is not None
+            else _resolve_scoring_prompt_id_from_snapshot(score_scheme_snapshot)
+        )
         effective_config = None
         if unit is not None and not prompt_id:
             effective_config = (
@@ -723,38 +780,49 @@ class AudioSubmissionService:
             ).config
             prompt_id = _resolve_scoring_prompt_id(unit, config_override=effective_config)
         if not prompt_id:
-            submission.status = "scoring_failed"
-            submission.error_code = "[SCORING_PROMPT_REQUIRED]"
-            submission.error_message = "缺少录音评分标准。"
+            _set_orm_fields(
+                submission,
+                status="scoring_failed",
+                error_code="[SCORING_PROMPT_REQUIRED]",
+                error_message="缺少录音评分标准。",
+            )
             await self._logs.record(
                 actor=actor,
                 action="audio_scoring_failed",
                 target_type="sales_trainer_audio_submission",
-                target_id=submission.submission_id,
+                target_id=submission_id,
                 metadata={"error_code": "[SCORING_PROMPT_REQUIRED]"},
             )
             return
-        prompt = await self._db.get(SalesTrainerAudioScorePrompt, prompt_id)
+        if prompt is None:
+            prompt = await self._db.get(SalesTrainerAudioScorePrompt, prompt_id)
         if prompt is None or prompt.status != "published":
-            submission.status = "scoring_failed"
-            submission.error_code = "[SCORING_PROMPT_NOT_PUBLISHED]"
-            submission.error_message = "录音评分标准不存在或未发布。"
+            _set_orm_fields(
+                submission,
+                status="scoring_failed",
+                error_code="[SCORING_PROMPT_NOT_PUBLISHED]",
+                error_message="录音评分标准不存在或未发布。",
+            )
             await self._logs.record(
                 actor=actor,
                 action="audio_scoring_failed",
                 target_type="sales_trainer_audio_submission",
-                target_id=submission.submission_id,
+                target_id=submission_id,
                 metadata={"error_code": "[SCORING_PROMPT_NOT_PUBLISHED]"},
             )
             return
 
-        submission.status = "scoring"
+        _set_orm_fields(submission, status="scoring")
         await self._logs.record(
             actor=actor,
             action="audio_scoring_started",
             target_type="sales_trainer_audio_submission",
-            target_id=submission.submission_id,
-            metadata={"prompt_id": prompt.prompt_id, "prompt_version": prompt.version},
+            target_id=submission_id,
+            metadata={
+                "prompt_id": prompt.prompt_id,
+                "prompt_version": prompt.version,
+                "prompt_source": prompt_source,
+            },
         )
         threshold = _resolve_pass_threshold_from_snapshot(score_scheme_snapshot)
         if threshold is None:
@@ -765,12 +833,13 @@ class AudioSubmissionService:
                     )
                 ).config
             threshold = resolve_audio_pass_threshold(effective_config if unit else None)
+        pass_threshold = float(threshold)
         outcome = await self._scoring.score_audio(
             submission=submission,
             prompt=prompt,
-            transcript_text=transcript.transcript_text,
-            unit_name=unit.name if unit else None,
-            pass_threshold=threshold,
+            transcript_text=str(transcript.transcript_text),
+            unit_name=str(unit.name) if unit else None,
+            pass_threshold=pass_threshold,
         )
         self._db.add(
             SalesTrainerAudioScoreResult(
@@ -793,20 +862,26 @@ class AudioSubmissionService:
             )
         )
         if outcome.error_code:
-            submission.status = "scoring_failed"
-            submission.error_code = outcome.error_code
-            submission.error_message = outcome.error_message
+            _set_orm_fields(
+                submission,
+                status="scoring_failed",
+                error_code=outcome.error_code,
+                error_message=outcome.error_message,
+            )
             action = "audio_scoring_failed"
         else:
-            submission.status = "scored"
-            submission.error_code = None
-            submission.error_message = None
+            _set_orm_fields(
+                submission,
+                status="scored",
+                error_code=None,
+                error_message=None,
+            )
             action = "audio_scoring_succeeded"
         await self._logs.record(
             actor=actor,
             action=action,
             target_type="sales_trainer_audio_submission",
-            target_id=submission.submission_id,
+            target_id=submission_id,
             metadata={"error_code": outcome.error_code},
         )
 
@@ -850,7 +925,8 @@ class AudioSubmissionService:
         result = await self._db.execute(
             select(User.department).where(User.user_id == submission.user_id)
         )
-        return result.scalar_one_or_none() == department
+        found_department = result.scalar_one_or_none()
+        return found_department is not None and str(found_department) == department
 
     def _validate_content_type(self, content_type: str) -> None:
         allowed = {
@@ -979,6 +1055,11 @@ class AudioSubmissionService:
         return base / user_id / f"{uuid.uuid4().hex}{_safe_extension(filename)}"
 
 
+def _set_orm_fields(target: object, **values: object) -> None:
+    for key, value in values.items():
+        setattr(target, key, value)
+
+
 def _resolve_scoring_prompt_id(
     unit: SalesTrainerUnit | None,
     *,
@@ -1001,14 +1082,63 @@ def _resolve_scoring_prompt_id_from_snapshot(
     return str(value) if value else None
 
 
-def _resolve_pass_threshold_from_snapshot(snapshot: dict[str, Any] | None) -> int | None:
+def _resolve_scoring_prompt_from_snapshot(
+    snapshot: dict[str, Any] | None,
+) -> SalesTrainerAudioScorePrompt | None:
     if snapshot is None:
         return None
-    value = snapshot.get("pass_threshold")
+    prompt_snapshot = snapshot.get("prompt_snapshot")
+    if not isinstance(prompt_snapshot, dict):
+        return None
+    prompt_id = str(prompt_snapshot.get("prompt_id") or "").strip()
+    system_prompt = str(prompt_snapshot.get("system_prompt") or "").strip()
+    scoring_template = str(prompt_snapshot.get("scoring_template") or "").strip()
+    if not prompt_id or not system_prompt or not scoring_template:
+        return None
+    version = prompt_snapshot.get("version")
+    prompt_version = _coerce_prompt_version(version)
+    if prompt_version is None:
+        prompt_version = _coerce_prompt_version(snapshot.get("version")) or 1
+    output_schema = prompt_snapshot.get("output_schema")
+    learner_rubric = prompt_snapshot.get("learner_rubric")
+    return SalesTrainerAudioScorePrompt(
+        prompt_id=prompt_id,
+        name=str(prompt_snapshot.get("name") or snapshot.get("name") or "历史评分标准快照"),
+        purpose=str(
+            prompt_snapshot.get("purpose")
+            or snapshot.get("purpose")
+            or "general_audio_scoring"
+        ),
+        system_prompt=system_prompt,
+        scoring_template=scoring_template,
+        output_schema=normalize_audio_score_output_schema(output_schema),
+        learner_rubric=normalize_learner_rubric(learner_rubric),
+        version=prompt_version,
+        status=str(prompt_snapshot.get("status") or snapshot.get("status") or "published"),
+    )
+
+
+def _coerce_prompt_version(value: Any) -> int | None:
     if isinstance(value, int):
         return value
     if isinstance(value, float):
         return int(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _resolve_pass_threshold_from_snapshot(snapshot: dict[str, Any] | None) -> float | None:
+    if snapshot is None:
+        return None
+    value = snapshot.get("pass_threshold")
+    if isinstance(value, int):
+        return float(value)
+    if isinstance(value, float):
+        return value
     return None
 
 
@@ -1044,13 +1174,17 @@ def _generate_object_storage_get_url(storage_key: str) -> str:
     object_key = _normalize_object_storage_key(storage_key)
     backend = _resolve_object_storage_backend(storage_key)
     if backend == "cos":
-        return get_cos_signing_service().generate_get_url(
+        return str(
+            get_cos_signing_service().generate_get_url(
+                object_key,
+                expires=_resolve_file_url_expires_seconds(),
+            )
+        )
+    return str(
+        get_oss_signing_service().generate_get_url(
             object_key,
             expires=_resolve_file_url_expires_seconds(),
         )
-    return get_oss_signing_service().generate_get_url(
-        object_key,
-        expires=_resolve_file_url_expires_seconds(),
     )
 
 
@@ -1058,9 +1192,9 @@ def _get_object_storage_size(storage_key: str) -> int:
     object_key = _normalize_object_storage_key(storage_key)
     backend = _resolve_object_storage_backend(storage_key)
     if backend == "cos":
-        return get_cos_signing_service().get_object_size(object_key)
+        return int(get_cos_signing_service().get_object_size(object_key))
     if backend == "oss":
-        return get_oss_signing_service().get_object_size(object_key)
+        return int(get_oss_signing_service().get_object_size(object_key))
     raise RuntimeError("Object storage backend is not configured.")
 
 

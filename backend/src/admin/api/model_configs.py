@@ -10,12 +10,14 @@ References:
 """
 
 import asyncio
+import json
 import time
 import uuid
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import and_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,7 +45,7 @@ from common.ai.schemas import (
 )
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_admin_user
-from common.db.models import User
+from common.db.models import SystemLog, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
 
@@ -54,6 +56,11 @@ router = APIRouter(
     tags=["Model Configs"],
     dependencies=[Depends(get_current_admin_user)],
 )
+
+ModelConfigApiResponse = (
+    ModelConfigSuccessResponse | ModelConfigErrorResponse | JSONResponse
+)
+TestConfigApiResponse = TestConfigSuccessResponse | ModelConfigErrorResponse
 
 
 SUPPORTED_PROVIDERS_BY_TYPE: dict[ModelType, set[ModelProvider]] = {
@@ -233,27 +240,112 @@ def _config_to_response(
     config: ModelConfig, api_key_plain: str | None = None
 ) -> ModelConfigResponse:
     """Convert ModelConfig to response with masked API key"""
+    config_row = cast(Any, config)
     if api_key_plain is not None:
         masked_key = mask_api_key(api_key_plain) if api_key_plain else "未设置"
     else:
-        masked_key = "****" if config.api_key_encrypted else "未设置"
+        masked_key = "****" if config_row.api_key_encrypted else "未设置"
 
     return ModelConfigResponse(
-        id=config.id,
-        name=config.name,
-        model_type=config.model_type,
-        provider=config.provider,
-        base_url=config.base_url,
+        id=config_row.id,
+        name=config_row.name,
+        model_type=config_row.model_type,
+        provider=config_row.provider,
+        base_url=config_row.base_url,
         api_key_masked=masked_key,
-        model_name=config.model_name,
-        extra_config=config.extra_config or {},
-        is_default=config.is_default,
-        is_active=config.is_active,
-        last_tested_at=config.last_tested_at,
-        last_test_status=config.last_test_status,
-        created_at=config.created_at,
-        updated_at=config.updated_at,
+        model_name=config_row.model_name,
+        extra_config=config_row.extra_config or {},
+        is_default=config_row.is_default,
+        is_active=config_row.is_active,
+        last_tested_at=config_row.last_tested_at,
+        last_test_status=config_row.last_test_status,
+        created_at=config_row.created_at,
+        updated_at=config_row.updated_at,
     )
+
+
+def _operator_identifier(user: User) -> str:
+    email = cast(str | None, user.email)
+    name = cast(str | None, user.name)
+    return email or name or str(user.user_id)
+
+
+def _model_config_audit_snapshot(config: ModelConfig) -> dict[str, Any]:
+    config_row = cast(Any, config)
+    return {
+        "id": config_row.id,
+        "name": config_row.name,
+        "model_type": config_row.model_type,
+        "provider": config_row.provider,
+        "base_url": config_row.base_url,
+        "api_key_configured": bool(config_row.api_key_encrypted),
+        "model_name": config_row.model_name,
+        "extra_config": config_row.extra_config or {},
+        "is_default": bool(config_row.is_default),
+        "is_active": bool(config_row.is_active),
+        "last_tested_at": config_row.last_tested_at.isoformat()
+        if config_row.last_tested_at
+        else None,
+        "last_test_status": config_row.last_test_status,
+        "created_at": config_row.created_at.isoformat()
+        if config_row.created_at
+        else None,
+        "updated_at": config_row.updated_at.isoformat()
+        if config_row.updated_at
+        else None,
+    }
+
+
+def _queue_model_config_audit_log(
+    db: AsyncSession,
+    *,
+    action: str,
+    actor: User,
+    target_config_id: str | None,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    status: str = "success",
+    extra: dict[str, Any] | None = None,
+) -> None:
+    details = {
+        "operator_id": str(actor.user_id),
+        "target_config_id": target_config_id,
+        "trace_id": get_trace_id(),
+        "source": "admin.api.model_configs",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "before": before,
+        "after": after,
+    }
+    if extra:
+        details.update(extra)
+    db.add(
+        SystemLog(
+            action=action,
+            user_id=str(actor.user_id),
+            user_identifier=_operator_identifier(actor),
+            status=status,
+            details=json.dumps(details, ensure_ascii=False, default=str),
+        )
+    )
+
+
+def _inline_model_config_audit_snapshot(
+    request: TestModelConfigRequest,
+) -> dict[str, Any]:
+    return {
+        "model_type": request.model_type.value,
+        "provider": request.provider.value,
+        "base_url": _normalized_provider_base_url(
+            request.model_type,
+            request.provider,
+            request.base_url,
+        )
+        if request.base_url.strip()
+        else request.base_url,
+        "api_key_configured": bool(request.api_key.strip()),
+        "model_name": request.model_name,
+        "extra_config": request.extra_config,
+    }
 
 
 @router.post("", response_model=ModelConfigSuccessResponse, status_code=201)
@@ -261,7 +353,7 @@ async def create_model_config(
     request: CreateModelConfigRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
-):
+) -> ModelConfigApiResponse:
     """
     Create a new model configuration.
 
@@ -305,7 +397,7 @@ async def create_model_config(
                     error_code="[ENCRYPTION_ERROR]",
                     trace_id=get_trace_id(),
                 )
-            api_key_encrypted = encrypt_result.value
+            api_key_encrypted = encrypt_result.value or ""
 
         # If setting as default, clear other defaults
         if request.is_default:
@@ -328,29 +420,45 @@ async def create_model_config(
         )
 
         db.add(config)
+        await db.flush()
+        config_row = cast(Any, config)
+        _queue_model_config_audit_log(
+            db,
+            action="model_config_create",
+            actor=current_user,
+            target_config_id=config_row.id,
+            before=None,
+            after=_model_config_audit_snapshot(config),
+            extra={
+                "model_type": config_row.model_type,
+                "provider": config_row.provider,
+                "runtime_refresh_requested": True,
+            },
+        )
         await db.commit()
         await db.refresh(config)
+        config_row = cast(Any, config)
 
         await _refresh_runtime_services()
 
         logger.info(
             "Model config created",
             admin_user_id=str(current_user.user_id),
-            config_id=config.id,
-            model_type=config.model_type,
-            provider=config.provider,
-            is_default=config.is_default,
+            config_id=config_row.id,
+            model_type=config_row.model_type,
+            provider=config_row.provider,
+            is_default=config_row.is_default,
         )
 
         return ModelConfigSuccessResponse(
             data=ModelConfigCreateResponse(
-                id=config.id,
-                name=config.name,
-                model_type=config.model_type,
-                provider=config.provider,
-                model_name=config.model_name,
-                is_default=config.is_default,
-                created_at=config.created_at,
+                id=config_row.id,
+                name=config_row.name,
+                model_type=config_row.model_type,
+                provider=config_row.provider,
+                model_name=config_row.model_name,
+                is_default=config_row.is_default,
+                created_at=config_row.created_at,
             ),
             trace_id=get_trace_id(),
         )
@@ -369,7 +477,7 @@ async def create_model_config(
 async def list_model_configs(
     model_type: ModelType | None = Query(None, description="Filter by model type"),
     db: AsyncSession = Depends(get_db),
-):
+) -> ModelConfigApiResponse:
     """
     List all model configurations, grouped by type.
 
@@ -395,24 +503,25 @@ async def list_model_configs(
         )
 
         for config in configs:
+            config_row = cast(Any, config)
             item = ModelConfigListItem(
-                id=config.id,
-                name=config.name,
-                model_type=config.model_type,
-                provider=config.provider,
-                model_name=config.model_name,
-                is_default=config.is_default,
-                is_active=config.is_active,
-                last_test_status=config.last_test_status,
+                id=config_row.id,
+                name=config_row.name,
+                model_type=config_row.model_type,
+                provider=config_row.provider,
+                model_name=config_row.model_name,
+                is_default=config_row.is_default,
+                is_active=config_row.is_active,
+                last_test_status=config_row.last_test_status,
             )
 
-            if config.model_type == "llm":
+            if config_row.model_type == "llm":
                 grouped.llm.append(item)
-            elif config.model_type == "embedding":
+            elif config_row.model_type == "embedding":
                 grouped.embedding.append(item)
-            elif config.model_type == "asr":
+            elif config_row.model_type == "asr":
                 grouped.asr.append(item)
-            elif config.model_type == "tts":
+            elif config_row.model_type == "tts":
                 grouped.tts.append(item)
 
         return ModelConfigSuccessResponse(data=grouped, trace_id=get_trace_id())
@@ -430,7 +539,7 @@ async def list_model_configs(
 async def get_model_config(
     config_id: str,
     db: AsyncSession = Depends(get_db),
-):
+) -> ModelConfigApiResponse:
     """
     Get a single model configuration by ID.
     """
@@ -447,8 +556,9 @@ async def get_model_config(
             )
 
         api_key_plain: str | None = None
-        if config.api_key_encrypted:
-            decrypt_result = decrypt_api_key(config.api_key_encrypted)
+        config_row = cast(Any, config)
+        if config_row.api_key_encrypted:
+            decrypt_result = decrypt_api_key(config_row.api_key_encrypted)
             if decrypt_result.is_success:
                 api_key_plain = decrypt_result.value
 
@@ -480,7 +590,7 @@ async def update_model_config(
     request: UpdateModelConfigRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
-):
+) -> ModelConfigApiResponse:
     """
     Update a model configuration (partial update).
 
@@ -499,8 +609,11 @@ async def update_model_config(
                 trace_id=get_trace_id(),
             )
 
-        provider = ModelProvider(config.provider)
-        model_type = ModelType(config.model_type)
+        config_row = cast(Any, config)
+        before_snapshot = _model_config_audit_snapshot(config)
+        provider = ModelProvider(config_row.provider)
+        model_type = ModelType(config_row.model_type)
+        replacement_default: ModelConfig | None = None
 
         if request.base_url is not None:
             if (
@@ -515,7 +628,7 @@ async def update_model_config(
                     )
                 )
             try:
-                config.base_url = _normalized_provider_base_url(
+                config_row.base_url = _normalized_provider_base_url(
                     model_type, provider, request.base_url
                 )
             except EndpointPolicyError as exc:
@@ -529,13 +642,13 @@ async def update_model_config(
 
         # Update fields
         if request.name is not None:
-            config.name = request.name
+            config_row.name = request.name
         if request.model_name is not None:
-            config.model_name = request.model_name
+            config_row.model_name = request.model_name
         if request.extra_config is not None:
-            config.extra_config = request.extra_config
+            config_row.extra_config = request.extra_config
         if request.is_active is not None:
-            config.is_active = request.is_active
+            config_row.is_active = request.is_active
 
         # Handle API key update
         if request.api_key is not None:
@@ -547,7 +660,7 @@ async def update_model_config(
                         error_code="[ENCRYPTION_ERROR]",
                         trace_id=get_trace_id(),
                     )
-                config.api_key_encrypted = encrypt_result.value
+                config_row.api_key_encrypted = encrypt_result.value or ""
             elif _requires_api_key(model_type, provider):
                 return ModelConfigErrorResponse(
                     error="API key is required for this provider",
@@ -555,42 +668,60 @@ async def update_model_config(
                     trace_id=get_trace_id(),
                 )
             else:
-                config.api_key_encrypted = ""
+                config_row.api_key_encrypted = ""
 
         # Handle default flag
         if request.is_default is not None and request.is_default:
             await _clear_defaults(db, model_type)
-            config.is_default = True
-        elif config.is_default and (
+            config_row.is_default = True
+        elif config_row.is_default and (
             request.is_default is False or request.is_active is False
         ):
-            replacement = await _find_replacement_default(
-                db, config.model_type, config.id
+            replacement_default = await _find_replacement_default(
+                db, config_row.model_type, config_row.id
             )
-            if not replacement:
+            if not replacement_default:
                 return ModelConfigErrorResponse(
                     error="Cannot remove the only active default configuration for this type",
                     error_code="[CANNOT_UNSET_DEFAULT]",
                     trace_id=get_trace_id(),
                 )
-            replacement.is_default = True
-            config.is_default = False
+            cast(Any, replacement_default).is_default = True
+            config_row.is_default = False
 
-        config.updated_at = datetime.now(UTC)
+        config_row.updated_at = datetime.now(UTC)
 
+        await db.flush()
+        _queue_model_config_audit_log(
+            db,
+            action="model_config_update",
+            actor=current_user,
+            target_config_id=config_row.id,
+            before=before_snapshot,
+            after=_model_config_audit_snapshot(config),
+            extra={
+                "model_type": config_row.model_type,
+                "provider": config_row.provider,
+                "replacement_default_id": cast(Any, replacement_default).id
+                if replacement_default
+                else None,
+                "runtime_refresh_requested": True,
+            },
+        )
         await db.commit()
         await db.refresh(config)
+        config_row = cast(Any, config)
 
         await _refresh_runtime_services()
 
         logger.info(
             "Model config updated",
             admin_user_id=str(current_user.user_id),
-            config_id=config.id,
-            model_type=config.model_type,
-            provider=config.provider,
-            is_default=config.is_default,
-            is_active=config.is_active,
+            config_id=config_row.id,
+            model_type=config_row.model_type,
+            provider=config_row.provider,
+            is_default=config_row.is_default,
+            is_active=config_row.is_active,
         )
 
         return ModelConfigSuccessResponse(
@@ -613,7 +744,7 @@ async def delete_model_config(
     config_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
-):
+) -> ModelConfigApiResponse:
     """
     Delete a model configuration.
 
@@ -631,12 +762,14 @@ async def delete_model_config(
                 trace_id=get_trace_id(),
             )
 
+        config_row = cast(Any, config)
+        before_snapshot = _model_config_audit_snapshot(config)
         replacement_config: ModelConfig | None = None
 
         # Check if it's the only default
-        if config.is_default:
+        if config_row.is_default:
             replacement_config = await _find_replacement_default(
-                db, config.model_type, config.id
+                db, config_row.model_type, config_row.id
             )
             if not replacement_config:
                 return ModelConfigErrorResponse(
@@ -645,8 +778,24 @@ async def delete_model_config(
                     trace_id=get_trace_id(),
                 )
 
-            replacement_config.is_default = True
+            cast(Any, replacement_config).is_default = True
 
+        _queue_model_config_audit_log(
+            db,
+            action="model_config_delete",
+            actor=current_user,
+            target_config_id=config_row.id,
+            before=before_snapshot,
+            after=None,
+            extra={
+                "model_type": config_row.model_type,
+                "provider": config_row.provider,
+                "replacement_default_id": cast(Any, replacement_config).id
+                if replacement_config
+                else None,
+                "runtime_refresh_requested": True,
+            },
+        )
         await db.delete(config)
         await db.commit()
 
@@ -655,9 +804,9 @@ async def delete_model_config(
         logger.info(
             "Model config deleted",
             admin_user_id=str(current_user.user_id),
-            deleted_config_id=config.id,
-            model_type=config.model_type,
-            replacement_default_id=replacement_config.id
+            deleted_config_id=config_row.id,
+            model_type=config_row.model_type,
+            replacement_default_id=cast(Any, replacement_config).id
             if replacement_config
             else None,
         )
@@ -686,7 +835,7 @@ async def _clear_defaults(db: AsyncSession, model_type: ModelType) -> None:
     configs = result.scalars().all()
 
     for config in configs:
-        config.is_default = False
+        cast(Any, config).is_default = False
 
 
 # ========== Test Connection Endpoint ==========
@@ -697,7 +846,7 @@ async def test_model_config(
     config_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
-):
+) -> TestConfigApiResponse:
     """
     Test a model configuration by making a simple API call.
 
@@ -718,10 +867,33 @@ async def test_model_config(
                 trace_id=get_trace_id(),
             )
 
+        config_row = cast(Any, config)
         api_key = ""
-        if config.api_key_encrypted:
-            key_result = decrypt_api_key(config.api_key_encrypted)
+        if config_row.api_key_encrypted:
+            key_result = decrypt_api_key(config_row.api_key_encrypted)
             if not key_result.is_success:
+                before_snapshot = _model_config_audit_snapshot(config)
+                config_row.last_tested_at = datetime.now(UTC)
+                config_row.last_test_status = "failed"
+                await db.flush()
+                _queue_model_config_audit_log(
+                    db,
+                    action="model_config_test",
+                    actor=current_user,
+                    target_config_id=config_row.id,
+                    before=before_snapshot,
+                    after=_model_config_audit_snapshot(config),
+                    status="warning",
+                    extra={
+                        "model_type": config_row.model_type,
+                        "provider": config_row.provider,
+                        "success": False,
+                        "latency_ms": 0,
+                        "test_kind": "persisted",
+                        "failure_reason": "decrypt_failed",
+                    },
+                )
+                await db.commit()
                 return TestConfigSuccessResponse(
                     data=TestConfigResponse(
                         success=False,
@@ -731,7 +903,8 @@ async def test_model_config(
                 )
             api_key = key_result.value or ""
 
-        model_type = ModelType(config.model_type)
+        model_type = ModelType(config_row.model_type)
+        before_snapshot = _model_config_audit_snapshot(config)
 
         # Run test with timeout
         start_time = time.time()
@@ -750,14 +923,32 @@ async def test_model_config(
         test_result.latency_ms = latency_ms
 
         # Update test status in database
-        config.last_tested_at = datetime.now(UTC)
-        config.last_test_status = "success" if test_result.success else "failed"
+        config_row.last_tested_at = datetime.now(UTC)
+        config_row.last_test_status = "success" if test_result.success else "failed"
+        await db.flush()
+        _queue_model_config_audit_log(
+            db,
+            action="model_config_test",
+            actor=current_user,
+            target_config_id=config_row.id,
+            before=before_snapshot,
+            after=_model_config_audit_snapshot(config),
+            status="success" if test_result.success else "warning",
+            extra={
+                "model_type": config_row.model_type,
+                "provider": config_row.provider,
+                "success": bool(test_result.success),
+                "latency_ms": latency_ms,
+                "test_kind": "persisted",
+                "message": test_result.message,
+            },
+        )
         await db.commit()
 
         logger.info(
             "Model config tested",
             admin_user_id=str(current_user.user_id),
-            config_id=config.id,
+            config_id=config_row.id,
             status="success" if test_result.success else "failed",
             latency_ms=latency_ms,
         )
@@ -785,8 +976,9 @@ async def test_model_config(
 @router.post("/test", response_model=TestConfigSuccessResponse)
 async def test_model_config_inline(
     request: TestModelConfigRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
-):
+) -> TestConfigSuccessResponse:
     """
     Test a model configuration before saving (inline test).
 
@@ -800,6 +992,29 @@ async def test_model_config_inline(
             api_key=request.api_key,
         )
         if validation_error:
+            _queue_model_config_audit_log(
+                db,
+                action="model_config_test_inline",
+                actor=current_user,
+                target_config_id=None,
+                before=None,
+                after=None,
+                status="warning",
+                extra={
+                    "request": {
+                        "model_type": request.model_type.value,
+                        "provider": request.provider.value,
+                        "base_url_configured": bool(request.base_url.strip()),
+                        "api_key_configured": bool(request.api_key.strip()),
+                        "model_name": request.model_name,
+                    },
+                    "success": False,
+                    "latency_ms": 0,
+                    "test_kind": "inline",
+                    "failure_reason": validation_error.error_code,
+                },
+            )
+            await db.commit()
             return TestConfigSuccessResponse(
                 data=TestConfigResponse(
                     success=False,
@@ -847,10 +1062,54 @@ async def test_model_config_inline(
             latency_ms=latency_ms,
         )
 
+        _queue_model_config_audit_log(
+            db,
+            action="model_config_test_inline",
+            actor=current_user,
+            target_config_id=None,
+            before=None,
+            after={
+                "success": bool(test_result.success),
+                "message": test_result.message,
+                "latency_ms": latency_ms,
+            },
+            status="success" if test_result.success else "warning",
+            extra={
+                "request": _inline_model_config_audit_snapshot(request),
+                "success": bool(test_result.success),
+                "latency_ms": latency_ms,
+                "test_kind": "inline",
+            },
+        )
+        await db.commit()
+
         return TestConfigSuccessResponse(data=test_result)
 
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as e:
         logger.error("Failed to test model config inline", error_type=type(e).__name__)
+        _queue_model_config_audit_log(
+            db,
+            action="model_config_test_inline",
+            actor=current_user,
+            target_config_id=None,
+            before=None,
+            after=None,
+            status="warning",
+            extra={
+                "request": {
+                    "model_type": request.model_type.value,
+                    "provider": request.provider.value,
+                    "base_url_configured": bool(request.base_url.strip()),
+                    "api_key_configured": bool(request.api_key.strip()),
+                    "model_name": request.model_name,
+                },
+                "success": False,
+                "latency_ms": 0,
+                "test_kind": "inline",
+                "error_type": type(e).__name__,
+            },
+        )
+        await db.commit()
         return TestConfigSuccessResponse(
             data=TestConfigResponse(
                 success=False,
@@ -894,8 +1153,9 @@ async def _test_llm(config: ModelConfig, api_key: str) -> TestConfigResponse:
     try:
         import httpx
 
+        config_row = cast(Any, config)
         endpoint = validate_provider_base_url(
-            ModelProvider(config.provider), config.base_url, resolve_dns=True
+            ModelProvider(config_row.provider), config_row.base_url, resolve_dns=True
         )
 
         headers = {
@@ -905,7 +1165,7 @@ async def _test_llm(config: ModelConfig, api_key: str) -> TestConfigResponse:
 
         # Simple completion request
         payload = {
-            "model": config.model_name,
+            "model": config_row.model_name,
             "messages": [{"role": "user", "content": "Hi"}],
             "max_tokens": 5,
         }
@@ -922,7 +1182,7 @@ async def _test_llm(config: ModelConfig, api_key: str) -> TestConfigResponse:
         if response.is_redirect:
             try:
                 validate_redirect_location(
-                    ModelProvider(config.provider),
+                    ModelProvider(config_row.provider),
                     endpoint.base_url,
                     response.headers.get("location", ""),
                     resolve_dns=True,
@@ -939,7 +1199,7 @@ async def _test_llm(config: ModelConfig, api_key: str) -> TestConfigResponse:
             return TestConfigResponse(
                 success=True,
                 message="LLM connection successful",
-                details={"model": config.model_name},
+                details={"model": config_row.model_name},
             )
         else:
             return TestConfigResponse(
@@ -963,8 +1223,9 @@ async def _test_embedding(config: ModelConfig, api_key: str) -> TestConfigRespon
     try:
         import httpx
 
+        config_row = cast(Any, config)
         endpoint = validate_provider_base_url(
-            ModelProvider(config.provider), config.base_url, resolve_dns=True
+            ModelProvider(config_row.provider), config_row.base_url, resolve_dns=True
         )
 
         headers = {
@@ -973,7 +1234,7 @@ async def _test_embedding(config: ModelConfig, api_key: str) -> TestConfigRespon
         }
 
         payload = {
-            "model": config.model_name,
+            "model": config_row.model_name,
             "input": "test",
         }
 
@@ -989,7 +1250,7 @@ async def _test_embedding(config: ModelConfig, api_key: str) -> TestConfigRespon
         if response.is_redirect:
             try:
                 validate_redirect_location(
-                    ModelProvider(config.provider),
+                    ModelProvider(config_row.provider),
                     endpoint.base_url,
                     response.headers.get("location", ""),
                     resolve_dns=True,
@@ -1008,7 +1269,7 @@ async def _test_embedding(config: ModelConfig, api_key: str) -> TestConfigRespon
             return TestConfigResponse(
                 success=True,
                 message="Embedding connection successful",
-                details={"model": config.model_name, "dimensions": embedding_dim},
+                details={"model": config_row.model_name, "dimensions": embedding_dim},
             )
         else:
             return TestConfigResponse(
@@ -1030,7 +1291,8 @@ async def _test_embedding(config: ModelConfig, api_key: str) -> TestConfigRespon
 async def _test_asr(config: ModelConfig, api_key: str) -> TestConfigResponse:
     """Test ASR configuration (credential validation)"""
     try:
-        provider = ModelProvider(config.provider)
+        config_row = cast(Any, config)
+        provider = ModelProvider(config_row.provider)
 
         if provider == ModelProvider.ALIBABA:
             if not api_key:
@@ -1043,13 +1305,13 @@ async def _test_asr(config: ModelConfig, api_key: str) -> TestConfigResponse:
             return TestConfigResponse(
                 success=True,
                 message="ASR credentials format valid (full test requires audio)",
-                details={"provider": "alibaba", "app_key": config.model_name},
+                details={"provider": "alibaba", "app_key": config_row.model_name},
             )
         if provider in {ModelProvider.LOCAL, ModelProvider.LOCAL_STREAMING}:
             return TestConfigResponse(
                 success=True,
                 message="Local ASR configuration valid",
-                details={"provider": provider.value, "model": config.model_name},
+                details={"provider": provider.value, "model": config_row.model_name},
             )
 
         else:
@@ -1068,14 +1330,15 @@ async def _test_asr(config: ModelConfig, api_key: str) -> TestConfigResponse:
 async def _test_tts(config: ModelConfig, api_key: str) -> TestConfigResponse:
     """Test TTS configuration"""
     try:
-        provider = ModelProvider(config.provider)
+        config_row = cast(Any, config)
+        provider = ModelProvider(config_row.provider)
 
         if provider == ModelProvider.LOCAL:
             # Edge TTS doesn't need API key validation
             return TestConfigResponse(
                 success=True,
                 message="TTS configuration valid (Edge TTS)",
-                details={"voice": config.model_name},
+                details={"voice": config_row.model_name},
             )
         elif provider == ModelProvider.ALIBABA:
             if not api_key:
@@ -1088,7 +1351,7 @@ async def _test_tts(config: ModelConfig, api_key: str) -> TestConfigResponse:
                 message="TTS configuration valid (Alibaba DashScope)",
                 details={
                     "provider": provider.value,
-                    "voice": config.model_name,
+                    "voice": config_row.model_name,
                 },
             )
         else:
@@ -1114,7 +1377,9 @@ async def preview_tts(
     rate: str = Query("+0%", description="Speech rate"),
     volume: str = Query("+0%", description="Volume"),
     pitch: str = Query("+0Hz", description="Pitch"),
-):
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+) -> Any:
     """
     Preview TTS with specified parameters.
 
@@ -1126,10 +1391,10 @@ async def preview_tts(
     import io
 
     import edge_tts
-    from fastapi.responses import StreamingResponse
 
     try:
         # Limit text length for preview
+        original_text_length = len(text)
         if len(text) > 200:
             text = text[:200]
 
@@ -1147,7 +1412,29 @@ async def preview_tts(
             if chunk["type"] == "audio":
                 audio_buffer.write(chunk["data"])
 
+        audio_size_bytes = audio_buffer.tell()
         audio_buffer.seek(0)
+        _queue_model_config_audit_log(
+            db,
+            action="model_config_tts_preview",
+            actor=current_user,
+            target_config_id=None,
+            before=None,
+            after={
+                "voice": voice,
+                "rate": rate,
+                "volume": volume,
+                "pitch": pitch,
+                "text_length": len(text),
+                "text_truncated": original_text_length > len(text),
+                "audio_size_bytes": audio_size_bytes,
+            },
+            extra={
+                "success": True,
+                "source": "admin.api.model_configs.tts_preview",
+            },
+        )
+        await db.commit()
 
         return StreamingResponse(
             audio_buffer,
@@ -1156,6 +1443,27 @@ async def preview_tts(
         )
 
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as e:
+        _queue_model_config_audit_log(
+            db,
+            action="model_config_tts_preview",
+            actor=current_user,
+            target_config_id=None,
+            before=None,
+            after=None,
+            status="warning",
+            extra={
+                "success": False,
+                "source": "admin.api.model_configs.tts_preview",
+                "voice": voice,
+                "rate": rate,
+                "volume": volume,
+                "pitch": pitch,
+                "text_length": min(len(text), 200),
+                "text_truncated": len(text) > 200,
+                "error_type": type(e).__name__,
+            },
+        )
+        await db.commit()
         return build_server_error(
             "[TTS_PREVIEW_FAILED]",
             message=f"TTS preview failed: {str(e)}",

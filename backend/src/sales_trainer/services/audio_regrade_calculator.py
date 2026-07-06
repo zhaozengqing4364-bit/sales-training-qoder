@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,10 @@ from sales_trainer.models import (
 )
 from sales_trainer.rules import resolve_audio_pass_threshold
 from sales_trainer.services.deucate_scoring_service import DeucateScoringService
+from sales_trainer.services.material_service import (
+    normalize_audio_score_output_schema,
+    normalize_learner_rubric,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,13 +47,18 @@ async def build_audio_regrade_preview(
         if submission.unit_id is not None
         else None
     )
+    submission_id = str(submission.submission_id)
+    score_id = str(score.score_id)
+    target_revision_id = str(target_revision.revision_id)
     prompt = _prompt_from_revision(target_revision)
-    threshold = resolve_audio_pass_threshold(unit.config if unit is not None else None)
+    threshold = resolve_audio_pass_threshold(
+        cast(dict[str, Any] | None, unit.config) if unit is not None else None
+    )
     outcome = await scoring_service.score_audio(
         submission=submission,
         prompt=prompt,
         transcript_text=transcript_text,
-        unit_name=unit.name if unit is not None else None,
+        unit_name=(str(unit.name) if unit is not None and unit.name is not None else None),
         pass_threshold=threshold,
     )
     before_snapshot = _score_snapshot(score)
@@ -59,7 +68,7 @@ async def build_audio_regrade_preview(
         "source_prompt_id": score.prompt_id,
         "source_prompt_version": score.prompt_version,
         "source_prompt_hash": score.prompt_hash,
-        "target_revision_id": target_revision.revision_id,
+        "target_revision_id": target_revision_id,
         "target_revision_no": target_revision.revision_no,
         "prompt_id": prompt.prompt_id,
         "prompt_version": prompt.version,
@@ -79,15 +88,16 @@ async def build_audio_regrade_preview(
     }
     return AudioRegradePreview(
         target_type="audio_submission",
-        target_id=submission.submission_id,
-        target_revision_id=target_revision.revision_id,
-        impact_scope=_impact_scope(submission.submission_id, score.score_id),
+        target_id=submission_id,
+        target_revision_id=target_revision_id,
+        impact_scope=_impact_scope(submission_id, score_id),
         before_snapshot=before_snapshot,
         after_snapshot=after_snapshot,
     )
 
 
 def _score_snapshot(score: SalesTrainerAudioScoreResult) -> dict[str, Any]:
+    total_score = cast(Decimal | None, score.total_score)
     return {
         "score_id": score.score_id,
         "submission_id": score.submission_id,
@@ -96,7 +106,7 @@ def _score_snapshot(score: SalesTrainerAudioScoreResult) -> dict[str, Any]:
         "prompt_hash": score.prompt_hash,
         "deucate_model": score.deucate_model,
         "transcript_snapshot": score.transcript_snapshot,
-        "total_score": _float_value(score.total_score),
+        "total_score": _float_value(total_score),
         "passed": score.passed,
         "summary": score.summary,
         "strengths": score.strengths or [],
@@ -115,7 +125,7 @@ async def _transcript_text(
     score: SalesTrainerAudioScoreResult,
 ) -> str:
     if score.transcript_snapshot and score.transcript_snapshot.strip():
-        return score.transcript_snapshot
+        return str(score.transcript_snapshot)
     result = await db.execute(
         select(SalesTrainerAudioTranscript)
         .where(SalesTrainerAudioTranscript.submission_id == score.submission_id)
@@ -123,22 +133,24 @@ async def _transcript_text(
     )
     transcript = result.scalar_one_or_none()
     if transcript is not None and transcript.transcript_text.strip():
-        return transcript.transcript_text
+        return str(transcript.transcript_text)
     return ""
 
 
 def _prompt_from_revision(
     revision: SalesTrainerAssetRevision,
 ) -> SalesTrainerAudioScorePrompt:
-    payload = revision.payload_json if isinstance(revision.payload_json, dict) else {}
+    payload: dict[str, Any] = (
+        revision.payload_json if isinstance(revision.payload_json, dict) else {}
+    )
     return SalesTrainerAudioScorePrompt(
         prompt_id=str(payload.get("prompt_id") or revision.logical_id),
         name=str(payload.get("name") or "音频评分标准"),
         purpose=str(payload.get("purpose") or "general_audio_scoring"),
         system_prompt=str(payload.get("system_prompt") or ""),
         scoring_template=str(payload.get("scoring_template") or "{transcript}"),
-        output_schema=dict(payload.get("output_schema") or {}),
-        learner_rubric=dict(payload.get("learner_rubric") or {}),
+        output_schema=normalize_audio_score_output_schema(payload.get("output_schema")),
+        learner_rubric=normalize_learner_rubric(payload.get("learner_rubric")),
         version=int(revision.revision_no),
         status="published",
     )

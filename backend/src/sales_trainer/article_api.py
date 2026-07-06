@@ -11,9 +11,6 @@ from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_trace_id
-from curriculum_practice.services.learning_progress_service import (
-    LearningProgressService,
-)
 from sales_trainer.permissions import can_manage_sales_trainer
 from sales_trainer.schemas import (
     LearningContentBindingImpactResponse,
@@ -26,6 +23,14 @@ from sales_trainer.schemas import (
 from sales_trainer.services.article_binding_service import (
     ArticleBindingService,
     ArticleBindingServiceError,
+)
+from sales_trainer.services.curriculum_practice_adapter import (
+    LearningProgressAdapter,
+    LearningProgressChapterRef,
+)
+from sales_trainer.services.learner_unit_access import (
+    LearnerUnitAccessError,
+    require_learner_active_path_module_access,
 )
 from sales_trainer.services.learning_content_binding_impact_service import (
     LearningContentBindingImpactService,
@@ -76,9 +81,17 @@ async def get_newcomer_module_article(
             NewcomerArticleBinding(
                 module_key=module_key,
                 learning_content_id=learning_content_id,
-            )
+            ),
+            require_active_binding=True,
+        )
+        await require_learner_active_path_module_access(
+            db,
+            actor=current_user,
+            module_key=module_key,
         )
     except ArticleBindingServiceError as exc:
+        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
+    except LearnerUnitAccessError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
     return success_response(
         NewcomerArticleResponse.model_validate(article).model_dump()
@@ -101,20 +114,28 @@ async def get_newcomer_module_article_progress(
             NewcomerArticleBinding(
                 module_key=module_key,
                 learning_content_id=learning_content_id,
-            )
+            ),
+            require_active_binding=True,
+        )
+        await require_learner_active_path_module_access(
+            db,
+            actor=current_user,
+            module_key=module_key,
         )
     except ArticleBindingServiceError as exc:
+        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
+    except LearnerUnitAccessError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
 
     learning_content_id = str(article["learning_content_id"])
     raw_chapters = cast(list[dict[str, Any]], article.get("chapters", []))
 
-    progress_service = LearningProgressService(db)
+    progress_service = LearningProgressAdapter(db)
     progress_result = await progress_service.progress_for_user(
         user_id=str(current_user.user_id),
         content_id=learning_content_id,
-        chapters=[  # type: ignore[arg-type]
-            type("Chapter", (), {"chapter_id": ch["chapter_id"]})()
+        chapters=[
+            LearningProgressChapterRef(chapter_id=str(ch["chapter_id"]))
             for ch in raw_chapters
         ],
     )
@@ -153,9 +174,17 @@ async def complete_newcomer_module_article_chapter(
             NewcomerArticleBinding(
                 module_key=module_key,
                 learning_content_id=payload.learning_content_id,
-            )
+            ),
+            require_active_binding=True,
+        )
+        await require_learner_active_path_module_access(
+            db,
+            actor=current_user,
+            module_key=module_key,
         )
     except ArticleBindingServiceError as exc:
+        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
+    except LearnerUnitAccessError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
 
     learning_content_id = str(article["learning_content_id"])
@@ -176,7 +205,7 @@ async def complete_newcomer_module_article_chapter(
             ),
         )
 
-    progress_service = LearningProgressService(db)
+    progress_service = LearningProgressAdapter(db)
     complete_result = await progress_service.complete_chapter(
         user_id=str(current_user.user_id),
         content_id=learning_content_id,

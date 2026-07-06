@@ -6,8 +6,9 @@ import type { BusinessEtiquetteCapabilitySnapshotResponse } from "@/lib/api/type
 import BusinessEtiquetteCapabilitiesPage from "./page";
 
 const {
+    getAdminCapabilitiesMock,
     archiveCapabilityMock,
-    getCapabilitiesMock,
+    getBusinessCapabilitiesMock,
     publishCapabilityMock,
     saveCapabilitiesMock,
     toastApi,
@@ -16,8 +17,9 @@ const {
     const toastError = vi.fn();
     const toastSuccess = vi.fn();
     return {
+        getAdminCapabilitiesMock: vi.fn(),
         archiveCapabilityMock: vi.fn(),
-        getCapabilitiesMock: vi.fn(),
+        getBusinessCapabilitiesMock: vi.fn(),
         publishCapabilityMock: vi.fn(),
         saveCapabilitiesMock: vi.fn(),
         toastApi: {
@@ -49,7 +51,8 @@ vi.mock("@/lib/api/client", async () => {
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
                     archiveBusinessEtiquetteCapability: archiveCapabilityMock,
-                    getBusinessEtiquetteCapabilities: getCapabilitiesMock,
+                    getBusinessEtiquetteCapabilities: getBusinessCapabilitiesMock,
+                    getCapabilities: getAdminCapabilitiesMock,
                     publishBusinessEtiquetteCapability: publishCapabilityMock,
                     saveBusinessEtiquetteCapabilities: saveCapabilitiesMock,
                 },
@@ -134,7 +137,21 @@ function snapshot(
 describe("BusinessEtiquetteCapabilitiesPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        getCapabilitiesMock.mockResolvedValue(snapshot());
+        getAdminCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: true,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: false,
+                view_records: false,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
+        getBusinessCapabilitiesMock.mockResolvedValue(snapshot());
         saveCapabilitiesMock.mockImplementation(async (payload) => ({
             ...snapshot({ source: "working_revision", needs_save: false }),
             capabilities: payload.capabilities,
@@ -161,6 +178,7 @@ describe("BusinessEtiquetteCapabilitiesPage", () => {
         render(<BusinessEtiquetteCapabilitiesPage />);
 
         expect(await screen.findByDisplayValue("尊重与分寸感")).toBeTruthy();
+        expect(getBusinessCapabilitiesMock).toHaveBeenCalledTimes(1);
         expect(screen.getByText("默认种子")).toBeTruthy();
         expect(screen.getByText(/请保存为训练包草稿/)).toBeTruthy();
 
@@ -200,5 +218,32 @@ describe("BusinessEtiquetteCapabilitiesPage", () => {
             );
         });
         expect(toastSuccessMock).toHaveBeenCalledWith("能力点已标记为已发布。");
+    });
+
+    it("fails closed before loading capability snapshot without content management permission", async () => {
+        getAdminCapabilitiesMock.mockResolvedValue({
+            role: "viewer",
+            role_label: "只读成员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: false,
+                view_records: true,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
+
+        render(<BusinessEtiquetteCapabilitiesPage />);
+
+        expect(await screen.findByText("能力点管理权限不足")).toBeTruthy();
+        expect(getBusinessCapabilitiesMock).not.toHaveBeenCalled();
+        expect(saveCapabilitiesMock).not.toHaveBeenCalled();
+        expect(publishCapabilityMock).not.toHaveBeenCalled();
+        expect(screen.queryByRole("button", { name: "新增能力点" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "保存能力点快照" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "发布" })).toBeNull();
     });
 });

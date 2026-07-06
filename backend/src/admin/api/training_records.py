@@ -14,7 +14,7 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import get_current_admin_user
@@ -98,13 +98,30 @@ def success_response(data: Any, trace_id: str | None = None) -> dict:
     return {"success": True, "data": data, "trace_id": trace_id or get_trace_id()}
 
 
+def _sales_trainer_owner_expr() -> Any:
+    return PracticeSession.voice_policy_snapshot["external_binding"]["owner"].as_string()
+
+
+def _exclude_sales_trainer_owned_sessions(stmt: Select[Any]) -> Select[Any]:
+    owner = _sales_trainer_owner_expr()
+    return stmt.where(or_(owner.is_(None), owner != "sales_trainer"))
+
+
+def _is_sales_trainer_owned_session(session: PracticeSession) -> bool:
+    snapshot = session.voice_policy_snapshot
+    if not isinstance(snapshot, dict):
+        return False
+    binding = snapshot.get("external_binding")
+    return isinstance(binding, dict) and binding.get("owner") == "sales_trainer"
+
+
 def calculate_overall_score(session: PracticeSession) -> float | None:
     """Calculate overall score from dimension scores"""
     scores = [session.logic_score, session.accuracy_score, session.completeness_score]
     valid_scores = [s for s in scores if s is not None]
     if not valid_scores:
         return None
-    return round(sum(valid_scores) / len(valid_scores), 1)
+    return cast(float, round(sum(valid_scores) / len(valid_scores), 1))
 
 
 def calculate_duration(session: PracticeSession) -> int | None:
@@ -213,6 +230,8 @@ async def list_training_records(
     )
 
     count_query = select(func.count()).select_from(PracticeSession)
+    query = _exclude_sales_trainer_owned_sessions(query)
+    count_query = _exclude_sales_trainer_owned_sessions(count_query)
 
     # Apply search filter
     if search:
@@ -228,6 +247,7 @@ async def list_training_records(
             .outerjoin(User, PracticeSession.user_id == User.user_id)
             .where(search_filter)
         )
+        count_query = _exclude_sales_trainer_owned_sessions(count_query)
 
     # Apply status filter
     if status:
@@ -249,6 +269,7 @@ async def list_training_records(
                 )
                 .where(Scenario.scenario_type == scenario_type)
             )
+            count_query = _exclude_sales_trainer_owned_sessions(count_query)
             if status:
                 count_query = count_query.where(PracticeSession.status == status)
 
@@ -308,6 +329,9 @@ async def get_training_record(
         raise HTTPException(status_code=404, detail="[TRAINING_RECORD_NOT_FOUND]")
 
     session, scenario, user = row
+    if _is_sales_trainer_owned_session(session):
+        raise HTTPException(status_code=404, detail="[TRAINING_RECORD_NOT_FOUND]")
+
     agent_names, persona_names = await load_agent_persona_name_maps([session], db)
     item = await session_to_response(
         session,
@@ -337,6 +361,8 @@ async def delete_training_record(
     session = result.scalar_one_or_none()
 
     if not session:
+        raise HTTPException(status_code=404, detail="[TRAINING_RECORD_NOT_FOUND]")
+    if _is_sales_trainer_owned_session(session):
         raise HTTPException(status_code=404, detail="[TRAINING_RECORD_NOT_FOUND]")
 
     # Delete the session (cascade will handle related records)

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
+    AlertTriangle,
     CheckCircle2,
     Eye,
     History,
@@ -89,7 +90,36 @@ export function PathConfigCenter({
                             <span className="rounded-full bg-slate-100 px-3 py-1">{model.governance.activeRevisionLabel}</span>
                             <span className="rounded-full bg-slate-100 px-3 py-1">{model.governance.workingRevisionLabel}</span>
                             <span className="rounded-full bg-slate-100 px-3 py-1">历史版本 {model.governance.revisionCount}</span>
+                            {model.governance.fallbackApplied ? (
+                                <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">
+                                    fallback_applied=true / {model.governance.fallbackReason ?? "unknown"}
+                                </span>
+                            ) : null}
                         </div>
+                        {model.governance.publishPreview || model.governance.publishPreviewLoadError ? (
+                            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-sm">
+                                <div className="flex items-center gap-2 font-bold text-slate-900">
+                                    {model.governance.publishPreviewLoadError ? (
+                                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                    ) : (
+                                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                    )}
+                                    发布预览
+                                </div>
+                                {model.governance.publishPreview ? (
+                                    <p className="mt-2 text-slate-600">
+                                        {model.governance.publishPreview.risk_level} 风险，
+                                        只影响后续学员；
+                                        回滚{rollbackAvailabilityLabel(model.governance.publishPreview.rollback_hint)}。
+                                    </p>
+                                ) : null}
+                                {model.governance.publishPreviewLoadError ? (
+                                    <p className="mt-2 text-amber-700">
+                                        发布预览失败：{model.governance.publishPreviewLoadError}
+                                    </p>
+                                ) : null}
+                            </div>
+                        ) : null}
                     </div>
                     <div className="flex w-full flex-col gap-3 lg:max-w-sm">
                         <div>
@@ -204,6 +234,10 @@ function OperationalChecks({ checks }: { readonly checks: readonly NewcomerOpera
             </div>
         </GlassCard>
     );
+}
+
+function rollbackAvailabilityLabel(value: Record<string, unknown>): string {
+    return value.available === true ? "可预览" : "暂无可用目标";
 }
 
 function LearnerPreview({ modules }: { readonly modules: readonly NewcomerConfigModuleSummary[] }) {

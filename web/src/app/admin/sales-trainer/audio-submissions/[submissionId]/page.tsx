@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, usePathname } from "next/navigation";
 
 import { AdminDetailShell } from "@/components/admin/admin-layout-shells";
+import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { AudioSubmissionRegradePanel } from "@/components/admin/sales-trainer/audio-submission-regrade-panel";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,8 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import { formatAdminRecordStatus, formatAudioSourceLabel } from "@/lib/sales-trainer/admin-display";
-import type { SalesTrainerAudioSubmission } from "@/lib/api/types";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
+import type { SalesTrainerAdminCapabilities, SalesTrainerAudioSubmission } from "@/lib/api/types";
 
 function formatSubmissionUser(submission: SalesTrainerAudioSubmission): string {
     const primary = submission.user_name || submission.user_email || submission.user_id;
@@ -33,29 +35,83 @@ function getSnapshotItems(snapshot: Record<string, unknown> | null): Array<{
     }> : [];
 }
 
+function formatPassedLabel(submission: SalesTrainerAudioSubmission): string {
+    if (submission.score_result?.error_code || submission.status.endsWith("failed")) {
+        return "待重试";
+    }
+    if (submission.score_result?.passed === true) {
+        return "是";
+    }
+    if (submission.score_result?.passed === false) {
+        return "否";
+    }
+    return "待判定";
+}
+
 export default function SalesTrainerAudioSubmissionDetailPage() {
     const params = useParams<{ submissionId: string }>();
     const pathname = usePathname();
-    const toast = useToast();
+    const { error: showError, success: showSuccess } = useToast();
     const [submission, setSubmission] = useState<SalesTrainerAudioSubmission | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [isOperating, setIsOperating] = useState(false);
+    const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessSubmission = isSalesTrainerAdminPathAllowedForCapabilities(pathname, adminCapabilities);
+    const canRetryJobs = Boolean(adminCapabilities?.capabilities.admin_full_access || adminCapabilities?.capabilities.retry_jobs);
+    const canRegradeHistory = Boolean(adminCapabilities?.capabilities.admin_full_access || adminCapabilities?.capabilities.regrade_history);
+
+    const loadCapabilities = useCallback(async () => {
+        setIsCapabilityLoading(true);
+        setCapabilityError(null);
+        try {
+            const result = await api.admin.salesTrainer.getCapabilities();
+            setAdminCapabilities(result);
+        } catch (error) {
+            setAdminCapabilities(null);
+            setCapabilityError(getApiErrorMessage(error));
+        } finally {
+            setIsCapabilityLoading(false);
+        }
+    }, []);
 
     const loadSubmission = useCallback(async () => {
+        if (!canAccessSubmission) {
+            return;
+        }
         setIsLoading(true);
+        setLoadError(null);
         try {
             const result = await api.admin.salesTrainer.getAudioSubmission(params.submissionId);
             setSubmission(result);
         } catch (loadError) {
-            toast.error(getApiErrorMessage(loadError));
+            const message = getApiErrorMessage(loadError);
+            setSubmission(null);
+            setLoadError(message);
+            showError(message);
         } finally {
             setIsLoading(false);
         }
-    }, [params.submissionId, toast]);
+    }, [canAccessSubmission, params.submissionId, showError]);
 
     useEffect(() => {
+        void loadCapabilities();
+    }, [loadCapabilities]);
+
+    useEffect(() => {
+        if (isCapabilityLoading) {
+            return;
+        }
+        if (!canAccessSubmission) {
+            setSubmission(null);
+            setLoadError(null);
+            setIsLoading(false);
+            return;
+        }
         void loadSubmission();
-    }, [loadSubmission]);
+    }, [canAccessSubmission, isCapabilityLoading, loadSubmission]);
 
     const fileUrl = useMemo(
         () => api.admin.salesTrainer.getAudioSubmissionFileUrl(params.submissionId),
@@ -63,18 +119,22 @@ export default function SalesTrainerAudioSubmissionDetailPage() {
     );
 
     async function retry(action: "transcription" | "scoring") {
+        if (!canRetryJobs) {
+            return;
+        }
         setIsOperating(true);
         try {
             if (action === "transcription") {
                 await api.admin.salesTrainer.retryAudioTranscription(params.submissionId);
-                toast.success("已触发重试转写");
+                showSuccess("已触发重试转写");
             } else {
                 await api.admin.salesTrainer.retryAudioScoring(params.submissionId);
-                toast.success("已触发重试评分");
+                showSuccess("已触发重试评分");
             }
             await loadSubmission();
         } catch (retryError) {
-            toast.error(getApiErrorMessage(retryError));
+            showError(getApiErrorMessage(retryError));
+        } finally {
             setIsOperating(false);
         }
     }
@@ -84,10 +144,28 @@ export default function SalesTrainerAudioSubmissionDetailPage() {
             backHref="/admin/sales-trainer/audio-submissions"
             title={submission ? submission.original_filename : "录音详情"}
             description="提供授权文件访问、转写结果、评分结果，以及后台重试操作。"
-            actions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+            actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
         >
-            {isLoading ? (
+            {isCapabilityLoading ? (
+                <div className="py-12 text-center text-sm text-slate-500">正在校验录音详情权限...</div>
+            ) : capabilityError || !canAccessSubmission ? (
+                <AdminLoadErrorCard
+                    title="录音详情权限不足"
+                    description="当前页不会在权限未确认时加载录音详情，避免把权限异常伪装成未找到记录。请联系管理员开通训练记录查看权限后重试。"
+                    message={capabilityError}
+                    retryLabel="重新校验权限"
+                    onRetry={() => void loadCapabilities()}
+                />
+            ) : isLoading ? (
                 <div className="py-12 text-center text-sm text-slate-500">正在加载录音详情...</div>
+            ) : loadError ? (
+                <AdminLoadErrorCard
+                    title="录音详情加载失败"
+                    description="当前页不会把接口异常伪装成未找到记录。请核对对象级权限、录音记录状态或后端服务状态后重试。"
+                    message={loadError}
+                    retryLabel="重新加载录音详情"
+                    onRetry={() => void loadSubmission()}
+                />
             ) : !submission ? (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                     未找到录音详情。
@@ -103,13 +181,22 @@ export default function SalesTrainerAudioSubmissionDetailPage() {
                             <a href={fileUrl} target="_blank" rel="noreferrer" download>
                                 <Button variant="outline" size="sm">下载录音</Button>
                             </a>
-                            <Button variant="outline" size="sm" disabled={isOperating} onClick={() => void retry("transcription")}>
-                                重试转写
-                            </Button>
-                            <Button variant="outline" size="sm" disabled={isOperating} onClick={() => void retry("scoring")}>
-                                重试评分
-                            </Button>
+                            {canRetryJobs ? (
+                                <>
+                                    <Button variant="outline" size="sm" disabled={isOperating} onClick={() => void retry("transcription")}>
+                                        重试转写
+                                    </Button>
+                                    <Button variant="outline" size="sm" disabled={isOperating} onClick={() => void retry("scoring")}>
+                                        重试评分
+                                    </Button>
+                                </>
+                            ) : null}
                         </div>
+                        {!isCapabilityLoading && !canRetryJobs ? (
+                            <p className="text-xs font-medium text-amber-700">
+                                当前账号没有重试转写/评分任务权限。
+                            </p>
+                        ) : null}
                         <div className="grid gap-4 md:grid-cols-3">
                             <div>
                                 <p className="text-xs text-slate-500">用户</p>
@@ -186,7 +273,7 @@ export default function SalesTrainerAudioSubmissionDetailPage() {
                                     </div>
                                     <div>
                                         <p className="text-xs text-slate-500">通过</p>
-                                        <p className="mt-1 text-2xl font-black text-slate-900">{submission.score_result.passed ? "是" : "否"}</p>
+                                        <p className="mt-1 text-2xl font-black text-slate-900">{formatPassedLabel(submission)}</p>
                                     </div>
                                     <div>
                                         <p className="text-xs text-slate-500">模型</p>
@@ -199,8 +286,13 @@ export default function SalesTrainerAudioSubmissionDetailPage() {
                             <p className="text-sm text-slate-500">评分尚未完成。</p>
                         )}
                     </GlassCard>
-                    {submission.score_result ? (
+                    {submission.score_result && canRegradeHistory ? (
                         <AudioSubmissionRegradePanel submission={submission} />
+                    ) : null}
+                    {submission.score_result && !isCapabilityLoading && !canRegradeHistory ? (
+                        <GlassCard className="border-amber-100 bg-amber-50 p-4 text-sm text-amber-800">
+                            当前账号没有历史重评权限，不能预览或追加重评记录。
+                        </GlassCard>
                     ) : null}
                 </div>
             )}

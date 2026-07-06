@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
@@ -9,8 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { SalesTrainerQuizAnswer, SalesTrainerQuizAttempt } from "@/lib/api/types";
-import { findBusinessSkillsCoachHref } from "@/lib/sales-trainer/ai-coach-availability";
+import type { SalesTrainerQuizAnswer, SalesTrainerQuizAttempt, TrainingJourneyModuleProgress } from "@/lib/api/types";
 import { SalesTrainerNextStepPanel } from "../../../next-step-panel";
 
 function stringifyAnswer(value: unknown): string {
@@ -65,53 +64,87 @@ function getAttemptResultBadge(attempt: SalesTrainerQuizAttempt): {
     return { label: "仅计分", className: "bg-blue-100 text-blue-700" };
 }
 
-async function resolveAiCoachHref(unitId: string): Promise<string | null> {
-    try {
-        const paths = await api.salesTrainer.listPaths();
-        return findBusinessSkillsCoachHref(paths.items, unitId);
-    } catch (loadError) {
-        if (loadError instanceof Error) {
-            return null;
-        }
-        throw loadError;
-    }
+const AI_COACH_ENTRY_DIAGNOSTIC_TITLE = "AI 教练入口配置诊断";
+
+function isBusinessSkillsCoachModule(moduleProgress: TrainingJourneyModuleProgress): boolean {
+    const action = moduleProgress.next_action;
+    return moduleProgress.module_key === "business_skills"
+        && Boolean(action && !action.disabled && action.target_path)
+        && Boolean(action?.action_key.includes("coach") || action?.target_path?.includes("/coach"));
+}
+
+async function resolveAiCoachHref(): Promise<string | null> {
+    const journey = await api.salesTrainer.getJourney();
+    return journey.modules.find(isBusinessSkillsCoachModule)?.next_action?.target_path ?? null;
 }
 
 export default function SalesTrainerQuizResultPage() {
     const params = useParams<{ attemptId: string }>();
     const [attempt, setAttempt] = useState<(SalesTrainerQuizAttempt & { paper_title?: string | null }) | null>(null);
     const [coachHref, setCoachHref] = useState<string | null>(null);
+    const [coachHrefError, setCoachHrefError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        async function loadAttempt() {
-            setIsLoading(true);
-            setError(null);
-            try {
-                const result = await api.salesTrainer.getQuizAttempt(params.attemptId);
-                const nextCoachHref = await resolveAiCoachHref(result.unit_id);
-                setAttempt(result);
-                setCoachHref(nextCoachHref);
-            } catch (loadError) {
-                setAttempt(null);
+    const loadAttempt = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const result = await api.salesTrainer.getQuizAttempt(params.attemptId);
+            setAttempt(result);
+            if (result.passed !== false) {
                 setCoachHref(null);
-                setError(getApiErrorMessage(loadError));
-            } finally {
-                setIsLoading(false);
+                setCoachHrefError(null);
+                return;
             }
+            try {
+                setCoachHref(await resolveAiCoachHref());
+                setCoachHrefError(null);
+            } catch (coachLoadError) {
+                setCoachHref(null);
+                setCoachHrefError(getApiErrorMessage(coachLoadError));
+            }
+        } catch (loadError) {
+            setAttempt(null);
+            setCoachHref(null);
+            setCoachHrefError(null);
+            setError(getApiErrorMessage(loadError));
+        } finally {
+            setIsLoading(false);
         }
-        void loadAttempt();
     }, [params.attemptId]);
+
+    useEffect(() => {
+        void loadAttempt();
+    }, [loadAttempt]);
 
     if (isLoading) {
         return <div className="py-12 text-center text-sm text-slate-500">正在加载做题结果...</div>;
     }
 
+    if (error && !attempt) {
+        return (
+            <GlassCard className="space-y-4 p-6">
+                <div className="space-y-2">
+                    <p className="text-sm font-semibold text-red-800">做题结果加载失败</p>
+                    <p className="text-sm text-red-700">{error}</p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                    <Button className="rounded-full" onClick={() => void loadAttempt()}>
+                        重新加载结果
+                    </Button>
+                    <Button asChild variant="outline" className="rounded-full">
+                        <Link href="/sales-trainer">返回新人训练路径</Link>
+                    </Button>
+                </div>
+            </GlassCard>
+        );
+    }
+
     if (!attempt) {
         return (
             <GlassCard className="space-y-4 p-6">
-                <p className="text-sm text-red-700">{error || "做题结果不存在。"}</p>
+                <p className="text-sm text-red-700">做题结果不存在。</p>
                 <Button asChild className="rounded-full">
                     <Link href="/sales-trainer">返回新人训练路径</Link>
                 </Button>
@@ -160,6 +193,15 @@ export default function SalesTrainerQuizResultPage() {
                     </div>
                 </div>
             </div>
+
+            {coachHrefError ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <p className="font-semibold text-amber-900">{AI_COACH_ENTRY_DIAGNOSTIC_TITLE}</p>
+                    <p className="mt-1">
+                        做题结果已加载，但 AI 教练入口依赖的训练路径配置读取失败：{coachHrefError}
+                    </p>
+                </div>
+            ) : null}
 
             <GlassCard className="grid gap-4 p-6 md:grid-cols-3">
                 <div>

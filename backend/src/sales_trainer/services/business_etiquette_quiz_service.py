@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from curriculum_practice.models import QuestionItem
+from common.db.typing import json_dict_or_empty, json_list_or_empty, orm_scalar
+from common.question_bank.ports import ResolvedQuestion
 from sales_trainer.models import (
     SalesTrainerAssetRevision,
     SalesTrainerBusinessEtiquetteQuizAttempt,
@@ -39,11 +40,15 @@ from sales_trainer.services.business_etiquette_import_service import (
 from sales_trainer.services.business_etiquette_learning_service import (
     BUSINESS_SKILLS_MODULE_KEY,
 )
+from sales_trainer.services.curriculum_practice_adapter import (
+    QuestionItem,
+    list_published_sales_trainer_questions,
+)
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
 from sales_trainer.services.question_bank.adapter import QuestionBankAdapter
-from sales_trainer.services.question_bank.contracts import SALES_TRAINER_QUESTION_SCOPE
 from sales_trainer.services.short_answer_scoring_service import (
+    ShortAnswerQuestion,
     ShortAnswerScoringService,
 )
 
@@ -124,12 +129,13 @@ class BusinessEtiquetteQuizService:
         for order_index, question in enumerate(questions, start=1):
             answer_payload = answer_map.get(str(question.question_id))
             points = 10
+            resolved_question = cast(ResolvedQuestion, question)
             is_correct, score = self._question_adapter.grade(
-                question,
+                resolved_question,
                 answer_payload=answer_payload,
                 points=points,
             )
-            question_type = self._question_adapter.resolve_type(question)
+            question_type = self._question_adapter.resolve_type(resolved_question)
             scoring_source: str | None = (
                 "rule_answer_key"
                 if question_type != "short_answer"
@@ -144,7 +150,7 @@ class BusinessEtiquetteQuizService:
             )
             if score is None and question_type == "short_answer":
                 scoring_result = await self._short_answer_scoring.score(
-                    question,
+                    cast(ShortAnswerQuestion, question),
                     answer_text=str(answer_payload or ""),
                 )
                 if scoring_result.is_success and scoring_result.value is not None:
@@ -237,11 +243,12 @@ class BusinessEtiquetteQuizService:
             status="submitted" if has_unscored else "scored",
         )
         self._db.add(attempt)
+        await self._db.flush()
         await self._logs.record(
             actor=actor,
             action="business_etiquette_unit_quiz.submitted",
             target_type="business_etiquette_unit_quiz_attempt",
-            target_id=attempt.attempt_id,
+            target_id=orm_scalar(attempt.attempt_id, str),
             metadata={
                 "learning_unit_key": context.unit_config.unit_key,
                 "training_pack_key": context.training_pack_key,
@@ -259,6 +266,7 @@ class BusinessEtiquetteQuizService:
         *,
         user_id: str | None = None,
         learning_unit_key: str | None = None,
+        team_department: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> BusinessEtiquetteUnitQuizAttemptListResponse:
@@ -282,6 +290,17 @@ class BusinessEtiquetteQuizService:
                 SalesTrainerBusinessEtiquetteQuizAttempt.learning_unit_key
                 == learning_unit_key
             )
+        if team_department is not None:
+            stmt = stmt.join(
+                User,
+                SalesTrainerBusinessEtiquetteQuizAttempt.user_id == User.user_id,
+            )
+            count_stmt = count_stmt.join(
+                User,
+                SalesTrainerBusinessEtiquetteQuizAttempt.user_id == User.user_id,
+            )
+            stmt = stmt.where(User.department == team_department)
+            count_stmt = count_stmt.where(User.department == team_department)
         result = await self._db.execute(
             stmt.order_by(SalesTrainerBusinessEtiquetteQuizAttempt.submitted_at.desc())
             .offset(offset)
@@ -364,19 +383,11 @@ class BusinessEtiquetteQuizService:
         )
 
     async def _select_questions(self, context: _QuizContext) -> list[QuestionItem]:
-        result = await self._db.execute(
-            select(QuestionItem)
-            .where(
-                QuestionItem.status == "published",
-                QuestionItem.usage_scope == SALES_TRAINER_QUESTION_SCOPE,
-                QuestionItem.safety_flagged.is_(False),
-            )
-            .order_by(QuestionItem.updated_at.desc())
-        )
+        questions = await list_published_sales_trainer_questions(self._db)
         unit_capability_keys = set(context.unit_config.capability_keys)
         candidates = [
             question
-            for question in result.scalars().all()
+            for question in questions
             if unit_capability_keys
             & set(_question_capability_keys(question, context.capability_map))
         ]
@@ -497,7 +508,9 @@ def _capability_snapshot_from_revision(
     list[BusinessEtiquetteCapabilityConfig],
     list[BusinessEtiquetteChapterCapabilityBinding],
 ]:
-    raw_snapshot = (revision.payload_json or {}).get(CAPABILITY_SNAPSHOT_KEY)
+    raw_snapshot = json_dict_or_empty(revision.payload_json).get(
+        CAPABILITY_SNAPSHOT_KEY
+    )
     if not isinstance(raw_snapshot, dict):
         raise BusinessEtiquetteQuizServiceError(
             "[BUSINESS_ETIQUETTE_CAPABILITY_SNAPSHOT_MISSING]",
@@ -558,7 +571,7 @@ def _question_response(
     order_index: int,
     context: _QuizContext,
 ) -> BusinessEtiquetteQuizQuestionResponse:
-    criteria = question.scoring_criteria or {}
+    criteria: dict[str, Any] = json_dict_or_empty(question.scoring_criteria)
     question_type = _question_type(criteria)
     return BusinessEtiquetteQuizQuestionResponse(
         question_id=str(question.question_id),
@@ -574,7 +587,7 @@ def _question_response(
 
 
 def _question_snapshot(question: QuestionItem, *, order_index: int) -> dict[str, Any]:
-    criteria = question.scoring_criteria or {}
+    criteria: dict[str, Any] = json_dict_or_empty(question.scoring_criteria)
     return {
         "question_id": str(question.question_id),
         "title": question.title,
@@ -583,8 +596,8 @@ def _question_snapshot(question: QuestionItem, *, order_index: int) -> dict[str,
         "options": criteria.get("options") or [],
         "reference_answer": question.reference_answer,
         "explanation": criteria.get("explanation"),
-        "scoring_dimensions": list(question.scoring_dimensions or []),
-        "tags": list(question.tags or []),
+        "scoring_dimensions": json_list_or_empty(question.scoring_dimensions),
+        "tags": json_list_or_empty(question.tags),
         "points": 10,
         "order_index": order_index,
         "version": question.version,
@@ -630,7 +643,7 @@ def _question_analysis(
     *,
     is_correct: bool | None,
 ) -> str | None:
-    criteria = question.scoring_criteria or {}
+    criteria = json_dict_or_empty(question.scoring_criteria)
     explanation = criteria.get("explanation")
     if isinstance(explanation, str) and explanation.strip():
         return explanation.strip()
@@ -695,11 +708,11 @@ def _question_capability_keys(
     capability_map: dict[str, BusinessEtiquetteCapabilityConfig],
 ) -> list[str]:
     keys: list[str] = []
-    for value in list(question.scoring_dimensions or []):
+    for value in json_list_or_empty(question.scoring_dimensions):
         text = str(value)
         if text in capability_map:
             keys.append(text)
-    for tag in list(question.tags or []):
+    for tag in json_list_or_empty(question.tags):
         text = str(tag)
         if text.startswith("capability:"):
             key = text.removeprefix("capability:")
@@ -710,7 +723,7 @@ def _question_capability_keys(
 
 def _question_chapter_orders(question: QuestionItem) -> list[int]:
     orders: list[int] = []
-    for tag in list(question.tags or []):
+    for tag in json_list_or_empty(question.tags):
         text = str(tag)
         if not text.startswith("chapter:"):
             continue
@@ -744,7 +757,9 @@ def _select_weighted_questions(
         "short_answer": [],
     }
     for question in candidates:
-        groups[_question_type(question.scoring_criteria or {})].append(question)
+        groups[_question_type(json_dict_or_empty(question.scoring_criteria))].append(
+            question
+        )
 
     available_weights = {
         question_type: weight
@@ -784,7 +799,7 @@ def _select_weighted_questions(
     selected: list[QuestionItem] = []
     selected_ids: set[str] = set()
     for question in candidates:
-        question_type = _question_type(question.scoring_criteria or {})
+        question_type = _question_type(json_dict_or_empty(question.scoring_criteria))
         if quotas.get(question_type, 0) <= 0:
             continue
         selected.append(question)

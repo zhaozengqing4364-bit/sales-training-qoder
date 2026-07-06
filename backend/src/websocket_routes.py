@@ -16,10 +16,10 @@ from common.db.models import PracticeSession, Scenario, User
 from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import get_logger
 from common.monitoring.trace_context import normalize_trace_id
+from common.services.runtime_gate import RuntimeAdmissionDecision, RuntimeGate
 from common.services.session_runtime_lifecycle_hooks import (
     mark_session_runtime_failed,
 )
-from common.services.runtime_gate import RuntimeAdmissionDecision, RuntimeGate
 from curriculum_practice.websocket.router import router as examiner_ws_router
 from sales_bot.websocket.router import router as sales_ws_router
 from training_runtime import TrainingRuntimeDescriptor

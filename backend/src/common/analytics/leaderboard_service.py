@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import and_, case, desc, func, or_, select
+from sqlalchemy import and_, case, delete, desc, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -694,7 +694,7 @@ class LeaderboardService:
         """
         try:
             # Clear existing entries
-            await db.execute(LeaderboardEntry.__table__.delete())
+            await db.execute(delete(LeaderboardEntry))
 
             # Calculate all-time leaderboard for each scenario type
             for scenario_type in ["presentation", "sales"]:

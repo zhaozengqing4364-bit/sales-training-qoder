@@ -4,12 +4,20 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetAiCoachConfig = vi.fn();
+const mockGetAdminCapabilities = vi.fn();
 const mockSaveAiCoachConfig = vi.fn();
 const mockPublishAiCoachConfig = vi.fn();
+
+vi.mock("next/navigation", () => ({
+    usePathname: () => "/admin/sales-trainer/ai-coach",
+}));
 
 vi.mock("@/lib/api/client", () => ({
     api: {
         admin: {
+            salesTrainer: {
+                getCapabilities: (...args: unknown[]) => mockGetAdminCapabilities(...args),
+            },
             newcomerTraining: {
                 getAiCoachConfig: (...args: unknown[]) => mockGetAiCoachConfig(...args),
                 saveAiCoachConfig: (...args: unknown[]) => mockSaveAiCoachConfig(...args),
@@ -128,6 +136,20 @@ const aiCoachConfig = {
 describe("AdminAiCoachConfigPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mockGetAdminCapabilities.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: false,
+                manage_prompts: true,
+                manage_questions: false,
+                view_records: false,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
         mockGetAiCoachConfig.mockResolvedValue(aiCoachConfig);
         mockSaveAiCoachConfig.mockResolvedValue({
             module_key: "business_skills",
@@ -151,7 +173,7 @@ describe("AdminAiCoachConfigPage", () => {
         render(<AdminAiCoachConfigPage />);
 
         expect(await screen.findByRole("heading", { name: "AI 教练配置" })).toBeTruthy();
-        expect(screen.getByText("主动教练闭环")).toBeTruthy();
+        expect(await screen.findByText("主动教练闭环")).toBeTruthy();
         expect(screen.getByText("allowed_training_card_types")).toBeTruthy();
         expect((screen.getByLabelText(/场景判断卡/) as HTMLInputElement).checked).toBe(
             true,
@@ -181,6 +203,32 @@ describe("AdminAiCoachConfigPage", () => {
             (screen.getByLabelText(/max_auto_steps_per_session/) as HTMLInputElement)
                 .value,
         ).toBe("1");
+    });
+
+    it("fails closed before loading config without AI Coach management capability", async () => {
+        mockGetAdminCapabilities.mockResolvedValue({
+            role: "viewer",
+            role_label: "只读成员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: false,
+                view_records: true,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
+
+        render(<AdminAiCoachConfigPage />);
+
+        expect(await screen.findByText("AI 教练配置权限不足")).toBeTruthy();
+        expect(mockGetAiCoachConfig).not.toHaveBeenCalled();
+        expect(mockSaveAiCoachConfig).not.toHaveBeenCalled();
+        expect(mockPublishAiCoachConfig).not.toHaveBeenCalled();
+        expect(screen.queryByRole("button", { name: /保存草稿/ })).toBeNull();
+        expect(screen.queryByRole("button", { name: /发布/ })).toBeNull();
     });
 
     it("validates pause threshold before saving", async () => {

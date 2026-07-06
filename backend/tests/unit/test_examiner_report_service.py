@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from curriculum_practice.services.examiner_report_service import (
     build_examiner_report_payload,
     examiner_report_frontend_path,

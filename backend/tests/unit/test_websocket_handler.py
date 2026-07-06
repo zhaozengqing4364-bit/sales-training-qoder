@@ -2,6 +2,7 @@
 WebSocket Handler Unit Tests
 Tests: ConnectionManager, BaseWebSocketHandler, Constitution Principle I
 """
+
 import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -12,6 +13,37 @@ from common.websocket.base_handler import (
     ConnectionManager,
     get_connection_manager,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_singleton_connection_manager():
+    """Keep singleton mutations from other websocket suites from leaking here."""
+    manager = get_connection_manager()
+    manager.active_connections = {"presentation": {}, "sales": {}}
+    manager.connect = ConnectionManager.connect.__get__(manager, ConnectionManager)
+    manager.disconnect = ConnectionManager.disconnect.__get__(manager, ConnectionManager)
+    manager.broadcast_to_session = ConnectionManager.broadcast_to_session.__get__(
+        manager,
+        ConnectionManager,
+    )
+    manager.get_connection_count = ConnectionManager.get_connection_count.__get__(
+        manager,
+        ConnectionManager,
+    )
+    manager.send_json = ConnectionManager.send_json.__get__(manager, ConnectionManager)
+    yield
+    manager.active_connections = {"presentation": {}, "sales": {}}
+    manager.connect = ConnectionManager.connect.__get__(manager, ConnectionManager)
+    manager.disconnect = ConnectionManager.disconnect.__get__(manager, ConnectionManager)
+    manager.broadcast_to_session = ConnectionManager.broadcast_to_session.__get__(
+        manager,
+        ConnectionManager,
+    )
+    manager.get_connection_count = ConnectionManager.get_connection_count.__get__(
+        manager,
+        ConnectionManager,
+    )
+    manager.send_json = ConnectionManager.send_json.__get__(manager, ConnectionManager)
 
 
 @pytest.mark.asyncio
@@ -76,19 +108,46 @@ class TestConnectionManager:
         assert "test-session" not in manager.active_connections["presentation"]
         assert manager.get_connection_count("presentation") == 0
 
+    async def test_connect_disconnect_records_lifecycle_metrics(
+        self, manager, mock_websocket
+    ):
+        """Verify connect/disconnect are wired to Prometheus lifecycle metrics."""
+        with (
+            patch("common.websocket.base_handler.track_websocket_connection") as active,
+            patch(
+                "common.websocket.base_handler.track_websocket_connection_event"
+            ) as events,
+        ):
+            await manager.connect(mock_websocket, "presentation", "test-session")
+            await manager.disconnect("presentation", "test-session")
+
+        events.assert_any_call("presentation", "connect")
+        events.assert_any_call("presentation", "disconnect")
+        active.assert_any_call("presentation", 1)
+        active.assert_any_call("presentation", -1)
+
     async def test_send_json_success(self, manager, mock_websocket):
         """Verify message is sent successfully"""
-        await manager.send_json(mock_websocket, {"type": "test", "data": "value"})
+        with patch(
+            "common.websocket.base_handler.track_websocket_message"
+        ) as track_message:
+            result = await manager.send_json(
+                mock_websocket,
+                {"type": "test", "data": "value"},
+                scenario="presentation",
+                session_id="test-session",
+            )
 
         assert mock_websocket.send_json.called
         sent_data = mock_websocket.send_json.call_args[0][0]
         assert sent_data["type"] == "test"
+        assert result.success is True
+        assert result.message_type == "test"
+        track_message.assert_called_once()
 
-    async def test_send_json_failure_logged_not_raised(
-        self, manager, caplog
-    ):
+    async def test_send_json_failure_logged_not_raised(self, manager, caplog):
         """
-        Verify send failure is logged (not thrown)
+        Verify send failure is returned and instrumented (not thrown)
         Constitution Principle I: Errors handled gracefully
         """
         # Create a broken WebSocket that throws
@@ -96,34 +155,61 @@ class TestConnectionManager:
         broken_ws.send_json = AsyncMock(side_effect=Exception("Send failed"))
 
         # Should not raise, only log
-        await manager.send_json(broken_ws, {"type": "test"})
+        with (
+            patch(
+                "common.websocket.base_handler.track_websocket_send_failure"
+            ) as send_failure,
+            patch("common.websocket.base_handler.track_websocket_error") as ws_error,
+        ):
+            result = await manager.send_json(
+                broken_ws,
+                {"type": "test"},
+                scenario="sales",
+                session_id="failed-session",
+            )
 
-        # Verify error was logged
-        # assert "Failed to send message" in caplog.text
+        assert result.success is False
+        assert result.skipped is False
+        assert result.message_type == "test"
+        assert result.error_type == "Exception"
+        assert result.error == "Send failed"
+        send_failure.assert_called_once_with("sales", "test", "Exception")
+        ws_error.assert_called_once_with("sales", "Exception")
+
+    async def test_send_json_returns_skipped_when_websocket_missing(self, manager):
+        """Verify missing socket is explicit instead of a silent no-op."""
+        result = await manager.send_json(None, {"type": "test"})
+
+        assert result.success is False
+        assert result.skipped is True
+        assert result.error_type == "MissingWebSocket"
 
     async def test_broadcast_to_session(self, manager, mock_websocket):
         """Verify message reaches specific session"""
         manager.active_connections["presentation"]["session-1"] = mock_websocket
 
-        await manager.broadcast_to_session(
+        result = await manager.broadcast_to_session(
             "presentation", "session-1", {"type": "test", "data": "value"}
         )
 
         assert mock_websocket.send_json.called
         sent_data = mock_websocket.send_json.call_args[0][0]
         assert sent_data["type"] == "test"
+        assert result.success is True
 
     async def test_broadcast_to_nonexistent_session(
         self, manager, mock_websocket, caplog
     ):
         """Verify broadcast to nonexistent session doesn't crash"""
         # Should not raise
-        await manager.broadcast_to_session(
+        result = await manager.broadcast_to_session(
             "presentation", "nonexistent", {"type": "test"}
         )
 
         # No send attempt should be made
         assert not mock_websocket.send_json.called
+        assert result.success is False
+        assert result.skipped is True
 
     async def test_get_connection_count_by_scenario(self, manager):
         """Verify connection count by scenario"""
@@ -225,18 +311,16 @@ class TestBaseWebSocketHandler:
         assert handler.message_queue.qsize() == 1
         assert handler.message_queue.get_nowait()["type"] == "second"
 
-    async def test_handle_connection_accepts_websocket(
-        self, handler, mock_websocket
-    ):
+    async def test_handle_connection_accepts_websocket(self, handler, mock_websocket):
         """Verify connection is accepted and tracked"""
         # Mock token verification
         with patch(
-            "common.auth.service.verify_token",
-            return_value={"trace_id": "test-trace"}
+            "common.auth.service.verify_token", return_value={"trace_id": "test-trace"}
         ):
             # Mock receive_json to wait forever (simulate open connection)
             async def wait_forever(*args, **kwargs):
                 await asyncio.sleep(10)
+
             mock_websocket.receive_json = AsyncMock(side_effect=wait_forever)
 
             # Run handler in background task
@@ -249,7 +333,9 @@ class TestBaseWebSocketHandler:
 
             try:
                 assert mock_websocket.accept.called
-                assert "test-session" in handler.manager.active_connections["presentation"]
+                assert (
+                    "test-session" in handler.manager.active_connections["presentation"]
+                )
                 assert handler.message_queue is not None
                 assert handler.running is True
             finally:
@@ -261,23 +347,14 @@ class TestBaseWebSocketHandler:
                 except asyncio.CancelledError:
                     pass
 
-    async def test_handle_connection_sends_client_ready(
-        self, handler, mock_websocket
-    ):
+    async def test_handle_connection_sends_client_ready(self, handler, mock_websocket):
         """Verify client_ready message is sent after connection"""
-        with patch(
-            "common.auth.service.verify_token",
-            return_value={}
-        ):
+        with patch("common.auth.service.verify_token", return_value={}):
             # Mock receive_json to throw immediately to exit
-            mock_websocket.receive_json = AsyncMock(
-                side_effect=Exception("Done")
-            )
+            mock_websocket.receive_json = AsyncMock(side_effect=Exception("Done"))
 
             try:
-                await handler.handle_connection(
-                    mock_websocket, "test-session", "token"
-                )
+                await handler.handle_connection(mock_websocket, "test-session", "token")
             except Exception:
                 pass
 
@@ -328,7 +405,7 @@ class TestBaseWebSocketHandler:
             mock_websocket,
             "ASR_TIMEOUT",
             "ASR service unavailable",
-            user_action="[USE_BROWSER_ASR]"
+            user_action="[USE_BROWSER_ASR]",
         )
 
         assert mock_websocket.send_json.called
@@ -340,14 +417,9 @@ class TestBaseWebSocketHandler:
     async def test_send_error_includes_trace_id(self, handler, mock_websocket):
         """Verify error messages include trace_id for observability"""
         with patch(
-            "common.websocket.base_handler.get_trace_id",
-            return_value="test-trace-123"
+            "common.websocket.base_handler.get_trace_id", return_value="test-trace-123"
         ):
-            await handler.send_error(
-                mock_websocket,
-                "TEST_ERROR",
-                "Test error message"
-            )
+            await handler.send_error(mock_websocket, "TEST_ERROR", "Test error message")
 
         sent_data = mock_websocket.send_json.call_args[0][0]
         assert sent_data["data"]["trace_id"] == "test-trace-123"
@@ -363,12 +435,11 @@ class TestBaseWebSocketHandler:
 
     async def test_heartbeat_sent_on_timeout(self, handler, mock_websocket):
         """Verify heartbeat is sent when no message received within timeout"""
-        mock_websocket.receive_json = AsyncMock(side_effect=[TimeoutError(), Exception("Stop")])
+        mock_websocket.receive_json = AsyncMock(
+            side_effect=[TimeoutError(), Exception("Stop")]
+        )
 
-        with patch(
-            "common.auth.service.verify_token",
-            return_value={}
-        ):
+        with patch("common.auth.service.verify_token", return_value={}):
             try:
                 # Run handler with short timeout
                 await handler.handle_connection(mock_websocket, "test", "token")
@@ -388,10 +459,7 @@ class TestBaseWebSocketHandler:
             side_effect=Exception("WebSocketDisconnect")
         )
 
-        with patch(
-            "common.auth.service.verify_token",
-            return_value={}
-        ):
+        with patch("common.auth.service.verify_token", return_value={}):
             try:
                 await handler.handle_connection(mock_websocket, "test", "token")
             except Exception:

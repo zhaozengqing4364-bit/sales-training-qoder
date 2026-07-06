@@ -1005,6 +1005,7 @@ export interface RoleplayComplianceSummary {
     contract_hash?: string | null;
     situation_code?: string | null;
     blocking_issues?: string[];
+    signal_sources?: string[];
     violation_count?: number;
     blocking_violation_count?: number;
     regenerate_count?: number;
@@ -1013,6 +1014,11 @@ export interface RoleplayComplianceSummary {
     disclosed_keys_count?: number;
     visible_keys_count?: number;
     disclosure_state_status?: string;
+    heuristic_only?: boolean;
+    llm_status?: string | null;
+    llm_timeout?: boolean;
+    manual_review_required?: boolean;
+    manual_review_reasons?: string[];
     last_decision?: RoleplayComplianceDecision | null;
     last_action_at?: string | null;
     timeline?: RoleplayComplianceTimelineItem[];
@@ -4733,12 +4739,15 @@ export interface SalesTrainerPathLevel {
     unit_type: SalesTrainerUnitType;
     module_key?: string | null;
     module_type?: NewcomerTrainingModuleType | null;
+    learning_content_id?: string | null;
+    exam_paper_id?: string | null;
     order_index: number;
     level_title: string;
     level_description: string | null;
     locked: boolean;
     lock_reason: string | null;
     status: "locked" | "available" | "in_progress" | "completed";
+    learner_level_required?: string[];
     completion_rule: "passed" | "scored" | "submitted";
     primary_action_label: string;
     retry_action_label: string;
@@ -4818,6 +4827,401 @@ export interface SalesTrainerPathListResponse {
     total: number;
 }
 
+export type TrainingJourneyStage =
+    | "not_started"
+    | "in_progress"
+    | "waiting_upload"
+    | "processing"
+    | "scored"
+    | "passed"
+    | "failed"
+    | "needs_remediation"
+    | "manual_review"
+    | "disabled"
+    | "archived"
+    | "error_terminal"
+    | "error_transient";
+
+export type TrainingJourneyLearnerLevelSource =
+    | "user_profile"
+    | "org_rule"
+    | "admin_assignment"
+    | "training_projection";
+
+export interface TrainingJourneyLearnerLevel {
+    level_key: string;
+    label: string;
+    source: TrainingJourneyLearnerLevelSource;
+    rank: number;
+    effective_from?: string | null;
+    effective_to?: string | null;
+    config_revision_id?: string | null;
+    description?: string | null;
+    fallback_applied?: boolean;
+    fallback_reason?: string | null;
+    policy_key?: string | null;
+    policy_version?: string | null;
+    management_entry?: string | null;
+}
+
+export type TrainingJourneyRoleCapabilityKey =
+    | SalesTrainerAdminCapabilityKey
+    | "learner_enter"
+    | "learner_submit"
+    | "learner_view_own_records"
+    | "sales_trainer.enter_realtime";
+
+export interface TrainingJourneyRoleCapability {
+    capability_key: TrainingJourneyRoleCapabilityKey;
+    allowed: boolean;
+    scope: "own" | "department" | "global" | "none";
+    reason_code?: string | null;
+}
+
+export interface TrainingJourneyDiagnostic {
+    code: string;
+    message: string;
+    severity: "info" | "warning" | "error";
+    terminal: boolean;
+}
+
+export type TrainingJourneyModuleType =
+    | NewcomerTrainingModuleType
+    | "ai_coach"
+    | "realtime_roleplay";
+
+export type TrainingJourneyModuleKind =
+    | "audio_submission"
+    | "quiz_attempt"
+    | "ai_coach"
+    | "realtime_roleplay";
+
+export type TrainingJourneyModuleOutcomeRecordType =
+    | "audio_submission"
+    | "quiz_attempt"
+    | "business_etiquette_quiz_attempt"
+    | "ai_coach_session"
+    | "realtime_roleplay_session"
+    | "remediation"
+    | "regrade";
+
+export interface TrainingJourneyModuleOutcomeSnapshotRef {
+    snapshot_type:
+        | "path_revision"
+        | "submission_snapshot"
+        | "attempt_snapshot"
+        | "session_snapshot"
+        | "runtime_outcome_snapshot"
+        | "regrade_snapshot";
+    legacy_snapshot_only: boolean;
+    regrade_unavailable?: boolean;
+}
+
+export interface TrainingJourneyModuleOutcomeEvidence {
+    record_id: string;
+    record_type: TrainingJourneyModuleOutcomeRecordType;
+    occurred_at?: string | null;
+}
+
+export interface TrainingJourneyModuleOutcome {
+    outcome_id: string;
+    record_type: TrainingJourneyModuleOutcomeRecordType;
+    source_record_id: string;
+    module_key: string;
+    module_type: TrainingJourneyModuleType;
+    status: TrainingJourneyStage;
+    score?: number | null;
+    max_score?: number | null;
+    passed?: boolean | null;
+    failure_type?: "terminal" | "transient" | "voluntary" | null;
+    failure_code?: string | null;
+    submitted_at?: string | null;
+    completed_at?: string | null;
+    path_revision_id: string;
+    path_revision_no: number;
+    snapshot_ref: TrainingJourneyModuleOutcomeSnapshotRef;
+    evidence?: TrainingJourneyModuleOutcomeEvidence;
+}
+
+export interface TrainingJourneyModuleUnmetReason {
+    code: string;
+    message: string;
+    severity?: "info" | "warning" | "error";
+    terminal: boolean;
+}
+
+export interface TrainingJourneyModuleNextAction {
+    action_key: string;
+    label: string;
+    target_path?: string | null;
+    disabled: boolean;
+    disabled_reason?: string | null;
+}
+
+export interface TrainingJourneyModuleProgress {
+    module_key: string;
+    title?: string;
+    kind?: TrainingJourneyModuleKind;
+    module_type: TrainingJourneyModuleType;
+    display_name: string;
+    order_index: number;
+    target_unit_id?: string | null;
+    target_unit_ids?: string[];
+    learning_content_id?: string | null;
+    exam_paper_id?: string | null;
+    enabled: boolean;
+    status?: TrainingJourneyStage;
+    stage: TrainingJourneyStage;
+    passed?: boolean | null;
+    score?: number | null;
+    max_score?: number | null;
+    required?: boolean;
+    completion_satisfied?: boolean;
+    locked?: boolean;
+    block_reason?: string | null;
+    completion_rule: NewcomerPathCompletionRule;
+    source?: {
+        path_revision_id: string;
+        path_revision_no: number;
+    };
+    learner_level_required?: string[] | null;
+    unmet_reasons: TrainingJourneyModuleUnmetReason[];
+    diagnostics?: TrainingJourneyDiagnostic[];
+    next_action?: TrainingJourneyModuleNextAction | null;
+    latest_outcome?: TrainingJourneyModuleOutcome | null;
+    outcome_history: TrainingJourneyModuleOutcome[];
+}
+
+export interface TrainingJourneyOverallProgress {
+    total_modules: number;
+    completed_modules: number;
+    passed_modules: number;
+    failed_modules: number;
+    needs_remediation_modules: number;
+}
+
+export interface TrainingJourneyResponse {
+    journey_id: string;
+    learner_id: string;
+    learner_name?: string | null;
+    department?: string | null;
+    path_key: "newcomer_training_path_v1";
+    path_revision_id: string;
+    path_revision_no: number;
+    source: "active_revision";
+    legacy_snapshot_only: false;
+    role_capabilities: TrainingJourneyRoleCapability[];
+    learner_level: TrainingJourneyLearnerLevel;
+    role_level: TrainingJourneyLearnerLevel;
+    training_stage: TrainingJourneyStage;
+    modules: TrainingJourneyModuleProgress[];
+    overall_progress: TrainingJourneyOverallProgress;
+    diagnostics: TrainingJourneyDiagnostic[];
+    generated_at: string;
+}
+
+export interface RealtimeRoleplayStartRequest {
+    module_key?: "realtime_roleplay";
+}
+
+export interface RealtimeRoleplayProviderReadinessSnapshot {
+    provider: "stepfun_realtime" | "legacy" | "mock";
+    ready: boolean;
+    checked_at: string;
+    config_revision_id?: string | null;
+    failure_code?: string | null;
+    failure_message?: string | null;
+}
+
+export interface RealtimeRoleplayRegistryReadinessSnapshot {
+    ready: boolean;
+    checked_at?: string | null;
+    failure_code?: string | null;
+    failure_message?: string | null;
+}
+
+export interface RealtimeRoleplayRegistryDescriptorSnapshot {
+    descriptor_id: string;
+    label?: string | null;
+    provider: "stepfun_realtime" | "phase4_local_stepfun" | "mock";
+    runtime_owner: "training_runtime" | "sales_bot";
+    enabled: boolean;
+    runtime_profile_id?: string | null;
+    config_revision_id?: string | null;
+    rollback_to_descriptor_id?: string | null;
+    readiness: RealtimeRoleplayRegistryReadinessSnapshot;
+}
+
+export interface RealtimeRoleplayRuntimeRegistrySnapshot {
+    registry_key: "sales_trainer.realtime_provider.registry";
+    config_id?: string | null;
+    version?: number | null;
+    source: string;
+    status?: string | null;
+    fallback_reason?: string | null;
+    descriptor: RealtimeRoleplayRegistryDescriptorSnapshot;
+}
+
+export interface RealtimeRoleplayFailurePolicySnapshot {
+    terminal_codes: string[];
+    transient_codes: string[];
+    voluntary_codes: string[];
+    terminal_retry_allowed: false;
+}
+
+export interface RealtimeRoleplayExternalBindingSnapshot {
+    owner: "sales_trainer";
+    path_key: "newcomer_training_path_v1";
+    path_revision_id: string;
+    path_revision_no: number;
+    module_key: "realtime_roleplay";
+    binding_key: "newcomer_realtime_roleplay_v1";
+    runtime_descriptor_id: string;
+    scenario_key: string;
+    runtime_config_revision_id: string;
+    runtime_registry: RealtimeRoleplayRuntimeRegistrySnapshot;
+    roleplay_contract_revision_id?: string | null;
+    practice_template_id: string;
+    provider_readiness_snapshot: RealtimeRoleplayProviderReadinessSnapshot;
+    failure_policy: RealtimeRoleplayFailurePolicySnapshot;
+    started_by_user_id: string;
+    started_at: string;
+}
+
+export interface RealtimeRoleplayStartResponse {
+    session_id: string;
+    module_key: "realtime_roleplay";
+    path_key: "newcomer_training_path_v1";
+    path_revision_id: string;
+    path_revision_no: number;
+    practice_url: string;
+    runtime_descriptor_id: string;
+    runtime_registry: RealtimeRoleplayRuntimeRegistrySnapshot;
+    provider_readiness_snapshot: RealtimeRoleplayProviderReadinessSnapshot;
+    external_binding: RealtimeRoleplayExternalBindingSnapshot;
+}
+
+export interface TrainingJourneyAnalyticsQuery {
+    department?: string;
+    training_stage?: TrainingJourneyStage;
+    module_key?: string;
+    learner_level?: string;
+    role_level?: string;
+    limit?: number;
+}
+
+export interface TrainingJourneyAnalyticsSummary {
+    learner_count: number;
+    loaded_learner_count: number;
+    passed_learner_count: number;
+    risk_learner_count: number;
+    pass_rate: number | null;
+}
+
+export interface TrainingJourneyAnalyticsFunnelEntry {
+    stage: TrainingJourneyStage;
+    learner_count: number;
+    rate: number | null;
+}
+
+export interface TrainingJourneyAnalyticsModuleSummary {
+    module_key: string;
+    title: string;
+    kind?: TrainingJourneyModuleKind | TrainingJourneyModuleType | string | null;
+    module_type?: TrainingJourneyModuleType | string | null;
+    learner_count: number;
+    passed_count: number;
+    failed_count: number;
+    status_counts: Record<string, number>;
+    pass_rate: number | null;
+    average_score?: number | null;
+}
+
+export interface TrainingJourneyAnalyticsWeaknessHeatmapEntry {
+    heatmap_key: string;
+    module_key: string;
+    title: string;
+    kind?: TrainingJourneyModuleKind | TrainingJourneyModuleType | string | null;
+    module_type?: TrainingJourneyModuleType | string | null;
+    learner_count: number;
+    risk_count: number;
+    passed_count: number;
+    status_counts: Record<string, number>;
+    risk_rate: number | null;
+    pass_rate: number | null;
+    average_score?: number | null;
+}
+
+export interface TrainingJourneyAnalyticsTrendPoint {
+    date: string;
+    outcome_count: number;
+    passed_outcome_count: number;
+    risk_outcome_count: number;
+    active_learner_count: number;
+    pass_rate: number | null;
+    average_score?: number | null;
+}
+
+export interface TrainingJourneyAnalyticsLevelSummary {
+    key: string;
+    label: string;
+    learner_count: number;
+    passed_count?: number;
+    pass_rate?: number | null;
+    source?: TrainingJourneyLearnerLevelSource | string | null;
+}
+
+export interface TrainingJourneyAnalyticsRiskLearner {
+    learner_id: string;
+    learner_name?: string | null;
+    department?: string | null;
+    training_stage: TrainingJourneyStage;
+    risk_reasons: string[];
+    risk_module_count: number;
+    risk_module_keys?: string[];
+}
+
+export interface TrainingJourneyRoleplayObservationAggregate {
+    status?: string | null;
+    total_session_count?: number | null;
+    observed_session_count?: number | null;
+    legacy_fallback_session_count?: number | null;
+    not_persisted_session_count?: number | null;
+    manual_review_session_count?: number | null;
+    llm_disabled_session_count?: number | null;
+    llm_timeout_session_count?: number | null;
+    observation_count?: number | null;
+    signal_count?: number | null;
+    source_counts?: Record<string, number> | null;
+    status_counts?: Record<string, number> | null;
+    generated_at?: string | null;
+    fallback_applied?: boolean;
+    fallback_reason?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface TrainingJourneyAnalyticsResponse {
+    generated_at: string;
+    summary: TrainingJourneyAnalyticsSummary;
+    funnel: TrainingJourneyAnalyticsFunnelEntry[];
+    module_summaries: TrainingJourneyAnalyticsModuleSummary[];
+    weakness_heatmap: TrainingJourneyAnalyticsWeaknessHeatmapEntry[];
+    trend_data: TrainingJourneyAnalyticsTrendPoint[];
+    learner_level_summaries: TrainingJourneyAnalyticsLevelSummary[];
+    role_level_summaries: TrainingJourneyAnalyticsLevelSummary[];
+    risk_learners: TrainingJourneyAnalyticsRiskLearner[];
+    additive_observation?: TrainingJourneyRoleplayObservationAggregate | null;
+    roleplay_observation_aggregate?: TrainingJourneyRoleplayObservationAggregate | null;
+    filters: {
+        department?: string | null;
+        training_stage?: TrainingJourneyStage | null;
+        module_key?: string | null;
+        learner_level?: string | null;
+        role_level?: string | null;
+        limit: number;
+    };
+}
+
 export interface NewcomerTrainingDurationOption {
     option_key: string;
     display_name: string;
@@ -4870,7 +5274,50 @@ export type NewcomerPathModuleType =
     | "audio_scoring"
     | "article_exam"
     | "audio_scoring_group"
+    | "realtime_roleplay"
     | "realtime_placeholder";
+
+export interface NewcomerRealtimeProviderReadinessSnapshot {
+    readonly ready: boolean;
+    readonly checked_at?: string | null;
+    readonly provider?: string | null;
+    readonly failure_code?: string | null;
+    readonly failure_message?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface NewcomerRealtimePermissionPolicy {
+    readonly learner_enter: "sales_trainer.enter_realtime";
+    readonly admin_configure: "sales_trainer.manage_modules";
+    readonly admin_provider_health: "sales_trainer.view_settings";
+}
+
+export interface NewcomerRealtimeFailurePolicy {
+    readonly terminal_codes?: readonly string[];
+    readonly transient_codes?: readonly string[];
+    readonly voluntary_codes?: readonly string[];
+    readonly terminal_retry_allowed: false;
+}
+
+export interface NewcomerRealtimeRollbackPolicy {
+    readonly rollback_via_active_revision: true;
+    readonly disable_module_on_invalid_binding: true;
+    readonly fallback_to_placeholder: false;
+}
+
+export interface NewcomerRealtimeRuntimeBinding {
+    readonly binding_key: "newcomer_realtime_roleplay_v1";
+    readonly runtime_owner: "training_runtime";
+    readonly runtime_descriptor_id: string;
+    readonly scenario_key: string;
+    readonly practice_template_id?: string | null;
+    readonly runtime_config_revision_id: string;
+    readonly roleplay_contract_revision_id?: string | null;
+    readonly provider_readiness_snapshot: NewcomerRealtimeProviderReadinessSnapshot;
+    readonly permission_policy?: NewcomerRealtimePermissionPolicy;
+    readonly failure_policy?: NewcomerRealtimeFailurePolicy;
+    readonly rollback_policy?: NewcomerRealtimeRollbackPolicy;
+}
 
 export interface NewcomerPathModuleConfig {
     readonly module_key: string;
@@ -4892,6 +5339,7 @@ export interface NewcomerPathModuleConfig {
     readonly retry_action_label: string | null;
     readonly review_action_label: string | null;
     readonly guidance_templates: Readonly<Record<string, string>>;
+    readonly runtime_binding?: NewcomerRealtimeRuntimeBinding | null;
     readonly learning_units?: readonly BusinessEtiquetteTrainingUnitConfig[];
     readonly duration_options?: readonly NewcomerTrainingDurationOption[];
 }
@@ -5320,14 +5768,105 @@ export interface NewcomerPathRevisionSummary {
     readonly published_at: string | null;
 }
 
+export interface NewcomerPathConfigPermissionPolicyDiagnostics {
+    readonly view: "sales_trainer.manage_modules";
+    readonly save: "sales_trainer.manage_modules";
+    readonly publish: "sales_trainer.manage_modules";
+    readonly rollback: "sales_trainer.manage_modules";
+    readonly high_risk_ai_coach: "sales_trainer.manage_prompts";
+    readonly regrade: "sales_trainer.regrade_history";
+}
+
+export interface NewcomerPathConfigHighRiskActionDiagnostics {
+    readonly requires_reason: true;
+    readonly requires_trace_id: true;
+    readonly audit_action: string;
+    readonly impact_scope: string;
+    readonly preview_endpoint?: string | null;
+    readonly history_overwrite?: boolean | null;
+}
+
+export interface NewcomerPathConfigHighRiskActionsDiagnostics {
+    readonly publish: NewcomerPathConfigHighRiskActionDiagnostics;
+    readonly rollback: NewcomerPathConfigHighRiskActionDiagnostics;
+    readonly regrade: NewcomerPathConfigHighRiskActionDiagnostics;
+}
+
+export interface NewcomerRealtimeProviderReadinessDiagnostics {
+    readonly module_key: "realtime_roleplay" | "realtime_roleplay_placeholder";
+    readonly module_type: "realtime_roleplay" | "realtime_placeholder";
+    readonly title: string;
+    readonly enabled: boolean;
+    readonly runtime_descriptor_id?: string | null;
+    readonly provider_readiness_snapshot?: NewcomerRealtimeProviderReadinessSnapshot | null;
+    readonly ready: boolean;
+    readonly failure_code?: string | null;
+    readonly failure_message?: string | null;
+}
+
+export interface NewcomerPathConfigDiagnostics {
+    readonly surface_key: "newcomer_training_path_v1";
+    readonly resource_type: "newcomer_training_path";
+    readonly source: "active_revision" | "legacy_migration_snapshot";
+    readonly legacy_snapshot_only: boolean;
+    readonly fallback_applied: boolean;
+    readonly fallback_reason?: "active_revision_missing" | null;
+    readonly realtime_provider_readiness: readonly NewcomerRealtimeProviderReadinessDiagnostics[];
+    readonly management_entry: "/admin/newcomer-training/path-config";
+    readonly permission_policy: NewcomerPathConfigPermissionPolicyDiagnostics;
+    readonly active_revision?: NewcomerPathRevisionSummary | null;
+    readonly working_revision?: NewcomerPathRevisionSummary | null;
+    readonly high_risk_actions: NewcomerPathConfigHighRiskActionsDiagnostics;
+}
+
 export interface NewcomerPathConfigResponse {
-    readonly source: "active_revision" | "unit_backfill";
+    readonly source: "active_revision" | "legacy_migration_snapshot";
+    readonly fallback_reason?: string | null;
+    readonly legacy_snapshot_only: boolean;
+    readonly management_entry: "/admin/newcomer-training/path-config";
+    readonly permission: "sales_trainer.manage_modules";
     readonly path: NewcomerPathConfigPayload;
     readonly active_revision_id: string | null;
     readonly active_revision_no: number | null;
+    readonly active_revision_snapshot?: Record<string, unknown> | null;
     readonly working_revision_id: string | null;
     readonly working_revision_no: number | null;
     readonly has_unpublished_revision: boolean;
+    readonly diagnostics: NewcomerPathConfigDiagnostics;
+}
+
+export interface NewcomerPathPublishPreviewResponse {
+    readonly action: "newcomer_path_config.publish";
+    readonly permission: "sales_trainer.manage_modules";
+    readonly requires_reason: boolean;
+    readonly requires_trace_id: boolean;
+    readonly future_only: boolean;
+    readonly risk_level: "low" | "medium" | "high";
+    readonly risk_reasons: readonly string[];
+    readonly change_class: NewcomerPathChangeClass;
+    readonly target_revision_id: string;
+    readonly target_revision_no: number;
+    readonly target_revision_status: NewcomerPathRevisionStatus;
+    readonly impact_scope: Record<string, unknown>;
+    readonly before_snapshot?: Record<string, unknown> | null;
+    readonly after_snapshot: Record<string, unknown>;
+    readonly audit_event: Record<string, unknown>;
+    readonly rollback_hint: Record<string, unknown>;
+}
+
+export interface NewcomerPathRollbackPreviewResponse {
+    readonly action: "newcomer_path_config.rollback";
+    readonly permission: "sales_trainer.manage_modules";
+    readonly requires_reason: boolean;
+    readonly requires_trace_id: boolean;
+    readonly future_only: boolean;
+    readonly target_revision_id: string;
+    readonly target_revision_no: number;
+    readonly target_revision_status: NewcomerPathRevisionStatus;
+    readonly impact_scope: Record<string, unknown>;
+    readonly before_snapshot?: Record<string, unknown> | null;
+    readonly after_snapshot: Record<string, unknown>;
+    readonly audit_event: Record<string, unknown>;
 }
 
 export interface NewcomerPathRevisionListResponse {
@@ -5664,6 +6203,20 @@ export interface SalesTrainerMaterialVersion {
     updated_at: string;
 }
 
+export interface SalesTrainerLearnerMaterialVersion {
+    version_id: string;
+    material_id: string;
+    version_label: string;
+    title: string;
+    file_name: string;
+    content_type: string;
+    file_size_bytes: number;
+    file_hash: string | null;
+    release_notes: string | null;
+    status: SalesTrainerStatus;
+    published_at: string | null;
+}
+
 export interface SalesTrainerMaterial {
     material_id: string;
     material_key: string;
@@ -5913,7 +6466,7 @@ export interface SalesTrainerUnitBriefMaterial {
     confirmation_required: boolean;
     learner_note: string | null;
     display_order: number;
-    current_version: SalesTrainerMaterialVersion;
+    current_version: SalesTrainerLearnerMaterialVersion;
 }
 
 export interface SalesTrainerLearnerRubricCriterion {
@@ -5933,9 +6486,39 @@ export interface SalesTrainerLearnerRubric {
     common_mistakes?: string[];
 }
 
+export interface SalesTrainerAudioScoreOutputFieldSchema {
+    type?: string | string[] | null;
+    description?: string | null;
+    enum?: Array<string | number | boolean | null> | null;
+    items?: Record<string, unknown> | null;
+    properties?: Record<string, unknown> | null;
+    required?: string[] | null;
+    [key: string]: unknown;
+}
+
+export interface SalesTrainerAudioScoreOutputSchema {
+    schema_version?: string;
+    type?: "object";
+    properties?: Record<string, SalesTrainerAudioScoreOutputFieldSchema>;
+    required?: string[];
+    additionalProperties?: boolean | Record<string, unknown> | null;
+    [key: string]: unknown;
+}
+
+export interface SalesTrainerTaskBrief {
+    enabled: boolean;
+    title: string | null;
+    purpose: string | null;
+    scenario: string | null;
+    instructions: string[];
+    success_criteria: string[];
+    common_mistakes: string[];
+    upload_guidance: string | null;
+}
+
 export interface SalesTrainerUnitBrief {
     unit: SalesTrainerUnit;
-    task_brief: Record<string, unknown>;
+    task_brief: SalesTrainerTaskBrief;
     materials: SalesTrainerUnitBriefMaterial[];
     score_scheme: {
         prompt_id: string;
@@ -5943,7 +6526,7 @@ export interface SalesTrainerUnitBrief {
         purpose: string;
         version: number;
         status: string;
-        learner_rubric: SalesTrainerLearnerRubric | Record<string, unknown>;
+        learner_rubric: SalesTrainerLearnerRubric;
         pass_threshold: number;
     } | null;
 }
@@ -5984,6 +6567,52 @@ export interface SalesTrainerAudioScoreResult {
     created_at: string;
 }
 
+export interface SalesTrainerMaterialSnapshot {
+    version?: number | null;
+    items: Record<string, unknown>[];
+    confirmed_material_version_id?: string | null;
+    frozen_at?: string | null;
+    [key: string]: unknown;
+}
+
+export interface SalesTrainerScoreSchemePromptSnapshot {
+    prompt_id?: string | null;
+    name?: string | null;
+    purpose?: string | null;
+    system_prompt?: string | null;
+    scoring_template?: string | null;
+    output_schema: SalesTrainerAudioScoreOutputSchema;
+    learner_rubric: SalesTrainerLearnerRubric;
+    version?: number | null;
+    status?: string | null;
+    [key: string]: unknown;
+}
+
+export interface SalesTrainerScoreSchemeSnapshot {
+    prompt_id?: string | null;
+    name?: string | null;
+    purpose?: string | null;
+    version?: number | null;
+    status?: string | null;
+    learner_rubric: SalesTrainerLearnerRubric;
+    pass_threshold?: number | null;
+    prompt_snapshot?: SalesTrainerScoreSchemePromptSnapshot | null;
+    [key: string]: unknown;
+}
+
+export interface SalesTrainerTaskBriefSnapshot {
+    enabled?: boolean | null;
+    title?: string | null;
+    purpose?: string | null;
+    scenario?: string | null;
+    instructions?: unknown[];
+    success_criteria?: unknown[];
+    common_mistakes?: unknown[];
+    upload_guidance?: string | null;
+    submission_context?: Record<string, unknown> | null;
+    [key: string]: unknown;
+}
+
 export interface SalesTrainerAudioSubmission {
     submission_id: string;
     unit_id: string | null;
@@ -6001,9 +6630,9 @@ export interface SalesTrainerAudioSubmission {
     source_page: string | null;
     confirmed_material_version_id: string | null;
     confirmed_material_at: string | null;
-    material_snapshot: Record<string, unknown> | null;
-    score_scheme_snapshot: Record<string, unknown> | null;
-    task_brief_snapshot: Record<string, unknown> | null;
+    material_snapshot: SalesTrainerMaterialSnapshot | null;
+    score_scheme_snapshot: SalesTrainerScoreSchemeSnapshot | null;
+    task_brief_snapshot: SalesTrainerTaskBriefSnapshot | null;
     path_key: string | null;
     path_revision_id: string | null;
     path_revision_no: number | null;
@@ -6029,8 +6658,8 @@ export interface SalesTrainerAudioScorePrompt {
     purpose: string;
     system_prompt: string;
     scoring_template: string;
-    output_schema: Record<string, unknown>;
-    learner_rubric: SalesTrainerLearnerRubric | Record<string, unknown>;
+    output_schema: SalesTrainerAudioScoreOutputSchema;
+    learner_rubric: SalesTrainerLearnerRubric;
     version: number;
     status: SalesTrainerStatus;
     created_by: string | null;
@@ -6049,8 +6678,8 @@ export interface SalesTrainerAudioScorePromptCreateRequest {
     purpose: string;
     system_prompt: string;
     scoring_template: string;
-    output_schema?: Record<string, unknown>;
-    learner_rubric?: SalesTrainerLearnerRubric | Record<string, unknown>;
+    output_schema?: SalesTrainerAudioScoreOutputSchema;
+    learner_rubric?: SalesTrainerLearnerRubric;
 }
 
 export interface SalesTrainerAudioScorePromptUpdateRequest {
@@ -6058,13 +6687,22 @@ export interface SalesTrainerAudioScorePromptUpdateRequest {
     purpose?: string;
     system_prompt?: string;
     scoring_template?: string;
-    output_schema?: Record<string, unknown>;
-    learner_rubric?: SalesTrainerLearnerRubric | Record<string, unknown>;
+    output_schema?: SalesTrainerAudioScoreOutputSchema;
+    learner_rubric?: SalesTrainerLearnerRubric;
 }
 
 export interface SalesTrainerAudioScoreResultListResponse {
     items: SalesTrainerAudioScoreResult[];
     total: number;
+}
+
+export interface SalesTrainerTrainingRecordOperationLogContext {
+    path_key?: string | null;
+    path_revision_id?: string | null;
+    path_revision_no?: number | null;
+    training_stage?: TrainingJourneyStage | null;
+    learner_level?: TrainingJourneyLearnerLevel | null;
+    role_level?: TrainingJourneyLearnerLevel | null;
 }
 
 export interface SalesTrainerOperationLog {
@@ -6079,6 +6717,7 @@ export interface SalesTrainerOperationLog {
     user_agent: string | null;
     metadata: Record<string, unknown>;
     created_at: string;
+    training_context?: SalesTrainerTrainingRecordOperationLogContext | null;
 }
 
 export interface SalesTrainerOperationLogListResponse {
@@ -6109,7 +6748,9 @@ export interface SalesTrainerAdminCapabilities {
 export type SalesTrainerTrainingRecordType =
     | "audio_submission"
     | "quiz_attempt"
-    | "ai_coach_session";
+    | "business_etiquette_quiz_attempt"
+    | "ai_coach_session"
+    | "realtime_roleplay_session";
 
 export interface SalesTrainerEffectiveScore {
     score: number | null;
@@ -6125,23 +6766,48 @@ export interface SalesTrainerEffectiveScore {
     history_overwrite: false;
 }
 
+export interface SalesTrainerLatestRegradeSnapshot {
+    regrade_run_id: string;
+    target_type: string;
+    target_revision_id: string | null;
+    status: string;
+    reason: string | null;
+    trace_id: string | null;
+    created_at: string | null;
+    before_snapshot: Record<string, unknown> | null;
+    after_snapshot: Record<string, unknown> | null;
+}
+
+export interface SalesTrainerScoreExplanationItem {
+    type?: string | null;
+    key?: string | null;
+    label?: string | null;
+    text?: string | null;
+    score?: number | null;
+    max_score?: number | null;
+    is_weak?: boolean | null;
+    readonly [key: string]: unknown;
+}
+
 export interface SalesTrainerScoreExplanation {
     basis: string;
     summary: string | null;
-    dimensions: Array<Record<string, unknown>>;
-    evidence: Array<Record<string, unknown>>;
+    dimensions: SalesTrainerScoreExplanationItem[];
+    evidence: SalesTrainerScoreExplanationItem[];
     strengths?: string[];
-    issues: Array<Record<string, unknown>>;
-    next_actions: Array<Record<string, unknown>>;
+    issues: SalesTrainerScoreExplanationItem[];
+    next_actions: SalesTrainerScoreExplanationItem[];
+    readonly [key: string]: unknown;
 }
 
 export interface SalesTrainerAbilityProfile {
     basis: "sales_trainer_phase2_projection_v1";
     overall_score: number | null;
     overall_passed: boolean | null;
-    dimensions: Array<Record<string, unknown>>;
-    weak_dimensions: Array<Record<string, unknown>>;
+    dimensions: SalesTrainerScoreExplanationItem[];
+    weak_dimensions: SalesTrainerScoreExplanationItem[];
     evidence_count: number;
+    readonly [key: string]: unknown;
 }
 
 export interface SalesTrainerRemediation {
@@ -6151,24 +6817,342 @@ export interface SalesTrainerRemediation {
     target_path: string;
     priority: "low" | "medium" | "high";
     weak_dimension_keys?: string[];
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerAiCoachArticleChapterSnapshot {
+    title?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerAiCoachArticleSnapshot {
+    title?: string | null;
+    chapters?: SalesTrainerAiCoachArticleChapterSnapshot[];
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerAiCoachPathConfigSnapshot {
+    module_key?: string | null;
+    module_type?: string | null;
+    title?: string | null;
+    learning_content_id?: string | null;
+    exam_paper_id?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerAiCoachConfigSnapshot {
+    enabled?: boolean | null;
+    chat_enabled?: boolean | null;
+    min_turns?: number | null;
+    max_turns?: number | null;
+    mastery_threshold?: number | null;
+    prompt_template_id?: string | null;
+    prompt_revision_id?: string | null;
+    scoring_prompt_template_id?: string | null;
+    scoring_prompt_revision_id?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerAiCoachStateSnapshot {
+    session_phase?: string | null;
+    active_event_id?: string | null;
+    answered_card_count?: number | null;
+    correct_streak?: number | null;
+    incorrect_streak?: number | null;
+    current_focus?: string | null;
+    difficulty?: string | null;
+    last_action?: string | null;
+    can_auto_advance?: boolean | null;
+    stopped_reason?: string | null;
+    business_etiquette_progress?: Record<string, unknown> | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerAiCoachRecordSnapshot {
+    session_id: string;
+    module_key: string | null;
+    path_key: string | null;
+    path_revision_id: string | null;
+    path_revision_no: number | null;
+    article_snapshot: SalesTrainerAiCoachArticleSnapshot | null;
+    path_config_snapshot: SalesTrainerAiCoachPathConfigSnapshot | null;
+    config_snapshot: SalesTrainerAiCoachConfigSnapshot | null;
+    coach_state: SalesTrainerAiCoachStateSnapshot | null;
+    prompt_template_id: string | null;
+    prompt_revision_id: string | null;
+    prompt_contract_hash: string | null;
+    mastery_state: string | null;
+    total_score: number | null;
+    max_score: number | null;
+    status: string;
+    trace_id: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+export interface SalesTrainerRealtimeRecordExternalBindingSnapshot {
+    owner: "sales_trainer";
+    path_key?: string | null;
+    path_revision_id?: string | null;
+    path_revision_no?: number | null;
+    module_key?: string | null;
+    binding_key?: string | null;
+    runtime_descriptor_id?: string | null;
+    scenario_key?: string | null;
+    runtime_config_revision_id?: string | null;
+    runtime_registry?: SalesTrainerRealtimeRecordRuntimeRegistrySnapshot | null;
+    roleplay_contract_revision_id?: string | null;
+    practice_template_id?: string | null;
+    provider_readiness_snapshot?: SalesTrainerRealtimeRecordProviderReadinessSnapshot | null;
+    failure_policy?: SalesTrainerRealtimeRecordFailurePolicySnapshot | null;
+    started_by_user_id?: string | null;
+    started_at?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerRealtimeRecordRegistryReadinessSnapshot {
+    ready?: boolean | null;
+    checked_at?: string | null;
+    failure_code?: string | null;
+    failure_message?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerRealtimeRecordRegistryDescriptorSnapshot {
+    descriptor_id?: string | null;
+    label?: string | null;
+    provider?: string | null;
+    runtime_owner?: string | null;
+    enabled?: boolean | null;
+    runtime_profile_id?: string | null;
+    config_revision_id?: string | null;
+    rollback_to_descriptor_id?: string | null;
+    readiness?: SalesTrainerRealtimeRecordRegistryReadinessSnapshot | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerRealtimeRecordRuntimeRegistrySnapshot {
+    registry_key?: string | null;
+    config_id?: string | null;
+    version?: number | null;
+    source?: string | null;
+    status?: string | null;
+    fallback_reason?: string | null;
+    descriptor?: SalesTrainerRealtimeRecordRegistryDescriptorSnapshot | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerRealtimeRecordProviderReadinessSnapshot {
+    provider?: string | null;
+    ready?: boolean | null;
+    checked_at?: string | null;
+    config_revision_id?: string | null;
+    failure_code?: string | null;
+    failure_message?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerRealtimeRecordFailurePolicySnapshot {
+    terminal_codes?: string[];
+    transient_codes?: string[];
+    voluntary_codes?: string[];
+    terminal_retry_allowed?: boolean | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerRealtimeRecordScoresSnapshot {
+    logic_score: number | null;
+    accuracy_score: number | null;
+    completeness_score: number | null;
+}
+
+export interface SalesTrainerRealtimeRecordVoicePolicySnapshot {
+    external_binding?: SalesTrainerRealtimeRecordExternalBindingSnapshot | null;
+    voice_mode?: string | null;
+    runtime_profile_id?: string | null;
+    model_name?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerRealtimeRecordEffectivenessSnapshot {
+    summary?: string | null;
+    evaluable?: boolean | null;
+    main_issue?: Record<string, unknown> | null;
+    dimension_scores?: Record<string, unknown> | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerRealtimeRecordRuntimeStateSnapshot {
+    state?: string | null;
+    session_status?: string | null;
+    ai_state?: string | null;
+    turn_count?: number | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerRealtimeRuntimeOutcomeSnapshot {
+    external_binding: SalesTrainerRealtimeRecordExternalBindingSnapshot;
+    voice_policy_snapshot: SalesTrainerRealtimeRecordVoicePolicySnapshot;
+    effectiveness_snapshot: SalesTrainerRealtimeRecordEffectivenessSnapshot;
+    runtime_state: SalesTrainerRealtimeRecordRuntimeStateSnapshot;
+    scores: SalesTrainerRealtimeRecordScoresSnapshot;
+}
+
+export interface SalesTrainerRealtimeRoleplayRecordSnapshot {
+    session_id: string;
+    module_key: string | null;
+    status: string;
+    score: number | null;
+    max_score: number | null;
+    passed: boolean | null;
+    submitted_at: string | null;
+    completed_at: string | null;
+    external_binding: SalesTrainerRealtimeRecordExternalBindingSnapshot;
+    snapshot: SalesTrainerRealtimeRuntimeOutcomeSnapshot;
+}
+
+export interface SalesTrainerBusinessEtiquetteCapabilitySnapshot {
+    capabilities: unknown[];
+    chapter_bindings: unknown[];
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerBusinessEtiquetteQuestionSnapshot {
+    question_id?: string | null;
+    title?: string | null;
+    stem?: string | null;
+    question_type?: string | null;
+    options?: unknown[];
+    reference_answer?: string | null;
+    explanation?: string | null;
+    scoring_dimensions?: string[];
+    tags?: string[];
+    points?: number | null;
+    order_index?: number | null;
+    version?: number | null;
+    content_hash?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerBusinessEtiquetteAnswerSnapshot {
+    question_id?: string | null;
+    question_type?: string | null;
+    answer_payload?: unknown;
+    is_correct?: boolean | null;
+    score?: number | null;
+    max_score?: number | null;
+    capability_keys?: string[];
+    question_snapshot?: SalesTrainerBusinessEtiquetteQuestionSnapshot | null;
+    analysis?: string | null;
+    scoring_source?: string | null;
+    scoring_provider?: string | null;
+    scoring_model?: string | null;
+    scoring_latency_ms?: number | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerBusinessEtiquetteCapabilityScoreSnapshot {
+    capability_key: string;
+    display_name?: string | null;
+    score?: number | null;
+    max_score?: number | null;
+    normalized_score?: number | null;
+    threshold?: number | null;
+    mastered?: boolean | null;
+    mastery_level_key?: string | null;
+    mastery_level_name?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerBusinessEtiquetteQuizRecordSnapshot {
+    attempt_id: string;
+    training_pack_key: string;
+    learning_unit_key: string;
+    learning_unit_title: string;
+    user_id: string;
+    path_revision_id: string | null;
+    path_revision_no: number | null;
+    training_pack_revision_id: string | null;
+    training_pack_revision_no: number | null;
+    capability_snapshot: SalesTrainerBusinessEtiquetteCapabilitySnapshot;
+    question_snapshots: SalesTrainerBusinessEtiquetteQuestionSnapshot[];
+    answers: SalesTrainerBusinessEtiquetteAnswerSnapshot[];
+    capability_scores: SalesTrainerBusinessEtiquetteCapabilityScoreSnapshot[];
+    weak_capability_keys: string[];
+    recommended_chapter_orders: number[];
+    total_score: number | null;
+    max_score: number | null;
+    passed: boolean | null;
+    status: string;
+    submitted_at: string | null;
 }
 
 export interface SalesTrainerPhase2Policy {
-    key: string;
+    key: "sales_trainer.phase2.closed_loop_policy";
     version: string;
     enabled: boolean;
     low_score_threshold: number;
     repeat_practice_threshold: number;
     dashboard_record_limit: number;
-    source: string;
+    source: "database" | "database_previous" | "default";
     config_id: string | null;
     config_version: number | null;
     status: string | null;
     fallback_applied: boolean;
     fallback_reason: string | null;
-    management_entry: string;
-    permission: string;
-    effective_timing: string;
+    management_entry: "/admin/business-rules/sales-trainer-phase2";
+    permission: "admin_publish_only";
+    effective_timing: "request_time";
+}
+
+export interface SalesTrainerManagerDashboardSummary {
+    record_count: number;
+    loaded_record_count: number;
+    learner_count: number;
+    completed_record_count: number;
+    completion_rate: number | null;
+    pass_rate: number | null;
+    low_score_record_count: number;
+    repeat_practice_learner_count: number;
+}
+
+export interface SalesTrainerManagerDashboardModuleSummary {
+    module_key: string;
+    module_name: string;
+    record_count: number;
+    completed_count: number;
+    pass_rate: number | null;
+    average_score: number | null;
+    weak_record_count: number;
+}
+
+export interface SalesTrainerManagerDashboardWeakDimension {
+    dimension_key: string;
+    dimension_label: string;
+    record_count: number;
+    learner_count: number;
+    average_score: number | null;
+}
+
+export interface SalesTrainerManagerDashboardRiskLearner {
+    user_id: string;
+    user_name: string | null;
+    user_department: string | null;
+    risk_reasons: string[];
+    latest_submitted_at: string | null;
+    lowest_score: number | null;
+    record_count: number;
+    suggested_action: string;
+    suggested_action_code: string;
+    priority: "low" | "medium" | "high";
+}
+
+export interface SalesTrainerManagerDashboardInterventionSuggestion {
+    user_id: string;
+    user_name: string | null;
+    priority: "low" | "medium" | "high";
+    action: string;
+    reason_codes: string[];
 }
 
 export interface SalesTrainerTrainingRecord {
@@ -6179,9 +7163,12 @@ export interface SalesTrainerTrainingRecord {
     path_revision_no: number | null;
     module_key: string | null;
     legacy_snapshot_only: boolean;
+    training_stage?: TrainingJourneyStage | null;
+    learner_level?: TrainingJourneyLearnerLevel | null;
+    role_level?: TrainingJourneyLearnerLevel | null;
     unit_id: string;
     unit_name: string | null;
-    unit_type: SalesTrainerUnitType | "ai_coach";
+    unit_type: SalesTrainerUnitType | "ai_coach" | "business_etiquette_quiz" | "realtime_roleplay";
     user_id: string;
     user_name: string | null;
     user_email: string | null;
@@ -6191,15 +7178,17 @@ export interface SalesTrainerTrainingRecord {
     max_score: number | null;
     passed: boolean | null;
     submitted_at: string | null;
-    material_snapshot: Record<string, unknown> | null;
-    score_scheme_snapshot: Record<string, unknown> | null;
-    task_brief_snapshot: Record<string, unknown> | null;
+    material_snapshot: SalesTrainerMaterialSnapshot | null;
+    score_scheme_snapshot: SalesTrainerScoreSchemeSnapshot | null;
+    task_brief_snapshot: SalesTrainerTaskBriefSnapshot | null;
     audio_submission: SalesTrainerAudioSubmission | null;
     quiz_attempt: SalesTrainerQuizAttempt | null;
-    ai_coach_session?: Record<string, unknown> | null;
+    ai_coach_session?: SalesTrainerAiCoachRecordSnapshot | null;
+    business_etiquette_quiz_attempt?: SalesTrainerBusinessEtiquetteQuizRecordSnapshot | null;
+    realtime_roleplay_session?: SalesTrainerRealtimeRoleplayRecordSnapshot | null;
     operation_logs: SalesTrainerOperationLog[];
     effective_score?: SalesTrainerEffectiveScore | null;
-    latest_regrade?: Record<string, unknown> | null;
+    latest_regrade?: SalesTrainerLatestRegradeSnapshot | null;
     score_explanation?: SalesTrainerScoreExplanation | null;
     ability_profile?: SalesTrainerAbilityProfile | null;
     remediation?: SalesTrainerRemediation | null;
@@ -6210,14 +7199,53 @@ export interface SalesTrainerTrainingRecordListResponse {
     total: number;
 }
 
+export type SalesTrainerRoleplayObservationSource = "heuristic" | "llm_evaluator";
+
+export type SalesTrainerRoleplayObservationStatus =
+    | "pending"
+    | "completed"
+    | "failed"
+    | "ignored";
+
+export interface SalesTrainerRoleplayObservationErrorSnapshot {
+    code?: string | null;
+    message?: string | null;
+    readonly [key: string]: unknown;
+}
+
+export interface SalesTrainerRoleplayObservation {
+    observation_id: string;
+    session_id: string;
+    source_record_id: string;
+    source: SalesTrainerRoleplayObservationSource;
+    turn_index: number;
+    evaluator_status: SalesTrainerRoleplayObservationStatus;
+    dimensions: Record<string, unknown>[];
+    signals: Record<string, unknown>[];
+    error?: SalesTrainerRoleplayObservationErrorSnapshot | null;
+    trace_id?: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SalesTrainerRoleplayObservationSessionResponse {
+    session_id: string;
+    source_record_id: string;
+    total: number;
+    latest_turn_index: number | null;
+    source_counts: Partial<Record<SalesTrainerRoleplayObservationSource, number>> & Record<string, number>;
+    status_counts: Partial<Record<SalesTrainerRoleplayObservationStatus, number>> & Record<string, number>;
+    items: SalesTrainerRoleplayObservation[];
+}
+
 export interface SalesTrainerManagerDashboard {
     generated_at: string;
     policy: SalesTrainerPhase2Policy;
-    summary: Record<string, unknown>;
-    module_summaries: Array<Record<string, unknown>>;
-    weak_dimensions: Array<Record<string, unknown>>;
-    risk_learners: Array<Record<string, unknown>>;
-    intervention_suggestions: Array<Record<string, unknown>>;
+    summary: SalesTrainerManagerDashboardSummary;
+    module_summaries: SalesTrainerManagerDashboardModuleSummary[];
+    weak_dimensions: SalesTrainerManagerDashboardWeakDimension[];
+    risk_learners: SalesTrainerManagerDashboardRiskLearner[];
+    intervention_suggestions: SalesTrainerManagerDashboardInterventionSuggestion[];
 }
 
 export interface SalesTrainerSettings {

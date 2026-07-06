@@ -16,7 +16,8 @@ import {
     type ConfigCenterData,
 } from "./page-data";
 
-export function usePathConfigCenterWorkflow() {
+export function usePathConfigCenterWorkflow(options: { enabled?: boolean } = {}) {
+    const { enabled = true } = options;
     const [data, setData] = useState<ConfigCenterData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isMutating, setIsMutating] = useState(false);
@@ -38,6 +39,12 @@ export function usePathConfigCenterWorkflow() {
     }, []);
 
     useEffect(() => {
+        if (!enabled) {
+            setIsLoading(false);
+            setData(null);
+            setError(null);
+            return;
+        }
         let isActive = true;
 
         void loadConfigCenterData()
@@ -64,7 +71,7 @@ export function usePathConfigCenterWorkflow() {
         return () => {
             isActive = false;
         };
-    }, []);
+    }, [enabled]);
 
     const updateAudioBinding = useCallback((
         moduleKey: "ppt_explanation" | "elevator_pitch",

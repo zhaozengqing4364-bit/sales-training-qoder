@@ -16,6 +16,7 @@ from curriculum_practice.schemas import (
 from curriculum_practice.services.learning_content_chapter_revision_service import (
     LearningContentChapterRevisionService,
 )
+from curriculum_practice.services.orm_payload_typing import set_orm_field
 
 SERVER_ERROR = "[LEARNING_CONTENT_SERVICE_FAILED]"
 
@@ -52,9 +53,10 @@ class LearningChapterServiceMixin:
         editable_result = self._editable_result(content)
         if not editable_result.is_success:
             return Result.fail(editable_result.fallback or "[LEARNING_CONTENT_NOT_EDITABLE]")
+        content_id = str(content.learning_content_id)
         order_index = payload.order_index
         if order_index is None:
-            chapters_result = await self.list_chapters(content.learning_content_id)
+            chapters_result = await self.list_chapters(content_id)
             if not chapters_result.is_success:
                 return Result.fail(chapters_result.fallback or SERVER_ERROR)
             order_index = len(chapters_result.value or []) + 1
@@ -62,12 +64,12 @@ class LearningChapterServiceMixin:
             actor_result = await self._actor_result(actor_id)
             if not actor_result.is_success or actor_result.value is None:
                 return Result.fail(actor_result.fallback or "[LEARNING_CONTENT_ACTOR_REQUIRED]")
-            chapters_result = await self.list_chapters(content.learning_content_id)
+            chapters_result = await self.list_chapters(content_id)
             if not chapters_result.is_success:
                 return Result.fail(chapters_result.fallback or SERVER_ERROR)
             chapter = LearningChapter(
                 chapter_id=str(uuid.uuid4()),
-                learning_content_id=content.learning_content_id,
+                learning_content_id=content_id,
                 title=payload.title,
                 content=payload.content,
                 order_index=order_index,
@@ -90,7 +92,7 @@ class LearningChapterServiceMixin:
                 return Result.fail(SERVER_ERROR)
             return Result.ok(chapter)
         chapter = LearningChapter(
-            learning_content_id=content.learning_content_id,
+            learning_content_id=content_id,
             title=payload.title,
             content=payload.content,
             order_index=order_index,
@@ -132,7 +134,7 @@ class LearningChapterServiceMixin:
             actor_result = await self._actor_result(actor_id)
             if not actor_result.is_success or actor_result.value is None:
                 return Result.fail(actor_result.fallback or "[LEARNING_CONTENT_ACTOR_REQUIRED]")
-            chapters_result = await self.list_chapters(content.learning_content_id)
+            chapters_result = await self.list_chapters(str(content.learning_content_id))
             if not chapters_result.is_success:
                 return Result.fail(chapters_result.fallback or SERVER_ERROR)
             try:
@@ -153,7 +155,7 @@ class LearningChapterServiceMixin:
             return Result.ok(chapter)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(chapter, field, value)
-        chapter.updated_by = actor_id
+        set_orm_field(chapter, "updated_by", actor_id)
         try:
             await self._db.commit()
             await self._db.refresh(chapter)
@@ -176,7 +178,7 @@ class LearningChapterServiceMixin:
             actor_result = await self._actor_result(actor_id)
             if not actor_result.is_success or actor_result.value is None:
                 return Result.fail(actor_result.fallback or "[LEARNING_CONTENT_ACTOR_REQUIRED]")
-            chapters_result = await self.list_chapters(content.learning_content_id)
+            chapters_result = await self.list_chapters(str(content.learning_content_id))
             if not chapters_result.is_success:
                 return Result.fail(chapters_result.fallback or SERVER_ERROR)
             try:
@@ -211,11 +213,12 @@ class LearningChapterServiceMixin:
         editable_result = self._editable_result(content)
         if not editable_result.is_success:
             return Result.fail(editable_result.fallback or "[LEARNING_CONTENT_NOT_EDITABLE]")
-        chapters_result = await self.list_chapters(content.learning_content_id)
+        content_id = str(content.learning_content_id)
+        chapters_result = await self.list_chapters(content_id)
         if not chapters_result.is_success:
             return Result.fail(chapters_result.fallback or SERVER_ERROR)
         chapters = chapters_result.value or []
-        chapter_by_id = {chapter.chapter_id: chapter for chapter in chapters}
+        chapter_by_id = {str(chapter.chapter_id): chapter for chapter in chapters}
         if set(chapter_ids) != set(chapter_by_id):
             return Result.fail("[LEARNING_CHAPTER_REORDER_INVALID]")
         if content.status == "published":
@@ -239,14 +242,14 @@ class LearningChapterServiceMixin:
         try:
             offset = len(chapters)
             for index, chapter in enumerate(chapters, start=1):
-                chapter.order_index = offset + index
+                set_orm_field(chapter, "order_index", offset + index)
             await self._db.flush()
             for index, chapter_id in enumerate(chapter_ids, start=1):
                 chapter = chapter_by_id[chapter_id]
-                chapter.order_index = index
-                chapter.updated_by = actor_id
+                set_orm_field(chapter, "order_index", index)
+                set_orm_field(chapter, "updated_by", actor_id)
             await self._db.commit()
         except SQLAlchemyError:
             await self._db.rollback()
             return Result.fail(SERVER_ERROR)
-        return await self.list_chapters(content.learning_content_id)
+        return await self.list_chapters(content_id)

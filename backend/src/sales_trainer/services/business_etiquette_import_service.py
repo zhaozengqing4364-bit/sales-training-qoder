@@ -7,14 +7,19 @@ from datetime import UTC, datetime
 from pathlib import PurePath
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from curriculum_practice.models import LearningChapter, LearningContent
+from common.db.typing import json_dict_or_empty
 from sales_trainer.models import SalesTrainerAssetRevision
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
+)
+from sales_trainer.services.curriculum_practice_adapter import (
+    LearningChapterCreate,
+    LearningContentContract,
+    archive_draft_learning_content,
+    create_learning_content_with_chapters,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 
@@ -180,31 +185,24 @@ class BusinessEtiquetteImportService:
                 await self._archive_previous_draft_content(existing_working_revision)
 
             imported_at = datetime.now(UTC)
-            learning_content = LearningContent(
+            learning_content = await create_learning_content_with_chapters(
+                self._db,
                 title=parsed.title or settings.content_title,
                 summary="商务礼仪训练包导入草稿，发布前不会对学员生效。",
                 owner=settings.owner,
                 source=_source_value(settings.source, logical_id, source_filename),
                 status="draft",
                 content_hash=content_hash,
-                created_by=str(actor.user_id),
-                updated_by=str(actor.user_id),
+                actor_id=str(actor.user_id),
+                chapters=[
+                    LearningChapterCreate(
+                        title=chapter.title,
+                        content=chapter.markdown,
+                        order_index=chapter.order_index,
+                    )
+                    for chapter in parsed.original_chapters
+                ],
             )
-            self._db.add(learning_content)
-            await self._db.flush()
-            chapters = [
-                LearningChapter(
-                    learning_content_id=learning_content.learning_content_id,
-                    title=chapter.title,
-                    content=chapter.markdown,
-                    order_index=chapter.order_index,
-                    created_by=str(actor.user_id),
-                    updated_by=str(actor.user_id),
-                )
-                for chapter in parsed.original_chapters
-            ]
-            self._db.add_all(chapters)
-            await self._db.flush()
 
             payload = _revision_payload(
                 parsed=parsed,
@@ -328,20 +326,11 @@ class BusinessEtiquetteImportService:
         self,
         revision: SalesTrainerAssetRevision,
     ) -> None:
-        payload = revision.payload_json or {}
+        payload = json_dict_or_empty(revision.payload_json)
         learning_content_id = payload.get("learning_content_id")
         if not isinstance(learning_content_id, str) or not learning_content_id:
             return
-        result = await self._db.execute(
-            select(LearningContent).where(
-                LearningContent.learning_content_id == learning_content_id
-            )
-        )
-        content = result.scalar_one_or_none()
-        if content is None or content.status != "draft":
-            return
-        content.status = "archived"
-        await self._db.flush()
+        await archive_draft_learning_content(self._db, learning_content_id)
 
 
 def parse_business_etiquette_markdown(
@@ -505,7 +494,7 @@ def _revision_payload(
     *,
     parsed: ParsedBusinessEtiquetteDocument,
     logical_id: str,
-    learning_content: LearningContent,
+    learning_content: LearningContentContract,
     source_filename: str,
     content_type: str | None,
     file_size_bytes: int,
@@ -566,7 +555,7 @@ def _import_response(
     *,
     parsed: ParsedBusinessEtiquetteDocument,
     logical_id: str,
-    learning_content: LearningContent,
+    learning_content: LearningContentContract,
     revision: SalesTrainerAssetRevision,
     active_revision: SalesTrainerAssetRevision | None,
     source_filename: str,

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,6 +58,29 @@ from curriculum_practice.services.practice_templates import PracticeTemplateServ
 from curriculum_practice.services.roleplay.situation_pack_dto import SituationPackDTO
 from curriculum_practice.services.test_bank import TestBankService
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
+
+
+class AssetImporter(Protocol):
+    def __call__(
+        self,
+        db: AsyncSession,
+        *,
+        entry: dict[str, Any],
+        conflict_strategy: ConflictStrategy,
+        actor_id: str,
+        id_mapping: dict[str, str],
+        dry_run: bool,
+    ) -> Awaitable[ImportAssetResult]: ...
+
+
+def _str_value(value: object) -> str | None:
+    return cast(str | None, value)
+
+
+def _payload_dict(value: object) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return cast(dict[str, Any], value)
+    return {}
 
 
 def _resolve_export_curriculum_plan(
@@ -176,25 +200,38 @@ async def _find_persona_by_natural_key(
 ) -> Persona | None:
     result = await db.execute(select(Persona))
     for row in result.scalars().all():
-        if derive_natural_key("persona", name=row.name) == natural_key:
+        if derive_natural_key("persona", name=_str_value(row.name)) == natural_key:
             return row
     return None
 
 
 async def _find_persona_by_name(db: AsyncSession, name: str) -> Persona | None:
-    return await db.scalar(select(Persona).where(Persona.name == name).limit(1))
+    return cast(
+        Persona | None,
+        await db.scalar(select(Persona).where(Persona.name == name).limit(1)),
+    )
 
 
-async def _find_kb_by_natural_key(db: AsyncSession, natural_key: str) -> KnowledgeBase | None:
+async def _find_kb_by_natural_key(
+    db: AsyncSession, natural_key: str
+) -> KnowledgeBase | None:
     result = await db.execute(select(KnowledgeBase))
     for row in result.scalars().all():
-        if derive_natural_key("knowledge_base", name=row.name) == natural_key:
+        if (
+            derive_natural_key("knowledge_base", name=_str_value(row.name))
+            == natural_key
+        ):
             return row
     return None
 
 
 async def _find_kb_by_name(db: AsyncSession, name: str) -> KnowledgeBase | None:
-    return await db.scalar(select(KnowledgeBase).where(KnowledgeBase.name == name).limit(1))
+    return cast(
+        KnowledgeBase | None,
+        await db.scalar(
+            select(KnowledgeBase).where(KnowledgeBase.name == name).limit(1)
+        ),
+    )
 
 
 async def _find_template_by_natural_key(
@@ -202,7 +239,10 @@ async def _find_template_by_natural_key(
 ) -> PracticeTemplate | None:
     result = await db.execute(select(PracticeTemplate))
     for row in result.scalars().all():
-        if derive_natural_key("practice_template", name=row.name) == natural_key:
+        if (
+            derive_natural_key("practice_template", name=_str_value(row.name))
+            == natural_key
+        ):
             return row
     return None
 
@@ -210,15 +250,20 @@ async def _find_template_by_natural_key(
 async def _find_template_by_name(
     db: AsyncSession, name: str
 ) -> PracticeTemplate | None:
-    return await db.scalar(
-        select(PracticeTemplate).where(PracticeTemplate.name == name).limit(1)
+    return cast(
+        PracticeTemplate | None,
+        await db.scalar(
+            select(PracticeTemplate).where(PracticeTemplate.name == name).limit(1)
+        ),
     )
 
 
-async def _find_agent_by_natural_key(db: AsyncSession, natural_key: str) -> Agent | None:
+async def _find_agent_by_natural_key(
+    db: AsyncSession, natural_key: str
+) -> Agent | None:
     result = await db.execute(select(Agent))
     for row in result.scalars().all():
-        if derive_natural_key("agent", name=row.name) == natural_key:
+        if derive_natural_key("agent", name=_str_value(row.name)) == natural_key:
             return row
     return None
 
@@ -228,7 +273,10 @@ async def _find_runtime_by_natural_key(
 ) -> VoiceRuntimeProfile | None:
     result = await db.execute(select(VoiceRuntimeProfile))
     for row in result.scalars().all():
-        if derive_natural_key("voice_runtime_profile", name=row.name) == natural_key:
+        if (
+            derive_natural_key("voice_runtime_profile", name=_str_value(row.name))
+            == natural_key
+        ):
             return row
     return None
 
@@ -238,7 +286,13 @@ async def _find_scoring_ruleset_by_natural_key(
 ) -> ScoringRuleset | None:
     result = await db.execute(select(ScoringRuleset))
     for row in result.scalars().all():
-        if derive_natural_key("scoring_ruleset", version=row.version) == natural_key:
+        if (
+            derive_natural_key(
+                "scoring_ruleset",
+                version=cast(str | int | None, row.version),
+            )
+            == natural_key
+        ):
             return row
     return None
 
@@ -249,7 +303,7 @@ async def _find_simple_by_natural_key(
     model: Any,
     asset_type: str,
     natural_key: str,
-    name_getter: Any,
+    name_getter: Callable[[Any], str],
 ) -> Any | None:
     result = await db.execute(select(model))
     for row in result.scalars().all():
@@ -265,20 +319,20 @@ async def _lookup_instance_id_by_natural_key(
     natural_key: str,
 ) -> str | None:
     if asset_type == "agent":
-        row = await _find_agent_by_natural_key(db, natural_key)
-        return str(row.id) if row is not None else None
+        agent = await _find_agent_by_natural_key(db, natural_key)
+        return str(agent.id) if agent is not None else None
     if asset_type == "persona":
-        row = await _find_persona_by_natural_key(db, natural_key)
-        return str(row.id) if row is not None else None
+        persona = await _find_persona_by_natural_key(db, natural_key)
+        return str(persona.id) if persona is not None else None
     if asset_type == "voice_runtime_profile":
-        row = await _find_runtime_by_natural_key(db, natural_key)
-        return str(row.id) if row is not None else None
+        profile = await _find_runtime_by_natural_key(db, natural_key)
+        return str(profile.id) if profile is not None else None
     if asset_type == "scoring_ruleset":
-        row = await _find_scoring_ruleset_by_natural_key(db, natural_key)
-        return str(row.ruleset_id) if row is not None else None
+        ruleset = await _find_scoring_ruleset_by_natural_key(db, natural_key)
+        return str(ruleset.ruleset_id) if ruleset is not None else None
     if asset_type == "knowledge_base":
-        row = await _find_kb_by_natural_key(db, natural_key)
-        return str(row.id) if row is not None else None
+        knowledge_base = await _find_kb_by_natural_key(db, natural_key)
+        return str(knowledge_base.id) if knowledge_base is not None else None
     if asset_type == "case_item":
         row = await _find_simple_by_natural_key(
             db,
@@ -334,8 +388,8 @@ async def _lookup_instance_id_by_natural_key(
         )
         return str(row.question_id) if row is not None else None
     if asset_type == "practice_template":
-        row = await _find_template_by_natural_key(db, natural_key)
-        return str(row.template_id) if row is not None else None
+        template = await _find_template_by_natural_key(db, natural_key)
+        return str(template.template_id) if template is not None else None
     if asset_type == "training_task":
         row = await _find_simple_by_natural_key(
             db,
@@ -636,7 +690,7 @@ async def import_practice_template(
                 message="natural_key already exists",
             )
 
-    asset_refs = payload.get("asset_refs") if isinstance(payload.get("asset_refs"), dict) else {}
+    asset_refs = _payload_dict(payload.get("asset_refs"))
     missing: list[str] = []
 
     async def required_ref(field: str, asset_type: str) -> str | None:
@@ -1001,7 +1055,7 @@ async def import_role_profile(
         id_mapping[identity] = "dry-run-role-profile-id"
         return ImportAssetResult("role_profile", namespace, natural_key, "imported", "dry-run-role-profile-id")
 
-    asset_refs = payload.get("asset_refs") if isinstance(payload.get("asset_refs"), dict) else {}
+    asset_refs = _payload_dict(payload.get("asset_refs"))
     persona_ref = payload.get("persona_ref")
     if asset_refs.get("persona") is not None:
         persona_ref = await _resolve_asset_ref_id(
@@ -1095,7 +1149,7 @@ async def import_learning_content(
         publish_result = await service.publish_content(content, actor_id=actor_id)
         if not publish_result.is_success:
             return ImportAssetResult("learning_content", namespace, natural_key, "failed", message=str(publish_result.fallback))
-        content = publish_result.value
+        content = cast(LearningContent, publish_result.value)
     id_mapping[identity] = str(content.learning_content_id)
     return ImportAssetResult("learning_content", namespace, natural_key, "imported", str(content.learning_content_id))
 
@@ -1130,7 +1184,7 @@ async def import_question_category(
 
     service = TestBankService(db)
     parent_id = payload.get("parent_id")
-    asset_refs = payload.get("asset_refs") if isinstance(payload.get("asset_refs"), dict) else {}
+    asset_refs = _payload_dict(payload.get("asset_refs"))
     if asset_refs.get("parent") is not None:
         parent_id = await _resolve_asset_ref_id(
             db,
@@ -1183,7 +1237,7 @@ async def import_question_item(
         id_mapping[identity] = "dry-run-question-item-id"
         return ImportAssetResult("question_item", namespace, natural_key, "imported", "dry-run-question-item-id")
 
-    asset_refs = payload.get("asset_refs") if isinstance(payload.get("asset_refs"), dict) else {}
+    asset_refs = _payload_dict(payload.get("asset_refs"))
     category_id = payload.get("category_id")
     if asset_refs.get("category") is not None:
         category_id = await _resolve_asset_ref_id(
@@ -1218,7 +1272,7 @@ async def import_question_item(
         publish_result = await service.publish_question(question, actor_id=actor_id)
         if not publish_result.is_success:
             return ImportAssetResult("question_item", namespace, natural_key, "failed", message=str(publish_result.fallback))
-        question = publish_result.value
+        question = cast(QuestionItem, publish_result.value)
     id_mapping[identity] = str(question.question_id)
     return ImportAssetResult("question_item", namespace, natural_key, "imported", str(question.question_id))
 
@@ -1251,7 +1305,7 @@ async def import_examiner_agent(
         id_mapping[identity] = "dry-run-examiner-agent-id"
         return ImportAssetResult("examiner_agent", namespace, natural_key, "imported", "dry-run-examiner-agent-id")
 
-    asset_refs = payload.get("asset_refs") if isinstance(payload.get("asset_refs"), dict) else {}
+    asset_refs = _payload_dict(payload.get("asset_refs"))
     question_ids: list[str] = []
     question_refs = asset_refs.get("question_sources")
     if isinstance(question_refs, list):
@@ -1300,7 +1354,7 @@ async def import_examiner_agent(
         publish_result = await service.publish_agent(examiner, actor_id=actor_id)
         if not publish_result.is_success:
             return ImportAssetResult("examiner_agent", namespace, natural_key, "failed", message=str(publish_result.fallback))
-        examiner = publish_result.value
+        examiner = cast(ExaminerAgent, publish_result.value)
     id_mapping[identity] = str(examiner.examiner_agent_id)
     return ImportAssetResult("examiner_agent", namespace, natural_key, "imported", str(examiner.examiner_agent_id))
 
@@ -1333,7 +1387,7 @@ async def import_training_task(
         id_mapping[identity] = "dry-run-training-task-id"
         return ImportAssetResult("training_task", namespace, natural_key, "imported", "dry-run-training-task-id")
 
-    asset_refs = payload.get("asset_refs") if isinstance(payload.get("asset_refs"), dict) else {}
+    asset_refs = _payload_dict(payload.get("asset_refs"))
     practice_template_id = payload.get("practice_template_id")
     if asset_refs.get("practice_template") is not None:
         practice_template_id = await _resolve_asset_ref_id(
@@ -1368,7 +1422,7 @@ async def import_training_task(
     return ImportAssetResult("training_task", namespace, natural_key, "imported", str(task.task_id))
 
 
-IMPORTERS = {
+IMPORTERS: dict[str, AssetImporter] = {
     "agent": import_agent,
     "knowledge_base": import_knowledge_base,
     "persona": import_persona,

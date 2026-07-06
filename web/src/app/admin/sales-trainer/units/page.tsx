@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { History } from "lucide-react";
+import { AlertTriangle, History } from "lucide-react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
+import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,12 +14,13 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 import {
     filterNewcomerAdminUnits,
     formatAdminStatus,
     normalizeNewcomerUnitDisplay,
 } from "@/lib/sales-trainer/admin-display";
-import type { NewcomerUnitRevision, SalesTrainerUnit } from "@/lib/api/types";
+import type { NewcomerUnitRevision, SalesTrainerAdminCapabilities, SalesTrainerUnit } from "@/lib/api/types";
 
 type ConfirmState =
     | { type: "publish"; unit: SalesTrainerUnit }
@@ -43,8 +45,16 @@ export default function SalesTrainerUnitsPage() {
     const [isHistoryLoading, setIsHistoryLoading] = useState(false);
     const [rollbackReasonByRevision, setRollbackReasonByRevision] = useState<Record<string, string>>({});
     const [rollbackRevisionId, setRollbackRevisionId] = useState<string | null>(null);
+    const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessUnits = isSalesTrainerAdminPathAllowedForCapabilities(pathname, adminCapabilities);
 
-    async function loadUnits() {
+    const loadUnits = useCallback(async () => {
+        if (!canAccessUnits) {
+            setError(null);
+            return;
+        }
         setIsLoading(true);
         setError(null);
         try {
@@ -55,18 +65,59 @@ export default function SalesTrainerUnitsPage() {
             setUnits(result.items);
         } catch (loadError) {
             setUnits([]);
+            setHistoryUnit(null);
+            setRevisions([]);
             setError(getApiErrorMessage(loadError));
         } finally {
             setIsLoading(false);
         }
-    }
+    }, [canAccessUnits]);
 
     useEffect(() => {
-        void loadUnits();
+        let isActive = true;
+        void api.admin.salesTrainer.getCapabilities()
+            .then((result) => {
+                if (!isActive) {
+                    return;
+                }
+                setAdminCapabilities(result);
+                setCapabilityError(null);
+            })
+            .catch((loadError) => {
+                if (!isActive) {
+                    return;
+                }
+                setAdminCapabilities(null);
+                setCapabilityError(getApiErrorMessage(loadError));
+            })
+            .finally(() => {
+                if (isActive) {
+                    setIsCapabilityLoading(false);
+                }
+            });
+        return () => {
+            isActive = false;
+        };
     }, []);
 
+    useEffect(() => {
+        if (isCapabilityLoading) {
+            return;
+        }
+        if (!canAccessUnits) {
+            setUnits([]);
+            setError(null);
+            setConfirmState(null);
+            setHistoryUnit(null);
+            setRevisions([]);
+            setIsLoading(false);
+            return;
+        }
+        void loadUnits();
+    }, [canAccessUnits, isCapabilityLoading, loadUnits]);
+
     async function handleConfirm() {
-        if (!confirmState) {
+        if (!confirmState || !canAccessUnits) {
             return;
         }
         setIsOperating(true);
@@ -87,6 +138,9 @@ export default function SalesTrainerUnitsPage() {
     }
 
     async function openRevisionHistory(unit: SalesTrainerUnit) {
+        if (!canAccessUnits) {
+            return;
+        }
         setHistoryUnit(unit);
         setRevisions([]);
         setRollbackReasonByRevision({});
@@ -102,7 +156,7 @@ export default function SalesTrainerUnitsPage() {
     }
 
     async function rollbackToRevision(revision: NewcomerUnitRevision) {
-        if (!historyUnit) {
+        if (!historyUnit || !canAccessUnits) {
             return;
         }
         const reason = rollbackReasonByRevision[revision.revision_id]?.trim() ?? "";
@@ -134,15 +188,15 @@ export default function SalesTrainerUnitsPage() {
                 <AdminPageHeader
                     title="新人训练路径模块单元"
                     description="列表页只做浏览与流转操作；新增和编辑都在独立页面完成。"
-                    primaryAction={(
+                    primaryAction={canAccessUnits ? (
                         <Button
                             className="rounded-full bg-slate-900 text-white"
                             onClick={() => router.push("/admin/sales-trainer/units/new")}
                         >
                             新建训练单元
                         </Button>
-                    )}
-                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+                    ) : null}
+                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
                 />
             )}
         >
@@ -157,12 +211,36 @@ export default function SalesTrainerUnitsPage() {
             />
 
             <div className="space-y-4">
-                <GlassCard className="overflow-hidden p-0">
-                    {error ? (
-                        <div className="border-b border-red-100 bg-red-50 px-6 py-4 text-sm text-red-700">
-                            {error}
+                {isCapabilityLoading ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                        正在校验模块单元管理权限...
+                    </div>
+                ) : capabilityError || !canAccessUnits ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+                        <div className="flex items-start gap-3">
+                            <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
+                            <div>
+                                <h2 className="font-bold text-amber-950">模块单元权限不足</h2>
+                                <p className="mt-1 text-sm leading-6">
+                                    当前页不会在权限未确认时读取或展示训练单元写入入口。请联系管理员开通模块管理权限后重试。
+                                </p>
+                                {capabilityError ? (
+                                    <p className="mt-2 text-sm font-medium">{capabilityError}</p>
+                                ) : null}
+                            </div>
                         </div>
-                    ) : null}
+                    </div>
+                ) : null}
+                {canAccessUnits && error ? (
+                    <AdminLoadErrorCard
+                        title="训练单元列表加载失败"
+                        description="当前页不会把训练单元接口异常伪装成暂无训练单元。请检查模块管理权限、路径配置或后端服务状态后重试。"
+                        message={error}
+                        retryLabel="重新加载训练单元"
+                        onRetry={() => void loadUnits()}
+                    />
+                ) : canAccessUnits ? (
+                <GlassCard className="overflow-hidden p-0">
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-slate-100 text-left text-slate-500">
@@ -230,7 +308,8 @@ export default function SalesTrainerUnitsPage() {
                         </tbody>
                     </table>
                 </GlassCard>
-                {historyUnit ? (
+                ) : null}
+                {canAccessUnits && historyUnit ? (
                     <GlassCard className="space-y-4 p-6">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>

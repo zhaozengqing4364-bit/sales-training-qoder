@@ -9,10 +9,14 @@ from sales_trainer.ai_coach_policy import (
 from sales_trainer.permissions import (
     can_manage_sales_trainer,
     can_manage_sales_trainer_prompts,
+    can_regrade_sales_trainer_history,
     can_retry_sales_trainer_jobs,
     can_view_sales_trainer_logs,
     can_view_sales_trainer_records,
+    can_view_sales_trainer_settings,
+    is_sales_trainer_manager,
     sales_trainer_admin_capability_projection,
+    sales_trainer_manager_roles,
     team_scope_department,
 )
 
@@ -43,7 +47,10 @@ def test_should_scope_training_lead_to_department_records() -> None:
 
     assert not can_manage_sales_trainer(user)
     assert can_view_sales_trainer_records(user)
+    assert not can_view_sales_trainer_logs(user)
+    assert not can_view_sales_trainer_settings(user)
     assert not can_retry_sales_trainer_jobs(user)
+    assert not can_regrade_sales_trainer_history(user)
     assert team_scope_department(user) == "华东销售"
 
 
@@ -54,6 +61,7 @@ def test_should_allow_content_admin_to_manage_content_but_not_records() -> None:
     assert not can_manage_sales_trainer_prompts(user)
     assert not can_view_sales_trainer_records(user)
     assert not can_retry_sales_trainer_jobs(user)
+    assert not can_regrade_sales_trainer_history(user)
 
 
 def test_should_allow_ops_to_diagnose_and_retry_without_content_management() -> None:
@@ -70,6 +78,7 @@ def test_should_keep_support_as_training_lead_compatibility_alias() -> None:
 
     assert not can_manage_sales_trainer(user)
     assert can_view_sales_trainer_records(user)
+    assert not can_view_sales_trainer_logs(user)
     assert team_scope_department(user) == "北区"
 
 
@@ -78,6 +87,38 @@ def test_should_accept_ops_as_operations_compatibility_alias() -> None:
 
     assert can_view_sales_trainer_logs(user)
     assert can_retry_sales_trainer_jobs(user)
+    assert can_regrade_sales_trainer_history(user)
+
+
+def test_should_filter_invalid_manager_roles_without_expanding_capabilities(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "SALES_TRAINER_MANAGER_ROLES",
+        "training_manager,evil,user,content_admin,admin,ops",
+    )
+
+    assert sales_trainer_manager_roles() == {"training_manager"}
+    assert is_sales_trainer_manager(_user("training_manager"))
+    assert not is_sales_trainer_manager(_user("user"))
+    assert not is_sales_trainer_manager(_user("content_admin"))
+    assert not is_sales_trainer_manager(_user("admin"))
+    assert not is_sales_trainer_manager(_user("ops"))
+
+
+def test_should_fail_closed_when_manager_roles_env_has_no_allowlisted_role(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "SALES_TRAINER_MANAGER_ROLES",
+        "evil,user,content_admin,admin,ops",
+    )
+
+    assert sales_trainer_manager_roles() == set()
+    assert not is_sales_trainer_manager(_user("support"))
+    assert not is_sales_trainer_manager(_user("training_lead"))
+    assert not is_sales_trainer_manager(_user("training_manager"))
+    assert not is_sales_trainer_manager(_user("user"))
 
 
 def test_should_use_granular_route_guards_for_admin_surfaces() -> None:
@@ -111,11 +152,16 @@ def test_admin_capability_projection_uses_permission_authority() -> None:
 
     assert training_lead["role_label"] == "培训负责人"
     assert training_lead["capabilities"]["view_records"] is True
+    assert training_lead["capabilities"]["view_logs"] is False
+    assert training_lead["capabilities"]["view_settings"] is False
     assert training_lead["capabilities"]["manage_content"] is False
+    assert training_lead["capabilities"]["regrade_history"] is False
 
     assert ops["role_label"] == "运维人员"
     assert ops["capabilities"]["retry_jobs"] is True
+    assert ops["capabilities"]["regrade_history"] is True
     assert ops["capabilities"]["view_logs"] is True
+    assert ops["capabilities"]["view_settings"] is True
     assert ops["capabilities"]["manage_content"] is False
     assert ops["capabilities"]["manage_prompts"] is False
 

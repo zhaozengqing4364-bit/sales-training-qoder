@@ -14,6 +14,7 @@ from curriculum_practice.services.asset_resolution import (
     merge_curriculum_into_voice_policy_snapshot,
 )
 from curriculum_practice.services.learner_profiles import DEFAULT_LEARNER_LEVEL
+from curriculum_practice.services.orm_payload_typing import set_orm_field
 from curriculum_practice.services.practice_templates import published_ref
 from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
@@ -93,6 +94,6 @@ async def apply_curriculum_snapshot_to_session(
             message=str(exc),
         ) from exc
 
-    session.practice_template_id = str(template.template_id)
-    session.curriculum_snapshot = snapshot.model_dump(mode="json")
+    set_orm_field(session, "practice_template_id", str(template.template_id))
+    set_orm_field(session, "curriculum_snapshot", snapshot.model_dump(mode="json"))
     merge_curriculum_into_voice_policy_snapshot(session, template=template)

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from curriculum_practice.services.test_bank import TestBankService
 from sales_trainer.schemas import (
     SalesTrainerQuestionCategoryCreate,
     SalesTrainerQuestionCategoryUpdate,
@@ -11,10 +12,13 @@ from sales_trainer.schemas import (
     SalesTrainerQuestionUpdate,
 )
 from sales_trainer.services.curriculum_practice_adapter import (
-    QuestionCategory,
     QuestionCategoryCreate,
+    QuestionCategoryDTO,
     QuestionCategoryUpdate,
-    QuestionItem,
+    QuestionItemDTO,
+    create_test_bank_service,
+    project_question_category,
+    project_question_item,
 )
 from sales_trainer.services.question_bank.contracts import (
     SALES_TRAINER_QUESTION_SCOPE,
@@ -42,10 +46,10 @@ __all__ = [
 class SalesTrainerQuestionService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
-        self._test_bank = TestBankService(db)
+        self._test_bank = create_test_bank_service(db)
         self._revisions = SalesTrainerQuestionRevisionService(db)
 
-    async def list_categories(self) -> tuple[list[QuestionCategory], int]:
+    async def list_categories(self) -> tuple[list[QuestionCategoryDTO], int]:
         result = await self._test_bank.list_categories_by_scope(
             usage_scope=SALES_TRAINER_QUESTION_SCOPE
         )
@@ -56,14 +60,16 @@ class SalesTrainerQuestionService:
                 status_code=500,
             )
         categories = result.value or []
-        return categories, len(categories)
+        return [project_question_category(category) for category in categories], len(
+            categories
+        )
 
     async def create_category(
         self,
         payload: SalesTrainerQuestionCategoryCreate,
         *,
         actor_id: str,
-    ) -> QuestionCategory:
+    ) -> QuestionCategoryDTO:
         result = await self._test_bank.create_category(
             QuestionCategoryCreate(
                 **payload.model_dump(),
@@ -77,7 +83,7 @@ class SalesTrainerQuestionService:
                 "新人训练路径题目分类创建失败。",
                 status_code=400,
             )
-        return result.value
+        return project_question_category(result.value)
 
     async def update_category(
         self,
@@ -85,8 +91,8 @@ class SalesTrainerQuestionService:
         payload: SalesTrainerQuestionCategoryUpdate,
         *,
         actor_id: str,
-    ) -> QuestionCategory:
-        category = await self._require_category(category_id)
+    ) -> QuestionCategoryDTO:
+        category = await self._require_category_record(category_id)
         result = await self._test_bank.update_category(
             category,
             QuestionCategoryUpdate(
@@ -101,7 +107,7 @@ class SalesTrainerQuestionService:
                 "新人训练路径题目分类更新失败。",
                 status_code=400,
             )
-        return result.value
+        return project_question_category(result.value)
 
     async def list_questions(
         self,
@@ -110,7 +116,7 @@ class SalesTrainerQuestionService:
         difficulty: str | None = None,
         status: str | None = None,
         tag: str | None = None,
-    ) -> tuple[list[QuestionItem], int]:
+    ) -> tuple[list[QuestionItemDTO], int]:
         result = await self._test_bank.list_questions(
             category_id=category_id,
             difficulty=difficulty,
@@ -125,15 +131,15 @@ class SalesTrainerQuestionService:
                 status_code=500,
             )
         questions = result.value or []
-        return questions, len(questions)
+        return [project_question_item(question) for question in questions], len(questions)
 
     async def create_question(
         self,
         payload: SalesTrainerQuestionCreate,
         *,
         actor_id: str,
-    ) -> QuestionItem:
-        await self._require_category(payload.category_id)
+    ) -> QuestionItemDTO:
+        await self._require_category_record(payload.category_id)
         result = await self._test_bank.create_question(
             to_question_item_create(payload),
             actor_id=actor_id,
@@ -144,24 +150,10 @@ class SalesTrainerQuestionService:
                 "新人训练路径题目创建失败。",
                 status_code=400,
             )
-        return result.value
+        return project_question_item(result.value)
 
-    async def get_question(self, question_id: str) -> QuestionItem:
-        result = await self._test_bank.get_question(question_id)
-        if not result.is_success or result.value is None:
-            raise SalesTrainerQuestionServiceError(
-                result.fallback or "[QUESTION_ITEM_NOT_FOUND]",
-                "新人训练路径题目不存在。",
-                status_code=404,
-            )
-        question = result.value
-        if question.usage_scope != SALES_TRAINER_QUESTION_SCOPE:
-            raise SalesTrainerQuestionServiceError(
-                "[QUESTION_ITEM_NOT_FOUND]",
-                "新人训练路径题目不存在。",
-                status_code=404,
-            )
-        return question
+    async def get_question(self, question_id: str) -> QuestionItemDTO:
+        return project_question_item(await self._require_question_record(question_id))
 
     async def update_question(
         self,
@@ -169,16 +161,17 @@ class SalesTrainerQuestionService:
         payload: SalesTrainerQuestionUpdate,
         *,
         actor_id: str,
-    ) -> QuestionItem:
-        question = await self.get_question(question_id)
+    ) -> QuestionItemDTO:
+        question = await self._require_question_record(question_id)
         if payload.category_id is not None:
-            await self._require_category(payload.category_id)
+            await self._require_category_record(payload.category_id)
         if question.status == "published":
-            return await self._revisions.save_future_revision(
+            saved = await self._revisions.save_future_revision(
                 question,
                 payload,
                 actor=await self._require_actor(actor_id),
             )
+            return project_question_item(saved)
         if question.status != "draft":
             raise SalesTrainerQuestionServiceError(
                 "[QUESTION_ITEM_NOT_EDITABLE]",
@@ -196,16 +189,16 @@ class SalesTrainerQuestionService:
                 "新人训练路径题目更新失败。",
                 status_code=400,
             )
-        return result.value
+        return project_question_item(result.value)
 
-    async def publish_question(self, question_id: str, *, actor_id: str) -> QuestionItem:
-        question = await self.get_question(question_id)
+    async def publish_question(self, question_id: str, *, actor_id: str) -> QuestionItemDTO:
+        question = await self._require_question_record(question_id)
         actor = await self._require_actor(actor_id)
         if question.status == "published" and await self._revisions.publish_working_revision(
             question,
             actor=actor,
         ):
-            return question
+            return project_question_item(question)
         previous_snapshot = question_lifecycle_snapshot(question)
         result = await self._test_bank.publish_question(question, actor_id=actor_id)
         if not result.is_success or result.value is None:
@@ -219,10 +212,10 @@ class SalesTrainerQuestionService:
             actor=actor,
             previous_snapshot=previous_snapshot,
         )
-        return result.value
+        return project_question_item(result.value)
 
-    async def archive_question(self, question_id: str, *, actor_id: str) -> QuestionItem:
-        question = await self.get_question(question_id)
+    async def archive_question(self, question_id: str, *, actor_id: str) -> QuestionItemDTO:
+        question = await self._require_question_record(question_id)
         result = await self._test_bank.archive_question(question, actor_id=actor_id)
         if not result.is_success or result.value is None:
             raise SalesTrainerQuestionServiceError(
@@ -230,9 +223,9 @@ class SalesTrainerQuestionService:
                 "新人训练路径题目归档失败。",
                 status_code=400,
             )
-        return result.value
+        return project_question_item(result.value)
 
-    async def _require_category(self, category_id: str) -> QuestionCategory:
+    async def _require_category_record(self, category_id: str) -> Any:
         result = await self._test_bank.get_category(category_id)
         if not result.is_success or result.value is None:
             raise SalesTrainerQuestionServiceError(
@@ -248,6 +241,23 @@ class SalesTrainerQuestionService:
                 status_code=404,
             )
         return category
+
+    async def _require_question_record(self, question_id: str) -> Any:
+        result = await self._test_bank.get_question(question_id)
+        if not result.is_success or result.value is None:
+            raise SalesTrainerQuestionServiceError(
+                result.fallback or "[QUESTION_ITEM_NOT_FOUND]",
+                "新人训练路径题目不存在。",
+                status_code=404,
+            )
+        question = result.value
+        if question.usage_scope != SALES_TRAINER_QUESTION_SCOPE:
+            raise SalesTrainerQuestionServiceError(
+                "[QUESTION_ITEM_NOT_FOUND]",
+                "新人训练路径题目不存在。",
+                status_code=404,
+            )
+        return question
 
     async def _require_actor(self, actor_id: str) -> User:
         actor = await self._db.get(User, actor_id)

@@ -44,6 +44,16 @@ class AiCoachChatSessionCreator:
     ) -> str:
         path_response = await SalesTrainerPathConfigService(self._db).get_config()
         try:
+            if (
+                path_response.get("path") is None
+                or not path_response.get("active_revision_id")
+                or path_response.get("active_revision_no") is None
+            ):
+                raise AiCoachChatRuntimeError(
+                    "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
+                    "新人训练路径尚未发布 active revision，AI Coach 不能启动。",
+                    409,
+                )
             module, config = self._runtime.module_ai_coach_config(
                 path_response.get("path"),
                 module_key,
@@ -82,7 +92,7 @@ class AiCoachChatSessionCreator:
             actor=actor,
             action="ai_coach_chat_session_created_v1",
             target_type="sales_trainer_ai_coach_session",
-            target_id=session.session_id,
+            target_id=str(session.session_id),
             metadata={"module_key": module_key, "runtime": "chat"},
         )
         if start_auto_advance:

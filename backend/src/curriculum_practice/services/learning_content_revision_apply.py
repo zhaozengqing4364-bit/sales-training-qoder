@@ -9,6 +9,7 @@ from curriculum_practice.models import LearningChapter, LearningContent
 from curriculum_practice.services.learning_content_revision_payloads import (
     learning_content_chapter_payloads,
 )
+from curriculum_practice.services.orm_payload_typing import set_orm_field
 
 
 class LearningContentRevisionApplier:
@@ -34,12 +35,12 @@ class LearningContentRevisionApplier:
         }
         offset = len(existing_chapters) + len(incoming_payloads) + 1
         for index, chapter in enumerate(existing_chapters, start=1):
-            chapter.order_index = offset + index
+            set_orm_field(chapter, "order_index", offset + index)
         await self._db.flush()
         for chapter_payload in incoming_payloads:
             chapter_id = _optional_str(chapter_payload.get("chapter_id"))
-            chapter = existing_by_id.get(chapter_id or "")
-            if chapter is None:
+            existing_chapter = existing_by_id.get(chapter_id or "")
+            if existing_chapter is None:
                 chapter = LearningChapter(
                     learning_content_id=str(content.learning_content_id),
                     title=_required_str(chapter_payload.get("title")),
@@ -49,13 +50,25 @@ class LearningContentRevisionApplier:
                     updated_by=actor_id,
                 )
                 if chapter_id is not None:
-                    chapter.chapter_id = chapter_id
+                    set_orm_field(chapter, "chapter_id", chapter_id)
                 self._db.add(chapter)
             else:
-                chapter.title = _required_str(chapter_payload.get("title"))
-                chapter.content = _required_str(chapter_payload.get("content"))
-                chapter.order_index = _required_int(chapter_payload.get("order_index"))
-                chapter.updated_by = actor_id
+                set_orm_field(
+                    existing_chapter,
+                    "title",
+                    _required_str(chapter_payload.get("title")),
+                )
+                set_orm_field(
+                    existing_chapter,
+                    "content",
+                    _required_str(chapter_payload.get("content")),
+                )
+                set_orm_field(
+                    existing_chapter,
+                    "order_index",
+                    _required_int(chapter_payload.get("order_index")),
+                )
+                set_orm_field(existing_chapter, "updated_by", actor_id)
         for chapter in existing_chapters:
             if str(chapter.chapter_id) not in incoming_ids:
                 await self._db.delete(chapter)

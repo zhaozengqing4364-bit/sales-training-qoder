@@ -32,7 +32,12 @@ const UNIT_TYPE_LABELS = {
     quiz: "考试",
     audio_scoring: "录音",
     ai_coach: "AI 教练",
-} as const satisfies Record<SalesTrainerUnitType | "ai_coach", string>;
+    business_etiquette_quiz: "商务礼仪小测",
+    realtime_roleplay: "实时对练",
+} as const satisfies Record<
+    SalesTrainerUnitType | "ai_coach" | "business_etiquette_quiz" | "realtime_roleplay",
+    string
+>;
 
 export const TRAINING_PURPOSE_OPTIONS = [
     { value: "ppt_pitch", label: "PPT 讲解录音" },
@@ -90,7 +95,9 @@ export function formatAdminRecordStatus(status: string | null | undefined): stri
     return "未识别状态";
 }
 
-export function formatUnitTypeLabel(unitType: SalesTrainerUnitType | "ai_coach"): string {
+export function formatUnitTypeLabel(
+    unitType: SalesTrainerUnitType | "ai_coach" | "business_etiquette_quiz" | "realtime_roleplay",
+): string {
     return UNIT_TYPE_LABELS[unitType];
 }
 

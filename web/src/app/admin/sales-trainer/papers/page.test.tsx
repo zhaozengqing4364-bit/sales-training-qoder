@@ -4,28 +4,36 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import NewcomerPapersPage from "./page";
 
 const {
+    getCapabilitiesMock,
     listPapersMock,
     listPaperRevisionsMock,
     rollbackPaperMock,
+    toastApi,
     toastSuccessMock,
     toastErrorMock,
-} = vi.hoisted(() => ({
-    listPapersMock: vi.fn(),
-    listPaperRevisionsMock: vi.fn(),
-    rollbackPaperMock: vi.fn(),
-    toastSuccessMock: vi.fn(),
-    toastErrorMock: vi.fn(),
-}));
+} = vi.hoisted(() => {
+    const toastSuccess = vi.fn();
+    const toastError = vi.fn();
+    return {
+        getCapabilitiesMock: vi.fn(),
+        listPapersMock: vi.fn(),
+        listPaperRevisionsMock: vi.fn(),
+        rollbackPaperMock: vi.fn(),
+        toastApi: {
+            success: toastSuccess,
+            error: toastError,
+        },
+        toastSuccessMock: toastSuccess,
+        toastErrorMock: toastError,
+    };
+});
 
 vi.mock("next/navigation", () => ({
     usePathname: () => "/admin/sales-trainer/papers",
 }));
 
 vi.mock("@/components/ui/toast", () => ({
-    useToast: () => ({
-        success: toastSuccessMock,
-        error: toastErrorMock,
-    }),
+    useToast: () => toastApi,
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -36,6 +44,10 @@ vi.mock("@/lib/api/client", async () => {
             ...actual.api,
             admin: {
                 ...actual.api.admin,
+                salesTrainer: {
+                    ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
+                },
                 newcomerTraining: {
                     ...actual.api.admin.newcomerTraining,
                     listPapers: listPapersMock,
@@ -52,11 +64,30 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("NewcomerPapersPage", () => {
     beforeEach(() => {
+        getCapabilitiesMock.mockReset();
         listPapersMock.mockReset();
         listPaperRevisionsMock.mockReset();
         rollbackPaperMock.mockReset();
         toastSuccessMock.mockReset();
         toastErrorMock.mockReset();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: true,
+                manage_questions: false,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_content"],
+        });
         listPapersMock.mockResolvedValue({
             items: [
                 {
@@ -173,9 +204,8 @@ describe("NewcomerPapersPage", () => {
                 limit: 100,
             });
         });
-        await waitFor(() => {
-            expect(screen.getByText("商务礼仪入门考卷")).toBeTruthy();
-        });
+        expect(await screen.findByText("商务礼仪入门考卷")).toBeTruthy();
+        expect(await screen.findByRole("link", { name: "编辑草稿" })).toBeTruthy();
         expect(screen.getByRole("link", { name: "新建考卷" }).getAttribute("href")).toBe(
             "/admin/sales-trainer/papers/new",
         );
@@ -193,6 +223,25 @@ describe("NewcomerPapersPage", () => {
         expect(screen.queryByText("考卷标识")).toBeNull();
         expect(screen.queryByText("题目编号")).toBeNull();
         expect(screen.queryByText("draft")).toBeNull();
+    });
+
+    it("shows a blocking load error instead of an empty paper table when list loading fails", async () => {
+        listPapersMock.mockRejectedValueOnce(new Error("papers backend down"));
+
+        render(<NewcomerPapersPage />);
+
+        expect(await screen.findByText("考卷列表加载失败")).toBeTruthy();
+        expect(screen.getByText("papers backend down")).toBeTruthy();
+        expect(screen.queryByText("暂无考卷")).toBeNull();
+        expect(toastErrorMock).toHaveBeenCalledWith("papers backend down");
+
+        fireEvent.click(screen.getByRole("button", { name: "重新加载考卷" }));
+
+        expect(await screen.findByText("商务礼仪入门考卷")).toBeTruthy();
+        expect(screen.queryByText("考卷列表加载失败")).toBeNull();
+        await waitFor(() => {
+            expect(listPapersMock).toHaveBeenCalledTimes(2);
+        });
     });
 
     it("shows paper revision history and rolls back with an explicit reason", async () => {
@@ -222,5 +271,36 @@ describe("NewcomerPapersPage", () => {
             });
         });
         expect(toastSuccessMock).toHaveBeenCalledWith("已回滚到第 1 版，后续学员将使用该版本");
+    });
+
+    it("fails closed without content management capability", async () => {
+        getCapabilitiesMock.mockResolvedValueOnce({
+            role: "viewer",
+            role_label: "只读人员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_questions: true,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_questions"],
+        });
+
+        render(<NewcomerPapersPage />);
+
+        expect(await screen.findByText("考卷管理权限不足")).toBeTruthy();
+        expect(listPapersMock).not.toHaveBeenCalled();
+        expect(listPaperRevisionsMock).not.toHaveBeenCalled();
+        expect(screen.queryByRole("link", { name: "新建考卷" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "发布并生效" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "归档" })).toBeNull();
+        expect(screen.queryByRole("button", { name: /回滚到第/ })).toBeNull();
     });
 });

@@ -9,8 +9,8 @@ import type {
 
 import SalesTrainerPathsPage from "./page";
 import {
+    defaultPathConfigDiagnostics,
     defaultLearningContentsResponse,
-    defaultModuleArticle,
     defaultPapersResponse,
     defaultPathRevisionsResponse,
     defaultSettingsResponse,
@@ -18,7 +18,7 @@ import {
 } from "./page.test-data";
 
 const {
-    getModuleArticleMock,
+    getCapabilitiesMock,
     getPathConfigMock,
     getSettingsMock,
     listLearningContentsMock,
@@ -30,7 +30,7 @@ const {
     savePathConfigMock,
     searchParamsMock,
 } = vi.hoisted(() => ({
-    getModuleArticleMock: vi.fn(),
+    getCapabilitiesMock: vi.fn(),
     getPathConfigMock: vi.fn(),
     getSettingsMock: vi.fn(),
     listLearningContentsMock: vi.fn(),
@@ -59,6 +59,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     getSettings: getSettingsMock,
                     listMaterials: listMaterialsMock,
                     listScorePrompts: listScorePromptsMock,
@@ -78,10 +79,6 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.learningContents,
                 list: listLearningContentsMock,
             },
-            newcomerTraining: {
-                ...actual.api.newcomerTraining,
-                getModuleArticle: getModuleArticleMock,
-            },
         },
     };
 });
@@ -89,11 +86,28 @@ vi.mock("@/lib/api/client", async () => {
 describe("SalesTrainerPathsPage audio bindings", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: true,
+                manage_content: true,
+                manage_questions: true,
+                manage_modules: true,
+                manage_prompts: true,
+                view_records: true,
+                view_global_records: true,
+                retry_jobs: true,
+                regrade_history: true,
+                view_logs: true,
+                view_settings: true,
+                enter_realtime: true,
+            },
+        });
         listUnitsMock.mockResolvedValue(defaultUnitsResponse());
         getPathConfigMock.mockResolvedValue(pathConfigWithPptModule());
         listPathConfigRevisionsMock.mockResolvedValue(defaultPathRevisionsResponse());
         listLearningContentsMock.mockResolvedValue(defaultLearningContentsResponse());
-        getModuleArticleMock.mockResolvedValue(defaultModuleArticle());
         listPapersMock.mockResolvedValue(defaultPapersResponse());
         listMaterialsMock.mockResolvedValue(publishedMaterials());
         listScorePromptsMock.mockResolvedValue(publishedScorePrompts());
@@ -141,6 +155,10 @@ describe("SalesTrainerPathsPage audio bindings", () => {
 function pathConfigWithPptModule(): NewcomerPathConfigResponse {
     return {
         source: "active_revision",
+        fallback_reason: null,
+        legacy_snapshot_only: false,
+        management_entry: "/admin/newcomer-training/path-config",
+        permission: "sales_trainer.manage_modules",
         path: {
             path_key: "newcomer_training_path_v1",
             title: "新人训练路径",
@@ -171,6 +189,7 @@ function pathConfigWithPptModule(): NewcomerPathConfigResponse {
         working_revision_id: null,
         working_revision_no: null,
         has_unpublished_revision: false,
+        diagnostics: defaultPathConfigDiagnostics(),
     };
 }
 

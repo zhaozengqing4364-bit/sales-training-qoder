@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +35,28 @@ from curriculum_practice.services.roleplay.situation_pack_hasher import (
 from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
 )
+
+
+class AssetExporter(Protocol):
+    def __call__(
+        self,
+        db: AsyncSession,
+        *,
+        namespace: str,
+        natural_key: str,
+    ) -> Awaitable[dict[str, Any] | None]: ...
+
+
+def _str_value(value: object) -> str | None:
+    return cast(str | None, value)
+
+
+def _asset_id(value: object) -> str | None:
+    return cast(str | None, value)
+
+
+def _json_list(value: object) -> list[Any]:
+    return cast(list[Any], value or [])
 
 
 def _export_status_persona(status: str) -> str:
@@ -93,50 +116,99 @@ async def _natural_ref_for_id(
         return None
     natural_key: str | None = None
     if asset_type == "agent":
-        row = await db.get(Agent, asset_id)
-        natural_key = derive_natural_key(asset_type, name=row.name) if row else None
-    elif asset_type == "persona":
-        row = await db.get(Persona, asset_id)
-        natural_key = derive_natural_key(asset_type, name=row.name) if row else None
-    elif asset_type == "voice_runtime_profile":
-        row = await db.get(VoiceRuntimeProfile, asset_id)
-        natural_key = derive_natural_key(asset_type, name=row.name) if row else None
-    elif asset_type == "scoring_ruleset":
-        row = await db.get(ScoringRuleset, asset_id)
+        agent = await db.get(Agent, asset_id)
         natural_key = (
-            derive_natural_key(asset_type, version=row.version) if row else None
+            derive_natural_key(asset_type, name=_str_value(agent.name))
+            if agent
+            else None
+        )
+    elif asset_type == "persona":
+        persona = await db.get(Persona, asset_id)
+        natural_key = (
+            derive_natural_key(asset_type, name=_str_value(persona.name))
+            if persona
+            else None
+        )
+    elif asset_type == "voice_runtime_profile":
+        profile = await db.get(VoiceRuntimeProfile, asset_id)
+        natural_key = (
+            derive_natural_key(asset_type, name=_str_value(profile.name))
+            if profile
+            else None
+        )
+    elif asset_type == "scoring_ruleset":
+        ruleset = await db.get(ScoringRuleset, asset_id)
+        natural_key = (
+            derive_natural_key(
+                asset_type,
+                version=cast(str | int | None, ruleset.version),
+            )
+            if ruleset
+            else None
         )
     elif asset_type == "knowledge_base":
-        row = await db.get(KnowledgeBase, asset_id)
-        natural_key = derive_natural_key(asset_type, name=row.name) if row else None
-    elif asset_type == "case_item":
-        row = await db.get(CaseItem, asset_id)
+        knowledge_base = await db.get(KnowledgeBase, asset_id)
         natural_key = (
-            derive_natural_key(asset_type, name=row.customer_role) if row else None
+            derive_natural_key(asset_type, name=_str_value(knowledge_base.name))
+            if knowledge_base
+            else None
+        )
+    elif asset_type == "case_item":
+        case_item = await db.get(CaseItem, asset_id)
+        natural_key = (
+            derive_natural_key(asset_type, name=_str_value(case_item.customer_role))
+            if case_item
+            else None
         )
     elif asset_type == "role_profile":
-        row = await db.get(RoleProfile, asset_id)
+        role_profile = await db.get(RoleProfile, asset_id)
         natural_key = (
-            derive_natural_key(asset_type, name=row.role_name) if row else None
+            derive_natural_key(asset_type, name=_str_value(role_profile.role_name))
+            if role_profile
+            else None
         )
     elif asset_type == "learning_content":
-        row = await db.get(LearningContent, asset_id)
-        natural_key = derive_natural_key(asset_type, name=row.title) if row else None
+        content = await db.get(LearningContent, asset_id)
+        natural_key = (
+            derive_natural_key(asset_type, name=_str_value(content.title))
+            if content
+            else None
+        )
     elif asset_type == "examiner_agent":
-        row = await db.get(ExaminerAgent, asset_id)
-        natural_key = derive_natural_key(asset_type, name=row.name) if row else None
+        examiner = await db.get(ExaminerAgent, asset_id)
+        natural_key = (
+            derive_natural_key(asset_type, name=_str_value(examiner.name))
+            if examiner
+            else None
+        )
     elif asset_type == "practice_template":
-        row = await db.get(PracticeTemplate, asset_id)
-        natural_key = derive_natural_key(asset_type, name=row.name) if row else None
+        template = await db.get(PracticeTemplate, asset_id)
+        natural_key = (
+            derive_natural_key(asset_type, name=_str_value(template.name))
+            if template
+            else None
+        )
     elif asset_type == "question_category":
-        row = await db.get(QuestionCategory, asset_id)
-        natural_key = derive_natural_key(asset_type, name=row.name) if row else None
+        category = await db.get(QuestionCategory, asset_id)
+        natural_key = (
+            derive_natural_key(asset_type, name=_str_value(category.name))
+            if category
+            else None
+        )
     elif asset_type == "question_item":
-        row = await db.get(QuestionItem, asset_id)
-        natural_key = derive_natural_key(asset_type, name=row.title) if row else None
+        question = await db.get(QuestionItem, asset_id)
+        natural_key = (
+            derive_natural_key(asset_type, name=_str_value(question.title))
+            if question
+            else None
+        )
     elif asset_type == "training_task":
-        row = await db.get(TrainingTask, asset_id)
-        natural_key = derive_natural_key(asset_type, name=row.title) if row else None
+        task = await db.get(TrainingTask, asset_id)
+        natural_key = (
+            derive_natural_key(asset_type, name=_str_value(task.title))
+            if task
+            else None
+        )
     if natural_key is None:
         return None
     return _natural_ref(asset_type, natural_key, namespace)
@@ -172,7 +244,10 @@ async def export_knowledge_base(
 ) -> dict[str, Any] | None:
     result = await db.execute(select(KnowledgeBase))
     for row in result.scalars().all():
-        if derive_natural_key("knowledge_base", name=row.name) != natural_key:
+        if (
+            derive_natural_key("knowledge_base", name=_str_value(row.name))
+            != natural_key
+        ):
             continue
         payload = {
             "name": row.name,
@@ -204,7 +279,7 @@ async def export_persona(
 ) -> dict[str, Any] | None:
     result = await db.execute(select(Persona))
     for row in result.scalars().all():
-        if derive_natural_key("persona", name=row.name) != natural_key:
+        if derive_natural_key("persona", name=_str_value(row.name)) != natural_key:
             continue
         payload = {
             "name": row.name,
@@ -268,7 +343,10 @@ async def export_practice_template(
 ) -> dict[str, Any] | None:
     result = await db.execute(select(PracticeTemplate))
     for row in result.scalars().all():
-        if derive_natural_key("practice_template", name=row.name) != natural_key:
+        if (
+            derive_natural_key("practice_template", name=_str_value(row.name))
+            != natural_key
+        ):
             continue
         depends_on: list[dict[str, str]] = []
         asset_refs: dict[str, object] = {}
@@ -278,7 +356,7 @@ async def export_practice_template(
             asset_refs=asset_refs,
             field="agent",
             asset_type="agent",
-            asset_id=row.agent_id,
+            asset_id=_asset_id(row.agent_id),
             namespace=namespace,
         )
         await _append_dependency_ref(
@@ -287,7 +365,7 @@ async def export_practice_template(
             asset_refs=asset_refs,
             field="persona",
             asset_type="persona",
-            asset_id=row.persona_id,
+            asset_id=_asset_id(row.persona_id),
             namespace=namespace,
         )
         await _append_dependency_ref(
@@ -296,7 +374,7 @@ async def export_practice_template(
             asset_refs=asset_refs,
             field="runtime_profile",
             asset_type="voice_runtime_profile",
-            asset_id=row.runtime_profile_id,
+            asset_id=_asset_id(row.runtime_profile_id),
             namespace=namespace,
         )
         await _append_dependency_ref(
@@ -305,11 +383,11 @@ async def export_practice_template(
             asset_refs=asset_refs,
             field="scoring_ruleset",
             asset_type="scoring_ruleset",
-            asset_id=row.scoring_ruleset_id,
+            asset_id=_asset_id(row.scoring_ruleset_id),
             namespace=namespace,
         )
         kb_refs: list[dict[str, str]] = []
-        for kb_id in row.knowledge_base_refs or []:
+        for kb_id in _json_list(row.knowledge_base_refs):
             ref = await _natural_ref_for_id(
                 db,
                 asset_type="knowledge_base",
@@ -327,7 +405,7 @@ async def export_practice_template(
             asset_refs=asset_refs,
             field="case_item",
             asset_type="case_item",
-            asset_id=row.case_item_id,
+            asset_id=_asset_id(row.case_item_id),
             namespace=namespace,
         )
         await _append_dependency_ref(
@@ -336,7 +414,7 @@ async def export_practice_template(
             asset_refs=asset_refs,
             field="role_profile",
             asset_type="role_profile",
-            asset_id=row.role_profile_id,
+            asset_id=_asset_id(row.role_profile_id),
             namespace=namespace,
         )
         await _append_dependency_ref(
@@ -345,7 +423,7 @@ async def export_practice_template(
             asset_refs=asset_refs,
             field="learning_content",
             asset_type="learning_content",
-            asset_id=row.learning_content_id,
+            asset_id=_asset_id(row.learning_content_id),
             namespace=namespace,
         )
         await _append_dependency_ref(
@@ -354,7 +432,7 @@ async def export_practice_template(
             asset_refs=asset_refs,
             field="examiner_agent",
             asset_type="examiner_agent",
-            asset_id=row.examiner_agent_id,
+            asset_id=_asset_id(row.examiner_agent_id),
             namespace=namespace,
         )
         if row.situation_pack_code:
@@ -400,7 +478,7 @@ async def export_agent(
 ) -> dict[str, Any] | None:
     result = await db.execute(select(Agent))
     for row in result.scalars().all():
-        if derive_natural_key("agent", name=row.name) != natural_key:
+        if derive_natural_key("agent", name=_str_value(row.name)) != natural_key:
             continue
         payload = {
             "name": row.name,
@@ -431,7 +509,10 @@ async def export_voice_runtime_profile(
 ) -> dict[str, Any] | None:
     result = await db.execute(select(VoiceRuntimeProfile))
     for row in result.scalars().all():
-        if derive_natural_key("voice_runtime_profile", name=row.name) != natural_key:
+        if (
+            derive_natural_key("voice_runtime_profile", name=_str_value(row.name))
+            != natural_key
+        ):
             continue
         payload = {
             "name": row.name,
@@ -469,7 +550,13 @@ async def export_scoring_ruleset(
 ) -> dict[str, Any] | None:
     result = await db.execute(select(ScoringRuleset))
     for row in result.scalars().all():
-        if derive_natural_key("scoring_ruleset", version=row.version) != natural_key:
+        if (
+            derive_natural_key(
+                "scoring_ruleset",
+                version=cast(str | int | None, row.version),
+            )
+            != natural_key
+        ):
             continue
         payload = {
             "scenario_type": row.scenario_type,
@@ -696,7 +783,7 @@ async def export_examiner_agent(
         depends_on: list[dict[str, str]] = []
         asset_refs: dict[str, object] = {}
         question_refs: list[dict[str, str]] = []
-        for question_id in row.question_source_ids or []:
+        for question_id in _json_list(row.question_source_ids):
             ref = await _natural_ref_for_id(
                 db,
                 asset_type="question_item",
@@ -796,10 +883,10 @@ async def _export_simple_model(
     asset_type: str,
     namespace: str,
     natural_key: str,
-    name_getter: Any,
-    version_getter: Any,
-    status_getter: Any,
-    payload_getter: Any,
+    name_getter: Callable[[Any], str],
+    version_getter: Callable[[Any], str | int],
+    status_getter: Callable[[Any], str],
+    payload_getter: Callable[[Any], dict[str, Any]],
 ) -> dict[str, Any] | None:
     result = await db.execute(select(model))
     for row in result.scalars().all():
@@ -844,7 +931,7 @@ def _native_asset_entry(
     }
 
 
-EXPORTERS = {
+EXPORTERS: dict[str, AssetExporter] = {
     "agent": export_agent,
     "knowledge_base": export_knowledge_base,
     "persona": export_persona,

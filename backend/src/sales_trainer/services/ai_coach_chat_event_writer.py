@@ -36,7 +36,7 @@ class AiCoachChatEventWriter:
         assistant: SalesTrainerAiCoachChatMessage,
         events: list[AiCoachChatUiEventInternalV1],
     ) -> None:
-        card_number = await self._store.next_card_number(session.session_id)
+        card_number = await self._store.next_card_number(str(session.session_id))
         for index, event in enumerate(events, start=1):
             event_id = str(uuid.uuid4())
             stored_payload = self.build_stored_event_payload(

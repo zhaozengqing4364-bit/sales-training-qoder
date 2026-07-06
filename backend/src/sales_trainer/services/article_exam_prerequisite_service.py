@@ -5,21 +5,18 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from curriculum_practice.services.learning_progress_service import (
-    LearningProgressService,
-)
-from sales_trainer.models import SalesTrainerExamPaper, SalesTrainerUnit
-from sales_trainer.schemas import NewcomerArticleBinding, NewcomerPathConfigPayload
+from sales_trainer.models import SalesTrainerExamPaper
+from sales_trainer.schemas import NewcomerArticleBinding
 from sales_trainer.services.article_binding_service import (
     ArticleBindingService,
     ArticleBindingServiceError,
 )
 from sales_trainer.services.curriculum_practice_adapter import (
     LearningChapterSummary,
+    LearningProgressAdapter,
     list_learning_chapters,
 )
 from sales_trainer.services.exam_paper_config import ExamPaperServiceError
-from sales_trainer.services.path_config_models import path_config
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
 
 
@@ -59,7 +56,7 @@ class ArticleExamPrerequisiteService:
 
         content_id = str(article["learning_content_id"])
         chapters = await self._chapters(content_id)
-        progress_result = await LearningProgressService(self._db).progress_for_user(
+        progress_result = await LearningProgressAdapter(self._db).progress_for_user(
             user_id=str(actor.user_id),
             content_id=content_id,
             chapters=chapters,
@@ -81,9 +78,11 @@ class ArticleExamPrerequisiteService:
         self,
         paper: SalesTrainerExamPaper,
     ) -> ArticleExamBinding | None:
-        path_response = await SalesTrainerPathConfigService(self._db).get_config()
-        payload = NewcomerPathConfigPayload.model_validate(path_response["path"])
-        for module in payload.modules:
+        projection = await SalesTrainerPathConfigService(self._db).active_projection()
+        if projection is None:
+            return None
+        for item in projection.items:
+            module = item.path_config
             if (
                 module.enabled
                 and module.module_type == "article_exam"
@@ -92,28 +91,14 @@ class ArticleExamPrerequisiteService:
                     or module.target_unit_id == str(paper.unit_id)
                 )
             ):
+                module_key = module.module_key
+                if not isinstance(module_key, str) or not module_key:
+                    continue
                 return ArticleExamBinding(
-                    module_key=module.module_key,
+                    module_key=module_key,
                     learning_content_id=module.learning_content_id,
                 )
-
-        unit = await self._db.get(SalesTrainerUnit, paper.unit_id)
-        if unit is None:
-            return None
-        legacy_config = path_config(unit.config or {})
-        if legacy_config is None:
-            return None
-        if not legacy_config.enabled or legacy_config.module_type != "article_exam":
-            return None
-        if (
-            legacy_config.exam_paper_id
-            and legacy_config.exam_paper_id != str(paper.paper_id)
-        ):
-            return None
-        return ArticleExamBinding(
-            module_key=legacy_config.module_key or str(paper.module_key),
-            learning_content_id=legacy_config.learning_content_id,
-        )
+        return None
 
     async def _chapters(self, content_id: str) -> list[LearningChapterSummary]:
         return await list_learning_chapters(self._db, content_id)

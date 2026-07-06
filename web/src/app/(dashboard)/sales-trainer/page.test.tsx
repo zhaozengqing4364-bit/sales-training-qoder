@@ -2,15 +2,26 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiRequestError } from "@/lib/api/client";
+
 import SalesTrainerPage from "./page";
 
-const { listPathsMock, listUnitsMock } = vi.hoisted(() => ({
+const { getJourneyMock, listPathsMock, listUnitsMock, routerPushMock, startRealtimeRoleplayMock } = vi.hoisted(() => ({
+    getJourneyMock: vi.fn(),
     listUnitsMock: vi.fn(),
     listPathsMock: vi.fn(),
+    routerPushMock: vi.fn(),
+    startRealtimeRoleplayMock: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
     default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
+}));
+
+vi.mock("next/navigation", () => ({
+    useRouter: () => ({
+        push: routerPushMock,
+    }),
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -25,8 +36,20 @@ vi.mock("@/components/ui/badge", () => ({
     Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
 }));
 
-vi.mock("@/components/ui/empty-state", () => ({
-    EmptyState: ({ title, description }: { title: string; description: string }) => <div>{title}{description}</div>,
+vi.mock("@/components/sales-trainer/sales-trainer-module-grid", () => ({
+    SalesTrainerModuleGrid: ({ path }: { path: { path_key: string } }) => <div>{`legacy-module-grid:${path.path_key}`}</div>,
+}));
+
+vi.mock("@/components/sales-trainer/sales-trainer-module-mission-panel", () => ({
+    SalesTrainerModuleMissionPanel: ({ path }: { path: { path_key: string } }) => <div>{`legacy-module-mission:${path.path_key}`}</div>,
+}));
+
+vi.mock("./path-mission-panel", () => ({
+    PathMissionPanel: ({ path }: { path: { path_key: string } }) => <div>{`legacy-path-mission:${path.path_key}`}</div>,
+}));
+
+vi.mock("./path-level-timeline", () => ({
+    PathLevelTimeline: ({ path }: { path: { path_key: string } }) => <div>{`legacy-path-timeline:${path.path_key}`}</div>,
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -37,355 +60,402 @@ vi.mock("@/lib/api/client", async () => {
             ...actual.api,
             salesTrainer: {
                 ...actual.api.salesTrainer,
+                getJourney: getJourneyMock,
                 listUnits: listUnitsMock,
                 listPaths: listPathsMock,
+                startRealtimeRoleplay: startRealtimeRoleplayMock,
             },
         },
     };
 });
 
-const baseUnits = [
-    {
-        unit_id: "quiz-unit",
-        name: "做题单元",
-        description: "题目训练",
-        unit_type: "quiz" as const,
-        config: {
-            learner: {
-                learning_content_id: "lc-coo",
-                chapter_order_index: 1,
-            },
-        },
-        status: "published" as const,
-        created_by: "admin-1",
-        updated_by: "admin-1",
-        created_at: "2026-05-28T00:00:00Z",
-        updated_at: "2026-05-28T00:00:00Z",
-        questions: [{ question_id: "q1", title: "Q1", stem: "stem", question_type: "single_choice" as const, points: 10, order_index: 1 }],
-    },
-    {
-        unit_id: "audio-unit",
-        name: "录音单元",
-        description: "录音训练",
-        unit_type: "audio_scoring" as const,
-        config: { audio: { pass_threshold: 75 } },
-        status: "published" as const,
-        created_by: "admin-1",
-        updated_by: "admin-1",
-        created_at: "2026-05-28T00:00:00Z",
-        updated_at: "2026-05-28T00:00:00Z",
-        questions: [],
-    },
-    {
-        unit_id: "extra-unit",
-        name: "额外练习",
-        description: "路径外单元",
-        unit_type: "quiz" as const,
-        config: {},
-        status: "published" as const,
-        created_by: "admin-1",
-        updated_by: "admin-1",
-        created_at: "2026-05-28T00:00:00Z",
-        updated_at: "2026-05-28T00:00:00Z",
-        questions: [],
-    },
-];
+const baseTimestamp = "2026-06-27T00:00:00Z";
 
-const basePath = {
-    path_key: "new_seller",
-    title: "新人销售闯关",
-    goal_title: "掌握首次客户沟通",
-    total_levels: 2,
-    completed_levels: 1,
-    current_level_id: "audio-unit",
-    next_level_id: "audio-unit",
-    goal_context: {
-        goal_title: "掌握首次客户沟通",
-        score_basis: "sales_trainer_path_projection_v1" as const,
-        evidence_items: [
+function buildJourneyError(errorCode: string, message: string, traceId: string, status = 409) {
+    return new ApiRequestError({
+        status,
+        errorCode,
+        message,
+        traceId,
+    });
+}
+
+function buildJourney(overrides?: Partial<ReturnType<typeof createJourneyFixture>>) {
+    return {
+        ...createJourneyFixture(),
+        ...overrides,
+    };
+}
+
+function createJourneyFixture() {
+    return {
+        journey_id: "journey-1",
+        learner_id: "learner-1",
+        learner_name: "张三",
+        department: "销售一部",
+        path_key: "newcomer_training_path_v1" as const,
+        path_revision_id: "path-rev-1",
+        path_revision_no: 3,
+        source: "active_revision" as const,
+        legacy_snapshot_only: false as const,
+        role_capabilities: [
             {
-                evidence_id: "attempt-1",
-                evidence_type: "quiz_attempt" as const,
-                unit_id: "quiz-unit",
-                unit_type: "quiz" as const,
-                level_title: "第一关：产品定位",
-                status: "scored",
-                passed: true,
-                score: 10,
-                max_score: 10,
-                submitted_at: "2026-05-28T00:00:00Z",
-                result_path: "/sales-trainer/quiz/result/attempt-1",
+                capability_key: "learner_enter" as const,
+                allowed: true,
+                scope: "own" as const,
+                reason_code: null,
+            },
+            {
+                capability_key: "sales_trainer.enter_realtime" as const,
+                allowed: true,
+                scope: "own" as const,
+                reason_code: null,
             },
         ],
-        weak_points: [
+        learner_level: {
+            level_key: "newcomer",
+            label: "新人销售",
+            source: "training_projection" as const,
+            rank: 1,
+            effective_from: null,
+            effective_to: null,
+            config_revision_id: null,
+            description: null,
+        },
+        role_level: {
+            level_key: "learner",
+            label: "普通学员",
+            source: "training_projection" as const,
+            rank: 0,
+            effective_from: null,
+            effective_to: null,
+            config_revision_id: null,
+            description: null,
+        },
+        training_stage: "in_progress" as const,
+        modules: [
             {
-                unit_id: "audio-unit",
-                level_title: "第二关：录音表达",
-                issue_type: "not_started" as const,
-                issue_text: "本关还没有训练证据。",
-                evidence_id: null,
-                score: null,
-                max_score: null,
+                module_key: "ppt_explanation",
+                module_type: "audio_scoring" as const,
+                display_name: "PPT 讲解录音",
+                order_index: 1,
+                enabled: true,
+                stage: "passed" as const,
+                completion_rule: "scored" as const,
+                learner_level_required: ["newcomer"],
+                unmet_reasons: [],
+                next_action: {
+                    action_key: "review_audio",
+                    label: "查看录音结果",
+                    target_path: "/sales-trainer/audio/result/submission-1",
+                    disabled: false,
+                    disabled_reason: null,
+                },
+                latest_outcome: {
+                    outcome_id: "outcome-1",
+                    record_type: "audio_submission" as const,
+                    source_record_id: "submission-1",
+                    module_key: "ppt_explanation",
+                    module_type: "audio_scoring" as const,
+                    status: "passed" as const,
+                    score: null,
+                    max_score: null,
+                    passed: true,
+                    failure_type: null,
+                    failure_code: null,
+                    submitted_at: baseTimestamp,
+                    completed_at: baseTimestamp,
+                    path_revision_id: "path-rev-1",
+                    path_revision_no: 3,
+                    snapshot_ref: {
+                        snapshot_type: "submission_snapshot" as const,
+                        legacy_snapshot_only: false,
+                    },
+                },
+                outcome_history: [],
+            },
+            {
+                module_key: "business_skills",
+                module_type: "article_exam" as const,
+                display_name: "商务技巧",
+                order_index: 2,
+                enabled: true,
+                stage: "processing" as const,
+                completion_rule: "passed" as const,
+                learner_level_required: null,
+                unmet_reasons: [
+                    {
+                        code: "WAITING_REVIEW",
+                        message: "系统正在处理最近一次结果。",
+                        terminal: false,
+                    },
+                ],
+                next_action: {
+                    action_key: "wait_result",
+                    label: "等待处理完成",
+                    target_path: null,
+                    disabled: true,
+                    disabled_reason: "最近一次训练结果仍在处理中。",
+                },
+                latest_outcome: {
+                    outcome_id: "outcome-2",
+                    record_type: "quiz_attempt" as const,
+                    source_record_id: "attempt-2",
+                    module_key: "business_skills",
+                    module_type: "article_exam" as const,
+                    status: "processing" as const,
+                    score: null,
+                    max_score: null,
+                    passed: null,
+                    failure_type: null,
+                    failure_code: null,
+                    submitted_at: baseTimestamp,
+                    completed_at: null,
+                    path_revision_id: "path-rev-1",
+                    path_revision_no: 3,
+                    snapshot_ref: {
+                        snapshot_type: "attempt_snapshot" as const,
+                        legacy_snapshot_only: false,
+                    },
+                },
+                outcome_history: [],
+            },
+            {
+                module_key: "realtime_roleplay",
+                module_type: "realtime_roleplay" as const,
+                display_name: "实时对练",
+                order_index: 3,
+                enabled: true,
+                stage: "not_started" as const,
+                completion_rule: "submitted" as const,
+                learner_level_required: null,
+                unmet_reasons: [],
+                next_action: {
+                    action_key: "start_realtime_roleplay",
+                    label: "开始实时对练",
+                    target_path: null,
+                    disabled: false,
+                    disabled_reason: null,
+                },
+                latest_outcome: null,
+                outcome_history: [],
             },
         ],
-        next_recommendation: {
-            title: "下一关：第二关：录音表达",
-            reason: "本关还没有训练证据。",
-            action_label: "上传语音作业",
-            target_path: "/sales-trainer/audio/audio-unit",
-            unit_id: "audio-unit",
-            level_title: "第二关：录音表达",
-            recommendation_kind: "start_level" as const,
+        overall_progress: {
+            total_modules: 3,
+            completed_modules: 1,
+            passed_modules: 1,
+            failed_modules: 0,
+            needs_remediation_modules: 0,
         },
-    },
-    levels: [
-        {
-            unit_id: "quiz-unit",
-            name: "做题单元",
-            description: "题目训练",
-            unit_type: "quiz" as const,
-            order_index: 1,
-            level_title: "第一关：产品定位",
-            level_description: "先确认产品定位。",
-            locked: false,
-            lock_reason: null,
-            status: "completed" as const,
-            completion_rule: "passed" as const,
-            primary_action_label: "开始做题",
-            retry_action_label: "重练本关",
-            review_action_label: "查看结果",
-            target_path: "/sales-trainer/quiz/quiz-unit",
-            latest_result: {
-                status: "scored",
-                passed: true,
-                score: 10,
-                max_score: 10,
-                submitted_at: "2026-05-28T00:00:00Z",
-                result_id: "attempt-1",
-                target_path: "/sales-trainer/quiz/result/attempt-1",
+        diagnostics: [
+            {
+                code: "JOURNEY_ACTIVE_REVISION",
+                message: "Journey 已按 active revision 更新。",
+                severity: "info" as const,
+                terminal: false,
             },
+        ],
+        generated_at: baseTimestamp,
+    };
+}
+
+function createPathFixture() {
+    return {
+        path_key: "newcomer_training_path_v1",
+        title: "新人训练路径",
+        goal_title: "掌握新人训练闭环",
+        total_levels: 1,
+        completed_levels: 0,
+        current_level_id: "module-1",
+        next_level_id: "module-1",
+        goal_context: {
+            goal_title: "掌握新人训练闭环",
+            score_basis: "sales_trainer_path_projection_v1" as const,
+            evidence_items: [],
+            weak_points: [],
+            next_recommendation: null,
         },
+        levels: [
+            {
+                unit_id: "module-1",
+                name: "PPT 讲解录音",
+                description: "兼容入口卡片",
+                unit_type: "audio_scoring" as const,
+                module_key: "ppt_explanation" as const,
+                module_type: "audio_scoring" as const,
+                order_index: 1,
+                level_title: "第1关：PPT 讲解录音",
+                level_description: "兼容入口卡片",
+                locked: false,
+                lock_reason: null,
+                status: "available" as const,
+                completion_rule: "scored" as const,
+                primary_action_label: "开始训练",
+                retry_action_label: "重新训练",
+                review_action_label: "查看结果",
+                target_path: "/sales-trainer/audio/module-1",
+                latest_result: null,
+            },
+        ],
+    };
+}
+
+function createUnitsFixture() {
+    return [
         {
-            unit_id: "audio-unit",
-            name: "录音单元",
-            description: "录音训练",
+            unit_id: "module-1",
+            name: "PPT 讲解录音",
+            description: "兼容单元",
             unit_type: "audio_scoring" as const,
-            order_index: 2,
-            level_title: "第二关：录音表达",
-            level_description: "上传讲解录音。",
-            locked: false,
-            lock_reason: null,
-            status: "available" as const,
-            completion_rule: "passed" as const,
-            primary_action_label: "上传语音作业",
-            retry_action_label: "重练本关",
-            review_action_label: "查看结果",
-            target_path: "/sales-trainer/audio/audio-unit",
-            latest_result: null,
+            config: {},
+            status: "published" as const,
+            created_by: "admin-1",
+            updated_by: "admin-1",
+            created_at: baseTimestamp,
+            updated_at: baseTimestamp,
+            questions: [],
         },
-    ],
-};
+    ];
+}
 
 describe("SalesTrainerPage", () => {
     beforeEach(() => {
+        getJourneyMock.mockReset();
         listPathsMock.mockReset();
-        listUnitsMock.mockResolvedValue({
-            items: baseUnits,
-            total: baseUnits.length,
+        listUnitsMock.mockReset();
+        routerPushMock.mockReset();
+        startRealtimeRoleplayMock.mockReset();
+
+        getJourneyMock.mockResolvedValue(buildJourney());
+        startRealtimeRoleplayMock.mockResolvedValue({
+            session_id: "session-realtime-1",
+            module_key: "realtime_roleplay",
+            path_key: "newcomer_training_path_v1",
+            path_revision_id: "path-rev-1",
+            path_revision_no: 3,
+            practice_url: "/practice/session-realtime-1",
+            runtime_descriptor_id: "newcomer-realtime-runtime",
+            provider_readiness_snapshot: {},
+            external_binding: {},
         });
-        listPathsMock.mockResolvedValue({ items: [], total: 0 });
+        listPathsMock.mockResolvedValue({
+            items: [createPathFixture()],
+            total: 1,
+        });
+        listUnitsMock.mockResolvedValue({
+            items: createUnitsFixture(),
+            total: 1,
+        });
     });
 
-    it("shows quiz and audio entries from the catalog fallback when no paths exist", async () => {
-        listUnitsMock.mockResolvedValue({
-            items: baseUnits.slice(0, 2),
-            total: 2,
-        });
+    it("优先渲染 Journey 状态，并不再读取 /paths 兼容入口卡片", async () => {
+        render(<SalesTrainerPage />);
 
+        expect(await screen.findByText("当前训练闭环状态")).toBeTruthy();
+        expect(screen.getByText("学员等级：新人销售")).toBeTruthy();
+        expect(screen.getByText("来源：training_projection")).toBeTruthy();
+        expect(screen.getByText("Journey 已按 active revision 更新。")).toBeTruthy();
+        expect(screen.getByText("PPT 讲解录音")).toBeTruthy();
+        expect(screen.getByText("商务技巧")).toBeTruthy();
+        expect(screen.queryByText("兼容入口卡片")).toBeNull();
+        expect(screen.queryByText("legacy-module-mission:newcomer_training_path_v1")).toBeNull();
+        expect(screen.queryByText("legacy-module-grid:newcomer_training_path_v1")).toBeNull();
+        expect(listUnitsMock).not.toHaveBeenCalled();
+        expect(listPathsMock).not.toHaveBeenCalled();
+    });
+
+    it("在无 active revision 时 fail-closed，并展示错误码与 trace_id", async () => {
+        getJourneyMock.mockRejectedValue(
+            buildJourneyError(
+                "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
+                "当前没有生效中的训练路径版本。",
+                "trace-journey-missing",
+            ),
+        );
+
+        render(<SalesTrainerPage />);
+
+        expect(await screen.findByText("Journey 读取失败")).toBeTruthy();
+        expect(screen.getByText("当前没有生效中的训练路径版本。 (trace_id: trace-journey-missing)")).toBeTruthy();
+        expect(screen.getByText("后端信息：当前没有生效中的训练路径版本。")).toBeTruthy();
+        expect(screen.getByText("error_code: [NEWCOMER_PATH_ACTIVE_REVISION_MISSING]")).toBeTruthy();
+        expect(screen.getByText("trace_id: trace-journey-missing")).toBeTruthy();
+        expect(screen.queryByText("legacy-module-mission:newcomer_training_path_v1")).toBeNull();
+        expect(listUnitsMock).not.toHaveBeenCalled();
+        expect(listPathsMock).not.toHaveBeenCalled();
+    });
+
+    it("Journey 报错时不会回退成 catalog 伪成功", async () => {
+        getJourneyMock.mockRejectedValue(
+            buildJourneyError(
+                "[HTTP_500]",
+                "Journey 服务暂时不可用。",
+                "trace-journey-500",
+                500,
+            ),
+        );
+
+        render(<SalesTrainerPage />);
+
+        expect(await screen.findByText("Journey 读取失败")).toBeTruthy();
+        expect(screen.getByText("Journey 服务暂时不可用。 (trace_id: trace-journey-500)")).toBeTruthy();
+        expect(screen.queryByText("当前训练闭环状态")).toBeNull();
+        expect(screen.queryByText("legacy-module-grid:newcomer_training_path_v1")).toBeNull();
+        expect(listUnitsMock).not.toHaveBeenCalled();
+        expect(listPathsMock).not.toHaveBeenCalled();
+    });
+
+    it("对 passed=null 维持三态展示，不渲染失败 verdict", async () => {
+        getJourneyMock.mockResolvedValue(buildJourney());
+
+        render(<SalesTrainerPage />);
+
+        expect(await screen.findByText("商务技巧")).toBeTruthy();
+        expect(screen.getByText("待判定")).toBeTruthy();
+        expect(screen.queryByText(/^未通过$/)).toBeNull();
+        expect(screen.getByText("系统正在处理最近一次结果。")).toBeTruthy();
+    });
+
+    it("点击实时对练 action 会调用 start API 并跳转到 practice_url", async () => {
+        render(<SalesTrainerPage />);
+
+        fireEvent.click(await screen.findByText("开始实时对练"));
+
+        await waitFor(() => {
+            expect(startRealtimeRoleplayMock).toHaveBeenCalledWith({
+                module_key: "realtime_roleplay",
+            });
+            expect(routerPushMock).toHaveBeenCalledWith("/practice/session-realtime-1");
+        });
+    });
+
+    it("实时对练启动失败时展示后端错误码与 trace_id", async () => {
+        startRealtimeRoleplayMock.mockRejectedValue(
+            buildJourneyError(
+                "[NEWCOMER_REALTIME_PROVIDER_NOT_READY]",
+                "实时对练 provider readiness 未通过。",
+                "trace-realtime-start",
+                503,
+            ),
+        );
+
+        render(<SalesTrainerPage />);
+
+        fireEvent.click(await screen.findByText("开始实时对练"));
+
+        expect(await screen.findByText("实时对练启动失败")).toBeTruthy();
+        expect(screen.getByText("error_code: [NEWCOMER_REALTIME_PROVIDER_NOT_READY]")).toBeTruthy();
+        expect(screen.getByText("trace_id: trace-realtime-start")).toBeTruthy();
+    });
+
+    it("首屏只请求 Journey，不再并行读取 units 和 paths 伪装入口成功", async () => {
         render(<SalesTrainerPage />);
 
         await waitFor(() => {
-            expect(listUnitsMock).toHaveBeenCalled();
+            expect(getJourneyMock).toHaveBeenCalledTimes(1);
+            expect(listUnitsMock).not.toHaveBeenCalled();
+            expect(listPathsMock).not.toHaveBeenCalled();
         });
-
-        expect(screen.getByRole("link", { name: /开始做题/ }).getAttribute("href")).toBe("/sales-trainer/quiz/quiz-unit");
-        expect(screen.getAllByRole("link", { name: /上传语音作业/ })[0].getAttribute("href")).toBe("/sales-trainer/audio/audio-unit");
-        expect(screen.getByText("语音作业")).toBeTruthy();
-        expect(screen.getByRole("heading", { name: "新人训练路径" })).toBeTruthy();
-    });
-
-    it("shows path-first layout without score_basis and hides full catalog grids", async () => {
-        listPathsMock.mockResolvedValue({
-            items: [basePath],
-            total: 1,
-        });
-
-        render(<SalesTrainerPage />);
-
-        expect(await screen.findByText("新人训练路径")).toBeTruthy();
-        expect(screen.queryByText("新人销售闯关")).toBeNull();
-        expect(screen.getByText("掌握首次客户沟通")).toBeTruthy();
-        expect(screen.getByText("1/2")).toBeTruthy();
-        expect(screen.getByText("当前要练")).toBeTruthy();
-        expect(screen.getAllByText("下一关：第二关：录音表达").length).toBeGreaterThanOrEqual(1);
-        expect(screen.getByText(/已完成 1 次有效训练/)).toBeTruthy();
-        expect(screen.getByText(/本关需达到 75 分通过，可多次上传，以最新一次为准/)).toBeTruthy();
-        expect(screen.getByText(/本关还没有训练证据。/)).toBeTruthy();
-        expect(screen.queryByText("sales_trainer_path_projection_v1")).toBeNull();
-        expect(screen.queryByText("目标证据")).toBeNull();
-        expect(screen.queryByText("下一步依据")).toBeNull();
-        expect(screen.queryByText("剩余关卡")).toBeNull();
-        expect(screen.queryByRole("heading", { name: "做题训练" })).toBeNull();
-        expect(screen.getByText("更多练习（1）")).toBeTruthy();
-        expect(screen.getAllByRole("link", { name: /上传语音作业/ })[0].getAttribute("href")).toBe("/sales-trainer/audio/audio-unit");
-    });
-
-    it("shows read-chapter link when unit has learner config", async () => {
-        listPathsMock.mockResolvedValue({
-            items: [basePath],
-            total: 1,
-        });
-
-        render(<SalesTrainerPage />);
-
-        expect(await screen.findByRole("link", { name: "阅读本章" })).toBeTruthy();
-        expect(screen.getByRole("link", { name: "阅读本章" }).getAttribute("href")).toBe(
-            "/sales-trainer/learn/quiz-unit",
-        );
-    });
-
-    it("shows three-module grid instead of level timeline", async () => {
-        const modulePath = {
-            ...basePath,
-            path_key: "new_seller_modules_v1",
-            title: "新人销售三模块训练",
-            total_levels: 5,
-            completed_levels: 0,
-            levels: [
-                {
-                    ...basePath.levels[0],
-                    unit_id: "ppt-unit",
-                    order_index: 1,
-                    level_title: "第1关：PPT讲解录音",
-                    target_path: "/sales-trainer/audio/ppt-unit",
-                },
-                {
-                    ...basePath.levels[0],
-                    unit_id: "hub-unit",
-                    order_index: 2,
-                    level_title: "第2关：商务技巧",
-                    target_path: "/sales-trainer/business-skills",
-                },
-                {
-                    ...basePath.levels[1],
-                    unit_id: "audio-5",
-                    order_index: 3,
-                    level_title: "电梯演讲 · 5 分钟",
-                    target_path: "/sales-trainer/audio/audio-5",
-                },
-                {
-                    ...basePath.levels[1],
-                    unit_id: "audio-10",
-                    order_index: 4,
-                    level_title: "电梯演讲 · 10 分钟",
-                    target_path: "/sales-trainer/audio/audio-10",
-                },
-                {
-                    ...basePath.levels[1],
-                    unit_id: "audio-15",
-                    order_index: 5,
-                    level_title: "电梯演讲 · 15 分钟",
-                    target_path: "/sales-trainer/audio/audio-15",
-                },
-            ],
-        };
-        listPathsMock.mockResolvedValue({
-            items: [modulePath],
-            total: 1,
-        });
-        listUnitsMock.mockResolvedValue({
-            items: [
-                {
-                    ...baseUnits[0],
-                    unit_id: "ppt-unit",
-                    unit_type: "audio_scoring",
-                },
-                ...baseUnits,
-            ],
-            total: baseUnits.length + 1,
-        });
-
-        render(<SalesTrainerPage />);
-
-        expect(await screen.findByText("选择下方模块开始训练")).toBeTruthy();
-        expect(screen.queryByText(/按模块完成 PPT 讲解录音/)).toBeNull();
-        expect(screen.queryByText("三模块训练")).toBeNull();
-        expect(screen.getByText("PPT讲解录音")).toBeTruthy();
-        expect(screen.getByRole("heading", { name: "商务技巧" })).toBeTruthy();
-        expect(screen.getByText("电梯演讲")).toBeTruthy();
-        expect(screen.getByText("实时对练")).toBeTruthy();
-        expect(screen.getByRole("button", { name: /暂不开放/ }).hasAttribute("disabled")).toBe(true);
-        expect(screen.queryByRole("link", { name: /实时对练/ })).toBeNull();
-        expect(screen.queryByText("当前要练")).toBeNull();
-        expect(screen.queryByText("1/2")).toBeNull();
-    });
-
-    it("shows extra units only after expanding the collapsed section", async () => {
-        listPathsMock.mockResolvedValue({
-            items: [basePath],
-            total: 1,
-        });
-
-        render(<SalesTrainerPage />);
-
-        expect(await screen.findByText("更多练习（1）")).toBeTruthy();
-        expect(screen.queryByText("额外练习")).toBeNull();
-
-        fireEvent.click(screen.getByRole("button", { name: /更多练习（1）/ }));
-
-        expect(await screen.findByText("额外练习")).toBeTruthy();
-        expect(screen.getByRole("link", { name: /开始做题/ }).getAttribute("href")).toBe("/sales-trainer/quiz/extra-unit");
-    });
-
-    it("keeps realtime placeholder disabled when it appears in extra units", async () => {
-        listPathsMock.mockResolvedValue({
-            items: [basePath],
-            total: 1,
-        });
-        listUnitsMock.mockResolvedValue({
-            items: [
-                ...baseUnits,
-                {
-                    unit_id: "realtime-placeholder",
-                    name: "实时对练占位",
-                    description: "当前版本仅展示占位，不允许启动实时对练。",
-                    unit_type: "quiz" as const,
-                    config: {
-                        path: {
-                            module_key: "realtime_placeholder",
-                            module_type: "realtime_placeholder",
-                            enabled: false,
-                            disabled_reason: "模块 4 仅为占位，不支持实时对练。",
-                        },
-                    },
-                    status: "published" as const,
-                    created_by: "admin-1",
-                    updated_by: "admin-1",
-                    created_at: "2026-05-28T00:00:00Z",
-                    updated_at: "2026-05-28T00:00:00Z",
-                    questions: [],
-                },
-            ],
-            total: baseUnits.length + 1,
-        });
-
-        render(<SalesTrainerPage />);
-
-        expect(await screen.findByText("更多练习（2）")).toBeTruthy();
-        fireEvent.click(screen.getByRole("button", { name: /更多练习（2）/ }));
-
-        expect(await screen.findByText("实时对练占位")).toBeTruthy();
-        expect(screen.getByRole("button", { name: "模块 4 仅为占位，不支持实时对练。" }).hasAttribute("disabled")).toBe(true);
-        expect(screen.getAllByRole("link", { name: /开始做题/ })).toHaveLength(1);
     });
 });

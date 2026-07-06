@@ -1,0 +1,11 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend scope: WebSocket failure semantics, Redis startup policy, RBAC, metrics, adapter guard, async task contract."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"send_json and startup failures must use typed, visible failure semantics rather than silent swallowing."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Required verification, targeted tests, and forbidden-pattern guidance for backend changes."}
+{"file":".trellis/spec/backend/realtime-roleplay-v1.md","reason":"Realtime runtime reliability, fail-closed behavior, and observability constraints."}
+{"file":".trellis/spec/backend/business-rule-configs.md","reason":"Redis startup policy and RBAC/role vocabulary are governed runtime policies."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"RBAC role length and persistent async task plan touch DB/migration concerns."}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend scope: admin role projection and route visibility tests."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Frontend auth role constants and capability projection must remain typed."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Frontend vitest/lint expectations for role-route changes."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Task spans storage/service/API/UI and CI gates; check end-to-end data flow."}
+{"file":".trellis/tasks/07-06-architecture-audit-remediation-closure/research/implementation-scope.md","reason":"Current task implementation scope and risk notes for the 8 remediation items."}

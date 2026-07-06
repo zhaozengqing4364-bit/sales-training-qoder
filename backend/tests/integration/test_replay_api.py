@@ -765,12 +765,16 @@ class TestReplayAPI:
     @pytest.mark.asyncio
     async def test_sales_session_replay_unlocks_after_background_finalization(
         self,
+        monkeypatch,
         async_client,
         auth_headers,
         db_session,
         test_user,
     ):
         """A scoring sales session should unlock replay/highlights only after background finalization promotes it."""
+        monkeypatch.delenv("PHASE4_E2E_PROVIDER", raising=False)
+        monkeypatch.delenv("PHASE4_E2E_PROVIDER_TRANSCRIPT", raising=False)
+
         scenario = Scenario(
             name="Sales Finalization",
             description="Replay unlock after background finalization",

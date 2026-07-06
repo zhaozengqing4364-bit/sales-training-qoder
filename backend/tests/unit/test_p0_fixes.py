@@ -207,6 +207,33 @@ class TestSessionManager:
         assert stats["metrics"]["timeout_closures"] >= 1
         assert stats["metrics"]["unregistered_sessions"] >= 1
 
+    @pytest.mark.asyncio
+    async def test_heartbeat_failed_send_result_unregisters_session(self):
+        """Should treat structured send failures like failed heartbeats."""
+        from common.websocket.base_handler import WebSocketSendResult
+        from common.websocket.session_manager import SessionManager
+
+        manager = SessionManager(
+            timeout_seconds=60,
+            heartbeat_interval=30,
+            cleanup_interval=60,
+        )
+        mock_handler = Mock()
+        mock_handler.send_message = AsyncMock(
+            return_value=WebSocketSendResult.failed(
+                "heartbeat",
+                error_type="RuntimeError",
+                error="socket closed",
+            )
+        )
+
+        await manager.register_session("failed_heartbeat_session", mock_handler)
+        await manager._send_heartbeats()
+
+        assert "failed_heartbeat_session" not in manager.sessions
+        assert manager.metrics["heartbeat_failures"] == 1
+        assert manager.metrics["unregistered_sessions"] == 1
+
 
 class TestSessionRateLimiter:
     """Test Session Rate Limiter functionality"""

@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 
 import { AdminFormShell } from "@/components/admin/admin-layout-shells";
+import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { SalesTrainerUnitForm } from "@/components/admin/sales-trainer/unit-form";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import { normalizeNewcomerUnitDisplay } from "@/lib/sales-trainer/admin-display";
 import { NEWCOMER_QUESTION_TAG } from "@/lib/sales-trainer/question-scope";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 import type {
     SalesTrainerAudioScorePrompt,
+    SalesTrainerAdminCapabilities,
     SalesTrainerMaterial,
     SalesTrainerQuestion,
     SalesTrainerUnit,
@@ -29,29 +32,75 @@ export default function EditSalesTrainerUnitPage() {
     const [materials, setMaterials] = useState<SalesTrainerMaterial[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessUnitForm = isSalesTrainerAdminPathAllowedForCapabilities(pathname, adminCapabilities);
+
+    const loadCapabilities = useCallback(async () => {
+        setIsCapabilityLoading(true);
+        setCapabilityError(null);
+        try {
+            const result = await api.admin.salesTrainer.getCapabilities();
+            setAdminCapabilities(result);
+        } catch (error) {
+            setAdminCapabilities(null);
+            setCapabilityError(getApiErrorMessage(error));
+        } finally {
+            setIsCapabilityLoading(false);
+        }
+    }, []);
+
+    const loadDependencies = useCallback(async () => {
+        if (!canAccessUnitForm) {
+            return;
+        }
+        setIsLoading(true);
+        setLoadError(null);
+        try {
+            const [unitsResult, questionsResult, promptsResult, materialsResult] = await Promise.all([
+                api.admin.newcomerTraining.listUnits({ include_archived: true, limit: 100 }),
+                api.admin.salesTrainer.listQuestions({ status: "published", tag: NEWCOMER_QUESTION_TAG }),
+                api.admin.salesTrainer.listScorePrompts({ include_archived: true }),
+                api.admin.salesTrainer.listMaterials({ include_archived: true, limit: 100 }),
+            ]);
+            setUnits(unitsResult.items);
+            setQuestions(questionsResult.items);
+            setPrompts(promptsResult.items);
+            setMaterials(materialsResult.items);
+        } catch (error) {
+            const message = getApiErrorMessage(error);
+            setUnits([]);
+            setQuestions([]);
+            setPrompts([]);
+            setMaterials([]);
+            setLoadError(message);
+            toast.error(message);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [canAccessUnitForm, toast]);
 
     useEffect(() => {
-        async function loadDependencies() {
-            setIsLoading(true);
-            try {
-                const [unitsResult, questionsResult, promptsResult, materialsResult] = await Promise.all([
-                    api.admin.newcomerTraining.listUnits({ include_archived: true, limit: 100 }),
-                    api.admin.salesTrainer.listQuestions({ status: "published", tag: NEWCOMER_QUESTION_TAG }),
-                    api.admin.salesTrainer.listScorePrompts({ include_archived: true }),
-                    api.admin.salesTrainer.listMaterials({ include_archived: true, limit: 100 }),
-                ]);
-                setUnits(unitsResult.items);
-                setQuestions(questionsResult.items);
-                setPrompts(promptsResult.items);
-                setMaterials(materialsResult.items);
-            } catch (loadError) {
-                toast.error(getApiErrorMessage(loadError));
-            } finally {
-                setIsLoading(false);
-            }
+        void loadCapabilities();
+    }, [loadCapabilities]);
+
+    useEffect(() => {
+        if (isCapabilityLoading) {
+            return;
+        }
+        if (!canAccessUnitForm) {
+            setUnits([]);
+            setQuestions([]);
+            setPrompts([]);
+            setMaterials([]);
+            setLoadError(null);
+            setIsLoading(false);
+            return;
         }
         void loadDependencies();
-    }, [toast]);
+    }, [canAccessUnitForm, isCapabilityLoading, loadDependencies]);
 
     const unit = useMemo(
         () => units.find((item) => item.unit_id === params.unitId) ?? null,
@@ -63,6 +112,9 @@ export default function EditSalesTrainerUnitPage() {
     );
 
     async function handleSubmit(payload: SalesTrainerUnitUpdateRequest) {
+        if (!canAccessUnitForm) {
+            return;
+        }
         setIsSubmitting(true);
         try {
             await api.admin.newcomerTraining.updateUnit(params.unitId, payload);
@@ -79,10 +131,28 @@ export default function EditSalesTrainerUnitPage() {
             backHref="/admin/sales-trainer/units"
             title={displayUnit ? `编辑训练单元：${displayUnit.name}` : "编辑训练单元"}
             description="已发布训练单元可以直接编辑；保存会生成待发布修订，发布后只影响后续学员。归档版本仅用于审计追溯。"
-            actions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+            actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
         >
-            {isLoading ? (
+            {isCapabilityLoading ? (
+                <div className="py-12 text-center text-sm text-slate-500">正在校验模块单元管理权限...</div>
+            ) : capabilityError || !canAccessUnitForm ? (
+                <AdminLoadErrorCard
+                    title="模块单元权限不足"
+                    description="当前页不会在权限未确认时加载训练单元或开放编辑表单。请联系管理员开通模块管理权限后重试。"
+                    message={capabilityError}
+                    retryLabel="重新校验权限"
+                    onRetry={() => void loadCapabilities()}
+                />
+            ) : isLoading ? (
                 <div className="py-12 text-center text-sm text-slate-500">正在加载训练单元...</div>
+            ) : loadError ? (
+                <AdminLoadErrorCard
+                    title="训练单元加载失败"
+                    description="当前页不会在训练单元、题目、评分 Prompt 或材料依赖缺失时开放编辑表单。请核对权限、配置发布状态或后端服务状态后重试。"
+                    message={loadError}
+                    retryLabel="重新加载训练单元"
+                    onRetry={() => void loadDependencies()}
+                />
             ) : unit ? (
                 <SalesTrainerUnitForm
                     mode="edit"

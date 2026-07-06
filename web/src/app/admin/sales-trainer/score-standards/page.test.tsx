@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import SalesTrainerScoreStandardsPage from "./page";
 
 const {
+    getCapabilitiesMock,
     listScorePromptsMock,
     pushMock,
     toastErrorMock,
     toastSuccessMock,
 } = vi.hoisted(() => ({
+    getCapabilitiesMock: vi.fn(),
     listScorePromptsMock: vi.fn(),
     pushMock: vi.fn(),
     toastErrorMock: vi.fn(),
@@ -37,6 +39,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     listScorePrompts: listScorePromptsMock,
                     publishScorePrompt: vi.fn(),
                     createScorePrompt: vi.fn(),
@@ -48,10 +51,29 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("SalesTrainerScoreStandardsPage", () => {
     beforeEach(() => {
+        getCapabilitiesMock.mockReset();
         pushMock.mockReset();
         toastErrorMock.mockReset();
         toastSuccessMock.mockReset();
         listScorePromptsMock.mockReset();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: true,
+                manage_questions: false,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_content"],
+        });
         listScorePromptsMock.mockResolvedValue({
             items: [
                 {
@@ -88,5 +110,34 @@ describe("SalesTrainerScoreStandardsPage", () => {
         expect(screen.queryByText("published")).toBeNull();
         expect(screen.getByRole("button", { name: "编辑" })).toBeTruthy();
         expect(screen.queryByRole("button", { name: /复制草稿/ })).toBeNull();
+    });
+
+    it("fails closed without content management capability", async () => {
+        getCapabilitiesMock.mockResolvedValueOnce({
+            role: "viewer",
+            role_label: "只读人员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_questions: true,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_questions"],
+        });
+
+        render(<SalesTrainerScoreStandardsPage />);
+
+        expect(await screen.findByText("评分标准管理权限不足")).toBeTruthy();
+        expect(listScorePromptsMock).not.toHaveBeenCalled();
+        expect(screen.queryByRole("button", { name: "新建评分标准" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "编辑" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "发布" })).toBeNull();
     });
 });

@@ -10,6 +10,7 @@ import os
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -102,7 +103,7 @@ async def create_presentation(
     data: PresentationCreate,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Create a new presentation (without file upload)"""
     try:
         presentation = Presentation(
@@ -136,7 +137,7 @@ async def upload_presentation(
     extract_points: bool = True,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """
     Upload a PPT file and extract content
 
@@ -178,7 +179,7 @@ async def upload_presentation(
         # Extract text from PPT
         extraction_result = await ocr_processor.extract_text(
             file_path=str(upload_path),
-            presentation_id=presentation.presentation_id,
+            presentation_id=uuid.UUID(str(presentation.presentation_id)),
             filename=original_filename,
         )
 
@@ -213,7 +214,7 @@ async def upload_presentation(
             pages_by_number[page_data.page_number] = page
             db.add(page)
 
-        presentation.total_pages = extraction.total_pages
+        setattr(presentation, "total_pages", extraction.total_pages)
         await db.commit()
 
         # Ingest into vector store
@@ -230,13 +231,13 @@ async def upload_presentation(
             if points_result.is_success and points_result.value is not None:
                 for page_num, points in points_result.value.items():
                     # Add required talking points to database
-                    page = pages_by_number.get(page_num)
-                    if page is None:
+                    target_page = pages_by_number.get(page_num)
+                    if target_page is None:
                         continue
                     for point_text in points.required_points:
                         talking_point = RequiredTalkingPoint(
                             point_id=str(uuid.uuid4()),
-                            page_id=page.page_id,
+                            page_id=str(target_page.page_id),
                             description=point_text,
                             created_by="ai",
                             is_ai_generated=True,
@@ -265,7 +266,7 @@ async def list_presentations(
     limit: int = 50,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """List all presentations"""
     try:
         result = await db.execute(
@@ -288,7 +289,7 @@ async def get_presentation(
     presentation_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get presentation details"""
     try:
         result = await db.execute(
@@ -319,7 +320,7 @@ async def delete_presentation(
     presentation_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Delete a presentation"""
     try:
         # Get presentation
@@ -334,7 +335,9 @@ async def delete_presentation(
             raise HTTPException(status_code=404, detail="Presentation not found")
 
         # Delete from vector store
-        await ingestion_service.delete_presentation(presentation.presentation_id)
+        await ingestion_service.delete_presentation(
+            uuid.UUID(str(presentation.presentation_id))
+        )
 
         # Delete from database (cascade will handle pages, talking points, etc.)
         await db.delete(presentation)
@@ -359,7 +362,7 @@ async def list_pages(
     presentation_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """List all pages in a presentation"""
     try:
         result = await db.execute(
@@ -387,7 +390,7 @@ async def update_page(
     data: PageUpdate,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Update page content"""
     try:
         result = await db.execute(
@@ -401,9 +404,9 @@ async def update_page(
         if not page:
             raise HTTPException(status_code=404, detail="Page not found")
 
-        page.title = data.title
-        page.content = data.content
-        page.updated_at = datetime.now()
+        setattr(page, "title", data.title)
+        setattr(page, "content", data.content)
+        setattr(page, "updated_at", datetime.now())
 
         await db.commit()
         await db.refresh(page)
@@ -441,17 +444,29 @@ async def create_talking_point(
     data: TalkingPointCreate,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Create a required talking point for a page"""
     try:
+        page_result = await db.execute(
+            select(Page).where(
+                Page.presentation_id == str(uuid.UUID(presentation_id)),
+                Page.page_number == page_number,
+            )
+        )
+        page = page_result.scalar_one_or_none()
+        if page is None:
+            raise HTTPException(status_code=404, detail="Page not found")
+
         talking_point = RequiredTalkingPoint(
-            point_id=uuid.uuid4(),
-            presentation_id=uuid.UUID(presentation_id),
-            page_number=page_number,
-            point_text=data.point_text,
-            point_order=data.order,
+            point_id=str(uuid.uuid4()),
+            page_id=str(page.page_id),
+            description=data.point_text,
+            created_by="admin",
+            is_ai_generated=False,
+            confirmed_by_admin=True,
             created_at=datetime.now(),
         )
+        setattr(talking_point, "point_order", data.order)
 
         db.add(talking_point)
         await db.commit()
@@ -475,16 +490,17 @@ async def list_talking_points(
     page_number: int,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """List talking points for a page"""
     try:
         result = await db.execute(
             select(RequiredTalkingPoint)
+            .join(Page, RequiredTalkingPoint.page_id == Page.page_id)
             .where(
-                RequiredTalkingPoint.presentation_id == uuid.UUID(presentation_id),
-                RequiredTalkingPoint.page_number == page_number,
+                Page.presentation_id == str(uuid.UUID(presentation_id)),
+                Page.page_number == page_number,
             )
-            .order_by(RequiredTalkingPoint.point_order)
+            .order_by(RequiredTalkingPoint.created_at)
         )
         points = result.scalars().all()
 
@@ -505,7 +521,7 @@ async def delete_talking_point(
     point_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Delete a talking point"""
     try:
         result = await db.execute(
@@ -541,7 +557,7 @@ async def create_forbidden_word(
     data: ForbiddenWordCreate,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Create a forbidden word for a presentation"""
     try:
         phrase_value = (data.phrase or data.word or "").strip()
@@ -579,7 +595,7 @@ async def list_forbidden_words(
     presentation_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """List forbidden words for a presentation"""
     try:
         result = await db.execute(
@@ -605,7 +621,7 @@ async def delete_forbidden_word(
     word_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Delete a forbidden word"""
     try:
         result = await db.execute(

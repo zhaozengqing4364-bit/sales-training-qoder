@@ -262,6 +262,7 @@ function QuizAttemptDiagnosis({
     attempt,
     attemptViewLabel,
     coachHref,
+    coachHrefError,
     examHref,
     isLatestAttempt,
     isReviewExpanded,
@@ -277,6 +278,7 @@ function QuizAttemptDiagnosis({
     readonly attempt: BusinessEtiquetteUnitQuizAttempt;
     readonly attemptViewLabel: string;
     readonly coachHref: string | null;
+    readonly coachHrefError: string | null;
     readonly examHref: string;
     readonly isLatestAttempt: boolean;
     readonly isReviewExpanded: boolean;
@@ -435,6 +437,11 @@ function QuizAttemptDiagnosis({
                                 <Button asChild className="rounded-full bg-slate-900 text-white">
                                     <Link href={coachHref}>去 AI 教练补练</Link>
                                 </Button>
+                            ) : null}
+                            {!isPending && !isPassed && !coachHref && coachHrefError ? (
+                                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+                                    AI 教练入口暂不可用：{coachHrefError}
+                                </p>
                             ) : null}
                             {!isPending && !isPassed && attempt.recommended_chapter_orders.length ? (
                                 <Button
@@ -610,6 +617,7 @@ function QuizPanel({
     attempts,
     attemptsErrorMessage,
     coachHref,
+    coachHrefError,
     errorMessage,
     examHref,
     isAttemptsLoading,
@@ -632,6 +640,7 @@ function QuizPanel({
     readonly attempts: readonly BusinessEtiquetteUnitQuizAttempt[];
     readonly attemptsErrorMessage: string | null;
     readonly coachHref: string | null;
+    readonly coachHrefError: string | null;
     readonly errorMessage: string | null;
     readonly examHref: string;
     readonly isAttemptsLoading: boolean;
@@ -684,6 +693,7 @@ function QuizPanel({
                     attempt={attempt}
                     attemptViewLabel={attemptViewLabel}
                     coachHref={coachHref}
+                    coachHrefError={coachHrefError}
                     examHref={examHref}
                     isLatestAttempt={isLatestAttempt}
                     isReviewExpanded={isReviewExpanded}
@@ -770,6 +780,7 @@ export default function BusinessSkillsPage() {
         article,
         canStartSelectedUnitQuiz,
         coachHref,
+        coachHrefError,
         completingChapterId,
         completeCurrentChapter,
         continueToNextLearningUnit,
@@ -956,6 +967,11 @@ export default function BusinessSkillsPage() {
                                             </Link>
                                         </Button>
                                     ) : null}
+                                    {!coachHref && coachHrefError && selectedLearningUnit.require_ai_coach ? (
+                                        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-800">
+                                            AI 教练入口暂不可用：{coachHrefError}
+                                        </p>
+                                    ) : null}
                                     {allUnitsCompleted ? (
                                         <Button asChild className="rounded-full bg-slate-900 text-white">
                                             <Link href={examHref}>
@@ -988,6 +1004,7 @@ export default function BusinessSkillsPage() {
                                     attempts={quizAttempts}
                                     attemptsErrorMessage={quizAttemptsError}
                                     coachHref={coachHref}
+                                    coachHrefError={coachHrefError}
                                     errorMessage={quizWorkflowError}
                                     examHref={examHref}
                                     isAttemptsLoading={isQuizAttemptsLoading}

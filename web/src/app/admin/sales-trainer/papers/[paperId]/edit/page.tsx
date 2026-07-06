@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 
 import { AdminFormShell } from "@/components/admin/admin-layout-shells";
+import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { NewcomerExamPaper, SalesTrainerQuestion } from "@/lib/api/types";
+import type { NewcomerExamPaper, SalesTrainerAdminCapabilities, SalesTrainerQuestion } from "@/lib/api/types";
 import { NEWCOMER_QUESTION_TAG } from "@/lib/sales-trainer/question-scope";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 import {
     BUSINESS_SKILLS_MODULE_KEY,
     buildPaperQuestionBindings,
@@ -34,32 +36,72 @@ export default function NewcomerPaperEditPage() {
     const [points, setPoints] = useState("10");
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessPaperForm = isSalesTrainerAdminPathAllowedForCapabilities(pathname, adminCapabilities);
+
+    const loadCapabilities = useCallback(async () => {
+        setIsCapabilityLoading(true);
+        setCapabilityError(null);
+        try {
+            const result = await api.admin.salesTrainer.getCapabilities();
+            setAdminCapabilities(result);
+        } catch (error) {
+            setAdminCapabilities(null);
+            setCapabilityError(getApiErrorMessage(error));
+        } finally {
+            setIsCapabilityLoading(false);
+        }
+    }, []);
+
+    const loadPaper = useCallback(async () => {
+        if (!canAccessPaperForm) {
+            return;
+        }
+        setIsLoading(true);
+        setLoadError(null);
+        try {
+            const [paperResult, questionResult] = await Promise.all([
+                api.admin.newcomerTraining.listPapers({ include_archived: true, limit: 100 }),
+                api.admin.salesTrainer.listQuestions({ status: "published", tag: NEWCOMER_QUESTION_TAG }),
+            ]);
+            const matchedPaper = paperResult.items.find((item) => item.paper_id === paperId) ?? null;
+            setPaper(matchedPaper);
+            setQuestions(questionResult.items);
+            setTitle(matchedPaper?.title ?? "");
+            setDescription(matchedPaper?.description ?? "");
+            setPoints(matchedPaper ? defaultPaperQuestionPoints(matchedPaper) : "10");
+            setSelectedQuestionIds(matchedPaper ? selectedPaperQuestionIds(matchedPaper) : []);
+        } catch (error) {
+            const message = getApiErrorMessage(error);
+            setPaper(null);
+            setQuestions([]);
+            setLoadError(message);
+            toast.error(message);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [canAccessPaperForm, paperId, toast]);
 
     useEffect(() => {
-        async function loadPaper() {
-            setIsLoading(true);
-            try {
-                const [paperResult, questionResult] = await Promise.all([
-                    api.admin.newcomerTraining.listPapers({ include_archived: true, limit: 100 }),
-                    api.admin.salesTrainer.listQuestions({ status: "published", tag: NEWCOMER_QUESTION_TAG }),
-                ]);
-                const matchedPaper = paperResult.items.find((item) => item.paper_id === paperId) ?? null;
-                setPaper(matchedPaper);
-                setQuestions(questionResult.items);
-                setTitle(matchedPaper?.title ?? "");
-                setDescription(matchedPaper?.description ?? "");
-                setPoints(matchedPaper ? defaultPaperQuestionPoints(matchedPaper) : "10");
-                setSelectedQuestionIds(matchedPaper ? selectedPaperQuestionIds(matchedPaper) : []);
-            } catch (error) {
-                setPaper(null);
-                setQuestions([]);
-                toast.error(getApiErrorMessage(error));
-            } finally {
-                setIsLoading(false);
-            }
+        void loadCapabilities();
+    }, [loadCapabilities]);
+
+    useEffect(() => {
+        if (isCapabilityLoading) {
+            return;
+        }
+        if (!canAccessPaperForm) {
+            setPaper(null);
+            setQuestions([]);
+            setLoadError(null);
+            setIsLoading(false);
+            return;
         }
         void loadPaper();
-    }, [paperId, toast]);
+    }, [canAccessPaperForm, isCapabilityLoading, loadPaper]);
 
     function toggleQuestion(questionId: string) {
         setSelectedQuestionIds((current) =>
@@ -71,6 +113,9 @@ export default function NewcomerPaperEditPage() {
 
     async function savePaper(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        if (!canAccessPaperForm) {
+            return;
+        }
         const parsedPoints = Number(points);
         if (!paperId || !paper) {
             toast.error("考卷不存在，请返回列表重新选择。");
@@ -117,10 +162,32 @@ export default function NewcomerPaperEditPage() {
             description={paper?.status === "published"
                 ? "保存后生成新修订；发布并生效前，学员仍使用当前已发布版本。"
                 : "草稿保存后可发布并生效；历史考试记录会继续保留提交时快照。"}
-            actions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+            actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
         >
-            {isLoading ? (
+            {isCapabilityLoading ? (
+                <GlassCard className="p-8 text-center text-sm text-slate-500">正在校验内容管理权限...</GlassCard>
+            ) : capabilityError || !canAccessPaperForm ? (
+                <AdminLoadErrorCard
+                    title="考卷管理权限不足"
+                    description="当前页不会在权限未确认时加载考卷或开放编辑表单。请联系管理员开通内容管理权限后重试。"
+                    message={capabilityError}
+                    retryLabel="重新校验权限"
+                    onRetry={() => void loadCapabilities()}
+                />
+            ) : isLoading ? (
                 <GlassCard className="p-8 text-center text-sm text-slate-500">正在加载考卷草稿...</GlassCard>
+            ) : loadError ? (
+                <AdminLoadErrorCard
+                    title="考卷加载失败"
+                    description="当前页不会在考卷或正式题库依赖缺失时开放编辑表单。请核对权限、题库发布状态或后端服务状态后重试。"
+                    message={loadError}
+                    retryLabel="重新加载考卷"
+                    onRetry={() => void loadPaper()}
+                />
+            ) : !paper ? (
+                <GlassCard className="p-6 text-sm text-red-700">
+                    未找到对应商务技巧考卷。
+                </GlassCard>
             ) : paper?.status === "archived" ? (
                 <GlassCard className="space-y-3 p-6">
                     <h2 className="text-lg font-bold text-slate-900">归档考卷只读</h2>

@@ -1,3 +1,3 @@
 2026-06-02 17:29:04 [info     ] Running startup database bootstrap auth_bootstrap_entrypoint='cd backend && python scripts/bootstrap_auth_admin.py --email <email> --role <role>' legacy_schema_repair_entrypoint='cd backend && python scripts/repair_legacy_schema.py' schema_migration_entrypoint='cd backend && alembic upgrade head' startup_compatibility_guards=('development/test-only personas.persona_policy compatibility guard', 'development/test-only knowledge_documents schema compatibility guard') startup_initializer=common.db.session.init_db startup_table_bootstrap=Base.metadata.create_all trace_id=4d90cb1b46be22a3a31b28147debbbfb
 2026-06-02 17:29:06 [info     ] Startup database bootstrap finished trace_id=4d90cb1b46be22a3a31b28147debbbfb
-ADMIN_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0YXNrNi1hZG1pbiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc4MDQ3ODk0Nn0.zaV10kFM9BXHiQcwBvrxLVc7y53dhxyDt8ufvRxYNbg
+ADMIN_TOKEN=<redacted-jwt-evidence-token>

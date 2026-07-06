@@ -13,6 +13,7 @@ from curriculum_practice.schemas import (
 from curriculum_practice.services.learning_content_revision_state import (
     learning_content_revision_state,
 )
+from curriculum_practice.services.orm_payload_typing import orm_str
 
 SERVER_ERROR = "[LEARNING_CONTENT_SERVICE_FAILED]"
 
@@ -31,7 +32,7 @@ async def serialize_learning_content(
     service: LearningChapterReader,
     content: LearningContent,
 ) -> Result[LearningContentResponse]:
-    chapters_result = await service.list_chapters(content.learning_content_id)
+    chapters_result = await service.list_chapters(orm_str(content.learning_content_id))
     if not chapters_result.is_success:
         return Result.fail(chapters_result.fallback or SERVER_ERROR)
     revision_state = await learning_content_revision_state(

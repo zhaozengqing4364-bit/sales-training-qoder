@@ -21,31 +21,105 @@ DEFAULT_PATHS = (
     "backend/.env.example",
     "docs",
     ".github/workflows",
+    "evidence",
+    ".sisyphus/evidence",
+)
+
+EXCLUDED_REPORT_NAMES = frozenset({"secret-scan-report.json"})
+EXCLUDED_REPORT_NAME_MARKERS = (
+    "secret-scan",
+    "secret_scan",
+    "secret-hygiene",
+    "secret_hygiene",
 )
 
 SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("openai-style-key", re.compile(r"\bsk-[A-Za-z0-9][A-Za-z0-9_-]{16,}\b")),
-    ("linear-api-key", re.compile(r"\blin_api_[A-Za-z0-9]{16,}\b")),
-    ("aws-access-key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    ("alibaba-access-key", re.compile(r"\bLTAI[0-9A-Za-z]{16,}\b")),
+    (
+        "stepfun-api-key-assignment",
+        re.compile(
+            r"(?i)\bSTEPFUN_API_KEY\s*[:=]\s*[\"']?"
+            r"(?P<secret>[A-Za-z0-9][A-Za-z0-9_.=-]{20,})"
+        ),
+    ),
+    (
+        "openai-style-key",
+        re.compile(r"\b(?P<secret>sk-[A-Za-z0-9][A-Za-z0-9_-]{16,})\b"),
+    ),
+    ("linear-api-key", re.compile(r"\b(?P<secret>lin_api_[A-Za-z0-9]{16,})\b")),
+    ("aws-access-key", re.compile(r"\b(?P<secret>AKIA[0-9A-Z]{16})\b")),
+    ("alibaba-access-key", re.compile(r"\b(?P<secret>LTAI[0-9A-Za-z]{16,})\b")),
+    (
+        "bearer-token",
+        re.compile(
+            r"(?i)\bAuthorization\s*[:=]\s*[\"']?Bearer\s+"
+            r"(?P<secret>[A-Za-z0-9][A-Za-z0-9._~+/=-]{20,})"
+        ),
+    ),
     (
         "jwt-secret-assignment",
-        re.compile(r"(?i)\b(jwt_secret|secret_key)\s*=\s*[^\s<#][^\s]{20,}"),
+        re.compile(
+            r"(?i)\b(?:jwt_secret|jwt_secret_key|secret_key)\s*[:=]\s*[\"']?"
+            r"(?P<secret>[^\s<#\"']{20,})"
+        ),
+    ),
+    (
+        "jwt-token-assignment",
+        re.compile(
+            r"(?i)\b[A-Z0-9_]*(?:TOKEN|JWT)[A-Z0-9_]*\s*[:=]\s*[\"']?"
+            r"(?P<secret>eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)"
+        ),
+    ),
+    (
+        "jwt-token",
+        re.compile(
+            r"\b(?P<secret>eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\b"
+        ),
+    ),
+    (
+        "url-query-token",
+        re.compile(
+            r"(?i)\b(?:https?|wss?)://[^\s'\"<>]*[?&]"
+            r"(?:access_token|refresh_token|id_token|token|api_key|apikey|"
+            r"authorization|jwt|client_secret|secret)="
+            r"(?P<secret>[^&\s'\"<>]{12,})"
+        ),
     ),
 )
 
-PLACEHOLDER_MARKERS = (
-    "<",
+PLACEHOLDER_WRAPPERS = ("<", ">", "{", "}", "${")
+PLACEHOLDER_PREFIXES = (
     "your-",
+    "your_",
     "replace-",
+    "replace_",
     "change-me",
-    "example",
-    "placeholder",
-    "...",
+    "change_me",
+    "example-",
+    "example_",
+    "dummy-",
+    "dummy_",
+    "fake-",
+    "fake_",
+)
+PLACEHOLDER_EXACT_VALUES = frozenset(
+    {
+        "token",
+        "jwt",
+        "jwt_token",
+        "api_key",
+        "secret",
+        "stepfun_api_key",
+        "example",
+        "...",
+    }
+)
+
+SECRET_EXCERPT_REDACTION = re.compile(
+    r"([A-Za-z0-9_-]{6})[A-Za-z0-9_.~+/=-]{8,}([A-Za-z0-9_-]{4})"
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Finding:
     path: Path
     line_number: int
@@ -54,36 +128,75 @@ class Finding:
 
 
 def is_placeholder(line: str) -> bool:
-    lowered = line.lower()
-    return any(marker in lowered for marker in PLACEHOLDER_MARKERS)
+    value = line.strip().strip("\"'")
+    lowered = value.lower()
+    if not value:
+        return True
+    if any(marker in value for marker in PLACEHOLDER_WRAPPERS):
+        return True
+    if lowered in PLACEHOLDER_EXACT_VALUES:
+        return True
+    if lowered.startswith(PLACEHOLDER_PREFIXES):
+        return True
+    return "placeholder" in lowered or "..." in lowered
+
+
+def _match_secret(match: re.Match[str]) -> str:
+    return match.groupdict().get("secret") or match.group(0)
+
+
+def redact_excerpt(line: str) -> str:
+    return SECRET_EXCERPT_REDACTION.sub(r"\1***\2", line.strip()[:160])
 
 
 def scan_text(path: Path, text: str) -> list[Finding]:
     findings: list[Finding] = []
     for line_number, line in enumerate(text.splitlines(), start=1):
-        if is_placeholder(line):
-            continue
         for name, pattern in SECRET_PATTERNS:
-            if pattern.search(line):
+            for match in pattern.finditer(line):
+                if is_placeholder(_match_secret(match)):
+                    continue
                 findings.append(
                     Finding(
                         path=path,
                         line_number=line_number,
                         pattern_name=name,
-                        excerpt=line.strip()[:160],
+                        excerpt=redact_excerpt(line),
                     )
                 )
     return findings
 
 
-def iter_files(root: Path, paths: tuple[str, ...]) -> list[Path]:
+def is_excluded_report_path(path: Path) -> bool:
+    name = path.name.lower()
+    if name in EXCLUDED_REPORT_NAMES:
+        return True
+    return path.suffix.lower() == ".json" and any(
+        marker in name for marker in EXCLUDED_REPORT_NAME_MARKERS
+    )
+
+
+def iter_files(
+    root: Path,
+    paths: tuple[str, ...],
+    exclude_paths: tuple[Path, ...] = (),
+) -> list[Path]:
     files: list[Path] = []
+    excluded = {path.resolve() for path in exclude_paths}
     for item in paths:
         path = root / item
         if path.is_file():
-            files.append(path)
+            resolved_path = path.resolve()
+            if resolved_path not in excluded and not is_excluded_report_path(path):
+                files.append(path)
         elif path.is_dir():
-            files.extend(p for p in path.rglob("*") if p.is_file())
+            files.extend(
+                p
+                for p in path.rglob("*")
+                if p.is_file()
+                and p.resolve() not in excluded
+                and not is_excluded_report_path(p)
+            )
     return sorted({p.resolve() for p in files})
 
 
@@ -92,9 +205,13 @@ def git_root() -> Path:
     return Path(output.strip())
 
 
-def scan_paths(root: Path, paths: tuple[str, ...]) -> list[Finding]:
+def scan_paths(
+    root: Path,
+    paths: tuple[str, ...],
+    exclude_paths: tuple[Path, ...] = (),
+) -> list[Finding]:
     findings: list[Finding] = []
-    for path in iter_files(root, paths):
+    for path in iter_files(root, paths, exclude_paths=exclude_paths):
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
@@ -114,24 +231,32 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = git_root()
-    findings = scan_paths(root, tuple(args.paths))
-    scanned_files = iter_files(root, tuple(args.paths))
+    report_path = Path(args.report) if args.report else None
+    if report_path is not None and not report_path.is_absolute():
+        report_path = root / report_path
+    exclude_paths = (report_path,) if report_path is not None else ()
+
+    findings = scan_paths(root, tuple(args.paths), exclude_paths=exclude_paths)
+    scanned_files = iter_files(root, tuple(args.paths), exclude_paths=exclude_paths)
     report = {
         "passed": not findings,
         "files_scanned": len(scanned_files),
-        "findings": [asdict(finding) | {"path": str(finding.path)} for finding in findings],
+        "findings": [
+            asdict(finding) | {"path": str(finding.path)} for finding in findings
+        ],
     }
-    if args.report:
-        report_path = Path(args.report)
-        if not report_path.is_absolute():
-            report_path = root / report_path
+    if report_path is not None:
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        report_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
     if findings:
         print("Secret hygiene scan failed:", file=sys.stderr)
         for finding in findings:
+            location = f"{finding.path}:{finding.line_number}"
             print(
-                f"{finding.path}:{finding.line_number}: {finding.pattern_name}: {finding.excerpt}",
+                f"{location}: {finding.pattern_name}: {finding.excerpt}",
                 file=sys.stderr,
             )
         return 1

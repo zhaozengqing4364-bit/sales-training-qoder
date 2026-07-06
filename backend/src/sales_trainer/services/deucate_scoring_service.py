@@ -5,7 +5,7 @@ import os
 import time
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import httpx
 
@@ -143,26 +143,28 @@ class DeucateScoringService:
         pass_threshold: float,
         scoring_standard: str = "",
     ) -> AudioScoreOutcome:
+        scoring_template = str(prompt.scoring_template)
+        system_prompt = str(prompt.system_prompt)
         rendered_prompt = _render_template(
-            prompt.scoring_template,
+            scoring_template,
             {
-                "purpose": submission.purpose,
+                "purpose": str(submission.purpose),
                 "transcript": transcript_text,
                 "unit_name": unit_name or "",
                 "scoring_standard": scoring_standard,
             },
         )
         prompt_hash = sha256(
-            f"{prompt.system_prompt}\n{rendered_prompt}".encode()
+            f"{system_prompt}\n{rendered_prompt}".encode()
         ).hexdigest()
         started = time.perf_counter()
         result = await self._client.score(
-            system_prompt=prompt.system_prompt,
+            system_prompt=system_prompt,
             prompt=rendered_prompt,
         )
         if not result.is_success and result.fallback == "[DEUCATE_RESPONSE_INVALID]":
             result = await self._client.score(
-                system_prompt=prompt.system_prompt,
+                system_prompt=system_prompt,
                 prompt=rendered_prompt,
             )
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -186,21 +188,31 @@ class DeucateScoringService:
         payload = result.value
         score = _normalized_score_or_none(payload.get("total_score"))
         passed = bool(score >= pass_threshold) if score is not None else None
+        raw_strengths = payload.get("strengths")
+        strengths = (
+            cast(list[Any], raw_strengths) if isinstance(raw_strengths, list) else []
+        )
+        raw_improvements = payload.get("improvements")
+        improvements = (
+            cast(list[Any], raw_improvements)
+            if isinstance(raw_improvements, list)
+            else []
+        )
+        raw_dimension_scores = payload.get("dimension_scores")
+        dimension_scores = (
+            cast(dict[str, Any], raw_dimension_scores)
+            if isinstance(raw_dimension_scores, dict)
+            else {}
+        )
         return AudioScoreOutcome(
             prompt_hash=prompt_hash,
             deucate_model=self._client.model_name,
             total_score=score,
             passed=passed,
             summary=str(payload.get("summary") or payload.get("feedback") or ""),
-            strengths=payload.get("strengths")
-            if isinstance(payload.get("strengths"), list)
-            else [],
-            improvements=payload.get("improvements")
-            if isinstance(payload.get("improvements"), list)
-            else [],
-            dimension_scores=payload.get("dimension_scores")
-            if isinstance(payload.get("dimension_scores"), dict)
-            else {},
+            strengths=strengths,
+            improvements=improvements,
+            dimension_scores=dimension_scores,
             raw_response=payload,
             error_code=None,
             error_message=None,

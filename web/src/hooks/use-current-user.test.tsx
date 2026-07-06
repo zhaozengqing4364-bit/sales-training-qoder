@@ -1,7 +1,15 @@
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { normalizeCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
+import {
+    ADMIN_CONSOLE_ROLE_VALUES,
+    canUseAdminConsoleRole,
+    hasRequiredRole,
+    isPlatformAdminRole,
+    normalizeCurrentUser,
+    shouldStayInSalesTrainerAdmin,
+    type CurrentUser,
+} from "@/lib/auth/current-user";
 
 import { useCurrentUser } from "./use-current-user";
 
@@ -36,5 +44,31 @@ describe("useCurrentUser", () => {
         });
 
         expect(user.role).toBe("content_admin");
+    });
+
+    it("uses one admin-console role vocabulary for platform, content, ops and auditors", () => {
+        expect(ADMIN_CONSOLE_ROLE_VALUES).toEqual(expect.arrayContaining([
+            "admin",
+            "super_admin",
+            "content_admin",
+            "newcomer_content_admin",
+            "ops",
+            "operator",
+            "operations",
+            "sre",
+            "readonly_auditor",
+        ]));
+        expect(isPlatformAdminRole(" Super_Admin ")).toBe(true);
+        expect(canUseAdminConsoleRole(" SRE ")).toBe(true);
+        expect(canUseAdminConsoleRole("readonly_auditor")).toBe(true);
+        expect(shouldStayInSalesTrainerAdmin("ops")).toBe(true);
+        expect(shouldStayInSalesTrainerAdmin("readonly_auditor")).toBe(false);
+    });
+
+    it("matches canonical required roles against compatible aliases", () => {
+        expect(hasRequiredRole({ role: "super_admin" }, ["admin"])).toBe(true);
+        expect(hasRequiredRole({ role: "newcomer_content_admin" }, ["content_admin"])).toBe(true);
+        expect(hasRequiredRole({ role: "sre" }, ["operations"])).toBe(true);
+        expect(hasRequiredRole({ role: "readonly_auditor" }, ["admin"])).toBe(false);
     });
 });

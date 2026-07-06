@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,10 +47,12 @@ class ExamPaperPublishWorkflow:
         if paper.status == "archived":
             raise ExamPaperServiceError("[PAPER_ARCHIVED]", "已归档考卷不能发布。", 409)
         unit = await require_backing_unit(self._db, paper)
+        paper_id = str(paper.paper_id)
+        unit_id = str(unit.unit_id)
         unit_service = UnitService(self._db)
         previous_snapshot = paper_lifecycle_snapshot(
             paper,
-            await unit_service.get_unit_questions(unit.unit_id),
+            await unit_service.get_unit_questions(unit_id),
             unit_status=str(unit.status),
         )
         revision_service = SalesTrainerAssetRevisionService(self._db)
@@ -58,7 +60,7 @@ class ExamPaperPublishWorkflow:
         if paper.status == "published":
             working_revision = await revision_service.latest_working_revision(
                 resource_type=PAPER_RESOURCE_TYPE,
-                logical_id=paper.paper_id,
+                logical_id=paper_id,
             )
         if working_revision is not None:
             return await self._publish_working_revision(
@@ -90,23 +92,25 @@ class ExamPaperPublishWorkflow:
         revision_service: SalesTrainerAssetRevisionService,
     ) -> SalesTrainerExamPaper:
         trace_id = get_trace_id()
+        paper_id = str(paper.paper_id)
+        unit_id = str(unit.unit_id)
         try:
             await unit_service.publish_unit(unit, actor=actor)
         except SalesTrainerUnitError as exc:
             raise ExamPaperServiceError(exc.code, exc.message, exc.status_code) from exc
-        paper.status = "published"
-        paper.updated_by = str(actor.user_id)
+        setattr(paper, "status", "published")
+        setattr(paper, "updated_by", str(actor.user_id))
         next_snapshot = await freeze_paper_question_revisions(
             self._db,
             paper_lifecycle_snapshot(
                 paper,
-                await unit_service.get_unit_questions(unit.unit_id),
+                await unit_service.get_unit_questions(unit_id),
                 unit_status=str(unit.status),
             ),
         )
         publish_result = await revision_service.create_published_revision(
             resource_type=PAPER_RESOURCE_TYPE,
-            logical_id=paper.paper_id,
+            logical_id=paper_id,
             payload=next_snapshot,
             actor=actor,
             change_class="scoring_high_risk",
@@ -117,7 +121,7 @@ class ExamPaperPublishWorkflow:
             actor=actor,
             action="exam_paper_published",
             target_type="sales_trainer_exam_paper",
-            target_id=paper.paper_id,
+            target_id=paper_id,
             request_id=trace_id,
             metadata=paper_lifecycle_metadata(previous_snapshot, next_snapshot)
             | {
@@ -143,10 +147,13 @@ class ExamPaperPublishWorkflow:
         revision_service: SalesTrainerAssetRevisionService,
     ) -> SalesTrainerExamPaper:
         trace_id = get_trace_id()
+        paper_id = str(paper.paper_id)
+        unit_id = str(unit.unit_id)
+        working_payload = cast(dict[str, Any], working_revision.payload_json)
         await self._payloads.apply(
             paper,
             unit,
-            working_revision.payload_json,
+            working_payload,
             actor=actor,
             unit_service=unit_service,
         )
@@ -157,11 +164,11 @@ class ExamPaperPublishWorkflow:
             trace_id=trace_id,
         )
         next_snapshot = (
-            working_revision.payload_json
+            working_payload
             if isinstance(working_revision.payload_json, dict)
             else paper_lifecycle_snapshot(
                 paper,
-                await unit_service.get_unit_questions(unit.unit_id),
+                await unit_service.get_unit_questions(unit_id),
                 unit_status=str(unit.status),
             )
         )
@@ -169,7 +176,7 @@ class ExamPaperPublishWorkflow:
             actor=actor,
             action="exam_paper_revision_published",
             target_type="sales_trainer_exam_paper",
-            target_id=paper.paper_id,
+            target_id=paper_id,
             request_id=trace_id,
             metadata={
                 **paper_lifecycle_metadata(previous_snapshot, next_snapshot),

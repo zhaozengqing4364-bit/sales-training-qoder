@@ -7,6 +7,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from curriculum_practice.models import CaseItem, RoleProfile
 from curriculum_practice.schemas import CaseItemCreate, RoleProfileCreate
+from curriculum_practice.services.orm_payload_typing import orm_int, set_orm_field
 
 HASH_EXCLUDED_FIELDS = {
     "case_item_id",
@@ -124,20 +125,28 @@ def apply_case_item_revision_payload(
     actor_id: str,
     published_at: datetime,
 ) -> None:
-    item.industry = _required_str(payload, "industry")
-    item.company_profile = _required_str(payload, "company_profile")
-    item.customer_role = _required_str(payload, "customer_role")
-    item.pain_points = _list_value(payload, "pain_points")
-    item.objections = _list_value(payload, "objections")
-    item.hidden_information = _required_str(payload, "hidden_information")
-    item.success_criteria = _list_value(payload, "success_criteria")
-    item.allowed_disclosure_policy = _dict_value(payload, "allowed_disclosure_policy")
-    item.status = "published"
-    item.version = _int_value(payload, "version", fallback=item.version or 1)
-    item.content_hash = case_item_content_hash(payload)
-    item.published_by = actor_id
-    item.published_at = published_at
-    item.updated_by = actor_id
+    set_orm_field(item, "industry", _required_str(payload, "industry"))
+    set_orm_field(item, "company_profile", _required_str(payload, "company_profile"))
+    set_orm_field(item, "customer_role", _required_str(payload, "customer_role"))
+    set_orm_field(item, "pain_points", _list_value(payload, "pain_points"))
+    set_orm_field(item, "objections", _list_value(payload, "objections"))
+    set_orm_field(
+        item, "hidden_information", _required_str(payload, "hidden_information")
+    )
+    set_orm_field(item, "success_criteria", _list_value(payload, "success_criteria"))
+    set_orm_field(
+        item,
+        "allowed_disclosure_policy",
+        _dict_value(payload, "allowed_disclosure_policy"),
+    )
+    set_orm_field(item, "status", "published")
+    set_orm_field(
+        item, "version", _int_value(payload, "version", fallback=item.version)
+    )
+    set_orm_field(item, "content_hash", case_item_content_hash(payload))
+    set_orm_field(item, "published_by", actor_id)
+    set_orm_field(item, "published_at", published_at)
+    set_orm_field(item, "updated_by", actor_id)
 
 
 def apply_role_profile_revision_payload(
@@ -147,22 +156,30 @@ def apply_role_profile_revision_payload(
     actor_id: str,
     published_at: datetime,
 ) -> None:
-    item.role_type = _required_str(payload, "role_type")
-    item.role_name = _required_str(payload, "role_name")
-    item.persona_ref = _optional_str(payload, "persona_ref")
-    item.communication_style = _required_str(payload, "communication_style")
-    item.pressure_level = _required_str(payload, "pressure_level")
-    item.knowledge_boundary = _list_value(payload, "knowledge_boundary")
-    item.behavior_rules = _list_value(payload, "behavior_rules")
-    item.voice_style_hint = _required_str(payload, "voice_style_hint")
-    item.voice_id = _optional_str(payload, "voice_id")
-    item.voice_sample_url = _optional_str(payload, "voice_sample_url")
-    item.status = "published"
-    item.version = _int_value(payload, "version", fallback=item.version or 1)
-    item.content_hash = role_profile_content_hash(payload)
-    item.published_by = actor_id
-    item.published_at = published_at
-    item.updated_by = actor_id
+    set_orm_field(item, "role_type", _required_str(payload, "role_type"))
+    set_orm_field(item, "role_name", _required_str(payload, "role_name"))
+    set_orm_field(item, "persona_ref", _optional_str(payload, "persona_ref"))
+    set_orm_field(
+        item,
+        "communication_style",
+        _required_str(payload, "communication_style"),
+    )
+    set_orm_field(item, "pressure_level", _required_str(payload, "pressure_level"))
+    set_orm_field(
+        item, "knowledge_boundary", _list_value(payload, "knowledge_boundary")
+    )
+    set_orm_field(item, "behavior_rules", _list_value(payload, "behavior_rules"))
+    set_orm_field(item, "voice_style_hint", _required_str(payload, "voice_style_hint"))
+    set_orm_field(item, "voice_id", _optional_str(payload, "voice_id"))
+    set_orm_field(item, "voice_sample_url", _optional_str(payload, "voice_sample_url"))
+    set_orm_field(item, "status", "published")
+    set_orm_field(
+        item, "version", _int_value(payload, "version", fallback=item.version)
+    )
+    set_orm_field(item, "content_hash", role_profile_content_hash(payload))
+    set_orm_field(item, "published_by", actor_id)
+    set_orm_field(item, "published_at", published_at)
+    set_orm_field(item, "updated_by", actor_id)
 
 
 def copy_suffix(value: str) -> str:
@@ -243,9 +260,9 @@ def _dict_value(payload: dict[str, Any], field_name: str) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _int_value(payload: dict[str, Any], field_name: str, *, fallback: int) -> int:
+def _int_value(payload: dict[str, Any], field_name: str, *, fallback: object) -> int:
     value = payload.get(field_name)
-    return value if isinstance(value, int) else int(fallback)
+    return value if isinstance(value, int) else orm_int(fallback)
 
 
 def _datetime_value(value: Any) -> str | None:

@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.db.typing import json_dict_or_empty, orm_scalar
+from common.services.runtime_outcome_projection import (
+    RuntimeOutcomeProjection,
+    RuntimeOutcomeProjectionService,
+)
 from sales_trainer.models import (
     SalesTrainerAiCoachSession,
     SalesTrainerAudioSubmission,
+    SalesTrainerBusinessEtiquetteQuizAttempt,
     SalesTrainerOperationLog,
     SalesTrainerQuizAttempt,
     SalesTrainerUnit,
@@ -26,6 +32,9 @@ from sales_trainer.services.training_record_lineage import (
 )
 
 RecordKey = tuple[str, str]
+BUSINESS_ETIQUETTE_QUIZ_RECORD_TYPE = "business_etiquette_quiz_attempt"
+REALTIME_ROLEPLAY_RECORD_TYPE = "realtime_roleplay_session"
+REALTIME_ROLEPLAY_OWNER = "sales_trainer"
 
 
 class TrainingRecordService:
@@ -34,6 +43,7 @@ class TrainingRecordService:
         self._audio = AudioSubmissionService(db)
         self._quiz = QuizService(db)
         self._logs = OperationLogService(db)
+        self._runtime_outcomes = RuntimeOutcomeProjectionService(db)
 
     async def list_records(
         self,
@@ -42,16 +52,29 @@ class TrainingRecordService:
         unit_id: str | None = None,
         material_version_id: str | None = None,
         team_department: str | None = None,
+        training_stage: str | None = None,
+        module_key: str | None = None,
+        learner_level: str | None = None,
+        role_level: str | None = None,
+        status: str | None = None,
+        viewer: User | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[dict[str, Any]], int]:
+        advanced_filter = _advanced_record_filter_present(
+            training_stage=training_stage,
+            module_key=module_key,
+            learner_level=learner_level,
+            role_level=role_level,
+            status=status,
+        )
         keys, total = await self._record_window(
             user_id=user_id,
             unit_id=unit_id,
             material_version_id=material_version_id,
             team_department=team_department,
-            limit=limit,
-            offset=offset,
+            limit=None if advanced_filter else limit,
+            offset=0 if advanced_filter else offset,
         )
         records = await self._serialize_window(keys, include_logs=False)
         policy, _ = await resolve_phase2_policy(self._db)
@@ -59,6 +82,25 @@ class TrainingRecordService:
             self._db,
             policy=policy,
         ).enrich_records(records)
+        enriched = await self._attach_journey_context(
+            enriched,
+            viewer=viewer,
+            team_department=team_department,
+        )
+        if advanced_filter:
+            enriched = [
+                record
+                for record in enriched
+                if _record_matches_filters(
+                    record,
+                    training_stage=training_stage,
+                    module_key=module_key,
+                    learner_level=learner_level,
+                    role_level=role_level,
+                    status=status,
+                )
+            ]
+            return enriched[offset : offset + limit], len(enriched)
         return enriched, total
 
     async def get_record(
@@ -81,13 +123,63 @@ class TrainingRecordService:
             if session is None:
                 return None
             record = await self._serialize_ai_coach_record(session, include_logs=True)
+        elif record_type == BUSINESS_ETIQUETTE_QUIZ_RECORD_TYPE:
+            business_attempt = await self._db.get(
+                SalesTrainerBusinessEtiquetteQuizAttempt,
+                record_id,
+            )
+            if business_attempt is None:
+                return None
+            record = await self._serialize_business_etiquette_quiz_record(
+                business_attempt,
+                include_logs=True,
+            )
+        elif record_type == REALTIME_ROLEPLAY_RECORD_TYPE:
+            projection = await self._runtime_outcomes.get_completed_external_binding(
+                owner=REALTIME_ROLEPLAY_OWNER,
+                source_record_id=record_id,
+            )
+            if projection is None:
+                return None
+            record = await self._serialize_realtime_record(
+                projection,
+                include_logs=True,
+            )
         else:
             return None
         policy, _ = await resolve_phase2_policy(self._db)
-        return await SalesTrainerPhase2ProjectionService(
-            self._db,
-            policy=policy,
-        ).enrich_record_from_database(record)
+        return cast(
+            dict[str, Any] | None,
+            await SalesTrainerPhase2ProjectionService(
+                self._db,
+                policy=policy,
+            ).enrich_record_from_database(record),
+        )
+
+    async def get_record_for_viewer(
+        self,
+        record_type: str,
+        record_id: str,
+        *,
+        viewer: User,
+        team_department: str | None,
+    ) -> dict[str, Any] | None:
+        record = await self.get_record(record_type, record_id)
+        if record is None:
+            return None
+        if (
+            team_department is not None
+            and record.get("user_department") != team_department
+        ):
+            return None
+        enriched = await self._attach_journey_context(
+            [record],
+            viewer=viewer,
+            team_department=team_department,
+        )
+        if enriched:
+            return enriched[0]
+        return record
 
     async def get_audio_record(self, submission_id: str) -> dict[str, Any] | None:
         return await self.get_record("audio_submission", submission_id)
@@ -99,7 +191,7 @@ class TrainingRecordService:
         unit_id: str | None,
         material_version_id: str | None,
         team_department: str | None,
-        limit: int,
+        limit: int | None,
         offset: int,
     ) -> tuple[list[RecordKey], int]:
         branches = [
@@ -125,6 +217,20 @@ class TrainingRecordService:
                         team_department=team_department,
                     )
                 )
+                branches.append(
+                    self._business_etiquette_quiz_window_select(
+                        user_id=user_id,
+                        team_department=team_department,
+                    )
+                )
+                branches.append(
+                    self._runtime_outcomes.completed_external_binding_window_select(
+                        owner=REALTIME_ROLEPLAY_OWNER,
+                        record_type=REALTIME_ROLEPLAY_RECORD_TYPE,
+                        user_id=user_id,
+                        team_department=team_department,
+                    )
+                )
         combined = (
             branches[0].subquery()
             if len(branches) == 1
@@ -135,20 +241,15 @@ class TrainingRecordService:
         )
         if total == 0:
             return [], 0
-        result = await self._db.execute(
-            select(combined.c.record_type, combined.c.record_id)
-            .order_by(
-                combined.c.submitted_at.desc(),
-                combined.c.record_type.asc(),
-                combined.c.record_id.desc(),
-            )
-            .offset(offset)
-            .limit(limit)
+        stmt = select(combined.c.record_type, combined.c.record_id).order_by(
+            combined.c.submitted_at.desc(),
+            combined.c.record_type.asc(),
+            combined.c.record_id.desc(),
         )
-        keys = [
-            (str(row.record_type), str(row.record_id))
-            for row in result.all()
-        ]
+        if limit is not None:
+            stmt = stmt.offset(offset).limit(limit)
+        result = await self._db.execute(stmt)
+        keys = [(str(row.record_type), str(row.record_id)) for row in result.all()]
         return keys, total
 
     def _audio_window_select(
@@ -158,7 +259,7 @@ class TrainingRecordService:
         unit_id: str | None,
         material_version_id: str | None,
         team_department: str | None,
-    ):
+    ) -> Any:
         stmt = select(
             literal("audio_submission").label("record_type"),
             SalesTrainerAudioSubmission.submission_id.label("record_id"),
@@ -184,7 +285,7 @@ class TrainingRecordService:
         user_id: str | None,
         unit_id: str | None,
         team_department: str | None,
-    ):
+    ) -> Any:
         stmt = select(
             literal("quiz_attempt").label("record_type"),
             SalesTrainerQuizAttempt.attempt_id.label("record_id"),
@@ -204,7 +305,7 @@ class TrainingRecordService:
         *,
         user_id: str | None,
         team_department: str | None,
-    ):
+    ) -> Any:
         stmt = select(
             literal("ai_coach_session").label("record_type"),
             SalesTrainerAiCoachSession.session_id.label("record_id"),
@@ -214,6 +315,29 @@ class TrainingRecordService:
             stmt = stmt.where(SalesTrainerAiCoachSession.user_id == user_id)
         if team_department is not None:
             stmt = stmt.join(User, SalesTrainerAiCoachSession.user_id == User.user_id)
+            stmt = stmt.where(User.department == team_department)
+        return stmt
+
+    def _business_etiquette_quiz_window_select(
+        self,
+        *,
+        user_id: str | None,
+        team_department: str | None,
+    ) -> Any:
+        stmt = select(
+            literal(BUSINESS_ETIQUETTE_QUIZ_RECORD_TYPE).label("record_type"),
+            SalesTrainerBusinessEtiquetteQuizAttempt.attempt_id.label("record_id"),
+            SalesTrainerBusinessEtiquetteQuizAttempt.submitted_at.label("submitted_at"),
+        )
+        if user_id:
+            stmt = stmt.where(
+                SalesTrainerBusinessEtiquetteQuizAttempt.user_id == user_id
+            )
+        if team_department is not None:
+            stmt = stmt.join(
+                User,
+                SalesTrainerBusinessEtiquetteQuizAttempt.user_id == User.user_id,
+            )
             stmt = stmt.where(User.department == team_department)
         return stmt
 
@@ -231,45 +355,116 @@ class TrainingRecordService:
 
         serialized: dict[RecordKey, dict[str, Any]] = {}
         if audio_ids := ids_by_type.get("audio_submission"):
-            result = await self._db.execute(
+            audio_result = await self._db.execute(
                 select(SalesTrainerAudioSubmission).where(
                     SalesTrainerAudioSubmission.submission_id.in_(audio_ids)
                 )
             )
-            for submission in result.scalars().all():
-                serialized[("audio_submission", submission.submission_id)] = (
-                    await self._serialize_audio_record(
-                        submission,
-                        include_logs=include_logs,
-                    )
+            for submission in audio_result.scalars().all():
+                submission_id = orm_scalar(submission.submission_id, str)
+                serialized[
+                    ("audio_submission", submission_id)
+                ] = await self._serialize_audio_record(
+                    submission,
+                    include_logs=include_logs,
                 )
         if quiz_ids := ids_by_type.get("quiz_attempt"):
-            result = await self._db.execute(
+            quiz_result = await self._db.execute(
                 select(SalesTrainerQuizAttempt).where(
                     SalesTrainerQuizAttempt.attempt_id.in_(quiz_ids)
                 )
             )
-            for attempt in result.scalars().all():
-                serialized[("quiz_attempt", attempt.attempt_id)] = (
-                    await self._serialize_quiz_record(
-                        attempt,
-                        include_logs=include_logs,
-                    )
+            for attempt in quiz_result.scalars().all():
+                attempt_id = orm_scalar(attempt.attempt_id, str)
+                serialized[
+                    ("quiz_attempt", attempt_id)
+                ] = await self._serialize_quiz_record(
+                    attempt,
+                    include_logs=include_logs,
                 )
         if ai_coach_ids := ids_by_type.get("ai_coach_session"):
-            result = await self._db.execute(
+            ai_coach_result = await self._db.execute(
                 select(SalesTrainerAiCoachSession).where(
                     SalesTrainerAiCoachSession.session_id.in_(ai_coach_ids)
                 )
             )
-            for session in result.scalars().all():
-                serialized[("ai_coach_session", session.session_id)] = (
-                    await self._serialize_ai_coach_record(
-                        session,
-                        include_logs=include_logs,
+            for session in ai_coach_result.scalars().all():
+                session_id = orm_scalar(session.session_id, str)
+                serialized[
+                    ("ai_coach_session", session_id)
+                ] = await self._serialize_ai_coach_record(
+                    session,
+                    include_logs=include_logs,
+                )
+        if business_quiz_ids := ids_by_type.get(BUSINESS_ETIQUETTE_QUIZ_RECORD_TYPE):
+            business_quiz_result = await self._db.execute(
+                select(SalesTrainerBusinessEtiquetteQuizAttempt).where(
+                    SalesTrainerBusinessEtiquetteQuizAttempt.attempt_id.in_(
+                        business_quiz_ids
                     )
                 )
+            )
+            for business_attempt in business_quiz_result.scalars().all():
+                attempt_id = orm_scalar(business_attempt.attempt_id, str)
+                serialized[
+                    (BUSINESS_ETIQUETTE_QUIZ_RECORD_TYPE, attempt_id)
+                ] = await self._serialize_business_etiquette_quiz_record(
+                    business_attempt,
+                    include_logs=include_logs,
+                )
+        if realtime_ids := ids_by_type.get(REALTIME_ROLEPLAY_RECORD_TYPE):
+            projections = (
+                await self._runtime_outcomes.list_completed_external_bindings_by_ids(
+                    owner=REALTIME_ROLEPLAY_OWNER,
+                    source_record_ids=realtime_ids,
+                )
+            )
+            for projection in projections:
+                serialized[
+                    (REALTIME_ROLEPLAY_RECORD_TYPE, projection.source_record_id)
+                ] = await self._serialize_realtime_record(
+                    projection,
+                    include_logs=include_logs,
+                )
         return [serialized[key] for key in keys if key in serialized]
+
+    async def _attach_journey_context(
+        self,
+        records: list[dict[str, Any]],
+        *,
+        viewer: User | None,
+        team_department: str | None,
+    ) -> list[dict[str, Any]]:
+        if not records or viewer is None:
+            return records
+        from sales_trainer.services.training_journey_service import (
+            TrainingJourneyError,
+            TrainingJourneyService,
+        )
+
+        service = TrainingJourneyService(self._db)
+        journeys_by_user: dict[str, dict[str, Any] | None] = {}
+        for record in records:
+            learner_id = str(record.get("user_id") or "")
+            if not learner_id or learner_id in journeys_by_user:
+                continue
+            try:
+                journeys_by_user[learner_id] = await service.get_admin_journey(
+                    learner_id,
+                    viewer=viewer,
+                    team_department=team_department,
+                )
+            except TrainingJourneyError:
+                journeys_by_user[learner_id] = None
+        for record in records:
+            journey = journeys_by_user.get(str(record.get("user_id") or ""))
+            if journey is None:
+                continue
+            record["training_stage"] = journey.get("training_stage")
+            record["learner_level"] = journey.get("learner_level")
+            record["role_level"] = journey.get("role_level")
+            _attach_training_context_to_logs(record, journey)
+        return records
 
     async def _serialize_audio_record(
         self,
@@ -287,7 +482,7 @@ class TrainingRecordService:
         logs = (
             await self._target_logs(
                 "sales_trainer_audio_submission",
-                submission.submission_id,
+                orm_scalar(submission.submission_id, str),
             )
             if include_logs
             else []
@@ -316,6 +511,68 @@ class TrainingRecordService:
             "audio_submission": audio_payload,
             "quiz_attempt": None,
             "ai_coach_session": None,
+            "business_etiquette_quiz_attempt": None,
+            "realtime_roleplay_session": None,
+            "operation_logs": logs,
+        }
+
+    async def _serialize_realtime_record(
+        self,
+        projection: RuntimeOutcomeProjection,
+        *,
+        include_logs: bool,
+    ) -> dict[str, Any]:
+        user = await self._db.get(User, projection.user_id)
+        snapshot = projection.snapshot if isinstance(projection.snapshot, dict) else {}
+        binding = snapshot.get("external_binding")
+        binding = binding if isinstance(binding, dict) else {}
+        logs = (
+            await self._target_logs(
+                "sales_trainer_realtime_roleplay_session",
+                projection.source_record_id,
+            )
+            if include_logs
+            else []
+        )
+        return {
+            "record_id": projection.source_record_id,
+            "record_type": REALTIME_ROLEPLAY_RECORD_TYPE,
+            "path_key": _optional_str(binding.get("path_key")),
+            "path_revision_id": projection.path_revision_id,
+            "path_revision_no": projection.path_revision_no,
+            "module_key": projection.module_key,
+            "legacy_snapshot_only": False,
+            "unit_id": "",
+            "unit_name": None,
+            "unit_type": "realtime_roleplay",
+            "user_id": projection.user_id,
+            "user_name": user.name if user else None,
+            "user_email": user.email if user else None,
+            "user_department": user.department if user else None,
+            "status": projection.status,
+            "score": projection.score,
+            "max_score": projection.max_score,
+            "passed": projection.passed,
+            "submitted_at": projection.completed_at or projection.submitted_at,
+            "material_snapshot": None,
+            "score_scheme_snapshot": None,
+            "task_brief_snapshot": None,
+            "audio_submission": None,
+            "quiz_attempt": None,
+            "ai_coach_session": None,
+            "business_etiquette_quiz_attempt": None,
+            "realtime_roleplay_session": {
+                "session_id": projection.source_record_id,
+                "module_key": projection.module_key,
+                "status": projection.status,
+                "score": projection.score,
+                "max_score": projection.max_score,
+                "passed": projection.passed,
+                "submitted_at": projection.submitted_at,
+                "completed_at": projection.completed_at,
+                "external_binding": binding,
+                "snapshot": snapshot,
+            },
             "operation_logs": logs,
         }
 
@@ -326,16 +583,12 @@ class TrainingRecordService:
         include_logs: bool,
     ) -> dict[str, Any]:
         user = await self._db.get(User, session.user_id)
-        path_config = (
-            session.path_config_snapshot
-            if isinstance(session.path_config_snapshot, dict)
-            else {}
-        )
+        path_config = json_dict_or_empty(session.path_config_snapshot)
         lineage = training_record_lineage_fields(path_config)
         logs = (
             await self._target_logs(
                 "sales_trainer_ai_coach_session",
-                session.session_id,
+                orm_scalar(session.session_id, str),
             )
             if include_logs
             else []
@@ -370,6 +623,16 @@ class TrainingRecordService:
             "ai_coach_session": {
                 "session_id": session.session_id,
                 "module_key": session.module_key,
+                "path_key": session.path_key,
+                "path_revision_id": session.path_revision_id,
+                "path_revision_no": session.path_revision_no,
+                "article_snapshot": session.article_snapshot,
+                "path_config_snapshot": session.path_config_snapshot,
+                "config_snapshot": session.config_snapshot,
+                "coach_state": session.coach_state,
+                "prompt_template_id": session.prompt_template_id,
+                "prompt_revision_id": session.prompt_revision_id,
+                "prompt_contract_hash": session.prompt_contract_hash,
                 "mastery_state": session.mastery_state,
                 "total_score": float(session.total_score)
                 if session.total_score is not None
@@ -382,6 +645,87 @@ class TrainingRecordService:
                 "created_at": session.created_at,
                 "updated_at": session.updated_at,
             },
+            "business_etiquette_quiz_attempt": None,
+            "realtime_roleplay_session": None,
+            "operation_logs": logs,
+        }
+
+    async def _serialize_business_etiquette_quiz_record(
+        self,
+        attempt: SalesTrainerBusinessEtiquetteQuizAttempt,
+        *,
+        include_logs: bool,
+    ) -> dict[str, Any]:
+        user = await self._db.get(User, attempt.user_id)
+        logs = (
+            await self._target_logs(
+                "business_etiquette_unit_quiz_attempt",
+                orm_scalar(attempt.attempt_id, str),
+            )
+            if include_logs
+            else []
+        )
+        payload = {
+            "attempt_id": attempt.attempt_id,
+            "training_pack_key": attempt.training_pack_key,
+            "learning_unit_key": attempt.learning_unit_key,
+            "learning_unit_title": attempt.learning_unit_title,
+            "user_id": attempt.user_id,
+            "path_revision_id": attempt.path_revision_id,
+            "path_revision_no": attempt.path_revision_no,
+            "training_pack_revision_id": attempt.training_pack_revision_id,
+            "training_pack_revision_no": attempt.training_pack_revision_no,
+            "capability_snapshot": attempt.capability_snapshot or {},
+            "question_snapshots": attempt.question_snapshots or [],
+            "answers": attempt.answers_snapshot or [],
+            "capability_scores": attempt.capability_scores or [],
+            "weak_capability_keys": attempt.weak_capability_keys or [],
+            "recommended_chapter_orders": attempt.recommended_chapter_orders or [],
+            "total_score": float(attempt.total_score)
+            if attempt.total_score is not None
+            else None,
+            "max_score": float(attempt.max_score)
+            if attempt.max_score is not None
+            else None,
+            "passed": attempt.passed,
+            "status": attempt.status,
+            "submitted_at": attempt.submitted_at,
+        }
+        legacy_snapshot_only = not (
+            attempt.path_revision_id and attempt.path_revision_no
+        )
+        return {
+            "record_id": attempt.attempt_id,
+            "record_type": BUSINESS_ETIQUETTE_QUIZ_RECORD_TYPE,
+            "path_key": "newcomer_training_path_v1",
+            "path_revision_id": attempt.path_revision_id,
+            "path_revision_no": attempt.path_revision_no,
+            "module_key": "business_skills",
+            "legacy_snapshot_only": legacy_snapshot_only,
+            "unit_id": attempt.learning_unit_key,
+            "unit_name": attempt.learning_unit_title,
+            "unit_type": "business_etiquette_quiz",
+            "user_id": attempt.user_id,
+            "user_name": user.name if user else None,
+            "user_email": user.email if user else None,
+            "user_department": user.department if user else None,
+            "status": attempt.status,
+            "score": float(attempt.total_score)
+            if attempt.total_score is not None
+            else None,
+            "max_score": float(attempt.max_score)
+            if attempt.max_score is not None
+            else None,
+            "passed": attempt.passed,
+            "submitted_at": attempt.submitted_at,
+            "material_snapshot": None,
+            "score_scheme_snapshot": None,
+            "task_brief_snapshot": None,
+            "audio_submission": None,
+            "quiz_attempt": None,
+            "ai_coach_session": None,
+            "business_etiquette_quiz_attempt": payload,
+            "realtime_roleplay_session": None,
             "operation_logs": logs,
         }
 
@@ -397,7 +741,7 @@ class TrainingRecordService:
         logs = (
             await self._target_logs(
                 "sales_trainer_quiz_attempt",
-                attempt.attempt_id,
+                orm_scalar(attempt.attempt_id, str),
             )
             if include_logs
             else []
@@ -429,6 +773,8 @@ class TrainingRecordService:
             "audio_submission": None,
             "quiz_attempt": quiz_payload,
             "ai_coach_session": None,
+            "business_etiquette_quiz_attempt": None,
+            "realtime_roleplay_session": None,
             "operation_logs": logs,
         }
 
@@ -459,3 +805,86 @@ def _serialize_operation_log(log: SalesTrainerOperationLog) -> dict[str, Any]:
         "metadata": log.metadata_json or {},
         "created_at": log.created_at,
     }
+
+
+def _attach_training_context_to_logs(
+    record: dict[str, Any],
+    journey: dict[str, Any],
+) -> None:
+    logs = record.get("operation_logs")
+    if not isinstance(logs, list):
+        return
+    context = _training_context_from_journey(journey)
+    for log in logs:
+        if isinstance(log, dict):
+            log["training_context"] = context
+
+
+def _training_context_from_journey(journey: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "path_key": journey.get("path_key"),
+        "path_revision_id": journey.get("path_revision_id"),
+        "path_revision_no": journey.get("path_revision_no"),
+        "training_stage": journey.get("training_stage"),
+        "learner_level": journey.get("learner_level"),
+        "role_level": journey.get("role_level"),
+    }
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text or None
+
+
+def _advanced_record_filter_present(
+    *,
+    training_stage: str | None,
+    module_key: str | None,
+    learner_level: str | None,
+    role_level: str | None,
+    status: str | None,
+) -> bool:
+    return any(
+        _normalise_filter_value(value)
+        for value in (training_stage, module_key, learner_level, role_level, status)
+    )
+
+
+def _record_matches_filters(
+    record: dict[str, Any],
+    *,
+    training_stage: str | None,
+    module_key: str | None,
+    learner_level: str | None,
+    role_level: str | None,
+    status: str | None,
+) -> bool:
+    training_stage = _normalise_filter_value(training_stage)
+    module_key = _normalise_filter_value(module_key)
+    learner_level = _normalise_filter_value(learner_level)
+    role_level = _normalise_filter_value(role_level)
+    status = _normalise_filter_value(status)
+    if training_stage and record.get("training_stage") != training_stage:
+        return False
+    if module_key and record.get("module_key") != module_key:
+        return False
+    if status and record.get("status") != status:
+        return False
+    if learner_level:
+        level = record.get("learner_level")
+        if not isinstance(level, dict) or level.get("level_key") != learner_level:
+            return False
+    if role_level:
+        level = record.get("role_level")
+        if not isinstance(level, dict) or level.get("level_key") != role_level:
+            return False
+    return True
+
+
+def _normalise_filter_value(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None

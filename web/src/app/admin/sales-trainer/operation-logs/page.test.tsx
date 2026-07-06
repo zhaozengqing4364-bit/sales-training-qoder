@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import SalesTrainerOperationLogsPage from "./page";
 
 const {
+    getCapabilitiesMock,
     listOperationLogsMock,
 } = vi.hoisted(() => ({
+    getCapabilitiesMock: vi.fn(),
     listOperationLogsMock: vi.fn(),
 }));
 
@@ -23,6 +25,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     listOperationLogs: listOperationLogsMock,
                 },
             },
@@ -30,9 +33,36 @@ vi.mock("@/lib/api/client", async () => {
     };
 });
 
+function capabilities(overrides: Record<string, boolean> = {}) {
+    const values = {
+        admin_full_access: false,
+        manage_content: false,
+        manage_questions: false,
+        manage_modules: false,
+        manage_prompts: false,
+        view_records: false,
+        view_global_records: false,
+        retry_jobs: false,
+        regrade_history: false,
+        view_logs: true,
+        view_settings: false,
+        ...overrides,
+    };
+    return {
+        role: "support",
+        role_label: "运营支持",
+        capabilities: values,
+        capability_keys: Object.entries(values)
+            .filter(([, enabled]) => enabled)
+            .map(([key]) => key),
+    };
+}
+
 describe("SalesTrainerOperationLogsPage", () => {
     beforeEach(() => {
+        getCapabilitiesMock.mockReset();
         listOperationLogsMock.mockReset();
+        getCapabilitiesMock.mockResolvedValue(capabilities());
         listOperationLogsMock.mockResolvedValue({
             items: [
                 {
@@ -90,5 +120,27 @@ describe("SalesTrainerOperationLogsPage", () => {
 
         expect(screen.getByText(/sales_trainer_exam_paper/)).toBeTruthy();
         expect(screen.getByText(/module_key/)).toBeTruthy();
+    });
+
+    it("fails closed before loading logs without view logs permission", async () => {
+        getCapabilitiesMock.mockResolvedValue(capabilities({ view_logs: false }));
+
+        render(<SalesTrainerOperationLogsPage />);
+
+        expect(await screen.findByText("操作日志权限不足")).toBeTruthy();
+        expect(listOperationLogsMock).not.toHaveBeenCalled();
+        expect(screen.queryByText("暂无操作日志")).toBeNull();
+        expect(screen.queryByText("正在加载操作日志...")).toBeNull();
+    });
+
+    it("keeps log load failures visible instead of rendering an empty audit table", async () => {
+        listOperationLogsMock.mockRejectedValue(new Error("logs unavailable"));
+
+        render(<SalesTrainerOperationLogsPage />);
+
+        expect(await screen.findByText("操作日志加载失败")).toBeTruthy();
+        expect(screen.getByText("logs unavailable")).toBeTruthy();
+        expect(screen.queryByText("暂无操作日志")).toBeNull();
+        expect(screen.queryByText("考卷已更新")).toBeNull();
     });
 });

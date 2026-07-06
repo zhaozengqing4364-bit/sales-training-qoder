@@ -68,21 +68,77 @@ bash scripts/critical-quality-gate.sh
 
 固定顺序：
 1. secret / environment checks
-2. dev smoke stack
-3. DB ready
-4. `alembic upgrade head`（在 seed 前执行）
-5. smoke bootstrap / seed
-6. web typecheck
-7. vitest
-8. Playwright smoke matrix
-9. backend targeted tests / coverage
+2. backend ruff
+3. web typecheck
+4. web lint
+5. vitest coverage gate
+6. dev smoke stack + DB ready + `alembic upgrade head` + smoke bootstrap / seed
+7. Playwright smoke matrix
+8. Playwright newcomer closed-loop E2E
+9. Playwright presentation / sales Phase 4 E2E
+10. optional real-provider focused gates
+11. backend newcomer coverage + mypy
+12. backend targeted tests + smoke regression
 
 说明：
-- 这里的 Playwright 只表示 smoke matrix，不是全量 E2E 套件。
-- Phase4 WebSocket / 外部 StepFun 402 属于外部依赖，不阻塞本地 smoke gate；它们应在专项 E2E 或集成环境中单独验证。
+- 这里的 Playwright 包含 smoke matrix、新人训练 closed-loop E2E 以及 presentation/sales Phase 4 E2E；真实 provider 仍由专项模式或显式开关验证。
+- 默认门禁使用 deterministic local provider，不依赖外部 StepFun 或真实 LLM；真实 provider 由 release/nightly 专项模式验证。
+- realtime 真实 provider 专项模式默认不会在缺凭证时通过；会输出 classified skip 证据并失败。只有人工明确设置 `NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1` 时，缺凭证才可作为可追踪跳过项通过；发布前仍可用 `NEWCOMER_REAL_PROVIDER_REQUIRED=1` 强制缺凭证失败。
+- AI Coach 真实 provider 专项模式同样默认 fail-closed；缺 `LLM_API_KEY` / `OPENAI_API_KEY` 时会输出 classified skip 证据并失败，只有人工明确设置 `NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1` 才允许可追踪跳过。
+
+真实 provider release/nightly 专项模式：
+
+先运行不联网的 StepFun Realtime 预检；该脚本不会打印 `STEPFUN_API_KEY`：
+
+```bash
+python3 scripts/check_stepfun_realtime_prereqs.py --env-file backend/.env
+```
+
+若继续强制真实 provider gate：
+
+```bash
+CRITICAL_GATE_MODE=newcomer-real-provider \
+NEWCOMER_REAL_PROVIDER_NAME=stepfun_realtime \
+STEPFUN_REALTIME_MODEL=stepaudio-2.5-realtime \
+STEPFUN_API_KEY=... \
+bash scripts/critical-quality-gate.sh
+```
+
+人工允许缺凭证跳过时必须显式设置：
+
+```bash
+CRITICAL_GATE_MODE=newcomer-real-provider \
+NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1 \
+bash scripts/critical-quality-gate.sh
+```
 
 脚本会把完整输出保存到：
-- `.sisyphus/evidence/task-9-quality-gate.txt`
+- `.sisyphus/evidence/task-9-newcomer-real-provider-gate.txt`
+- `.sisyphus/evidence/newcomer-real-provider-gate.json`（仅真实 provider 专项模式或显式开启时生成）
+
+AI Coach 真实 LLM provider release/nightly 专项模式：
+
+```bash
+CRITICAL_GATE_MODE=newcomer-ai-coach-real-provider \
+LLM_API_KEY=... \
+LLM_PROVIDER=openai \
+LLM_BASE_URL=https://api.openai.com/v1 \
+LLM_MODEL=gpt-4o-mini \
+bash scripts/critical-quality-gate.sh
+```
+
+人工允许缺凭证跳过时必须显式设置：
+
+```bash
+CRITICAL_GATE_MODE=newcomer-ai-coach-real-provider \
+NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1 \
+bash scripts/critical-quality-gate.sh
+```
+
+脚本会把 AI Coach 真实 provider 证据保存到：
+- `.sisyphus/evidence/task-9-newcomer-ai-coach-real-provider-gate.txt`
+- `.sisyphus/evidence/newcomer-ai-coach-real-provider-gate.json`
+- `.sisyphus/evidence/newcomer-ai-coach-real-provider-runtime-audit.json`
 
 Playwright 报告会输出到：
 - `.sisyphus/evidence/task-9-playwright-report/`

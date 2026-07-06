@@ -13,6 +13,7 @@ from common.monitoring.logger import get_logger
 from common.services.session_runtime_state_service import SessionRuntimeStateService
 from curriculum_practice.models import ExaminerAgent, PracticeTemplate, QuestionItem
 from curriculum_practice.services.asset_references import CurriculumAssetReferenceReader
+from curriculum_practice.services.orm_payload_typing import orm_list, set_orm_field
 from curriculum_practice.services.practice_templates import published_ref
 from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
@@ -150,7 +151,7 @@ class ExaminerSessionAssembler:
             )
             raise ValueError(f"[RUNTIME_SNAPSHOT_{exc.reason_code.upper()}]") from exc
 
-        session.curriculum_snapshot = snapshot.model_dump(mode="json")
+        set_orm_field(session, "curriculum_snapshot", snapshot.model_dump(mode="json"))
 
     async def _load_published_questions(
         self,
@@ -158,7 +159,7 @@ class ExaminerSessionAssembler:
     ) -> list[QuestionItem]:
         question_ids = [
             str(item).strip()
-            for item in (agent.question_source_ids or [])
+            for item in orm_list(agent.question_source_ids)
             if str(item).strip()
         ]
         if not question_ids:

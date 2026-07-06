@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -94,18 +94,27 @@ class BusinessEtiquetteAiCoachProgressService:
             unit_key=unit_key,
         )
         state = coach_state_from_snapshot(session.coach_state)
-        session.coach_state = state.model_copy(
-            update={"business_etiquette_progress": progress}
-        ).model_dump(mode="json")
-        session.mastery_state = "mastered" if progress.passed else "not_mastered"
+        setattr(
+            session,
+            "coach_state",
+            state.model_copy(update={"business_etiquette_progress": progress}).model_dump(
+                mode="json"
+            ),
+        )
+        setattr(
+            session,
+            "mastery_state",
+            "mastered" if progress.passed else "not_mastered",
+        )
         normalized_scores = [
             item.normalized_score
             for item in progress.capability_scores
             if item.normalized_score is not None
         ]
         if normalized_scores:
-            session.total_score = round(sum(normalized_scores) / len(normalized_scores), 2)
-            session.max_score = 100.0
+            average_score = round(sum(normalized_scores) / len(normalized_scores), 2)
+            setattr(session, "total_score", average_score)
+            setattr(session, "max_score", 100.0)
         await self._logs.record(
             actor=actor,
             action="business_etiquette_ai_coach_progress.updated",
@@ -329,6 +338,8 @@ class BusinessEtiquetteAiCoachProgressService:
         required_key_set = set(required_keys)
         for event in events:
             interaction = self._interaction_for_event(event)
+            if interaction is None:
+                continue
             score_result = self._score_result_for_event(event)
             capability_keys = [
                 key
@@ -403,6 +414,8 @@ class BusinessEtiquetteAiCoachProgressService:
         for event in events:
             score_result = self._score_result_for_event(event)
             interaction = self._interaction_for_event(event)
+            if interaction is None:
+                continue
             event_keys = [
                 key for key in interaction.capability_keys if key in required_keys
             ] or required_keys
@@ -527,7 +540,7 @@ class BusinessEtiquetteAiCoachProgressService:
         *,
         allow_missing: bool = False,
     ) -> AiCoachInteractionPublicV1 | None:
-        raw_payload = event.payload_json or {}
+        raw_payload: dict[str, Any] = cast(dict[str, Any], event.payload_json or {})
         raw_interaction = raw_payload.get("public_interaction")
         if raw_interaction is None:
             if allow_missing:

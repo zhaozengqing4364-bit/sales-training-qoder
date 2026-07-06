@@ -21,7 +21,7 @@ EFFECTIVE_DATABASE_URL=""
 
 SMOKE_ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL:-admin@qoder.ai}"
 SMOKE_ADMIN_NAME="${SMOKE_ADMIN_NAME:-管理员}"
-SMOKE_ADMIN_PASSWORD="${SMOKE_ADMIN_PASSWORD:-change-me}"
+SMOKE_ADMIN_PASSWORD="${SMOKE_ADMIN_PASSWORD:-${AUTH_SHARED_PASSWORD:-change-me}}"
 
 _timestamp() {
   date '+%Y-%m-%d %H:%M:%S'
@@ -191,6 +191,18 @@ bootstrap_smoke_practice_evidence() {
   done <<< "${seed_output}"
 }
 
+bootstrap_newcomer_training_seed() {
+  local python_bin
+  python_bin="$(resolve_python_bin)" || die "未找到 Python 解释器，无法引导新人训练 smoke 数据"
+
+  log "[smoke] Seeding newcomer training closed-loop baseline..."
+  (
+    cd "${ROOT_DIR}/backend"
+    DATABASE_URL="${EFFECTIVE_DATABASE_URL}" "${python_bin}" \
+      "${ROOT_DIR}/backend/scripts/seed_newcomer_training_path.py" --apply
+  )
+}
+
 run_alembic_upgrade_head() {
   local python_bin
   python_bin="$(resolve_python_bin)" || die "未找到 Python 解释器，无法执行 Alembic 迁移"
@@ -209,6 +221,7 @@ main() {
   local default_auth_user_passwords_json
   default_auth_user_passwords_json="$(printf '{"%s":"%s"}' "${SMOKE_ADMIN_EMAIL}" "${SMOKE_ADMIN_PASSWORD}")"
 
+  export SMOKE_ADMIN_PASSWORD
   export AUTH_SHARED_PASSWORD="${AUTH_SHARED_PASSWORD:-${SMOKE_ADMIN_PASSWORD}}"
   export AUTH_USER_PASSWORDS_JSON="${AUTH_USER_PASSWORDS_JSON:-${default_auth_user_passwords_json}}"
 
@@ -227,6 +240,7 @@ main() {
 
   bootstrap_smoke_admin
   bootstrap_smoke_practice_evidence
+  bootstrap_newcomer_training_seed
 
   cat <<SUMMARY
 
@@ -235,7 +249,7 @@ main() {
 - Frontend: http://localhost:${FRONTEND_PORT}
 - Backend health: http://localhost:${BACKEND_PORT}/health
 - Smoke admin: ${SMOKE_ADMIN_EMAIL}
-- Smoke password: ${SMOKE_ADMIN_PASSWORD}
+- Smoke password: $(if [[ "${SMOKE_ADMIN_PASSWORD}" == "change-me" ]]; then printf 'change-me'; else printf '<configured via env>'; fi)
 - Smoke report route: $(grep -E '^SMOKE_REPORT_PATH=' "${STATE_FILE}" | tail -n 1 | cut -d'=' -f2-)
 - Smoke replay route: $(grep -E '^SMOKE_REPLAY_PATH=' "${STATE_FILE}" | tail -n 1 | cut -d'=' -f2-)
 - 停止命令: bash ${ROOT_DIR}/scripts/dev-smoke-stop.sh

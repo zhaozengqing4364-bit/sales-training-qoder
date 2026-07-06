@@ -28,6 +28,14 @@ class EffectiveAudioTrainingConfig:
     source: Literal["active_path_revision", "legacy_unit_config"]
 
 
+class EffectiveAudioTrainingConfigError(Exception):
+    def __init__(self, code: str, message: str, status_code: int = 409) -> None:
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+        super().__init__(message)
+
+
 class EffectiveAudioTrainingConfigResolver:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
@@ -35,6 +43,8 @@ class EffectiveAudioTrainingConfigResolver:
     async def resolve_for_unit(
         self,
         unit: SalesTrainerUnit,
+        *,
+        allow_legacy: bool = True,
     ) -> EffectiveAudioTrainingConfig:
         from sales_trainer.services.path_config_service import (
             SalesTrainerPathConfigService,
@@ -44,13 +54,14 @@ class EffectiveAudioTrainingConfigResolver:
         if projection is not None:
             for item in projection.items:
                 config = item.path_config
+                unit_config = unit.config if isinstance(unit.config, dict) else None
                 if str(item.unit.unit_id) != str(unit.unit_id) and (
                     config.target_unit_id != str(unit.unit_id)
                 ):
                     continue
                 return EffectiveAudioTrainingConfig(
                     unit=unit,
-                    config=merge_audio_path_config(unit.config or {}, config),
+                    config=merge_audio_path_config(unit_config, config),
                     context={
                         "path_key": projection.path_key,
                         "path_revision_id": projection.revision_id,
@@ -61,9 +72,21 @@ class EffectiveAudioTrainingConfigResolver:
                     },
                     source="active_path_revision",
                 )
+            if not allow_legacy:
+                raise EffectiveAudioTrainingConfigError(
+                    "[SALES_TRAINER_UNIT_NOT_FOUND]",
+                    "训练单元不存在或未开放。",
+                    status_code=404,
+                )
+        if not allow_legacy:
+            raise EffectiveAudioTrainingConfigError(
+                "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
+                "新人训练路径尚未发布有效版本，无法使用旧单元配置创建新的正式录音训练。",
+                status_code=409,
+            )
         return EffectiveAudioTrainingConfig(
             unit=unit,
-            config=_base_config(unit.config),
+            config=_base_config(unit.config if isinstance(unit.config, dict) else None),
             context={
                 "path_key": None,
                 "path_revision_id": None,
@@ -111,7 +134,8 @@ def _dict_value(value: Any) -> dict[str, Any]:
 
 
 def _legacy_unit_module_key(unit: SalesTrainerUnit) -> str | None:
-    config = path_config(unit.config or {})
+    raw_config = unit.config
+    config = path_config(raw_config) if isinstance(raw_config, dict) else None
     if config is not None and config.module_key:
         return config.module_key
     return str(unit.unit_id)

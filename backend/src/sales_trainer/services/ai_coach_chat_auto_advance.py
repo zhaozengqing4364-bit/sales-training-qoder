@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.db.typing import orm_scalar
 from sales_trainer.ai_coach_chat_models import SalesTrainerAiCoachChatMessage
 from sales_trainer.ai_coach_chat_schemas import (
     AiCoachChatCommandV1,
@@ -72,7 +73,7 @@ class AiCoachChatAutoAdvance:
                 and config.auto_advance_enabled,
             }
         )
-        session.coach_state = state.model_dump(mode="json")
+        setattr(session, "coach_state", state.model_dump(mode="json"))
         if not config.proactive_coaching_enabled:
             await self._db.commit()
             return
@@ -95,7 +96,9 @@ class AiCoachChatAutoAdvance:
                             "请主动发起一轮教练主导训练局，输出简短训练计划，"
                             "并生成 1 张热身 quiz_card。"
                         ),
-                        history=await self._store.messages(session.session_id),
+                        history=await self._store.messages(
+                            orm_scalar(session.session_id, str)
+                        ),
                         on_generation_delta=on_generation_delta,
                     )
                     AiCoachChatNextActionGenerator._validate_response_for_action(
@@ -164,7 +167,7 @@ class AiCoachChatAutoAdvance:
             score_result=score_result,
         )
         if not decision.should_generate:
-            session.coach_state = scored_state.model_dump(mode="json")
+            setattr(session, "coach_state", scored_state.model_dump(mode="json"))
             self._db.add(
                 self._actions.add_action(
                     session,
@@ -195,7 +198,7 @@ class AiCoachChatAutoAdvance:
                 score_result=score_result,
                 answer_payload=answer_payload,
                 answered_event_payload=event_payload,
-                history=await self._store.messages(session.session_id),
+                history=await self._store.messages(orm_scalar(session.session_id, str)),
                 on_generation_delta=on_generation_delta,
             )
         except AiCoachChatGenerationError as exc:
@@ -281,7 +284,7 @@ class AiCoachChatAutoAdvance:
                 session=session,
                 config=config,
                 user_message=self._command_instruction(action),
-                history=await self._store.messages(session.session_id),
+                history=await self._store.messages(orm_scalar(session.session_id, str)),
                 on_generation_delta=on_generation_delta,
             )
             AiCoachChatNextActionGenerator._validate_response_for_action(
@@ -383,15 +386,16 @@ class AiCoachChatAutoAdvance:
         reason: str,
         trigger_type: str,
         trigger_event_id: str | None,
-        state_before,
-        state_after,
+        state_before: AiCoachCoachStateV1,
+        state_after: AiCoachCoachStateV1,
         actor: User | None,
         status: str = "generated",
         error_code: str | None = None,
     ) -> None:
-        order = await self._store.next_message_order(session.session_id)
+        session_id = orm_scalar(session.session_id, str)
+        order = await self._store.next_message_order(session_id)
         assistant = SalesTrainerAiCoachChatMessage(
-            session_id=session.session_id,
+            session_id=session_id,
             role="assistant",
             content=response.assistant_text,
             order_index=order,
@@ -399,9 +403,9 @@ class AiCoachChatAutoAdvance:
         self._db.add(assistant)
         await self._db.flush()
         await self._events.persist_ui_events(session, assistant, response.ui_events)
-        session.coach_state = state_after.model_dump(mode="json")
+        setattr(session, "coach_state", state_after.model_dump(mode="json"))
         if action == "end_session":
-            session.status = "completed"
+            setattr(session, "status", "completed")
         self._db.add(
             self._actions.add_action(
                 session,
@@ -412,7 +416,7 @@ class AiCoachChatAutoAdvance:
                 status=status,
                 state_before=state_before,
                 state_after=state_after,
-                assistant_message_id=assistant.message_id,
+                assistant_message_id=orm_scalar(assistant.message_id, str),
                 error_code=error_code,
             )
         )
@@ -424,11 +428,12 @@ class AiCoachChatAutoAdvance:
                 else "ai_coach_chat_next_action_generated_v1"
             ),
             target_type="sales_trainer_ai_coach_session",
-            target_id=session.session_id,
+            target_id=session_id,
             metadata={
                 "next_action": action,
                 "trigger_type": trigger_type,
                 "error_code": error_code,
+                "llm_runtime": dict(response.runtime_audit or {}),
             },
         )
         await self._db.commit()
@@ -440,12 +445,12 @@ class AiCoachChatAutoAdvance:
         action: AiCoachNextActionV1,
         reason: str,
         trigger_event_id: str,
-        state_before,
-        state_after,
+        state_before: AiCoachCoachStateV1,
+        state_after: AiCoachCoachStateV1,
         error_code: str,
         actor: User | None,
     ) -> None:
-        session.coach_state = state_after.model_dump(mode="json")
+        setattr(session, "coach_state", state_after.model_dump(mode="json"))
         self._db.add(
             self._actions.add_action(
                 session,
@@ -463,7 +468,7 @@ class AiCoachChatAutoAdvance:
             actor=actor,
             action="ai_coach_chat_next_action_failed_v1",
             target_type="sales_trainer_ai_coach_session",
-            target_id=session.session_id,
+            target_id=orm_scalar(session.session_id, str),
             metadata={
                 "next_action": action,
                 "trigger_type": "event_answer",
@@ -479,12 +484,12 @@ class AiCoachChatAutoAdvance:
         action: AiCoachNextActionV1,
         reason: str,
         trigger_event_id: str | None,
-        state_before,
-        state_after,
+        state_before: AiCoachCoachStateV1,
+        state_after: AiCoachCoachStateV1,
         error_code: str,
         actor: User | None,
     ) -> None:
-        session.coach_state = state_after.model_dump(mode="json")
+        setattr(session, "coach_state", state_after.model_dump(mode="json"))
         self._db.add(
             self._actions.add_action(
                 session,
@@ -502,7 +507,7 @@ class AiCoachChatAutoAdvance:
             actor=actor,
             action="ai_coach_chat_next_action_failed_v1",
             target_type="sales_trainer_ai_coach_session",
-            target_id=session.session_id,
+            target_id=orm_scalar(session.session_id, str),
             metadata={
                 "next_action": action,
                 "trigger_type": "user_message",

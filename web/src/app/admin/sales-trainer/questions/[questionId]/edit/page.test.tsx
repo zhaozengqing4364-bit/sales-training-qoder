@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import EditSalesTrainerQuestionPage from "./page";
 
 const {
+    getCapabilitiesMock,
     getQuestionMock,
     listCategoriesMock,
     toastErrorMock,
@@ -14,6 +15,7 @@ const {
     const toastError = vi.fn();
     const toastSuccess = vi.fn();
     return {
+        getCapabilitiesMock: vi.fn(),
         getQuestionMock: vi.fn(),
         listCategoriesMock: vi.fn(),
         toastErrorMock: toastError,
@@ -45,6 +47,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     getQuestion: getQuestionMock,
                     listQuestionCategories: listCategoriesMock,
                     updateQuestion: updateQuestionMock,
@@ -56,11 +59,29 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("EditSalesTrainerQuestionPage", () => {
     beforeEach(() => {
+        getCapabilitiesMock.mockReset();
         getQuestionMock.mockReset();
         listCategoriesMock.mockReset();
         toastErrorMock.mockReset();
         toastSuccessMock.mockReset();
         updateQuestionMock.mockReset();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "training_manager",
+            role_label: "培训负责人",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: true,
+                view_records: true,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
         getQuestionMock.mockResolvedValue({
             question_id: "question-1",
             title: "商务礼仪",
@@ -105,6 +126,34 @@ describe("EditSalesTrainerQuestionPage", () => {
             question_id: "question-1",
             title: "商务礼仪新修订",
         });
+    });
+
+    it("fails closed before loading the edit form without question management permission", async () => {
+        getCapabilitiesMock.mockResolvedValue({
+            role: "viewer",
+            role_label: "只读成员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: false,
+                view_records: true,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
+
+        render(<EditSalesTrainerQuestionPage />);
+
+        expect(await screen.findByText("题库管理权限不足")).toBeTruthy();
+        expect(getQuestionMock).not.toHaveBeenCalled();
+        expect(listCategoriesMock).not.toHaveBeenCalled();
+        expect(updateQuestionMock).not.toHaveBeenCalled();
+        expect(screen.queryByLabelText("题目标题")).toBeNull();
     });
 
     it("saves a published question as a future-only revision", async () => {

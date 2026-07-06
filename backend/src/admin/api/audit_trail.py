@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, literal, literal_column, select, union_all
+from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin.api.permissions import CONFIG_AUDIT_READ_PERMISSION, require_admin_permission
@@ -48,7 +49,7 @@ class AuditTrailListResponse(BaseModel):
     has_more: bool
 
 
-def _build_audit_union():
+def _build_audit_union() -> Any:
     cbal = ConfigBundleAuditLog.__table__
     brcal = BusinessRuleConfigAuditLog.__table__
     sl = SystemLog.__table__
@@ -103,7 +104,7 @@ def _build_audit_union():
     return union_all(q1, q2, q3)
 
 
-def _row_to_item(row) -> AuditTrailItem:
+def _row_to_item(row: Row[Any]) -> AuditTrailItem:
     ts = row.ts
     if isinstance(ts, datetime):
         ts_str = ts.isoformat()
@@ -164,7 +165,7 @@ async def list_audit_trail(
     to_date: str | None = Query(None, description="ISO date filter end"),
     current_user: User = Depends(require_admin_permission(CONFIG_AUDIT_READ_PERMISSION)),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     _ = current_user
 
     base = _build_audit_union().alias("audit_base")

@@ -1502,13 +1502,14 @@ class PromptTemplateService:
         items: list[dict[str, Any]] = []
         now = datetime.now(UTC)
 
-        def row_sort_key(row: Any) -> tuple[Any, Any, str]:
-            def sortable_datetime(value: Any) -> float:
+        def row_sort_key(row: Any) -> tuple[float, float, str]:
+            def sortable_datetime(value: object) -> float:
                 if not isinstance(value, datetime):
                     return 0.0
-                if value.tzinfo is None:
-                    value = value.replace(tzinfo=UTC)
-                return value.timestamp()
+                sortable_value = value
+                if sortable_value.tzinfo is None:
+                    sortable_value = sortable_value.replace(tzinfo=UTC)
+                return sortable_value.timestamp()
 
             return (
                 sortable_datetime(getattr(row, "updated_at", None)),
@@ -1585,21 +1586,22 @@ class PromptTemplateService:
                 after = dict(before)
                 after["is_default"] = False
                 actions = ["clear_duplicate_default"]
+                duplicate_issues = [
+                    {
+                        "code": "multiple_default_templates",
+                        "severity": "blocking",
+                        "message": (
+                            f"{prompt_type_display_label(prompt_type)} 存在多个默认模板，"
+                            "保留最近更新的一条。"
+                        ),
+                    }
+                ]
                 item = {
                     "template_id": str(getattr(row, "id", "")),
                     "name": getattr(row, "name", None),
                     "prompt_type": prompt_type,
                     "keep_template_id": str(getattr(keep, "id", "")),
-                    "issues": [
-                        {
-                            "code": "multiple_default_templates",
-                            "severity": "blocking",
-                            "message": (
-                                f"{prompt_type_display_label(prompt_type)} 存在多个默认模板，"
-                                "保留最近更新的一条。"
-                            ),
-                        }
-                    ],
+                    "issues": duplicate_issues,
                     "actions": actions,
                     "before": before,
                     "after": after,
@@ -1615,7 +1617,7 @@ class PromptTemplateService:
                         reason=reason,
                         before=before,
                         after=after,
-                        issues=item["issues"],
+                        issues=duplicate_issues,
                     )
 
         if not dry_run and items:
@@ -2162,9 +2164,12 @@ class PromptTemplateService:
         }
         if is_active is not None:
             if is_active:
+                scenario_id_value = self._orm_field(assignment, "scenario_id")
                 await self._assert_no_duplicate_active_binding(
                     scenario_type=str(assignment.scenario_type),
-                    scenario_id=assignment.scenario_id,
+                    scenario_id=(
+                        str(scenario_id_value) if scenario_id_value is not None else None
+                    ),
                     prompt_type=str(assignment.prompt_type),
                     exclude_assignment_id=str(assignment.id),
                 )

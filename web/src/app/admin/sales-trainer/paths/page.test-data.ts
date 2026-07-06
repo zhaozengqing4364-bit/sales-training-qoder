@@ -2,8 +2,10 @@ import type {
     LearningContentListResponse,
     NewcomerArticle,
     NewcomerExamPaperListResponse,
+    NewcomerPathConfigDiagnostics,
     NewcomerPathConfigResponse,
     NewcomerPathModuleConfig,
+    NewcomerPathPublishPreviewResponse,
     NewcomerPathRevisionListResponse,
     SalesTrainerAudioScorePromptListResponse,
     SalesTrainerMaterialListResponse,
@@ -64,6 +66,10 @@ export function defaultUnitsResponse(): SalesTrainerUnitListResponse {
 export function defaultPathConfigResponse(): NewcomerPathConfigResponse {
     return {
         source: "active_revision",
+        fallback_reason: null,
+        legacy_snapshot_only: false,
+        management_entry: "/admin/newcomer-training/path-config",
+        permission: "sales_trainer.manage_modules",
         path: {
             path_key: "newcomer_training_path_v1",
             title: "新人训练路径",
@@ -77,6 +83,56 @@ export function defaultPathConfigResponse(): NewcomerPathConfigResponse {
         working_revision_id: null,
         working_revision_no: null,
         has_unpublished_revision: false,
+        diagnostics: defaultPathConfigDiagnostics(),
+    };
+}
+
+export function defaultPathConfigDiagnostics(
+    overrides: Partial<NewcomerPathConfigDiagnostics> = {},
+): NewcomerPathConfigDiagnostics {
+    return {
+        surface_key: "newcomer_training_path_v1",
+        resource_type: "newcomer_training_path",
+        source: "active_revision",
+        legacy_snapshot_only: false,
+        fallback_applied: false,
+        fallback_reason: null,
+        realtime_provider_readiness: [],
+        management_entry: "/admin/newcomer-training/path-config",
+        permission_policy: {
+            view: "sales_trainer.manage_modules",
+            save: "sales_trainer.manage_modules",
+            publish: "sales_trainer.manage_modules",
+            rollback: "sales_trainer.manage_modules",
+            high_risk_ai_coach: "sales_trainer.manage_prompts",
+            regrade: "sales_trainer.regrade_history",
+        },
+        active_revision: null,
+        working_revision: null,
+        high_risk_actions: {
+            publish: {
+                requires_reason: true,
+                requires_trace_id: true,
+                audit_action: "newcomer_path_config.publish",
+                impact_scope: "future_learners_only",
+                preview_endpoint: "/api/v1/admin/newcomer-training/path-config/publish/preview",
+            },
+            rollback: {
+                requires_reason: true,
+                requires_trace_id: true,
+                audit_action: "newcomer_path_config.rollback",
+                impact_scope: "future_learners_only",
+                preview_endpoint: "/api/v1/admin/newcomer-training/path-config/rollback/preview",
+            },
+            regrade: {
+                requires_reason: true,
+                requires_trace_id: true,
+                audit_action: "historical_regrade.completed",
+                impact_scope: "append_only_history",
+                history_overwrite: false,
+            },
+        },
+        ...overrides,
     };
 }
 
@@ -86,6 +142,48 @@ export function pathConfigWithWorkingRevision(): NewcomerPathConfigResponse {
         working_revision_id: "path-revision-3",
         working_revision_no: 3,
         has_unpublished_revision: true,
+    };
+}
+
+export function defaultPublishPreviewResponse(): NewcomerPathPublishPreviewResponse {
+    return {
+        action: "newcomer_path_config.publish",
+        permission: "sales_trainer.manage_modules",
+        requires_reason: true,
+        requires_trace_id: true,
+        future_only: true,
+        risk_level: "medium",
+        risk_reasons: ["module_configuration_changed"],
+        change_class: "semantic",
+        target_revision_id: "path-revision-3",
+        target_revision_no: 3,
+        target_revision_status: "working",
+        impact_scope: {
+            active_revision_id: "path-revision-2",
+            working_revision_id: "path-revision-3",
+            will_change_active_revision: true,
+            future_learner_paths_changed: true,
+            historical_attempts_changed: false,
+            historical_submissions_changed: false,
+            historical_regrade_required: false,
+            affected_module_keys: ["business_skills"],
+            changed_module_keys: ["business_skills"],
+            rollback_available: true,
+            realtime_provider_readiness: [],
+        },
+        before_snapshot: { revision_id: "path-revision-2" },
+        after_snapshot: { revision_id: "path-revision-3" },
+        audit_event: {
+            action: "newcomer_path_config.publish",
+            required_fields: ["actor_id", "reason", "trace_id", "impact_scope"],
+        },
+        rollback_hint: {
+            available: true,
+            preview_endpoint: "/api/v1/admin/newcomer-training/path-config/rollback/preview",
+            target_revision_id: "path-revision-2",
+            target_revision_no: 2,
+            message: "发布后可先对当前 active revision 执行回滚预览，再决定是否回滚。",
+        },
     };
 }
 

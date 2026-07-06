@@ -228,7 +228,10 @@ class RoleplayGuardUpstream(ResponseCreatingUpstream):
         self._roleplay_regenerate_attempted_for_turn = False
         self._roleplay_repair_instruction = ""
         self._latest_knowledge_answer_diagnostics = {}
+        self._stepfun_output_audio_format = "pcm16"
+        self._stepfun_output_sample_rate = 24000
         self._stepfun_playback_rate = 1.0
+        self._tts_chunk_protocol_version = "v1"
         self.persist_metric_calls = 0
 
     async def _persist_runtime_metrics_to_session(self) -> None:
@@ -254,6 +257,13 @@ def _first_visit_contract() -> dict[str, Any]:
         actor_id="actor-1",
         compiled_at="2026-05-26T00:00:00Z",
     )
+
+
+def _enable_sales_trainer_observe_only(upstream: RoleplayGuardUpstream) -> None:
+    upstream._effective_policy["external_binding"] = {
+        "owner": "sales_trainer",
+        "module_key": "realtime_roleplay",
+    }
 
 
 @pytest.mark.asyncio
@@ -563,7 +573,7 @@ async def test_upstream_reads_role_anchor_from_effective_policy_without_profile(
 
 
 @pytest.mark.asyncio
-async def test_roleplay_stream_guard_cancels_and_regenerates_once() -> None:
+async def test_roleplay_stream_guard_records_only_and_queues_next_turn_hint() -> None:
     transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
     upstream = RoleplayGuardUpstream(transport, object())
 
@@ -571,24 +581,34 @@ async def test_roleplay_stream_guard_cancels_and_regenerates_once() -> None:
         {"type": "response.text.delta", "delta": "上次拜访我们聊过预算"}
     )
 
-    sent_payloads = [payload for _, payload in transport.calls]
-    assert {"type": "response.cancel"} in sent_payloads
-    response_creates = [
-        payload for payload in sent_payloads if payload.get("type") == "response.create"
-    ]
-    assert len(response_creates) == 1
-    assert "角色合同修复指令" in response_creates[0]["response"]["instructions"]
+    assert transport.calls == []
+    assert upstream.manager.sent_json == []
     assert upstream._active_response is not None
-    assert upstream._roleplay_regenerate_attempted_for_turn is True
+    assert upstream._active_response.roleplay_suppressed is False
+    assert upstream._active_response.roleplay_violation_decision is not None
+    assert upstream._roleplay_regenerate_attempted_for_turn is False
+    assert "下一轮" in upstream._roleplay_repair_instruction
     metrics = upstream._effective_policy["runtime_metrics"]["roleplay_compliance"]
     assert metrics["violation_count"] == 1
     assert metrics["blocking_violation_count"] == 1
-    assert metrics["cancel_stream_count"] == 1
-    assert metrics["regenerate_count"] == 1
+    assert metrics["cancel_stream_count"] == 0
+    assert metrics["regenerate_count"] == 0
+    assert metrics["last_action"] == "observe_only"
+
+    upstream._active_response = None
+    transport.calls.clear()
+    created = await upstream._create_response()
+
+    assert created is True
+    instructions = transport.calls[0][1]["response"]["instructions"]
+    assert "下一轮角色合同软纠偏提示" in instructions
+    assert "必须重写本轮回答" not in instructions
+    assert "角色合同修复指令" not in instructions
+    assert upstream._roleplay_repair_instruction == ""
 
 
 @pytest.mark.asyncio
-async def test_roleplay_stream_guard_second_violation_repairs_without_retry() -> None:
+async def test_roleplay_stream_guard_second_violation_keeps_audio_flowing() -> None:
     transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
     upstream = RoleplayGuardUpstream(transport, object())
     upstream._roleplay_regenerate_attempted_for_turn = True
@@ -600,27 +620,84 @@ async def test_roleplay_stream_guard_second_violation_repairs_without_retry() ->
         {"type": "response.audio.delta", "delta": "AAECAw=="}
     )
 
-    sent_payloads = [payload for _, payload in transport.calls]
-    assert sent_payloads == [{"type": "response.cancel"}]
+    assert transport.calls == []
     assert upstream.manager.sent_json
-    repair_payload = upstream.manager.sent_json[0][1]
-    assert repair_payload["type"] == "tts_audio"
-    assert repair_payload["data"]["roleplay_guard"] is True
+    audio_payload = upstream.manager.sent_json[0][1]
+    assert audio_payload["type"] == "tts_chunk"
+    assert "roleplay_guard" not in audio_payload["data"]
+    assert upstream._active_response is not None
+    assert upstream._active_response.roleplay_suppressed is False
     metrics = upstream._effective_policy["runtime_metrics"]["roleplay_compliance"]
     assert metrics["violation_count"] == 1
     assert metrics["blocking_violation_count"] == 1
-    assert metrics["cancel_stream_count"] == 1
-    assert metrics.get("regenerate_count", 0) == 0
+    assert metrics["cancel_stream_count"] == 0
+    assert metrics["regenerate_count"] == 0
+    assert metrics["last_action"] == "observe_only"
 
 
 @pytest.mark.asyncio
-async def test_roleplay_final_guard_replaces_blocking_text_with_repair() -> None:
+async def test_roleplay_final_guard_keeps_text_and_queues_next_turn_hint() -> None:
     transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
     upstream = RoleplayGuardUpstream(transport, object())
 
-    repaired = await upstream._apply_roleplay_output_guard("上次拜访我们聊过预算")
+    original_text = "上次拜访我们聊过预算"
+    guarded_text = await upstream._apply_roleplay_output_guard(original_text)
 
-    assert "第一次正式沟通" in repaired
+    assert guarded_text == original_text
+    assert "下一轮" in upstream._roleplay_repair_instruction
     metrics = upstream._effective_policy["runtime_metrics"]["roleplay_compliance"]
     assert metrics["violation_count"] == 1
     assert metrics["blocking_violation_count"] == 1
+    assert metrics["cancel_stream_count"] == 0
+    assert metrics["regenerate_count"] == 0
+    assert metrics["last_action"] == "observe_only"
+
+
+@pytest.mark.asyncio
+async def test_sales_trainer_roleplay_stream_guard_observes_without_cancelling() -> None:
+    transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
+    upstream = RoleplayGuardUpstream(transport, object())
+    _enable_sales_trainer_observe_only(upstream)
+
+    await upstream._handle_upstream_response_text_delta(
+        {"type": "response.text.delta", "delta": "上次拜访我们聊过预算"}
+    )
+
+    assert transport.calls == []
+    assert upstream.manager.sent_json == []
+    assert upstream._active_response is not None
+    assert upstream._active_response.roleplay_suppressed is False
+    assert upstream._active_response.roleplay_violation_decision is not None
+    assert upstream._roleplay_regenerate_attempted_for_turn is False
+    assert "下一轮" in upstream._roleplay_repair_instruction
+    metrics = upstream._effective_policy["runtime_metrics"]["roleplay_compliance"]
+    assert metrics["violation_count"] == 1
+    assert metrics["blocking_violation_count"] == 1
+    assert metrics.get("cancel_stream_count", 0) == 0
+    assert metrics.get("regenerate_count", 0) == 0
+    assert metrics["last_action"] == "observe_only"
+
+
+@pytest.mark.asyncio
+async def test_sales_trainer_roleplay_final_guard_keeps_original_text_and_skips_duplicate_count() -> (
+    None
+):
+    transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
+    upstream = RoleplayGuardUpstream(transport, object())
+    _enable_sales_trainer_observe_only(upstream)
+
+    await upstream._handle_upstream_response_text_delta(
+        {"type": "response.text.delta", "delta": "上次拜访我们聊过预算"}
+    )
+
+    original_text = "上次拜访我们聊过预算"
+    guarded_text = await upstream._apply_roleplay_output_guard(
+        original_text,
+        existing_decision=upstream._active_response.roleplay_violation_decision,
+    )
+
+    assert guarded_text == original_text
+    metrics = upstream._effective_policy["runtime_metrics"]["roleplay_compliance"]
+    assert metrics["violation_count"] == 1
+    assert metrics["blocking_violation_count"] == 1
+    assert metrics["last_action"] == "observe_only"

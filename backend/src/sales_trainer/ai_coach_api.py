@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends
 from fastapi.encoders import jsonable_encoder
@@ -40,6 +40,10 @@ from sales_trainer.services.ai_coach_session_service import (
 from sales_trainer.services.learner_public_projection import (
     assert_learner_public_payload,
 )
+from sales_trainer.services.learner_unit_access import (
+    LearnerUnitAccessError,
+    require_learner_active_path_module_access,
+)
 
 router = APIRouter(
     prefix="/newcomer-training/ai-coach",
@@ -78,6 +82,9 @@ _LEARNER_FACING_ERROR_CODES: frozenset[str] = frozenset(
         "[AI_COACH_UI_EVENT_TYPE_NOT_ALLOWED]",
         "[AI_COACH_NEXT_ACTION_UI_EVENT_INVALID]",
         "[AI_COACH_LLM_GENERATION_FAILED]",
+        "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
+        "[NEWCOMER_LEARNER_ROLE_REQUIRED]",
+        "[SALES_TRAINER_UNIT_NOT_FOUND]",
         "[ACCESS_DENIED]",
     }
 )
@@ -129,6 +136,23 @@ def _assert_no_internal_leak(payload: dict[str, Any]) -> None:
         raise RuntimeError(f"ai_coach_api {exc}") from exc
 
 
+async def _require_ai_coach_module_access_response(
+    db: AsyncSession,
+    *,
+    actor: User,
+    module_key: str,
+) -> JSONResponse | None:
+    try:
+        await require_learner_active_path_module_access(
+            db,
+            actor=actor,
+            module_key=module_key,
+        )
+    except LearnerUnitAccessError as exc:
+        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
+    return None
+
+
 def _serialize_session_public(
     session: Any,
     turns: list[Any] | None = None,
@@ -146,7 +170,7 @@ def _serialize_session_public(
     payload = public_dto.model_dump(mode="json")
     _assert_no_internal_leak(payload)
     payload["schema_version"] = AI_COACH_INTERACTION_SCHEMA_VERSION
-    return payload
+    return cast(dict[str, Any], payload)
 
 
 @router.post("/chat/sessions")
@@ -155,6 +179,13 @@ async def create_ai_coach_chat_session(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> JSONResponse:
+    access_error = await _require_ai_coach_module_access_response(
+        db,
+        actor=current_user,
+        module_key=payload.module_key,
+    )
+    if access_error is not None:
+        return access_error
     service = AiCoachChatService(db)
     try:
         session = await service.create_session(
@@ -172,12 +203,19 @@ async def create_ai_coach_chat_session(
     )
 
 
-@router.post("/chat/sessions/stream")
+@router.post("/chat/sessions/stream", response_model=None)
 async def create_ai_coach_chat_session_stream(
     payload: AiCoachChatSessionCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> StreamingResponse:
+) -> StreamingResponse | JSONResponse:
+    access_error = await _require_ai_coach_module_access_response(
+        db,
+        actor=current_user,
+        module_key=payload.module_key,
+    )
+    if access_error is not None:
+        return access_error
     service = AiCoachChatStreamService(db)
     return StreamingResponse(
         service.stream_create_session(payload=payload, actor=current_user),
@@ -298,6 +336,13 @@ async def create_ai_coach_session(
     current_user: User = Depends(get_current_user),
 ) -> JSONResponse:
     """Create a new AI coach session."""
+    access_error = await _require_ai_coach_module_access_response(
+        db,
+        actor=current_user,
+        module_key=payload.module_key,
+    )
+    if access_error is not None:
+        return access_error
     service = AiCoachSessionService(db)
     try:
         session = await service.create_session_v1(
@@ -308,7 +353,7 @@ async def create_ai_coach_session(
         )
     except AiCoachSessionServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    turns = await service.list_turns(session.session_id)
+    turns = await service.list_turns(str(session.session_id))
     return _success_json(
         status_code=201,
         data=_serialize_session_public(session, turns=turns),

@@ -7,6 +7,12 @@ from types import SimpleNamespace
 
 import pytest
 
+from common.config import Settings
+from curriculum_practice.services.roleplay.dual_read_observability import (
+    build_config_asset_center_overview_payload,
+    record_dual_read_mismatch,
+    reset_dual_read_observability_for_tests,
+)
 from support.services.asset_registry import (
     build_empty_asset_governance_indexes,
     get_asset_registration,
@@ -15,12 +21,6 @@ from support.services.asset_registry import (
 from support.services.runtime_status_service import (
     RuntimeSessionRecord,
     RuntimeStatusService,
-)
-from common.config import Settings
-from curriculum_practice.services.roleplay.dual_read_observability import (
-    build_config_asset_center_overview_payload,
-    record_dual_read_mismatch,
-    reset_dual_read_observability_for_tests,
 )
 
 

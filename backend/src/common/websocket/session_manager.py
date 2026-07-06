@@ -14,13 +14,14 @@ import inspect
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
+    from common.db.session_lifecycle import SessionLifecycleTransition
     from common.websocket.base_handler import BaseWebSocketHandler
 
 
@@ -73,7 +74,11 @@ class SessionManager:
             "heartbeat_loop_errors": 0,
         }
 
-    async def start(self):
+    @staticmethod
+    def _send_result_failed(result: Any) -> bool:
+        return getattr(result, "success", True) is False
+
+    async def start(self) -> None:
         """Start session monitoring (cleanup and heartbeat loops)"""
         if self._running:
             return
@@ -83,7 +88,7 @@ class SessionManager:
         self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         logger.info("Session manager started")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop session monitoring"""
         self._running = False
 
@@ -108,7 +113,7 @@ class SessionManager:
         session_id: str,
         handler: "BaseWebSocketHandler",
         user_id: str | None = None,
-    ):
+    ) -> None:
         """Register a new session for monitoring"""
         self.sessions[session_id] = SessionInfo(
             session_id=session_id,
@@ -127,12 +132,14 @@ class SessionManager:
             },
         )
 
-    async def update_activity(self, session_id: str):
+    async def update_activity(self, session_id: str) -> None:
         """Update last activity timestamp for a session"""
         if session_id in self.sessions:
             self.sessions[session_id].last_activity = time.time()
 
-    async def unregister_session(self, session_id: str, reason: str = "manual"):
+    async def unregister_session(
+        self, session_id: str, reason: str = "manual"
+    ) -> None:
         """Unregister a session"""
         if session_id in self.sessions:
             session_info = self.sessions[session_id]
@@ -148,7 +155,9 @@ class SessionManager:
                 },
             )
 
-    async def sync_lifecycle_transition(self, transition) -> bool:
+    async def sync_lifecycle_transition(
+        self, transition: "SessionLifecycleTransition"
+    ) -> bool:
         """Synchronize a DB lifecycle transition into the live handler."""
         session_id = str(transition.session.session_id)
         session_info = self.sessions.get(session_id)
@@ -189,7 +198,7 @@ class SessionManager:
             await maybe_result
         return True
 
-    async def _cleanup_loop(self):
+    async def _cleanup_loop(self) -> None:
         """Background task to clean up expired sessions"""
         while self._running:
             try:
@@ -201,24 +210,24 @@ class SessionManager:
                 self.metrics["cleanup_loop_errors"] += 1
                 logger.error(f"Cleanup loop error: {e}")
 
-    async def _cleanup_expired_sessions(self):
+    async def _cleanup_expired_sessions(self) -> None:
         """Clean up sessions that have exceeded timeout"""
         now = time.time()
-        expired_sessions = []
+        expired_sessions: list[tuple[str, float]] = []
 
-        for session_id, info in self.sessions.items():
-            inactive_duration = now - info.last_activity
+        for session_id, session_info in self.sessions.items():
+            inactive_duration = now - session_info.last_activity
             if inactive_duration > self.timeout_seconds:
                 expired_sessions.append((session_id, inactive_duration))
 
         for session_id, inactive_duration in expired_sessions:
-            info = self.sessions.get(session_id)
-            if not info:
+            expired_info = self.sessions.get(session_id)
+            if not expired_info:
                 continue
 
             try:
                 # Send timeout notification
-                await info.handler.send_message(
+                send_result = await expired_info.handler.send_message(
                     {
                         "type": "session_timeout",
                         "timestamp": datetime.now(UTC).isoformat(),
@@ -229,9 +238,18 @@ class SessionManager:
                         },
                     }
                 )
+                if self._send_result_failed(send_result):
+                    logger.warning(
+                        "Session timeout notification was not delivered",
+                        extra={
+                            "session_id": session_id,
+                            "user_id": expired_info.user_id,
+                            "error_type": getattr(send_result, "error_type", None),
+                        },
+                    )
 
                 # Close connection
-                await info.handler.close(code=1000, reason="Session timeout")
+                await expired_info.handler.close(code=1000, reason="Session timeout")
                 self.metrics["timeout_closures"] += 1
 
                 logger.warning(
@@ -239,7 +257,7 @@ class SessionManager:
                     f"inactive for {int(inactive_duration)}s",
                     extra={
                         "session_id": session_id,
-                        "user_id": info.user_id,
+                        "user_id": expired_info.user_id,
                         "inactive_duration": inactive_duration,
                     },
                 )
@@ -250,7 +268,7 @@ class SessionManager:
                 # Always remove from tracking
                 await self.unregister_session(session_id, reason="timeout")
 
-    async def _heartbeat_loop(self):
+    async def _heartbeat_loop(self) -> None:
         """Background task to send periodic heartbeats"""
         while self._running:
             try:
@@ -262,14 +280,14 @@ class SessionManager:
                 self.metrics["heartbeat_loop_errors"] += 1
                 logger.error(f"Heartbeat loop error: {e}")
 
-    async def _send_heartbeats(self):
+    async def _send_heartbeats(self) -> None:
         """Send heartbeat to all active sessions"""
         now = time.time()
         dead_sessions = []
 
         for session_id, info in list(self.sessions.items()):
             try:
-                await info.handler.send_message(
+                send_result = await info.handler.send_message(
                     {
                         "type": "heartbeat",
                         "timestamp": datetime.now(UTC).isoformat(),
@@ -279,6 +297,16 @@ class SessionManager:
                         },
                     }
                 )
+                if self._send_result_failed(send_result):
+                    self.metrics["heartbeat_failures"] += 1
+                    logger.warning(
+                        "Heartbeat send returned a failed result",
+                        extra={
+                            "session_id": session_id,
+                            "error_type": getattr(send_result, "error_type", None),
+                        },
+                    )
+                    dead_sessions.append(session_id)
             except (RuntimeError, ValueError, OSError) as e:
                 self.metrics["heartbeat_failures"] += 1
                 logger.warning(
@@ -291,7 +319,9 @@ class SessionManager:
         for session_id in dead_sessions:
             await self.unregister_session(session_id, reason="heartbeat_failed")
 
-    def _runtime_diagnostics_for_handler(self, handler) -> dict | None:
+    def _runtime_diagnostics_for_handler(
+        self, handler: "BaseWebSocketHandler"
+    ) -> dict[str, Any] | None:
         getter = getattr(handler, "get_runtime_diagnostics", None)
         if not callable(getter):
             return None
@@ -320,7 +350,7 @@ class SessionManager:
             },
         }
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> dict[str, Any]:
         """Get session manager statistics"""
         now = time.time()
         total = len(self.sessions)
@@ -381,14 +411,14 @@ def get_session_manager() -> SessionManager:
     return _session_manager
 
 
-async def init_session_manager():
+async def init_session_manager() -> None:
     """Initialize session manager on application startup"""
     manager = get_session_manager()
     await manager.start()
     logger.info("Session manager initialized")
 
 
-async def shutdown_session_manager():
+async def shutdown_session_manager() -> None:
     """Shutdown session manager on application shutdown"""
     global _session_manager
     if _session_manager:

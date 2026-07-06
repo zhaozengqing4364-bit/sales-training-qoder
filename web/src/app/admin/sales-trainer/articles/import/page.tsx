@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, RefreshCcw, UploadCloud } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { AlertTriangle, FileText, RefreshCcw, UploadCloud } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
@@ -11,11 +11,13 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 import type {
     BusinessEtiquetteImportedChapter,
     BusinessEtiquetteImportResponse,
     BusinessEtiquetteReleaseImpactResponse,
     BusinessEtiquetteReleaseStrategy,
+    SalesTrainerAdminCapabilities,
 } from "@/lib/api/types";
 import {
     BUSINESS_ETIQUETTE_IMPORT_COPY,
@@ -73,6 +75,10 @@ export default function BusinessEtiquetteImportPage() {
     );
     const [isPublishingRelease, setIsPublishingRelease] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [capabilities, setCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessImport = isSalesTrainerAdminPathAllowedForCapabilities(pathname, capabilities);
 
     const selectedFileLabel = useMemo(() => {
         if (!selectedFile) {
@@ -82,6 +88,9 @@ export default function BusinessEtiquetteImportPage() {
     }, [selectedFile]);
 
     const loadReleaseImpact = useCallback(async (trainingPackKey: string) => {
+        if (!canAccessImport) {
+            return;
+        }
         setIsLoadingImpact(true);
         setReleaseImpactError(null);
         try {
@@ -96,10 +105,35 @@ export default function BusinessEtiquetteImportPage() {
         } finally {
             setIsLoadingImpact(false);
         }
+    }, [canAccessImport]);
+
+    useEffect(() => {
+        let isCurrent = true;
+        void api.admin.salesTrainer.getCapabilities()
+            .then((result) => {
+                if (!isCurrent) return;
+                setCapabilities(result);
+                setCapabilityError(null);
+            })
+            .catch((error) => {
+                if (!isCurrent) return;
+                setCapabilities(null);
+                setCapabilityError(getApiErrorMessage(error));
+            })
+            .finally(() => {
+                if (!isCurrent) return;
+                setIsCapabilityLoading(false);
+            });
+        return () => {
+            isCurrent = false;
+        };
     }, []);
 
     async function submitImport(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        if (!canAccessImport) {
+            return;
+        }
         if (!selectedFile) {
             toast.error(BUSINESS_ETIQUETTE_IMPORT_COPY.fileRequired);
             return;
@@ -136,7 +170,7 @@ export default function BusinessEtiquetteImportPage() {
     }
 
     async function publishRelease() {
-        if (!result) {
+        if (!result || !canAccessImport) {
             return;
         }
         const assignedUserIds = parseUserIds(assignedUserIdsText);
@@ -176,17 +210,38 @@ export default function BusinessEtiquetteImportPage() {
                                 variant="outline"
                                 className="rounded-full"
                                 onClick={resetDraft}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || !canAccessImport}
                             >
                                 <RefreshCcw className="mr-2 h-4 w-4" />
                                 重置
                             </Button>
-                            <SalesTrainerAdminModuleNav currentPath={pathname} />
+                            <SalesTrainerAdminModuleNav currentPath={pathname} capabilities={capabilities} />
                         </div>
                     )}
                 />
             )}
         >
+            {isCapabilityLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                    正在校验资料导入权限...
+                </div>
+            ) : capabilityError || !canAccessImport ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
+                        <div>
+                            <h2 className="font-bold text-amber-950">资料导入权限不足</h2>
+                            <p className="mt-1 text-sm leading-6">
+                                当前页不会在权限未确认时展示导入和发布入口。请联系管理员开通内容管理权限后重试。
+                            </p>
+                            {capabilityError ? (
+                                <p className="mt-2 text-sm font-medium">{capabilityError}</p>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+            {canAccessImport ? (
             <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
                 <GlassCard className="p-6">
                     <form className="space-y-5" onSubmit={(event) => void submitImport(event)}>
@@ -307,6 +362,7 @@ export default function BusinessEtiquetteImportPage() {
                     )}
                 </div>
             </div>
+            ) : null}
         </AdminIndexShell>
     );
 }

@@ -292,8 +292,12 @@ class SessionRuntimeRepairService:
             voice_mode_override=_optional_text(session.voice_mode),
             runtime_profile_override=_optional_text(session.voice_runtime_profile_id),
         )
-        session.voice_runtime_profile_id = _optional_text(policy.get("runtime_profile_id"))
-        session.voice_policy_snapshot = deepcopy(policy)
+        setattr(
+            session,
+            "voice_runtime_profile_id",
+            _optional_text(policy.get("runtime_profile_id")),
+        )
+        setattr(session, "voice_policy_snapshot", deepcopy(policy))
 
     @staticmethod
     def _scenario_type(session: PracticeSession) -> str:

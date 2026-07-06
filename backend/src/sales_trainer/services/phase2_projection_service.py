@@ -93,7 +93,7 @@ class SalesTrainerPhase2ProjectionService:
         )
         latest: dict[tuple[str, str], SalesTrainerRegradeRun] = {}
         for run in result.scalars().all():
-            key = (run.target_type, run.target_id)
+            key = (str(run.target_type), str(run.target_id))
             if key in target_pairs and key not in latest:
                 latest[key] = run
         return latest
@@ -167,8 +167,15 @@ class SalesTrainerPhase2ProjectionService:
             return self._audio_score_explanation(record, latest_regrade)
         if record["record_type"] == "quiz_attempt":
             return self._quiz_score_explanation(record, latest_regrade)
+        if record["record_type"] == "business_etiquette_quiz_attempt":
+            return self._business_etiquette_quiz_score_explanation(
+                record,
+                effective_score,
+            )
         if record["record_type"] == "ai_coach_session":
             return self._ai_coach_score_explanation(record, effective_score)
+        if record["record_type"] == "realtime_roleplay_session":
+            return self._realtime_roleplay_score_explanation(record, effective_score)
         return {
             "basis": "sales_trainer_phase2_projection_v1",
             "summary": None,
@@ -310,6 +317,127 @@ class SalesTrainerPhase2ProjectionService:
                 "kind": "continue_ai_coach",
                 "label": "继续 AI 教练训练",
                 "href": "/sales-trainer/business-skills/coach",
+            }],
+        }
+
+    def _business_etiquette_quiz_score_explanation(
+        self,
+        record: dict[str, Any],
+        effective_score: dict[str, Any],
+    ) -> dict[str, Any]:
+        attempt = _snapshot(record.get("business_etiquette_quiz_attempt"))
+        capability_scores = [
+            item for item in attempt.get("capability_scores") or []
+            if isinstance(item, dict)
+        ]
+        answers = [
+            item for item in attempt.get("answers") or []
+            if isinstance(item, dict)
+        ]
+        weak_keys = set(_string_list(attempt.get("weak_capability_keys")))
+        dimensions = [
+            {
+                "key": str(item.get("capability_key") or ""),
+                "label": _optional_str(item.get("display_name")) or _dimension_label(
+                    str(item.get("capability_key") or "")
+                ),
+                "score": _float_value(item.get("normalized_score") or item.get("score")),
+                "max_score": 100.0,
+                "is_weak": (
+                    item.get("mastered") is False
+                    or str(item.get("capability_key") or "") in weak_keys
+                    or _score_is_weak(
+                        item.get("normalized_score") or item.get("score"),
+                        self._policy,
+                    )
+                ),
+            }
+            for item in capability_scores
+            if item.get("capability_key")
+        ]
+        failed_answers = [
+            answer for answer in answers
+            if answer.get("is_correct") is False
+            or _is_low_answer_score(answer, self._policy)
+        ]
+        return {
+            "basis": "business_etiquette_quiz_attempt_snapshot_v1",
+            "summary": (
+                f"本次商务礼仪小测共 {len(answers)} 题，"
+                f"发现 {len(failed_answers)} 个需复习点。"
+            ),
+            "dimensions": dimensions,
+            "evidence": [
+                {
+                    "type": "business_etiquette_quiz_answer",
+                    "question_id": answer.get("question_id"),
+                    "question_type": answer.get("question_type"),
+                    "score": answer.get("score"),
+                    "max_score": answer.get("max_score"),
+                    "capability_keys": answer.get("capability_keys"),
+                }
+                for answer in answers
+            ],
+            "issues": [
+                {
+                    "type": "weak_business_etiquette_capability",
+                    "capability_key": key,
+                    "text": f"商务礼仪能力点 {key} 未达当前闭环策略要求。",
+                }
+                for key in sorted(weak_keys)
+            ] + [
+                {
+                    "type": "incorrect_answer",
+                    "question_id": answer.get("question_id"),
+                    "feedback": answer.get("analysis"),
+                }
+                for answer in failed_answers
+            ],
+            "next_actions": [{
+                "kind": "retry_business_etiquette_quiz",
+                "label": "复习后重做小测",
+                "href": _record_retry_href(record),
+            }],
+        }
+
+    def _realtime_roleplay_score_explanation(
+        self,
+        record: dict[str, Any],
+        effective_score: dict[str, Any],
+    ) -> dict[str, Any]:
+        session = _snapshot(record.get("realtime_roleplay_session"))
+        snapshot = _snapshot(session.get("snapshot"))
+        scores = _snapshot(snapshot.get("scores"))
+        dimensions = [
+            {
+                "key": key,
+                "label": _dimension_label(key),
+                "score": _float_value(scores.get(key)),
+                "max_score": 100.0 if scores.get(key) is not None else None,
+                "is_weak": _score_is_weak(scores.get(key), self._policy),
+            }
+            for key in ("logic_score", "accuracy_score", "completeness_score")
+            if scores.get(key) is not None
+        ]
+        return {
+            "basis": "realtime_roleplay_runtime_outcome_snapshot_v1",
+            "summary": "实时对练已形成运行时结果快照。",
+            "dimensions": dimensions,
+            "evidence": [{
+                "type": "realtime_roleplay_session",
+                "session_id": session.get("session_id"),
+                "module_key": session.get("module_key"),
+            }],
+            "issues": []
+            if not _score_is_weak(effective_score.get("score"), self._policy)
+            else [{
+                "type": "low_realtime_roleplay_score",
+                "text": "实时对练综合得分低于当前闭环策略阈值。",
+            }],
+            "next_actions": [{
+                "kind": "retry_realtime_roleplay",
+                "label": "再次进行实时对练",
+                "href": "/sales-trainer/realtime-roleplay",
             }],
         }
 
@@ -518,9 +646,10 @@ def _is_low_answer_score(
 ) -> bool:
     score = _float_value(answer.get("score"))
     max_score = _float_value(answer.get("max_score"))
-    if score is None or max_score in {None, 0}:
+    if score is None or max_score is None or max_score == 0:
         return False
-    return score / max_score * 100 < policy.low_score_threshold
+    percentage = score / max_score * 100
+    return bool(percentage < policy.low_score_threshold)
 
 
 def _snapshot(value: object) -> dict[str, Any]:
@@ -571,6 +700,8 @@ def _record_retry_href(record: dict[str, Any]) -> str:
             return "/sales-trainer/business-skills/exam"
         if unit_id:
             return f"/sales-trainer/quiz/{unit_id}"
+    if record_type == "business_etiquette_quiz_attempt":
+        return f"/sales-trainer/business-skills?learningUnitKey={unit_id}"
     if record_type == "ai_coach_session":
         return "/sales-trainer/business-skills/coach"
     return "/sales-trainer"
@@ -583,6 +714,9 @@ def _record_result_href(record: dict[str, Any]) -> str:
         return f"/sales-trainer/audio/result/{record_id}"
     if record_type == "quiz_attempt":
         return f"/sales-trainer/quiz/result/{record_id}"
+    if record_type == "business_etiquette_quiz_attempt":
+        unit_id = str(record.get("unit_id") or "")
+        return f"/sales-trainer/business-skills?learningUnitKey={unit_id}"
     if record_type == "ai_coach_session":
         return "/sales-trainer/business-skills/coach"
     return "/sales-trainer"

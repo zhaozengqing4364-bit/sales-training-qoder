@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.ai.llm_service import LLMService
 from common.db.models import User
+from common.db.typing import json_dict_or_empty, orm_scalar
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 from prompt_templates.service import PromptTemplateService
@@ -34,15 +35,19 @@ from sales_trainer.schemas import (
     AiCoachSessionPublicResponse,
     AiCoachTurnPublicV1,
     NewcomerArticleBinding,
+    NewcomerPathConfigPayload,
 )
 from sales_trainer.services.ai_coach_model_config import (
     AiCoachModelConfigError,
     model_config_contract_payload,
     model_config_id,
-    resolve_ai_coach_llm_model_config,
+    resolve_ai_coach_llm_model_config_from_db,
 )
 from sales_trainer.services.ai_coach_scoring_service import AiCoachScoringService
-from sales_trainer.services.article_binding_service import ArticleBindingService
+from sales_trainer.services.article_binding_service import (
+    ArticleBindingService,
+    ArticleBindingServiceError,
+)
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
@@ -130,33 +135,12 @@ class AiCoachSessionService:
         """
         trace_id = str(uuid.uuid4())
 
-        # Resolve path config and module config
-        path_service = SalesTrainerPathConfigService(self._db)
-        path_response = await path_service.get_config()
-        path_payload = path_response.get("path")
-        path_revision_id = path_response.get("active_revision_id")
-        path_revision_no = path_response.get("active_revision_no")
-
-        module_config: dict[str, Any] | None = None
-        ai_coach_config: AiCoachConfig | None = None
-        article_snapshot: dict[str, Any] = {}
-
-        if path_payload is not None:
-            from sales_trainer.schemas import NewcomerPathConfigPayload
-
-            try:
-                payload = NewcomerPathConfigPayload.model_validate(path_payload)
-                for module in payload.modules:
-                    if module.module_key == module_key:
-                        module_config = module.model_dump(mode="json")
-                        ai_coach_config = module.ai_coach
-                        break
-            except Exception:
-                pass
-
-        # If ai_coach not configured in module, use defaults
-        if ai_coach_config is None:
-            ai_coach_config = AiCoachConfig()
+        (
+            path_revision_id,
+            path_revision_no,
+            module_config,
+            ai_coach_config,
+        ) = await self._resolve_active_ai_coach_module(module_key)
 
         if not ai_coach_config.enabled:
             raise AiCoachSessionServiceError(
@@ -171,26 +155,10 @@ class AiCoachSessionService:
                 status_code=409,
             )
 
-        # Resolve article snapshot if learning_content_id is configured
-        if module_config and module_config.get("learning_content_id"):
-            try:
-                article_binding = await ArticleBindingService(
-                    self._db
-                ).resolve_module_article(
-                    NewcomerArticleBinding(
-                        module_key=module_key,
-                        learning_content_id=module_config["learning_content_id"],
-                    )
-                )
-                article_snapshot = {
-                    "module_key": article_binding.get("module_key"),
-                    "learning_content_id": article_binding.get("learning_content_id"),
-                    "title": article_binding.get("title"),
-                    "summary": article_binding.get("summary"),
-                    "chapters": article_binding.get("chapters", []),
-                }
-            except Exception:
-                pass
+        article_snapshot = await self._resolve_article_snapshot(
+            module_key=module_key,
+            module_config=module_config,
+        )
 
         # Build initial question
         first_question = self._build_first_question(article_snapshot, module_config)
@@ -232,7 +200,7 @@ class AiCoachSessionService:
             actor=None,
             action="ai_coach_session_created",
             target_type="sales_trainer_ai_coach_session",
-            target_id=session.session_id,
+            target_id=orm_scalar(session.session_id, str),
             metadata={
                 "user_id": user_id,
                 "module_key": module_key,
@@ -256,7 +224,16 @@ class AiCoachSessionService:
         Validates session ownership, calls LLM for scoring,
         and generates the next question.
         """
-        session = await self._require_session(session_id)
+        if actor is not None:
+            session = await self.get_session(session_id, str(actor.user_id))
+            if session is None:
+                raise AiCoachSessionServiceError(
+                    "[AI_COACH_SESSION_NOT_FOUND]",
+                    "AI 教练会话不存在。",
+                    status_code=404,
+                )
+        else:
+            session = await self._require_session(session_id)
 
         if session.status != "in_progress":
             raise AiCoachSessionServiceError(
@@ -275,18 +252,17 @@ class AiCoachSessionService:
             )
 
         # Update the current turn with user's answer
-        latest_turn.user_answer = user_answer
+        setattr(latest_turn, "user_answer", user_answer)
 
         # Get previous turns for context
         previous_turns = await self._get_previous_turns(session_id)
 
         # Call scoring service
-        config = session.config_snapshot or {}
-        if isinstance(config, dict):
-            config["article_snapshot"] = session.article_snapshot
+        config = json_dict_or_empty(session.config_snapshot)
+        config["article_snapshot"] = json_dict_or_empty(session.article_snapshot)
 
         scoring_result = await self._scoring.score_turn(
-            question=latest_turn.question,
+            question=orm_scalar(latest_turn.question, str),
             user_answer=user_answer,
             config=config,
             session_id=session_id,
@@ -300,11 +276,11 @@ class AiCoachSessionService:
                 turn_id=latest_turn.turn_id,
                 fallback=scoring_result.fallback,
             )
-            latest_turn.ai_feedback = "评分服务暂时不可用，请稍后重试。"
-            latest_turn.score = 0
-            latest_turn.max_score = 100
-            latest_turn.missed_points = []
-            latest_turn.raw_model_output = {"error": scoring_result.fallback}
+            setattr(latest_turn, "ai_feedback", "评分服务暂时不可用，请稍后重试。")
+            setattr(latest_turn, "score", 0)
+            setattr(latest_turn, "max_score", 100)
+            setattr(latest_turn, "missed_points", [])
+            setattr(latest_turn, "raw_model_output", {"error": scoring_result.fallback})
             await self._db.flush()
             raise AiCoachSessionServiceError(
                 "[AI_COACH_SCORING_FAILED]",
@@ -320,25 +296,29 @@ class AiCoachSessionService:
                 status_code=502,
             )
 
-        latest_turn.ai_feedback = output.get("feedback", "")
-        latest_turn.score = output.get("score")
-        latest_turn.max_score = output.get("max_score", 100)
-        latest_turn.missed_points = output.get("missed_points", [])
-        latest_turn.next_question = output.get("next_question")
-        latest_turn.raw_model_output = output.get("raw_model_output")
-        latest_turn.validated_output = {
-            "score": output.get("score"),
-            "max_score": output.get("max_score"),
-            "feedback": output.get("feedback"),
-            "missed_points": output.get("missed_points"),
-            "next_question": output.get("next_question"),
-            "passed": output.get("passed"),
-            "reasoning": output.get("reasoning"),
-        }
+        setattr(latest_turn, "ai_feedback", output.get("feedback", ""))
+        setattr(latest_turn, "score", output.get("score"))
+        setattr(latest_turn, "max_score", output.get("max_score", 100))
+        setattr(latest_turn, "missed_points", output.get("missed_points", []))
+        setattr(latest_turn, "next_question", output.get("next_question"))
+        setattr(latest_turn, "raw_model_output", output.get("raw_model_output"))
+        setattr(
+            latest_turn,
+            "validated_output",
+            {
+                "score": output.get("score"),
+                "max_score": output.get("max_score"),
+                "feedback": output.get("feedback"),
+                "missed_points": output.get("missed_points"),
+                "next_question": output.get("next_question"),
+                "passed": output.get("passed"),
+                "reasoning": output.get("reasoning"),
+            },
+        )
         await self._db.flush()
 
         # Check if we should create next turn or finish
-        config_snapshot = session.config_snapshot or {}
+        config_snapshot = json_dict_or_empty(session.config_snapshot)
         max_turns = int(config_snapshot.get("max_turns", 10))
         min_turns = int(config_snapshot.get("min_turns", 3))
         mastery_threshold = float(config_snapshot.get("mastery_threshold", 80.0))
@@ -362,7 +342,7 @@ class AiCoachSessionService:
             next_question = output.get("next_question")
             if not next_question:
                 next_question = self._build_follow_up_question(
-                    session.article_snapshot,
+                    json_dict_or_empty(session.article_snapshot),
                     current_turn_count,
                 )
 
@@ -378,16 +358,17 @@ class AiCoachSessionService:
             self._db.add(next_turn)
             await self._db.flush()
 
+        latest_score_value = orm_scalar(latest_turn.score, float, nullable=True)
         await self._logs.record(
             actor=actor,
             action="ai_coach_turn_submitted",
             target_type="sales_trainer_ai_coach_turn",
-            target_id=latest_turn.turn_id,
+            target_id=orm_scalar(latest_turn.turn_id, str),
             metadata={
                 "session_id": session_id,
-                "turn_number": latest_turn.turn_number,
-                "score": float(latest_turn.score)
-                if latest_turn.score is not None
+                "turn_number": orm_scalar(latest_turn.turn_number, int),
+                "score": float(latest_score_value)
+                if latest_score_value is not None
                 else None,
             },
         )
@@ -409,8 +390,8 @@ class AiCoachSessionService:
         scored_turns = [t for t in turns if t.score is not None]
 
         if not scored_turns:
-            session.status = "failed"
-            session.mastery_state = "not_mastered"
+            setattr(session, "status", "failed")
+            setattr(session, "mastery_state", "not_mastered")
             await self._db.flush()
             await self._db.commit()
             await self._db.refresh(session)
@@ -419,18 +400,22 @@ class AiCoachSessionService:
         total_score = sum(float(t.score) for t in scored_turns)
         avg_score = total_score / len(scored_turns)
 
-        config_snapshot = session.config_snapshot or {}
+        config_snapshot = json_dict_or_empty(session.config_snapshot)
         mastery_threshold = float(config_snapshot.get("mastery_threshold", 80.0))
 
         max_score = sum(float(t.max_score or 100) for t in scored_turns)
 
-        session.total_score = avg_score
-        session.max_score = max_score / len(scored_turns) if scored_turns else 100
-        session.mastery_state = (
-            "mastered" if avg_score >= mastery_threshold else "not_mastered"
+        setattr(session, "total_score", avg_score)
+        setattr(
+            session, "max_score", max_score / len(scored_turns) if scored_turns else 100
         )
-        session.status = "completed"
-        session.updated_at = datetime.now(UTC)
+        setattr(
+            session,
+            "mastery_state",
+            "mastered" if avg_score >= mastery_threshold else "not_mastered",
+        )
+        setattr(session, "status", "completed")
+        setattr(session, "updated_at", datetime.now(UTC))
         await self._db.flush()
 
         await self._logs.record(
@@ -508,6 +493,81 @@ class AiCoachSessionService:
     async def list_turns(self, session_id: str) -> list[SalesTrainerAiCoachTurn]:
         """Public alias used by ai_coach_api serializer (delegates to internal)."""
         return await self._get_all_turns(session_id)
+
+    async def _resolve_active_ai_coach_module(
+        self,
+        module_key: str,
+    ) -> tuple[str, int, dict[str, Any], AiCoachConfig]:
+        path_response = await SalesTrainerPathConfigService(self._db).get_config()
+        path_payload = path_response.get("path")
+        path_revision_id = path_response.get("active_revision_id")
+        path_revision_no = path_response.get("active_revision_no")
+        if path_payload is None or not path_revision_id or path_revision_no is None:
+            raise AiCoachSessionServiceError(
+                "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
+                "新人训练路径尚未发布 active revision，AI Coach 不能启动。",
+                status_code=409,
+            )
+        try:
+            payload = NewcomerPathConfigPayload.model_validate(path_payload)
+        except ValidationError as exc:
+            raise AiCoachSessionServiceError(
+                "[AI_COACH_PROMPT_CONFIG_INVALID]",
+                "新人训练路径 AI Coach 配置非法。",
+                status_code=409,
+            ) from exc
+        for module in payload.modules:
+            if module.module_key != module_key:
+                continue
+            if module.ai_coach is None:
+                raise AiCoachSessionServiceError(
+                    "[AI_COACH_NOT_CONFIGURED]",
+                    "该模块未配置 AI 教练。",
+                    status_code=409,
+                )
+            return (
+                str(path_revision_id),
+                int(path_revision_no),
+                module.model_dump(mode="json"),
+                module.ai_coach,
+            )
+        raise AiCoachSessionServiceError(
+            "[AI_COACH_NOT_CONFIGURED]",
+            "AI 教练模块不存在。",
+            status_code=404,
+        )
+
+    async def _resolve_article_snapshot(
+        self,
+        *,
+        module_key: str,
+        module_config: dict[str, Any],
+    ) -> dict[str, Any]:
+        learning_content_id = module_config.get("learning_content_id")
+        if not learning_content_id:
+            return {}
+        try:
+            article_binding = await ArticleBindingService(
+                self._db
+            ).resolve_module_article(
+                NewcomerArticleBinding(
+                    module_key=module_key,
+                    learning_content_id=str(learning_content_id),
+                )
+            )
+        except ArticleBindingServiceError as exc:
+            raise AiCoachSessionServiceError(
+                exc.code,
+                exc.message,
+                exc.status_code,
+            ) from exc
+        return {
+            "module_key": article_binding.get("module_key"),
+            "learning_content_id": article_binding.get("learning_content_id"),
+            "title": article_binding.get("title"),
+            "summary": article_binding.get("summary"),
+            "chapters": article_binding.get("chapters", []),
+        }
 
     async def _get_previous_turns(self, session_id: str) -> list[dict[str, Any]]:
         turns = await self._get_all_turns(session_id)
@@ -598,31 +658,12 @@ class AiCoachSessionService:
         """
         trace_id = str(uuid.uuid4())
 
-        path_service = SalesTrainerPathConfigService(self._db)
-        path_response = await path_service.get_config()
-        path_payload = path_response.get("path")
-        path_revision_id = path_response.get("active_revision_id")
-        path_revision_no = path_response.get("active_revision_no")
-
-        module_config: dict[str, Any] | None = None
-        ai_coach_config: AiCoachConfig | None = None
-        article_snapshot: dict[str, Any] = {}
-
-        if path_payload is not None:
-            from sales_trainer.schemas import NewcomerPathConfigPayload
-
-            try:
-                payload = NewcomerPathConfigPayload.model_validate(path_payload)
-                for module in payload.modules:
-                    if module.module_key == module_key:
-                        module_config = module.model_dump(mode="json")
-                        ai_coach_config = module.ai_coach
-                        break
-            except Exception:
-                pass
-
-        if ai_coach_config is None:
-            ai_coach_config = AiCoachConfig()
+        (
+            path_revision_id,
+            path_revision_no,
+            module_config,
+            ai_coach_config,
+        ) = await self._resolve_active_ai_coach_module(module_key)
 
         if not ai_coach_config.enabled:
             raise AiCoachSessionServiceError(
@@ -636,25 +677,10 @@ class AiCoachSessionService:
             interaction_type=interaction_type,
         )
 
-        if module_config and module_config.get("learning_content_id"):
-            try:
-                article_binding = await ArticleBindingService(
-                    self._db
-                ).resolve_module_article(
-                    NewcomerArticleBinding(
-                        module_key=module_key,
-                        learning_content_id=module_config["learning_content_id"],
-                    )
-                )
-                article_snapshot = {
-                    "module_key": article_binding.get("module_key"),
-                    "learning_content_id": article_binding.get("learning_content_id"),
-                    "title": article_binding.get("title"),
-                    "summary": article_binding.get("summary"),
-                    "chapters": article_binding.get("chapters", []),
-                }
-            except Exception:
-                pass
+        article_snapshot = await self._resolve_article_snapshot(
+            module_key=module_key,
+            module_config=module_config,
+        )
 
         config_snapshot = ai_coach_config.model_dump(mode="json")
         # Pin the runtime schema version to the backend constant; admin
@@ -714,7 +740,7 @@ class AiCoachSessionService:
             actor=None,
             action="ai_coach_session_created_v1",
             target_type="sales_trainer_ai_coach_session",
-            target_id=session.session_id,
+            target_id=orm_scalar(session.session_id, str),
             metadata={
                 "user_id": user_id,
                 "module_key": module_key,
@@ -750,7 +776,7 @@ class AiCoachSessionService:
              answer_key / scoring_rubric / source_evidence / raw).
           6. Persist the snapshots on the turn.
         """
-        template_id = session.prompt_template_id
+        template_id = orm_scalar(session.prompt_template_id, str, nullable=True)
         if not template_id:
             raise AiCoachSessionServiceError(
                 "[AI_COACH_PROMPT_TEMPLATE_MISSING]",
@@ -758,7 +784,7 @@ class AiCoachSessionService:
                 status_code=409,
             )
 
-        config_snapshot = session.config_snapshot or {}
+        config_snapshot = json_dict_or_empty(session.config_snapshot)
         ai_coach_config_raw = config_snapshot.get("ai_coach") or config_snapshot
         try:
             ai_coach_config = self._load_ai_coach_config_from_snapshot(
@@ -771,7 +797,11 @@ class AiCoachSessionService:
         try:
             resolution = await resolver.resolve(
                 template_id=template_id,
-                prompt_revision_id=session.prompt_revision_id,
+                prompt_revision_id=orm_scalar(
+                    session.prompt_revision_id,
+                    str,
+                    nullable=True,
+                ),
             )
         except PromptTemplateRevisionResolverError as exc:
             raise self._prompt_resolver_service_error(exc) from exc
@@ -780,10 +810,14 @@ class AiCoachSessionService:
                 actor=None,
                 action="ai_coach_prompt_revision_fallback_blocked",
                 target_type="sales_trainer_ai_coach_session",
-                target_id=session.session_id,
+                target_id=orm_scalar(session.session_id, str),
                 metadata={
                     "template_id": template_id,
-                    "prompt_revision_id": session.prompt_revision_id,
+                    "prompt_revision_id": orm_scalar(
+                        session.prompt_revision_id,
+                        str,
+                        nullable=True,
+                    ),
                     "resolution_status": resolution.status,
                 },
             )
@@ -802,8 +836,8 @@ class AiCoachSessionService:
         template = resolution.snapshot.template
 
         try:
-            model_config = resolve_ai_coach_llm_model_config(
-                ai_coach_config.generation_model
+            model_config = await resolve_ai_coach_llm_model_config_from_db(
+                self._db, ai_coach_config.generation_model
             )
         except AiCoachModelConfigError as exc:
             raise AiCoachSessionServiceError(exc.code, exc.message, 409) from exc
@@ -828,14 +862,18 @@ class AiCoachSessionService:
             )
         contract = compile_result.value
 
-        session.prompt_contract_hash = contract.contract_hash
+        setattr(session, "prompt_contract_hash", contract.contract_hash)
 
         # 4. LLM call. We use the shared LLMService so cost / metrics /
         # tracing stay consistent with the rest of the sales_trainer stack.
-        llm_service = LLMService(config=model_config) if model_config is not None else LLMService()
+        llm_service = (
+            LLMService(config=model_config)
+            if model_config is not None
+            else LLMService()
+        )
         llm_result = await llm_service.generate(
             prompt=contract.rendered_prompt,
-            session_id=session.session_id,
+            session_id=orm_scalar(session.session_id, str),
             system_message=contract.system_message,
             allow_fallback_response=False,
         )
@@ -869,7 +907,7 @@ class AiCoachSessionService:
         # silent rewrite — the LLM contract is that the prompt template
         # already constrains the type, so a mismatch is a real config
         # error worth surfacing, not "fixing" by coercion.
-        config_snapshot = session.config_snapshot or {}
+        config_snapshot = json_dict_or_empty(session.config_snapshot)
         active_mode = config_snapshot.get("active_coach_mode")
         active_explicit_type = config_snapshot.get("active_interaction_type")
         raw_allowed_types = config_snapshot.get("allowed_interaction_types")
@@ -881,7 +919,7 @@ class AiCoachSessionService:
         expected_type = AiCoachSessionService._expected_interaction_type_for_mode(
             active_mode=active_mode,
             active_explicit_type=active_explicit_type,
-            turn_number=turn.turn_number,
+            turn_number=orm_scalar(turn.turn_number, int),
             allowed_types=allowed_types,
         )
         if expected_type is not None and internal.interaction_type != expected_type:
@@ -898,11 +936,11 @@ class AiCoachSessionService:
         public = self._project_to_public(internal, session=session, turn=turn)
 
         # 6. Persist.
-        turn.interaction_snapshot = internal.model_dump(mode="json")
-        turn.public_interaction = public.model_dump(mode="json")
-        turn.schema_version = AI_COACH_INTERACTION_SCHEMA_VERSION
+        setattr(turn, "interaction_snapshot", internal.model_dump(mode="json"))
+        setattr(turn, "public_interaction", public.model_dump(mode="json"))
+        setattr(turn, "schema_version", AI_COACH_INTERACTION_SCHEMA_VERSION)
         # Backward-compatible legacy fields.
-        turn.question = internal.stem
+        setattr(turn, "question", internal.stem)
         await self._db.flush()
         return internal
 
@@ -925,7 +963,16 @@ class AiCoachSessionService:
         ``next_question`` are also updated so the legacy response model
         still works.
         """
-        session = await self._require_session(session_id)
+        if actor is not None:
+            session = await self.get_session(session_id, str(actor.user_id))
+            if session is None:
+                raise AiCoachSessionServiceError(
+                    "[AI_COACH_SESSION_NOT_FOUND]",
+                    "AI 教练会话不存在。",
+                    status_code=404,
+                )
+        else:
+            session = await self._require_session(session_id)
 
         if session.status != "in_progress":
             raise AiCoachSessionServiceError(
@@ -953,6 +1000,7 @@ class AiCoachSessionService:
 
         # Score using the dedicated strategy.
         scoring_runtime_metadata: dict[str, object] = {}
+        score_result: AiCoachScoreResultV1
         if answer_payload.variant == "choice":
             score_result = self.score_choice(
                 answer_payload=answer_payload,
@@ -961,7 +1009,7 @@ class AiCoachSessionService:
                 feedback_guidance=internal.feedback_guidance,
             )
         else:
-            config_snapshot = session.config_snapshot or {}
+            config_snapshot = json_dict_or_empty(session.config_snapshot)
             scoring_prompt_template_id = config_snapshot.get(
                 "scoring_prompt_template_id"
             )
@@ -981,7 +1029,9 @@ class AiCoachSessionService:
                 runtime_metadata_out=scoring_runtime_metadata,
             )
             if not short_answer_result.is_success:
-                failure_code = short_answer_result.fallback or "[AI_COACH_SCORING_FAILED]"
+                failure_code = (
+                    short_answer_result.fallback or "[AI_COACH_SCORING_FAILED]"
+                )
                 if failure_code.startswith("[AI_COACH_PROMPT") or failure_code in {
                     "[AI_COACH_SCORING_PROMPT_MISSING]",
                 }:
@@ -995,36 +1045,39 @@ class AiCoachSessionService:
                     "简答评分失败。",
                     status_code=502,
                 )
-            score_result = short_answer_result.value
-            if score_result is None:
+            short_answer_score_result = short_answer_result.value
+            if short_answer_score_result is None:
                 raise AiCoachSessionServiceError(
                     "[AI_COACH_SCORING_EMPTY]",
                     "简答评分结果为空。",
                     status_code=502,
                 )
+            score_result = short_answer_score_result
 
         # Persist scoring + payload on the turn.
-        latest_turn.user_answer = (
+        setattr(
+            latest_turn,
+            "user_answer",
             answer_payload.text
             if answer_payload.variant == "text"
-            else ",".join(answer_payload.option_ids or [])
+            else ",".join(answer_payload.option_ids or []),
         )
-        latest_turn.score = score_result.score
-        latest_turn.max_score = score_result.max_score
-        latest_turn.ai_feedback = score_result.feedback
-        latest_turn.missed_points = list(score_result.missed_points)
-        latest_turn.answer_payload = answer_payload.model_dump(mode="json")
+        setattr(latest_turn, "score", score_result.score)
+        setattr(latest_turn, "max_score", score_result.max_score)
+        setattr(latest_turn, "ai_feedback", score_result.feedback)
+        setattr(latest_turn, "missed_points", list(score_result.missed_points))
+        setattr(latest_turn, "answer_payload", answer_payload.model_dump(mode="json"))
         score_result_payload = score_result.model_dump(mode="json")
         if answer_payload.variant == "text" and scoring_runtime_metadata:
             score_result_payload["runtime_audit"] = {
                 "scoring": dict(scoring_runtime_metadata)
             }
-        latest_turn.score_result = score_result_payload
-        latest_turn.validated_output = score_result_payload
+        setattr(latest_turn, "score_result", score_result_payload)
+        setattr(latest_turn, "validated_output", score_result_payload)
         await self._db.flush()
 
         # Decide whether to continue or finish.
-        config_snapshot = session.config_snapshot or {}
+        config_snapshot = json_dict_or_empty(session.config_snapshot)
         max_turns = int(config_snapshot.get("max_turns", 10))
         min_turns = int(config_snapshot.get("min_turns", 3))
         mastery_threshold = float(config_snapshot.get("mastery_threshold", 80.0))
@@ -1058,15 +1111,13 @@ class AiCoachSessionService:
             actor=actor,
             action="ai_coach_turn_submitted_v1",
             target_type="sales_trainer_ai_coach_turn",
-            target_id=latest_turn.turn_id,
+            target_id=orm_scalar(latest_turn.turn_id, str),
             metadata={
                 "session_id": session_id,
-                "turn_number": latest_turn.turn_number,
+                "turn_number": orm_scalar(latest_turn.turn_number, int),
                 "variant": answer_payload.variant,
-                "score": float(latest_turn.score)
-                if latest_turn.score is not None
-                else None,
-                "max_score": float(latest_turn.max_score or 100),
+                "score": score_result.score,
+                "max_score": score_result.max_score,
             },
         )
         await self._db.commit()
@@ -1091,8 +1142,8 @@ class AiCoachSessionService:
         scored_turns = [t for t in turns if t.score is not None]
 
         if not scored_turns:
-            session.status = "failed"
-            session.mastery_state = "not_mastered"
+            setattr(session, "status", "failed")
+            setattr(session, "mastery_state", "not_mastered")
             await self._db.flush()
             await self._db.commit()
             await self._db.refresh(session)
@@ -1102,17 +1153,23 @@ class AiCoachSessionService:
         avg_score = total_score / len(scored_turns)
         max_score = sum(float(t.max_score or 100) for t in scored_turns)
 
-        config_snapshot = session.config_snapshot or {}
+        config_snapshot = json_dict_or_empty(session.config_snapshot)
         mastery_threshold = float(config_snapshot.get("mastery_threshold", 80.0))
 
-        session.total_score = avg_score
-        session.max_score = max_score / len(scored_turns) if scored_turns else 100
-        session.mastery_state = self._evaluate_mastery(
-            avg_score=avg_score,
-            mastery_threshold=mastery_threshold,
+        setattr(session, "total_score", avg_score)
+        setattr(
+            session, "max_score", max_score / len(scored_turns) if scored_turns else 100
         )
-        session.status = "completed"
-        session.updated_at = datetime.now(UTC)
+        setattr(
+            session,
+            "mastery_state",
+            self._evaluate_mastery(
+                avg_score=avg_score,
+                mastery_threshold=mastery_threshold,
+            ),
+        )
+        setattr(session, "status", "completed")
+        setattr(session, "updated_at", datetime.now(UTC))
         await self._db.flush()
 
         await self._logs.record(
@@ -1160,7 +1217,9 @@ class AiCoachSessionService:
 
         submitted = list(answer_payload.option_ids or [])
         valid_option_ids = {option.option_id for option in (internal.options or [])}
-        invalid = [option_id for option_id in submitted if option_id not in valid_option_ids]
+        invalid = [
+            option_id for option_id in submitted if option_id not in valid_option_ids
+        ]
         if invalid:
             raise AiCoachSessionServiceError(
                 "[AI_COACH_ANSWER_OPTION_INVALID]",
@@ -1357,11 +1416,16 @@ class AiCoachSessionService:
 
         template = resolution.snapshot.template
         try:
-            model_config = resolve_ai_coach_llm_model_config(scoring_model)
+            model_config = await resolve_ai_coach_llm_model_config_from_db(
+                self._db,
+                scoring_model,
+            )
         except AiCoachModelConfigError as exc:
             return Result.fail(exc.code)
 
-        compile_result = PromptTemplateService(self._db).compile_runtime_prompt_contract(
+        compile_result = PromptTemplateService(
+            self._db
+        ).compile_runtime_prompt_contract(
             template=template,
             variables=self._build_short_answer_variables(
                 answer_text=answer_text,
@@ -1376,13 +1440,14 @@ class AiCoachSessionService:
             return Result.fail("[AI_COACH_SCORING_PROMPT_RENDER_FAILED]")
         contract = compile_result.value
 
-        if (
-            scoring_contract_hash
-            and contract.contract_hash != scoring_contract_hash
-        ):
+        if scoring_contract_hash and contract.contract_hash != scoring_contract_hash:
             return Result.fail("[AI_COACH_SCORING_PROMPT_CONTRACT_MISMATCH]")
 
-        llm_service = LLMService(config=model_config) if model_config is not None else LLMService()
+        llm_service = (
+            LLMService(config=model_config)
+            if model_config is not None
+            else LLMService()
+        )
         if runtime_metadata_out is not None:
             runtime_metadata_out.update(
                 {
@@ -1398,7 +1463,8 @@ class AiCoachSessionService:
         llm_result = await llm_service.generate(
             prompt=contract.rendered_prompt,
             session_id=session_id,
-            system_message=contract.system_message or self._build_short_answer_system_message(),
+            system_message=contract.system_message
+            or self._build_short_answer_system_message(),
             allow_fallback_response=False,
         )
         if not llm_result.is_success or not llm_result.value:
@@ -1580,53 +1646,60 @@ class AiCoachSessionService:
         contract raises a validation error instead of leaking. The
         internal ``interaction_snapshot`` is never read here.
         """
-        config_snapshot = session.config_snapshot or {}
+        config_snapshot = json_dict_or_empty(session.config_snapshot)
         min_turns = int(config_snapshot.get("min_turns", 3))
         max_turns = int(config_snapshot.get("max_turns", 10))
         mastery_threshold = float(config_snapshot.get("mastery_threshold", 80.0))
 
         public_turns: list[AiCoachTurnPublicV1] = []
         for turn in turns:
+            score_value = orm_scalar(turn.score, float, nullable=True)
+            max_score_value = orm_scalar(turn.max_score, float, nullable=True)
             public_turns.append(
                 AiCoachTurnPublicV1(
-                    turn_id=turn.turn_id,
-                    turn_number=turn.turn_number,
+                    turn_id=orm_scalar(turn.turn_id, str),
+                    turn_number=orm_scalar(turn.turn_number, int),
                     public_interaction=self._safe_public_interaction(turn),
                     user_answer_payload=self._safe_user_answer_payload(turn),
-                    score=float(turn.score) if turn.score is not None else None,
-                    max_score=float(turn.max_score)
-                    if turn.max_score is not None
+                    score=float(score_value) if score_value is not None else None,
+                    max_score=float(max_score_value)
+                    if max_score_value is not None
                     else None,
-                    ai_feedback=turn.ai_feedback,
+                    ai_feedback=orm_scalar(turn.ai_feedback, str, nullable=True),
                     missed_points=list(turn.missed_points or []),
                     next_turn_available=True,
                 )
             )
 
         overall_mastered = (
-            session.status == "completed"
-            and session.mastery_state == "mastered"
+            orm_scalar(session.status, str) == "completed"
+            and orm_scalar(session.mastery_state, str, nullable=True) == "mastered"
         )
+        total_score_value = orm_scalar(session.total_score, float, nullable=True)
+        max_score_value = orm_scalar(session.max_score, float, nullable=True)
+        public_turn_payloads: list[dict[str, Any]] = [
+            turn.model_dump(mode="json") for turn in public_turns
+        ]
 
-        payload = {
-            "session_id": session.session_id,
-            "module_key": session.module_key,
-            "status": session.status,
-            "mastery_state": session.mastery_state,
-            "total_score": float(session.total_score)
-            if session.total_score is not None
+        payload: dict[str, Any] = {
+            "session_id": orm_scalar(session.session_id, str),
+            "module_key": orm_scalar(session.module_key, str),
+            "status": orm_scalar(session.status, str),
+            "mastery_state": orm_scalar(session.mastery_state, str, nullable=True),
+            "total_score": float(total_score_value)
+            if total_score_value is not None
             else None,
-            "max_score": float(session.max_score)
-            if session.max_score is not None
+            "max_score": float(max_score_value)
+            if max_score_value is not None
             else None,
             "current_turn": len(turns),
             "min_turns": min_turns,
             "max_turns": max_turns,
             "mastery_threshold": mastery_threshold,
             "overall_mastered": overall_mastered,
-            "created_at": session.created_at,
-            "updated_at": session.updated_at,
-            "turns": [turn.model_dump(mode="json") for turn in public_turns],
+            "created_at": orm_scalar(session.created_at, datetime),
+            "updated_at": orm_scalar(session.updated_at, datetime),
+            "turns": public_turn_payloads,
         }
         # Defensive allow-list sweep: drop anything that is not in the
         # learner-facing contract before model validation. This guards
@@ -1636,8 +1709,8 @@ class AiCoachSessionService:
             for key, value in payload.items()
             if key in ALLOWED_PUBLIC_SESSION_FIELDS
         }
-        for index, turn_payload in enumerate(payload.get("turns") or []):
-            payload["turns"][index] = {
+        for index, turn_payload in enumerate(public_turn_payloads):
+            public_turn_payloads[index] = {
                 key: value
                 for key, value in turn_payload.items()
                 if key in ALLOWED_PUBLIC_TURN_FIELDS
@@ -1659,7 +1732,7 @@ class AiCoachSessionService:
 
         Async because it needs to ``await self._get_previous_turns()``.
         """
-        article_snapshot = session.article_snapshot or {}
+        article_snapshot = json_dict_or_empty(session.article_snapshot)
         chapters = article_snapshot.get("chapters") or []
         chapter_titles: list[str] = []
         for chapter in chapters:
@@ -1668,7 +1741,7 @@ class AiCoachSessionService:
                 if isinstance(title, str) and title.strip():
                     chapter_titles.append(title)
         previous_turns: list[dict[str, Any]] = []
-        for row in await self._get_previous_turns(session.session_id):
+        for row in await self._get_previous_turns(orm_scalar(session.session_id, str)):
             previous_turns.append(
                 {
                     "turn_number": row.get("turn_number"),
@@ -1678,12 +1751,12 @@ class AiCoachSessionService:
                 }
             )
         active_coach_mode, active_allowed_types = self._active_generation_settings(
-            session.config_snapshot or {},
+            json_dict_or_empty(session.config_snapshot),
             ai_coach_config,
         )
         return {
-            "module_key": session.module_key,
-            "turn_number": turn.turn_number,
+            "module_key": orm_scalar(session.module_key, str),
+            "turn_number": orm_scalar(turn.turn_number, int),
             "article_title": article_snapshot.get("title") or "",
             "article_summary": article_snapshot.get("summary") or "",
             "chapter_titles": chapter_titles,
@@ -1703,15 +1776,15 @@ class AiCoachSessionService:
             "你是一位销售培训 AI 对话教练，负责生成下一轮结构化互动卡片；stem 应使用 Chatbot 式自然对话语气。\n"
             "严格输出 JSON，必须满足以下契约字段：\n"
             "{"
-            "\"schema_version\": \"ai_coach_interaction_v1\","
-            "\"interaction_type\": \"single_choice\" | \"multiple_choice\" | \"short_answer\","
-            "\"stem\": str,"
-            "\"options\": [...] | null,"
-            "\"answer_key\": {\"option_ids\": [...], \"reference_answer\": str | null},"
-            "\"scoring_rubric\": {\"max_score\": number, \"points\": [...], "
-            "\"partial_credit_policy\": \"all_or_nothing\" | \"proportional\" | \"tiered\"},"
-            "\"feedback_guidance\": {\"correct\": str, \"incorrect\": str},"
-            "\"source_evidence\": [...] | null"
+            '"schema_version": "ai_coach_interaction_v1",'
+            '"interaction_type": "single_choice" | "multiple_choice" | "short_answer",'
+            '"stem": str,'
+            '"options": [...] | null,'
+            '"answer_key": {"option_ids": [...], "reference_answer": str | null},'
+            '"scoring_rubric": {"max_score": number, "points": [...], '
+            '"partial_credit_policy": "all_or_nothing" | "proportional" | "tiered"},'
+            '"feedback_guidance": {"correct": str, "incorrect": str},'
+            '"source_evidence": [...] | null'
             "}"
         )
 
@@ -1728,8 +1801,8 @@ class AiCoachSessionService:
             "参考答案：\n"
             f"{reference_answer or '(无)'}\n\n"
             f"满分：{scoring_rubric.max_score}\n"
-            "请给出 JSON：{\"score\": 0..满分, \"feedback\": str, "
-            "\"missed_points\": [str]}。\n"
+            '请给出 JSON：{"score": 0..满分, "feedback": str, '
+            '"missed_points": [str]}。\n'
         )
 
     def _load_internal_interaction(
@@ -1776,9 +1849,12 @@ class AiCoachSessionService:
             constraints["max_length"] = 8000
         return AiCoachInteractionPublicV1(
             schema_version=AI_COACH_PUBLIC_INTERACTION_SCHEMA_VERSION,
-            interaction_id=f"{session.session_id}:{turn.turn_number}",
-            session_id=session.session_id,
-            turn_number=turn.turn_number,
+            interaction_id=(
+                f"{orm_scalar(session.session_id, str)}:"
+                f"{orm_scalar(turn.turn_number, int)}"
+            ),
+            session_id=orm_scalar(session.session_id, str),
+            turn_number=orm_scalar(turn.turn_number, int),
             interaction_type=internal.interaction_type,
             stem=internal.stem,
             options=options_payload,

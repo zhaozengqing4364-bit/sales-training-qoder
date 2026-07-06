@@ -11,13 +11,16 @@ import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { NewcomerExamPaper } from "@/lib/api/types";
 
 import {
+    BUSINESS_SKILLS_ACTIVE_UNIT_MISSING_MESSAGE,
+    BUSINESS_SKILLS_ACTIVE_UNIT_NOT_FOUND_MESSAGE,
     BUSINESS_SKILLS_EXAM_COPY,
     BUSINESS_SKILLS_MODULE_KEY,
     businessSkillsArticleErrorMessage,
-    fallbackPaperId,
-    learningContentIdFromUnit,
-    paperIdFromUnit,
+    findBusinessSkillsModuleFromJourney,
+    learningContentIdFromJourneyModule,
+    paperIdFromJourneyModule,
     resolveBusinessSkillsUnit,
+    unitIdFromJourneyModule,
 } from "../config";
 import {
     answerPayload,
@@ -31,6 +34,7 @@ export default function BusinessSkillsExamPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const unitId = searchParams.get("unitId");
+    const [activeUnitId, setActiveUnitId] = useState<string | null>(unitId);
     const [paper, setPaper] = useState<NewcomerExamPaper | null>(null);
     const [answers, setAnswers] = useState<AnswersState>({});
     const [isLoading, setIsLoading] = useState(true);
@@ -39,20 +43,32 @@ export default function BusinessSkillsExamPage() {
     const [missingPaper, setMissingPaper] = useState(false);
     const [learningRequired, setLearningRequired] = useState(false);
     const [learningMismatch, setLearningMismatch] = useState(false);
-    const learningHref = unitId
-        ? `/sales-trainer/business-skills?unitId=${encodeURIComponent(unitId)}`
+    const learningHref = activeUnitId
+        ? `/sales-trainer/business-skills?unitId=${encodeURIComponent(activeUnitId)}`
         : "/sales-trainer/business-skills";
 
     useEffect(() => {
         let isActive = true;
-        void api.salesTrainer.listUnits()
-            .then(async (unitResponse) => {
-                const selectedUnit = resolveBusinessSkillsUnit(unitResponse.items, unitId);
-                const paperId = paperIdFromUnit(selectedUnit) ?? fallbackPaperId(unitResponse.items);
+        void Promise.all([
+            api.salesTrainer.listUnits(),
+            api.salesTrainer.getJourney(),
+        ])
+            .then(async ([unitResponse, journeyResponse]) => {
+                const activeModule = findBusinessSkillsModuleFromJourney(journeyResponse.modules, unitId);
+                const nextActiveUnitId = unitIdFromJourneyModule(activeModule);
+                if (!activeModule || !nextActiveUnitId) {
+                    throw new Error(BUSINESS_SKILLS_ACTIVE_UNIT_MISSING_MESSAGE);
+                }
+                const selectedUnit = resolveBusinessSkillsUnit(unitResponse.items, nextActiveUnitId);
+                if (nextActiveUnitId && !selectedUnit) {
+                    throw new Error(BUSINESS_SKILLS_ACTIVE_UNIT_NOT_FOUND_MESSAGE);
+                }
+                const paperId = paperIdFromJourneyModule(activeModule);
                 if (!paperId) {
                     if (!isActive) {
                         return;
                     }
+                    setActiveUnitId(nextActiveUnitId);
                     setPaper(null);
                     setMissingPaper(true);
                     setLearningRequired(false);
@@ -60,7 +76,7 @@ export default function BusinessSkillsExamPage() {
                     setError(null);
                     return;
                 }
-                const learningContentId = learningContentIdFromUnit(selectedUnit);
+                const learningContentId = learningContentIdFromJourneyModule(activeModule);
                 const [nextArticle, progress] = await Promise.all([
                     api.newcomerTraining.getModuleArticle(
                         BUSINESS_SKILLS_MODULE_KEY,
@@ -71,6 +87,7 @@ export default function BusinessSkillsExamPage() {
                 if (!isActive) {
                     return;
                 }
+                setActiveUnitId(nextActiveUnitId);
                 // 后端 gate: 进度完成 && learning_content_id 与文章匹配
                 if (!progress.is_completed) {
                     setPaper(null);

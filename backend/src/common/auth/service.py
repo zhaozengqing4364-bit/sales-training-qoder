@@ -24,6 +24,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import String as SQLAlchemyString
 
+from common.auth.roles import is_platform_admin_role, role_matches_allowed
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
@@ -568,7 +569,7 @@ async def get_current_admin_user(
     Get current user and verify they have admin role.
     Use this dependency for admin-only endpoints.
     """
-    if not hasattr(current_user, "role") or current_user.role != "admin":
+    if not is_platform_admin_role(getattr(current_user, "role", None)):
         _raise_auth_http_error(
             status_code=403,
             error_code="[ROLE_REQUIRED]",
@@ -588,7 +589,7 @@ async def get_current_admin_user_for_app_routes(
     drift, while making the top-level `message` string include `ADMIN_REQUIRED`
     for the app-mounted RBAC smoke tests that assert the public error wording.
     """
-    if not hasattr(current_user, "role") or current_user.role != "admin":
+    if not is_platform_admin_role(getattr(current_user, "role", None)):
         _raise_auth_http_error(
             status_code=403,
             error_code="[ROLE_REQUIRED]",
@@ -608,8 +609,7 @@ def require_role(allowed_roles: list[str]) -> Any:
     """
 
     async def role_checker(current_user: User = Depends(get_current_user)) -> User:
-        user_role = getattr(current_user, "role", "user")
-        if user_role not in allowed_roles:
+        if not role_matches_allowed(getattr(current_user, "role", None), allowed_roles):
             _raise_auth_http_error(
                 status_code=403,
                 error_code="[ROLE_REQUIRED]",

@@ -14,6 +14,7 @@ from sales_trainer.ai_coach_chat_schemas import (
     AiCoachChatSessionPublicV1,
     AiCoachChatUiEventInternalV1,
     AiCoachFollowupPromptPayloadV1,
+    AiCoachUiEventPublicPayloadV1,
 )
 from sales_trainer.models import SalesTrainerAiCoachSession
 from sales_trainer.schemas import AiCoachAnswerPayloadV1, AiCoachScoreResultV1
@@ -115,12 +116,12 @@ class AiCoachChatService:
             if existing is not None:
                 return await self.public_session(str(existing.session_id), user_id)
         if resume_strategy == "latest_active_or_new":
-            existing = await self._latest_active_session(
+            active_session = await self._latest_active_session(
                 user_id=user_id,
                 module_key=module_key,
             )
-            if existing is not None:
-                return existing
+            if active_session is not None:
+                return active_session
         session_id = await self._session_creator.create_session_id(
             actor=actor,
             user_id=user_id,
@@ -148,12 +149,12 @@ class AiCoachChatService:
             if existing is not None:
                 return await self.public_session(str(existing.session_id), user_id)
         if resume_strategy == "latest_active_or_new":
-            existing = await self._latest_active_session(
+            active_session = await self._latest_active_session(
                 user_id=user_id,
                 module_key=module_key,
             )
-            if existing is not None:
-                return existing
+            if active_session is not None:
+                return active_session
         session_id = await self._session_creator.create_session_id(
             actor=actor,
             user_id=user_id,
@@ -280,6 +281,7 @@ class AiCoachChatService:
             metadata={
                 "ui_event_count": len(response.ui_events),
                 "schema_version": response.schema_version,
+                "llm_runtime": dict(response.runtime_audit or {}),
             },
         )
         await self._db.commit()
@@ -346,14 +348,14 @@ class AiCoachChatService:
             threshold=self._runtime.config_from_session(session).mastery_threshold,
         )
         event_payload = dict(event.payload_json or {})
-        event.answer_payload = answer_payload.model_dump(mode="json")
+        setattr(event, "answer_payload", answer_payload.model_dump(mode="json"))
         score_result_payload = score_result.model_dump(mode="json")
         if scoring_runtime_metadata:
             score_result_payload["runtime_audit"] = {
                 "scoring": dict(scoring_runtime_metadata)
             }
-        event.score_result = score_result_payload
-        event.status = "scored"
+        setattr(event, "score_result", score_result_payload)
+        setattr(event, "status", "scored")
         await self._logs.record(
             actor=actor,
             action="ai_coach_chat_card_submitted_v1",
@@ -385,7 +387,7 @@ class AiCoachChatService:
         event_id: str,
         user_id: str,
         event_payload: dict[str, object],
-        score_result,
+        score_result: AiCoachScoreResultV1,
         answer_payload: AiCoachAnswerPayloadV1,
         actor: User | None = None,
         on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
@@ -432,7 +434,7 @@ class AiCoachChatService:
         *,
         answer_payload: AiCoachAnswerPayloadV1 | dict[str, object],
         runtime_metadata_out: dict[str, object] | None = None,
-    ):
+    ) -> AiCoachScoreResultV1:
         if event.status != "pending" or event.answer_payload:
             raise AiCoachChatServiceError(
                 "[AI_COACH_CHAT_EVENT_ALREADY_SUBMITTED]",
@@ -485,7 +487,11 @@ class AiCoachChatService:
         except AiCoachChatServiceError:
             raise
 
-    def public_payload_for_event(self, event_type: str, stored_payload: dict[str, Any]):
+    def public_payload_for_event(
+        self,
+        event_type: str,
+        stored_payload: dict[str, Any],
+    ) -> AiCoachUiEventPublicPayloadV1:
         return self._projection.public_payload_for_event(event_type, stored_payload)
 
     async def _require_owned_session(

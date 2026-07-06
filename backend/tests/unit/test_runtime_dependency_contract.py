@@ -41,6 +41,20 @@ COMMON_REVERSE_DEPENDENCY_ALLOWLIST = {
     "common/db/voice_policy_snapshot.py": {"agent"},
 }
 
+SALES_TRAINER_CURRICULUM_PRACTICE_IMPORT_ALLOWLIST = {
+    "sales_trainer/services/curriculum_practice_adapter.py": {
+        "reason": (
+            "controlled adapter boundary for legacy curriculum content, "
+            "progress, and question-bank access"
+        ),
+        "allowed_prefixes": {
+            "curriculum_practice.models",
+            "curriculum_practice.services.learning_progress_service",
+            "curriculum_practice.services.test_bank",
+        },
+    },
+}
+
 
 def _constraint_allowed_values(table, constraint_name: str) -> set[str]:
     for constraint in table.constraints:
@@ -69,8 +83,34 @@ def _imported_modules(path: Path) -> set[str]:
     return imported
 
 
+def _dynamic_imported_modules(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        func = node.func
+        is_import_module = (
+            isinstance(func, ast.Name)
+            and func.id in {"import_module", "__import__"}
+        ) or (
+            isinstance(func, ast.Attribute)
+            and func.attr in {"import_module", "__import__"}
+        )
+        if not is_import_module:
+            continue
+        first_arg = node.args[0]
+        if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+            imported.add(first_arg.value)
+    return imported
+
+
+def _direct_or_dynamic_imports(path: Path) -> set[str]:
+    return _imported_modules(path) | _dynamic_imported_modules(path)
+
+
 def _top_level_modules(path: Path) -> set[str]:
-    return {module.split(".", 1)[0] for module in _imported_modules(path)}
+    return {module.split(".", 1)[0] for module in _direct_or_dynamic_imports(path)}
 
 
 def _relative_backend_src_path(path: Path) -> str:
@@ -177,6 +217,45 @@ def test_should_keep_sales_trainer_out_of_realtime_runtime_modules() -> None:
     assert violations == {}
 
 
+def test_should_keep_sales_trainer_curriculum_imports_behind_controlled_adapters() -> None:
+    violations: dict[str, list[str]] = {}
+
+    for path in _python_files_under("sales_trainer"):
+        relative_path = _relative_backend_src_path(path)
+        curriculum_imports = sorted(
+            module
+            for module in _direct_or_dynamic_imports(path)
+            if module == "curriculum_practice"
+            or module.startswith("curriculum_practice.")
+        )
+        if not curriculum_imports:
+            continue
+        policy = SALES_TRAINER_CURRICULUM_PRACTICE_IMPORT_ALLOWLIST.get(
+            relative_path
+        )
+        if policy is None:
+            violations[relative_path] = curriculum_imports
+            continue
+        allowed_prefixes = policy["allowed_prefixes"]
+        unexpected = [
+            module
+            for module in curriculum_imports
+            if not any(
+                module == prefix or module.startswith(f"{prefix}.")
+                for prefix in allowed_prefixes
+            )
+        ]
+        if unexpected:
+            violations[relative_path] = unexpected
+
+    assert violations == {}, (
+        "sales_trainer must not import curriculum_practice directly outside "
+        "controlled adapter/composition-root files. Route access through "
+        "sales_trainer.services.curriculum_practice_adapter or add a documented "
+        f"allowlist entry with a reason. Violations: {violations}"
+    )
+
+
 def test_should_keep_support_runtime_domains_behind_contributors() -> None:
     forbidden_runtime_domains = {
         "curriculum_practice",
@@ -200,20 +279,35 @@ def test_should_keep_cross_domain_adapters_from_exporting_foreign_orm_models() -
     controlled_cross_domain_adapters = {
         "sales_trainer/services/curriculum_practice_adapter.py": {
             "allowed_exports": {
+                "LearningChapterCreate",
                 "LearningChapterSummary",
+                "LearningContentContract",
                 "LearningContentSummary",
+                "LearningProgressAdapter",
+                "LearningProgressChapterRef",
+                "QuestionCategory",
                 "QuestionCategoryCreate",
+                "QuestionCategoryDTO",
                 "QuestionCategoryUpdate",
+                "QuestionItem",
                 "QuestionItemCreate",
+                "QuestionItemDTO",
                 "QuestionItemUpdate",
+                "archive_draft_learning_content",
+                "create_learning_content_with_chapters",
+                "create_learning_progress_service",
+                "create_test_bank_service",
+                "get_learning_chapter_by_order",
                 "get_learning_content",
+                "get_question_item",
                 "list_learning_chapters",
+                "list_published_sales_trainer_questions",
+                "project_question_category",
+                "project_question_item",
             },
             "forbidden_exports": {
                 "LearningChapter",
                 "LearningContent",
-                "QuestionCategory",
-                "QuestionItem",
             },
         },
         "curriculum_practice/services/sales_trainer_revision_adapter.py": {

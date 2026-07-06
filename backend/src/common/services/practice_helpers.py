@@ -90,15 +90,15 @@ class PracticeRetryEntryAssembler:
             goal = cls._sanitize_text(focus_intent.get("goal"), max_length=500)
             if task_id is None and goal is None:
                 return None
-            sanitized: dict[str, Any] = {"version": "training_task_focus_v1"}
+            task_focus: dict[str, Any] = {"version": "training_task_focus_v1"}
             if task_id is not None:
-                sanitized["training_task_id"] = task_id
+                task_focus["training_task_id"] = task_id
             if goal is not None:
-                sanitized["goal"] = goal
+                task_focus["goal"] = goal
             focus_text = cls._sanitize_text(focus_intent.get("focus_intent"), max_length=120)
             if focus_text is not None:
-                sanitized["focus_intent"] = focus_text
-            return sanitized
+                task_focus["focus_intent"] = focus_text
+            return task_focus
 
         main_issue = cls._filter_retry_focus_fields(
             focus_intent.get("main_issue"),

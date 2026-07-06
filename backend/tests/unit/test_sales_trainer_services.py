@@ -8,18 +8,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
 from common.error_handling.result import Result
-from curriculum_practice.models import QuestionCategory, QuestionItem
+from curriculum_practice.models import LearningContent, QuestionCategory, QuestionItem
 from sales_trainer.models import (
     SalesTrainerAudioScorePrompt,
     SalesTrainerAudioScoreResult,
     SalesTrainerAudioSubmission,
     SalesTrainerAudioTranscript,
+    SalesTrainerExamPaper,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
     SalesTrainerUnit,
 )
 from sales_trainer.schemas import (
     AudioSubmissionCreate,
+    NewcomerPathConfigSaveRequest,
     QuizAnswerSubmit,
     QuizAttemptCreate,
     SalesTrainerMaterialCreate,
@@ -39,6 +41,7 @@ from sales_trainer.services.deucate_scoring_service import (
 )
 from sales_trainer.services.material_service import SalesTrainerMaterialService
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
 from sales_trainer.services.path_service import SalesTrainerPathService
 from sales_trainer.services.question_bank import QuestionBankAdapter
 from sales_trainer.services.quiz_service import QuizService, QuizServiceError
@@ -78,6 +81,29 @@ class FakeScoringService:
             error_code=None,
             error_message=None,
             latency_ms=12,
+        )
+
+
+class PromptSnapshotScoringService:
+    async def score_audio(self, **kwargs) -> AudioScoreOutcome:
+        prompt = kwargs["prompt"]
+        assert prompt.system_prompt == "你是销售训练评分员。"
+        assert prompt.scoring_template == "请评分：{transcript}"
+        assert prompt.version == 1
+        assert kwargs["pass_threshold"] == 80
+        return AudioScoreOutcome(
+            prompt_hash="hash-snapshot-score",
+            deucate_model="fake-deucate",
+            total_score=86,
+            passed=True,
+            summary="使用提交时快照评分。",
+            strengths=["快照稳定"],
+            improvements=[],
+            dimension_scores={"content_accuracy": 86},
+            raw_response={"prompt_version": prompt.version},
+            error_code=None,
+            error_message=None,
+            latency_ms=10,
         )
 
 
@@ -843,6 +869,26 @@ async def test_should_project_sales_trainer_path_with_unlock_progress(
         status="published",
         usage_scope="sales_trainer",
     )
+    first_content = LearningContent(
+        learning_content_id=str(uuid.uuid4()),
+        title="产品定位学习内容",
+        summary="产品定位学习内容。",
+        owner="新人销售闯关",
+        source="unit_test",
+        status="published",
+        created_by=str(test_user.user_id),
+        updated_by=str(test_user.user_id),
+    )
+    second_content = LearningContent(
+        learning_content_id=str(uuid.uuid4()),
+        title="价值表达学习内容",
+        summary="价值表达学习内容。",
+        owner="新人销售闯关",
+        source="unit_test",
+        status="published",
+        created_by=str(test_user.user_id),
+        updated_by=str(test_user.user_id),
+    )
     first_unit = SalesTrainerUnit(
         unit_id="path-unit-1",
         name="第一关：产品定位",
@@ -851,7 +897,7 @@ async def test_should_project_sales_trainer_path_with_unlock_progress(
             "quiz": {"pass_threshold": 10},
             "path": {
                 "enabled": True,
-                "path_key": "new_seller",
+                "path_key": "newcomer_training_path_v1",
                 "path_title": "新人销售闯关",
                 "goal_title": "掌握首次客户沟通",
                 "level_title": "第一关：产品定位",
@@ -859,6 +905,17 @@ async def test_should_project_sales_trainer_path_with_unlock_progress(
                 "completion_rule": "passed",
             },
         },
+        status="published",
+        created_by=test_user.user_id,
+        updated_by=test_user.user_id,
+    )
+    first_paper = SalesTrainerExamPaper(
+        paper_id=str(uuid.uuid4()),
+        paper_key="path-unit-1-paper",
+        title="产品定位考卷",
+        module_key="business_skills",
+        unit_id=first_unit.unit_id,
+        pass_threshold=10,
         status="published",
         created_by=test_user.user_id,
         updated_by=test_user.user_id,
@@ -871,7 +928,7 @@ async def test_should_project_sales_trainer_path_with_unlock_progress(
             "quiz": {"pass_threshold": 10},
             "path": {
                 "enabled": True,
-                "path_key": "new_seller",
+                "path_key": "newcomer_training_path_v1",
                 "path_title": "新人销售闯关",
                 "goal_title": "掌握首次客户沟通",
                 "level_title": "第二关：价值表达",
@@ -884,7 +941,29 @@ async def test_should_project_sales_trainer_path_with_unlock_progress(
         created_by=test_user.user_id,
         updated_by=test_user.user_id,
     )
-    test_db.add_all([category, question, first_unit, second_unit])
+    second_paper = SalesTrainerExamPaper(
+        paper_id=str(uuid.uuid4()),
+        paper_key="path-unit-2-paper",
+        title="价值表达考卷",
+        module_key="elevator_pitch",
+        unit_id=second_unit.unit_id,
+        pass_threshold=10,
+        status="published",
+        created_by=test_user.user_id,
+        updated_by=test_user.user_id,
+    )
+    test_db.add_all(
+        [
+            category,
+            question,
+            first_content,
+            second_content,
+            first_unit,
+            second_unit,
+            first_paper,
+            second_paper,
+        ]
+    )
     await test_db.flush()
     await UnitService(test_db)._replace_questions(
         first_unit.unit_id,
@@ -903,6 +982,46 @@ async def test_should_project_sales_trainer_path_with_unlock_progress(
         ],
     )
     await test_db.commit()
+
+    path_config_service = SalesTrainerPathConfigService(test_db)
+    await path_config_service.save_config(
+        NewcomerPathConfigSaveRequest.model_validate(
+            {
+                "path_key": "newcomer_training_path_v1",
+                "title": "新人销售闯关",
+                "goal_title": "掌握首次客户沟通",
+                "reason": "发布测试路径 active revision",
+                "modules": [
+                    {
+                        "module_key": "business_skills",
+                        "module_type": "article_exam",
+                        "order_index": 1,
+                        "title": "第一关：产品定位",
+                        "target_unit_id": first_unit.unit_id,
+                        "learning_content_id": first_content.learning_content_id,
+                        "exam_paper_id": first_paper.paper_id,
+                        "completion_rule": "passed",
+                    },
+                    {
+                        "module_key": "elevator_pitch",
+                        "module_type": "article_exam",
+                        "order_index": 2,
+                        "title": "第二关：价值表达",
+                        "target_unit_id": second_unit.unit_id,
+                        "learning_content_id": second_content.learning_content_id,
+                        "exam_paper_id": second_paper.paper_id,
+                        "unlock_after_unit_ids": [first_unit.unit_id],
+                        "completion_rule": "passed",
+                    },
+                ],
+            }
+        ),
+        actor=test_user,
+    )
+    await path_config_service.publish_config(
+        actor=test_user,
+        reason="测试路径 active revision 生效",
+    )
 
     paths_before = await SalesTrainerPathService(test_db).list_paths_for_user(
         str(test_user.user_id)
@@ -943,7 +1062,7 @@ async def test_should_project_sales_trainer_path_with_unlock_progress(
         "title": "下一关：第二关：价值表达",
         "reason": "本关还没有训练证据。",
         "action_label": "开始做题",
-        "target_path": "/sales-trainer/quiz/path-unit-2",
+        "target_path": "/sales-trainer/business-skills",
         "unit_id": "path-unit-2",
         "level_title": "第二关：价值表达",
         "recommendation_kind": "start_level",
@@ -1483,3 +1602,85 @@ async def test_should_require_latest_material_confirmation_for_ppt_submission(
         submission.score_scheme_snapshot["learner_rubric"]["criteria"][0]["label"]
         == "结构"
     )
+    assert (
+        submission.score_scheme_snapshot["prompt_snapshot"]["system_prompt"]
+        == "你是销售训练评分员。"
+    )
+    assert (
+        submission.score_scheme_snapshot["prompt_snapshot"]["scoring_template"]
+        == "请评分：{transcript}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_should_score_audio_with_submission_prompt_snapshot(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="PPT 讲解评分方案",
+        purpose="ppt_pitch",
+        system_prompt="你是销售训练评分员。",
+        scoring_template="请评分：{transcript}",
+        output_schema={},
+        learner_rubric={
+            "visible_to_learner": True,
+            "criteria": [{"key": "structure", "label": "结构", "weight": 40}],
+        },
+        version=1,
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="PPT 演练",
+        unit_type="audio_scoring",
+        config={
+            "audio": {
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 80,
+                "purpose": "general_audio_scoring",
+            }
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    test_db.add_all([admin, learner, prompt, unit])
+    await test_db.commit()
+
+    service = AudioSubmissionService(
+        test_db,
+        transcription_service=FakeTranscriptionService(),
+        scoring_service=PromptSnapshotScoringService(),
+    )
+    submission = await service.create_submission(
+        AudioSubmissionCreate(
+            unit_id=unit.unit_id,
+            purpose="general_audio_scoring",
+            original_filename="ppt-recording.wav",
+            content_type="audio/wav",
+            size_bytes=1024,
+            storage_key="/tmp/ppt-recording.wav",
+            auto_process=False,
+        ),
+        actor=learner,
+    )
+
+    prompt.system_prompt = "新版评分员指令。"
+    prompt.scoring_template = "新版模板：{transcript}"
+    prompt.version = 99
+    await test_db.commit()
+
+    scored = await service.process_submission(submission.submission_id, actor=learner)
+    scores, total = await service.list_score_results(
+        submission_id=submission.submission_id
+    )
+
+    assert scored.status == "scored"
+    assert total == 1
+    assert scores[0].prompt_version == 1
+    assert scores[0].prompt_hash == "hash-snapshot-score"

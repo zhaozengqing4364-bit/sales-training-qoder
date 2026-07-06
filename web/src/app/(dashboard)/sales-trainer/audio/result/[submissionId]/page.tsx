@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { useSalesTrainerSubmissionPoll } from "@/hooks/use-sales-trainer-submission-poll";
-import { api } from "@/lib/api/client";
+import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { SalesTrainerAudioSubmission } from "@/lib/api/types";
 import {
     formatPassThresholdLine,
@@ -20,6 +20,8 @@ import {
 } from "@/lib/sales-trainer/learner-presenter";
 
 import { SalesTrainerNextStepPanel } from "../../../next-step-panel";
+
+const PASS_THRESHOLD_DIAGNOSTIC_TITLE = "评分标准配置不可用";
 
 function formatFileSize(sizeBytes: number): string {
     if (sizeBytes >= 1024 * 1024) {
@@ -238,6 +240,7 @@ export default function SalesTrainerAudioResultPage() {
         refresh,
     } = useSalesTrainerSubmissionPoll(params.submissionId);
     const [passThreshold, setPassThreshold] = useState<number | null>(null);
+    const [passThresholdError, setPassThresholdError] = useState<string | null>(null);
 
     useEffect(() => {
         let isMounted = true;
@@ -246,6 +249,7 @@ export default function SalesTrainerAudioResultPage() {
             if (!submission?.unit_id) {
                 if (isMounted) {
                     setPassThreshold(null);
+                    setPassThresholdError(null);
                 }
                 return;
             }
@@ -253,11 +257,18 @@ export default function SalesTrainerAudioResultPage() {
             try {
                 const unit = await api.salesTrainer.getUnit(submission.unit_id);
                 if (isMounted) {
-                    setPassThreshold(getAudioPassThreshold(unit));
+                    const threshold = getAudioPassThreshold(unit);
+                    setPassThreshold(threshold);
+                    setPassThresholdError(
+                        threshold === null
+                            ? "训练单元缺少语音作业通过线配置，页面不会使用默认分数兜底。"
+                            : null,
+                    );
                 }
-            } catch {
+            } catch (loadError) {
                 if (isMounted) {
-                    setPassThreshold(70);
+                    setPassThreshold(null);
+                    setPassThresholdError(getApiErrorMessage(loadError));
                 }
             }
         }
@@ -278,10 +289,30 @@ export default function SalesTrainerAudioResultPage() {
         return <div className="py-12 text-center text-sm text-slate-500">正在加载语音作业反馈...</div>;
     }
 
+    if (error && !submission) {
+        return (
+            <GlassCard className="space-y-4 p-6">
+                <div>
+                    <h1 className="text-lg font-bold text-red-900">语音作业结果加载失败</h1>
+                    <p className="mt-2 text-sm text-red-700">{error}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <Button type="button" className="rounded-full" onClick={() => void refresh()}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        重新加载结果
+                    </Button>
+                    <Button asChild variant="outline" className="rounded-full">
+                        <Link href="/sales-trainer">返回新人训练路径</Link>
+                    </Button>
+                </div>
+            </GlassCard>
+        );
+    }
+
     if (!submission) {
         return (
             <GlassCard className="space-y-4 p-6">
-                <p className="text-sm text-red-700">{error || "语音作业结果不存在。"}</p>
+                <p className="text-sm text-red-700">语音作业结果不存在。</p>
                 <Button asChild className="rounded-full">
                     <Link href="/sales-trainer">返回新人训练路径</Link>
                 </Button>
@@ -338,6 +369,15 @@ export default function SalesTrainerAudioResultPage() {
                 <GlassCard className="p-5">
                     <p className="text-sm text-slate-600">{formatPassThresholdLine(passThreshold)}</p>
                 </GlassCard>
+            ) : null}
+
+            {passThresholdError ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <p className="font-semibold text-amber-900">{PASS_THRESHOLD_DIAGNOSTIC_TITLE}</p>
+                    <p className="mt-1">
+                        语音结果已加载，但本关通过线不可用：{passThresholdError}
+                    </p>
+                </div>
             ) : null}
 
             <GlassCard className="grid gap-4 p-6 md:grid-cols-3">

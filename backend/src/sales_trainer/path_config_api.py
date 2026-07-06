@@ -22,13 +22,18 @@ from sales_trainer.permissions import (
     can_manage_sales_trainer_prompts,
 )
 from sales_trainer.schemas import (
+    NewcomerDeadDataDiagnosticsResponse,
     NewcomerPathConfigActionRequest,
     NewcomerPathConfigResponse,
     NewcomerPathConfigSaveRequest,
+    NewcomerPathPublishPreviewResponse,
     NewcomerPathRevisionListResponse,
     NewcomerPathRevisionSummary,
     NewcomerPathRollbackPreviewRequest,
     NewcomerPathRollbackPreviewResponse,
+)
+from sales_trainer.services.newcomer_dead_data_diagnostics_service import (
+    NewcomerDeadDataDiagnosticsService,
 )
 from sales_trainer.services.path_config_models import SalesTrainerPathConfigError
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
@@ -91,8 +96,8 @@ async def save_path_config(
     # route's stricter checks. We diff against the currently-persisted
     # payload to detect only changed fields.
     service = SalesTrainerPathConfigService(db)
-    current_response = await service.get_config()
     try:
+        current_response = await service.get_config()
         changed_high_risk = _changed_ai_coach_high_risk_fields(
             current_response.get("path"),
             payload,
@@ -102,6 +107,12 @@ async def save_path_config(
             "[AI_COACH_CONFIG_RBAC_CHECK_FAILED]",
             status_code=500,
             message="AI 教练配置权限校验失败，已拒绝保存。",
+        )
+    except SalesTrainerPathConfigError as exc:
+        return _api_error(
+            exc.code,
+            status_code=exc.status_code,
+            message=exc.message,
         )
     if changed_high_risk and not can_manage_sales_trainer_prompts(current_user):
         return _api_error(
@@ -125,6 +136,41 @@ async def save_path_config(
         )
     return success_response(
         NewcomerPathConfigResponse.model_validate(response).model_dump(),
+        trace_id=trace_id,
+    )
+
+
+@newcomer_admin_path_config_router.post("/path-config/publish/preview", response_model=None)
+async def preview_path_config_publish(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if error := _require_manager(current_user):
+        return error
+    service = SalesTrainerPathConfigService(db)
+    trace_id = get_trace_id()
+    try:
+        changed_high_risk = await changed_ai_coach_high_risk_fields_for_publish(db)
+        if changed_high_risk and not can_manage_sales_trainer_prompts(current_user):
+            return _api_error(
+                "[PERMISSION_DENIED]",
+                status_code=403,
+                message=(
+                    "无权预览发布以下 AI 教练高风险字段："
+                    + ", ".join(sorted(changed_high_risk))
+                ),
+                trace_id=trace_id,
+            )
+        preview = await service.publish_preview()
+    except SalesTrainerPathConfigError as exc:
+        return _api_error(
+            exc.code,
+            status_code=exc.status_code,
+            message=exc.message,
+            trace_id=trace_id,
+        )
+    return success_response(
+        NewcomerPathPublishPreviewResponse.model_validate(preview).model_dump(),
         trace_id=trace_id,
     )
 
@@ -187,6 +233,22 @@ async def list_path_config_revisions(
     ]
     return success_response(
         NewcomerPathRevisionListResponse(items=items, total=len(items))
+    )
+
+
+@newcomer_admin_path_config_router.get(
+    "/path-config/dead-data-diagnostics",
+    response_model=None,
+)
+async def get_path_config_dead_data_diagnostics(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if error := _require_manager(current_user):
+        return error
+    report = await NewcomerDeadDataDiagnosticsService(db).build_report()
+    return success_response(
+        NewcomerDeadDataDiagnosticsResponse.model_validate(report).model_dump()
     )
 
 

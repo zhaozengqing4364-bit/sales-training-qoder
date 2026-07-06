@@ -17,7 +17,7 @@ from sales_trainer.services.ai_coach_chat_generation_parser import (
 from sales_trainer.services.ai_coach_model_config import (
     AiCoachModelConfigError,
     model_config_contract_payload,
-    resolve_ai_coach_llm_model_config,
+    resolve_ai_coach_llm_model_config_from_db,
 )
 from sales_trainer.services.ai_coach_session_service import AiCoachSessionService
 from sales_trainer.services.prompt_template_revision_resolver import (
@@ -47,7 +47,11 @@ class AiCoachChatPromptCompiler:
         try:
             resolution = await resolver.resolve(
                 template_id=str(session.prompt_template_id),
-                prompt_revision_id=session.prompt_revision_id,
+                prompt_revision_id=(
+                    str(session.prompt_revision_id)
+                    if session.prompt_revision_id is not None
+                    else None
+                ),
             )
         except PromptTemplateRevisionResolverError as exc:
             raise self._resolver_error(exc) from exc
@@ -64,7 +68,10 @@ class AiCoachChatPromptCompiler:
             )
         if model_config is _MODEL_CONFIG_UNSET:
             try:
-                model_config = resolve_ai_coach_llm_model_config(config.generation_model)
+                model_config = await resolve_ai_coach_llm_model_config_from_db(
+                    self._db,
+                    config.generation_model,
+                )
             except AiCoachModelConfigError as exc:
                 raise AiCoachChatGenerationError(exc.code, exc.message, 409) from exc
         compile_result = PromptTemplateService(self._db).compile_runtime_prompt_contract(
@@ -89,7 +96,11 @@ class AiCoachChatPromptCompiler:
         user_message: str,
         history: list[SalesTrainerAiCoachChatMessage],
     ) -> dict[str, Any]:
-        article = session.article_snapshot or {}
+        article: dict[str, Any] = (
+            dict(session.article_snapshot)
+            if isinstance(session.article_snapshot, dict)
+            else {}
+        )
         chapters = article.get("chapters") if isinstance(article, dict) else []
         raw_path_config = getattr(session, "path_config_snapshot", None)
         path_config = (

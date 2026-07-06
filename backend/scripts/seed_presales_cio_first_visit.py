@@ -338,7 +338,7 @@ async def _upsert_runtime_profile(
     profile.is_active = True
     profile.is_default = False
     profile.voice_mode = "stepfun_realtime"
-    profile.model_name = "step-audio-2"
+    profile.model_name = "stepaudio-2.5-realtime"
     profile.voice_name = "qingchunshaonv"
     profile.temperature = 0.35
     profile.system_instruction_template = (

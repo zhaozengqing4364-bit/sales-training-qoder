@@ -10,6 +10,8 @@ Response Format:
 """
 
 from datetime import UTC, datetime
+from typing import Any, cast
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -68,7 +70,7 @@ class UserMeUpdateRequest(BaseModel):
 # ========== Helper Functions ==========
 
 
-def success_response(data, trace_id: str = None):
+def success_response(data: Any, trace_id: str | None = None) -> dict[str, Any]:
     """Create unified success response"""
 
     return {
@@ -78,7 +80,9 @@ def success_response(data, trace_id: str = None):
     }
 
 
-def error_response(error_code: str, message: str = None, trace_id: str = None):
+def error_response(
+    error_code: str, message: str | None = None, trace_id: str | None = None
+) -> dict[str, Any]:
     """Create unified error response"""
 
     return {
@@ -162,7 +166,7 @@ def _build_user_me_response(current_user: User) -> UserMeResponse:
 async def get_current_user_info(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Get current user information
 
@@ -191,7 +195,7 @@ async def update_current_user_info(
     request: UserMeUpdateRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Update current user profile fields.
 
@@ -246,7 +250,7 @@ async def update_current_user_info(
 async def get_my_training_preferences(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Return current user's saved training preferences only."""
     try:
         result = await db.execute(
@@ -268,7 +272,7 @@ async def update_my_training_preferences(
     request: UserTrainingPreferencesUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Upsert current user's training preferences; user_id is never accepted."""
     try:
         result = await db.execute(
@@ -285,13 +289,23 @@ async def update_my_training_preferences(
             )
             db.add(preferences)
 
-        preferences.voice_mode = request.voice_mode
-        preferences.agent_id = _normalize_training_preference_id(request.agent_id)
-        preferences.persona_id = _normalize_training_preference_id(request.persona_id)
-        preferences.presentation_id = _normalize_training_preference_id(
-            request.presentation_id
+        setattr(preferences, "voice_mode", request.voice_mode)
+        setattr(
+            preferences,
+            "agent_id",
+            _normalize_training_preference_id(request.agent_id),
         )
-        preferences.updated_at = now
+        setattr(
+            preferences,
+            "persona_id",
+            _normalize_training_preference_id(request.persona_id),
+        )
+        setattr(
+            preferences,
+            "presentation_id",
+            _normalize_training_preference_id(request.presentation_id),
+        )
+        setattr(preferences, "updated_at", now)
 
         await db.commit()
         await db.refresh(preferences)
@@ -311,7 +325,7 @@ async def update_my_training_preferences(
 async def get_my_open_intervention(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Return the latest unresolved manager intervention for the current learner only."""
     try:
         result = await db.execute(
@@ -344,7 +358,7 @@ async def get_my_history(
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Get current user's practice history with report summary (Story 3.2).
 
@@ -367,7 +381,7 @@ async def get_my_history(
         )
         result = await history_service.get_user_history_with_report_summary(
             db=db,
-            user_id=current_user.user_id,
+            user_id=cast(UUID, current_user.user_id),
             page=page,
             page_size=page_size,
             scenario_type=normalized_scenario_type,
@@ -376,10 +390,10 @@ async def get_my_history(
         if not result.is_success:
             return error_response(result.fallback or "[HISTORY_FAILED]")
 
-        data = result.value
+        data = result.unwrap()
 
         # Convert dataclasses to dicts for JSON serialization
-        sessions = []
+        sessions: list[dict[str, Any]] = []
         for session in data["sessions"]:
             sessions.append(
                 {

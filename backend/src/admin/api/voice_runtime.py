@@ -102,7 +102,7 @@ class RuntimeProfilePayload(BaseModel):
     voice_mode: Literal["legacy", "stepfun_realtime"] = Field(
         default="stepfun_realtime"
     )
-    model_name: str = Field(default="step-audio-2", max_length=100)
+    model_name: str = Field(default="stepaudio-2.5-realtime", max_length=100)
     voice_name: str = Field(default="qingchunshaonv", max_length=100)
     temperature: float = Field(default=0.7, ge=0, le=2)
     input_audio_format: str = Field(default="pcm16", max_length=20)
@@ -188,7 +188,7 @@ async def list_runtime_profiles(
     only_active: bool = Query(False),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     admin_error = _require_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
@@ -236,7 +236,7 @@ async def create_runtime_profile(
     payload: RuntimeProfilePayload,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     admin_error = _require_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
@@ -264,7 +264,7 @@ async def update_runtime_profile(
     payload: RuntimeProfileUpdatePayload,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     admin_error = _require_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
@@ -299,7 +299,7 @@ async def delete_runtime_profile(
     profile_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     admin_error = _require_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
@@ -329,7 +329,7 @@ async def get_agent_voice_policy(
     agent_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     admin_error = _require_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
@@ -345,7 +345,7 @@ async def upsert_agent_voice_policy(
     payload: AgentVoicePolicyPayload,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     admin_error = _require_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
@@ -382,7 +382,7 @@ async def preview_effective_agent_policy(
     runtime_profile_id: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     admin_error = _require_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error

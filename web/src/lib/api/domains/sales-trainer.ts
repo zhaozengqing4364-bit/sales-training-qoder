@@ -35,6 +35,7 @@ import type {
     SalesTrainerRegradePreviewResponse,
     SalesTrainerRegradeRunRequest,
     SalesTrainerRegradeRunResponse,
+    SalesTrainerRoleplayObservationSessionResponse,
     SalesTrainerSettings,
     SalesTrainerTrainingRecord,
     SalesTrainerTrainingRecordListResponse,
@@ -45,6 +46,13 @@ import type {
     SalesTrainerUnitListResponse,
     SalesTrainerUnitUpdateRequest,
 } from "../types/sales-trainer";
+import type {
+    RealtimeRoleplayStartRequest,
+    RealtimeRoleplayStartResponse,
+    TrainingJourneyAnalyticsQuery,
+    TrainingJourneyAnalyticsResponse,
+    TrainingJourneyResponse,
+} from "../types";
 import type { ApiRequest, ApiUpload } from "./shared";
 import { buildQueryString } from "./shared";
 import { createAdminNewcomerTrainingDomain } from "./newcomer-training";
@@ -103,6 +111,17 @@ export function createSalesTrainerDomain({
 
         listPaths: async () => {
             return request<SalesTrainerPathListResponse>("/sales-trainer/paths");
+        },
+
+        getJourney: async () => {
+            return request<TrainingJourneyResponse>("/sales-trainer/journey");
+        },
+
+        startRealtimeRoleplay: async (payload: RealtimeRoleplayStartRequest = {}) => {
+            return request<RealtimeRoleplayStartResponse>("/sales-trainer/realtime-roleplay/start", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
         },
 
         getUnit: async (unitId: string) => {
@@ -382,6 +401,8 @@ export function createAdminSalesTrainerDomain({
             adminNewcomerTrainingDomain.assignBusinessEtiquetteRetraining,
         getBusinessEtiquetteCapabilities:
             adminNewcomerTrainingDomain.getBusinessEtiquetteCapabilities,
+        getBusinessEtiquetteLearningUnits:
+            adminNewcomerTrainingDomain.getBusinessEtiquetteLearningUnits,
         saveBusinessEtiquetteCapabilities:
             adminNewcomerTrainingDomain.saveBusinessEtiquetteCapabilities,
         publishBusinessEtiquetteCapability:
@@ -586,6 +607,11 @@ export function createAdminSalesTrainerDomain({
             user_id?: string;
             unit_id?: string;
             material_version_id?: string;
+            training_stage?: string;
+            module_key?: string;
+            learner_level?: string;
+            role_level?: string;
+            status?: string;
             limit?: number;
             offset?: number;
         }) => {
@@ -593,6 +619,11 @@ export function createAdminSalesTrainerDomain({
                 user_id: params?.user_id,
                 unit_id: params?.unit_id,
                 material_version_id: params?.material_version_id,
+                training_stage: params?.training_stage,
+                module_key: params?.module_key,
+                learner_level: params?.learner_level,
+                role_level: params?.role_level,
+                status: params?.status,
                 limit: params?.limit,
                 offset: params?.offset,
             });
@@ -604,6 +635,20 @@ export function createAdminSalesTrainerDomain({
         getManagerDashboard: async () => {
             return request<SalesTrainerManagerDashboard>(
                 "/admin/sales-trainer/manager-dashboard",
+            );
+        },
+
+        getJourneyAnalytics: async (params?: TrainingJourneyAnalyticsQuery) => {
+            const query = buildQueryString({
+                department: params?.department,
+                training_stage: params?.training_stage,
+                module_key: params?.module_key,
+                learner_level: params?.learner_level,
+                role_level: params?.role_level,
+                limit: params?.limit,
+            });
+            return request<TrainingJourneyAnalyticsResponse>(
+                `/admin/sales-trainer/journeys/analytics${query}`,
             );
         },
 
@@ -619,6 +664,12 @@ export function createAdminSalesTrainerDomain({
         ) => {
             return request<SalesTrainerTrainingRecord>(
                 `/admin/sales-trainer/training-records/detail/${encodeURIComponent(recordType)}/${encodeURIComponent(recordId)}`,
+            );
+        },
+
+        getRealtimeRoleplayObservations: async (sessionId: string) => {
+            return request<SalesTrainerRoleplayObservationSessionResponse>(
+                `/admin/sales-trainer/training-records/realtime-roleplay/${encodeURIComponent(sessionId)}/observations`,
             );
         },
 

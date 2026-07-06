@@ -1,14 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Save, Send, Sparkles } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-layout-shells";
+import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { AiCoachAdminConfigLike } from "@/lib/api/types";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
+import type { AiCoachAdminConfigLike, SalesTrainerAdminCapabilities } from "@/lib/api/types";
 
 type CoachMode = "single_choice_drill" | "multiple_choice_drill" | "short_answer_drill" | "mixed_drill";
 type InteractionType = "single_choice" | "multiple_choice" | "short_answer";
@@ -536,6 +539,7 @@ function normalize(raw: unknown): AiCoachAdminConfig {
 }
 
 export default function AdminAiCoachConfigPage() {
+    const pathname = usePathname();
     const [moduleKey] = useState("business_skills");
     const [config, setConfig] = useState<AiCoachAdminConfig>(DEFAULT_CONFIG);
     const [isLoading, setIsLoading] = useState(true);
@@ -544,8 +548,29 @@ export default function AdminAiCoachConfigPage() {
     const [error, setError] = useState<string | null>(null);
     const [remediation, setRemediation] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
+    const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessAiCoach = isSalesTrainerAdminPathAllowedForCapabilities(pathname, adminCapabilities);
+
+    const loadCapabilities = useCallback(async () => {
+        setIsCapabilityLoading(true);
+        setCapabilityError(null);
+        try {
+            const result = await api.admin.salesTrainer.getCapabilities();
+            setAdminCapabilities(result);
+        } catch (loadError) {
+            setAdminCapabilities(null);
+            setCapabilityError(getApiErrorMessage(loadError));
+        } finally {
+            setIsCapabilityLoading(false);
+        }
+    }, []);
 
     const load = useCallback(async () => {
+        if (!canAccessAiCoach) {
+            return;
+        }
         setIsLoading(true);
         setError(null);
         setRemediation(null);
@@ -561,36 +586,25 @@ export default function AdminAiCoachConfigPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [moduleKey]);
+    }, [canAccessAiCoach, moduleKey]);
 
     useEffect(() => {
-        let isActive = true;
-        void requestConfig(moduleKey)
-            .then((response) => {
-                if (!isActive) {
-                    return;
-                }
-                setConfig(response);
-            })
-            .catch((loadError) => {
-                if (!isActive) {
-                    return;
-                }
-                const message = getApiErrorMessage(loadError);
-                setError(message);
-                setRemediation(
-                    "无法加载 AI 教练配置。请检查路径配置中心是否已发布商务技巧模块，或联系管理员。",
-                );
-            })
-            .finally(() => {
-                if (isActive) {
-                    setIsLoading(false);
-                }
-            });
-        return () => {
-            isActive = false;
-        };
-    }, [moduleKey]);
+        void loadCapabilities();
+    }, [loadCapabilities]);
+
+    useEffect(() => {
+        if (isCapabilityLoading) {
+            return;
+        }
+        if (!canAccessAiCoach) {
+            setError(null);
+            setRemediation(null);
+            setActionMessage(null);
+            setIsLoading(false);
+            return;
+        }
+        void load();
+    }, [canAccessAiCoach, isCapabilityLoading, load]);
 
     const validationError = useMemo(() => validate(config), [config]);
     const hasRemediation = remediation !== null;
@@ -674,6 +688,9 @@ export default function AdminAiCoachConfigPage() {
     }
 
     async function save() {
+        if (!canAccessAiCoach) {
+            return;
+        }
         if (validationError) {
             setError(validationError);
             return;
@@ -695,6 +712,9 @@ export default function AdminAiCoachConfigPage() {
     }
 
     async function publish() {
+        if (!canAccessAiCoach) {
+            return;
+        }
         if (validationError) {
             setError(validationError);
             return;
@@ -721,6 +741,7 @@ export default function AdminAiCoachConfigPage() {
             <AdminPageHeader
                 title="AI 教练配置"
                 description="管理商务技巧模块 AI 教练的开关、训练模式、轮数、掌握阈值和 prompt 绑定。"
+                secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
             />
 
             {error ? (
@@ -738,7 +759,26 @@ export default function AdminAiCoachConfigPage() {
                 </GlassCard>
             ) : null}
 
-            {isLoading ? (
+            {isCapabilityLoading ? (
+                <div className="h-64 animate-pulse rounded-3xl border border-white/60 bg-white/60" />
+            ) : capabilityError || !canAccessAiCoach ? (
+                <GlassCard className="space-y-3 border-amber-100 bg-amber-50 p-6 text-amber-800">
+                    <p className="font-semibold text-amber-950">AI 教练配置权限不足</p>
+                    <p className="text-sm leading-6">
+                        当前页不会在权限未确认时读取 AI 教练配置或展示保存、发布入口。请联系管理员开通内容管理或 Prompt 管理权限后重试。
+                    </p>
+                    {capabilityError ? (
+                        <p className="text-sm font-medium">{capabilityError}</p>
+                    ) : null}
+                    <Button
+                        variant="outline"
+                        className="rounded-full bg-white"
+                        onClick={() => void loadCapabilities()}
+                    >
+                        重新校验权限
+                    </Button>
+                </GlassCard>
+            ) : isLoading ? (
                 <div className="h-64 animate-pulse rounded-3xl border border-white/60 bg-white/60" />
             ) : hasRemediation ? (
                 <GlassCard className="space-y-3 p-6">

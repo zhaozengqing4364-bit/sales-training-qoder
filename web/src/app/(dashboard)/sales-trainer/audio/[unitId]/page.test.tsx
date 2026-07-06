@@ -42,6 +42,10 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("SalesTrainerAudioUploadPage", () => {
     beforeEach(() => {
+        pushMock.mockReset();
+        getUnitBriefMock.mockReset();
+        listPathsMock.mockReset();
+        uploadAudioSubmissionDirectMock.mockReset();
         getUnitBriefMock.mockResolvedValue({
             unit: {
                 unit_id: "audio-unit",
@@ -57,6 +61,7 @@ describe("SalesTrainerAudioUploadPage", () => {
                 questions: [],
             },
             task_brief: {
+                enabled: true,
                 title: "第二关：录音表达",
                 purpose: "上传讲解语音作业。",
                 scenario: "按公司主胶片逻辑完成一次讲解录音。",
@@ -188,7 +193,76 @@ describe("SalesTrainerAudioUploadPage", () => {
             });
         });
         expect(screen.queryByText(/50 秒|最大时长/)).toBeNull();
+        expect(listPathsMock).not.toHaveBeenCalled();
         expect(pushMock).toHaveBeenCalledWith("/sales-trainer/audio/result/submission-1");
+    });
+
+    it("uses unit brief as the only learner source and does not fail when legacy paths are unavailable", async () => {
+        listPathsMock.mockRejectedValue(new Error("legacy paths unavailable"));
+
+        render(<SalesTrainerAudioUploadPage />);
+
+        expect(await screen.findByText("第二关：录音表达")).toBeTruthy();
+        expect(screen.getByText("上传讲解语音作业。")).toBeTruthy();
+        expect(screen.getByText(/本关需达到 80 分通过/)).toBeTruthy();
+        expect(listPathsMock).not.toHaveBeenCalled();
+    });
+
+    it("fails closed when the audio pass threshold is missing", async () => {
+        getUnitBriefMock.mockResolvedValueOnce({
+            unit: {
+                unit_id: "audio-unit",
+                name: "录音单元",
+                description: "录音训练",
+                unit_type: "audio_scoring",
+                config: { audio: { purpose: "ppt_pitch" } },
+                status: "published",
+                created_by: "admin-1",
+                updated_by: "admin-1",
+                created_at: "2026-05-28T00:00:00Z",
+                updated_at: "2026-05-28T00:00:00Z",
+                questions: [],
+            },
+            task_brief: {
+                enabled: true,
+                title: "第二关：录音表达",
+                purpose: "上传讲解语音作业。",
+                scenario: null,
+                instructions: [],
+                success_criteria: [],
+                common_mistakes: [],
+                upload_guidance: null,
+            },
+            materials: [],
+            score_scheme: {
+                prompt_id: "prompt-1",
+                name: "PPT 讲解评分",
+                purpose: "ppt_pitch",
+                version: 1,
+                status: "published",
+                pass_threshold: null,
+                learner_rubric: {
+                    visible_to_learner: true,
+                    criteria: [],
+                    common_mistakes: [],
+                },
+            },
+        });
+
+        render(<SalesTrainerAudioUploadPage />);
+
+        expect(await screen.findByText("评分标准配置缺失")).toBeTruthy();
+        expect(screen.queryByText(/本关需达到 70 分通过/)).toBeNull();
+
+        const file = new File(["audio"], "pitch.wav", { type: "audio/wav" });
+        fireEvent.change(screen.getByLabelText("选择音频文件"), {
+            target: { files: [file] },
+        });
+
+        const uploadButton = await screen.findByRole("button", { name: /上传并开始评分/ });
+        expect(uploadButton).toHaveProperty("disabled", true);
+        fireEvent.click(uploadButton);
+        expect(uploadAudioSubmissionDirectMock).not.toHaveBeenCalled();
     });
 
     it("renders markdown training material preview without forcing a download", async () => {

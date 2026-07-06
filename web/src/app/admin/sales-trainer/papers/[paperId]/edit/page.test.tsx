@@ -5,6 +5,7 @@ import NewcomerPaperEditPage from "./page";
 import { NEWCOMER_QUESTION_TAG } from "@/lib/sales-trainer/question-scope";
 
 const {
+    getCapabilitiesMock,
     listPapersMock,
     listQuestionsMock,
     pushMock,
@@ -16,6 +17,7 @@ const {
     const toastError = vi.fn();
     const toastSuccess = vi.fn();
     return {
+        getCapabilitiesMock: vi.fn(),
         listPapersMock: vi.fn(),
         listQuestionsMock: vi.fn(),
         pushMock: vi.fn(),
@@ -54,6 +56,7 @@ vi.mock("@/lib/api/client", async () => {
                 },
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     listQuestions: listQuestionsMock,
                 },
             },
@@ -63,12 +66,30 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("NewcomerPaperEditPage", () => {
     beforeEach(() => {
+        getCapabilitiesMock.mockReset();
         listPapersMock.mockReset();
         listQuestionsMock.mockReset();
         pushMock.mockReset();
         toastErrorMock.mockReset();
         toastSuccessMock.mockReset();
         updatePaperMock.mockReset();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "content_admin",
+            role_label: "内容管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: true,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
         listPapersMock.mockResolvedValue({
             items: [{
                 paper_id: "paper-1",
@@ -102,6 +123,35 @@ describe("NewcomerPaperEditPage", () => {
             total: 2,
         });
         updatePaperMock.mockResolvedValue({ paper_id: "paper-1" });
+    });
+
+    it("fails closed before loading paper data without content management permission", async () => {
+        getCapabilitiesMock.mockResolvedValue({
+            role: "viewer",
+            role_label: "只读成员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: false,
+                view_records: true,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
+
+        render(<NewcomerPaperEditPage />);
+
+        expect(await screen.findByText("考卷管理权限不足")).toBeTruthy();
+        expect(listPapersMock).not.toHaveBeenCalled();
+        expect(listQuestionsMock).not.toHaveBeenCalled();
+        expect(updatePaperMock).not.toHaveBeenCalled();
+        expect(screen.queryByLabelText("考卷标题")).toBeNull();
+        expect(screen.queryByRole("button", { name: "保存草稿" })).toBeNull();
     });
 
     it("updates a draft business skills paper without exposing internal identifiers", async () => {

@@ -8,12 +8,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
-from common.db.models import User
+from common.db.models import PromptTemplate, User
 from curriculum_practice.models import LearningChapter, LearningContent
+from prompt_templates.models import PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
 from sales_trainer.models import (
     SalesTrainerAssetRevision,
     SalesTrainerExamPaper,
     SalesTrainerUnit,
+)
+from sales_trainer.services.asset_revision_service import (
+    SalesTrainerAssetRevisionService,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
@@ -48,12 +52,92 @@ def _content(content_id: str, *, status: str) -> LearningContent:
     )
 
 
+def _ai_coach_config() -> dict[str, object]:
+    return {
+        "enabled": True,
+        "coach_mode": "mixed_drill",
+        "allowed_interaction_types": ["single_choice", "multiple_choice"],
+        "prompt_template_id": "11111111-1111-1111-1111-111111111111",
+        "prompt_revision_id": None,
+        "prompt_contract_hash": None,
+        "scoring_prompt_template_id": None,
+        "scoring_prompt_revision_id": None,
+        "scoring_contract_hash": None,
+        "min_turns": 3,
+        "max_turns": 10,
+        "mastery_threshold": 90,
+        "output_schema_version": "ai_coach_interaction_v1",
+        "generation_model": None,
+        "scoring_model": None,
+        "retry_policy": {"max_retries": 2, "retry_backoff": 1.0},
+        "failure_behavior": "skip_turn",
+    }
+
+
+def _ai_coach_prompt_template() -> PromptTemplate:
+    return PromptTemplate(
+        id="11111111-1111-1111-1111-111111111111",
+        name="商务技巧 AI 教练对话生成",
+        prompt_type="stage",
+        business_purpose=PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION,
+        category="sales_trainer_ai_coach",
+        template="请根据 {{ module_key }} 和 {{ coach_mode }} 生成教练回复。",
+        variables=["module_key", "coach_mode"],
+        is_active=True,
+        is_default=False,
+        is_system=False,
+    )
+
+
+async def _publish_article_path(
+    test_db: AsyncSession,
+    *,
+    actor: User,
+    unit_id: str,
+    learning_content_id: str,
+    learner_level_required: list[str] | None = None,
+) -> None:
+    await SalesTrainerAssetRevisionService(test_db).create_published_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        payload={
+            "path_key": NEWCOMER_PATH_LOGICAL_ID,
+            "title": "新人训练路径",
+            "enabled": True,
+            "modules": [
+                {
+                    "module_key": "business_skills",
+                    "module_type": "article_exam",
+                    "enabled": True,
+                    "order_index": 2,
+                    "title": "商务技巧",
+                    "target_unit_id": unit_id,
+                    "learning_content_id": learning_content_id,
+                    "learner_level_required": learner_level_required or [],
+                    "completion_rule": "passed",
+                }
+            ],
+        },
+        actor=actor,
+        change_class="semantic",
+        reason="发布商务技巧文章测试路径",
+    )
+    await test_db.commit()
+
+
 @pytest.mark.asyncio
 async def test_should_fetch_newcomer_article_via_api(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
     learner = _user("user")
+    unit = SalesTrainerUnit(
+        unit_id="newcomer-article-api-active-unit",
+        name="商务技巧",
+        unit_type="quiz",
+        status="published",
+        config={},
+    )
     content = _content("newcomer-article-api-content", status="published")
     chapter = LearningChapter(
         chapter_id="newcomer-article-api-chapter",
@@ -62,8 +146,14 @@ async def test_should_fetch_newcomer_article_via_api(
         content="![商务礼仪图](https://example.com/etiquette.png)\n\n确认客户背景。",
         order_index=1,
     )
-    test_db.add_all([learner, content, chapter])
+    test_db.add_all([learner, unit, content, chapter])
     await test_db.commit()
+    await _publish_article_path(
+        test_db,
+        actor=learner,
+        unit_id=unit.unit_id,
+        learning_content_id=content.learning_content_id,
+    )
 
     response = await async_client.get(
         "/api/v1/newcomer-training/modules/business_skills/article",
@@ -110,6 +200,12 @@ async def test_should_fetch_newcomer_article_from_module_binding_via_api(
     )
     test_db.add_all([learner, content, chapter, module_unit])
     await test_db.commit()
+    await _publish_article_path(
+        test_db,
+        actor=learner,
+        unit_id=module_unit.unit_id,
+        learning_content_id=content.learning_content_id,
+    )
 
     response = await async_client.get(
         "/api/v1/newcomer-training/modules/business_skills/article",
@@ -149,6 +245,7 @@ async def test_should_bind_newcomer_article_content_via_admin_api(
                 "module_key": "business_skills",
                 "module_type": "article_exam",
                 "order_index": 2,
+                "ai_coach": _ai_coach_config(),
             }
         },
     )
@@ -162,7 +259,9 @@ async def test_should_bind_newcomer_article_content_via_admin_api(
         created_by=str(admin.user_id),
         updated_by=str(admin.user_id),
     )
-    test_db.add_all([admin, learner, content, chapter, module_unit, paper])
+    test_db.add_all(
+        [admin, learner, content, chapter, module_unit, paper, _ai_coach_prompt_template()]
+    )
     await test_db.commit()
 
     bind_response = await async_client.put(
@@ -192,8 +291,8 @@ async def test_should_bind_newcomer_article_content_via_admin_api(
         "/api/v1/newcomer-training/modules/business_skills/article",
         headers=_auth_headers(learner),
     )
-    assert learner_response.status_code == 404
-    assert learner_response.json()["error"] == "[LEARNING_CONTENT_NOT_PUBLISHED]"
+    assert learner_response.status_code == 409
+    assert learner_response.json()["error"] == "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]"
 
     path_config_response = await async_client.get(
         "/api/v1/admin/newcomer-training/path-config",
@@ -242,6 +341,7 @@ async def test_should_bind_newcomer_article_content_via_admin_api(
                     "target_unit_id": module_unit.unit_id,
                     "learning_content_id": content.learning_content_id,
                     "exam_paper_id": paper.paper_id,
+                    "ai_coach": _ai_coach_config(),
                     "completion_rule": "passed",
                 }
             ],
@@ -288,9 +388,22 @@ async def test_should_reject_draft_newcomer_article_via_api(
     test_db: AsyncSession,
 ) -> None:
     learner = _user("user")
+    unit = SalesTrainerUnit(
+        unit_id="newcomer-article-api-draft-unit",
+        name="商务技巧",
+        unit_type="quiz",
+        status="published",
+        config={},
+    )
     content = _content("newcomer-article-api-draft", status="draft")
-    test_db.add_all([learner, content])
+    test_db.add_all([learner, unit, content])
     await test_db.commit()
+    await _publish_article_path(
+        test_db,
+        actor=learner,
+        unit_id=unit.unit_id,
+        learning_content_id=content.learning_content_id,
+    )
 
     response = await async_client.get(
         "/api/v1/newcomer-training/modules/business_skills/article",
@@ -330,9 +443,22 @@ async def test_should_reject_empty_chapter_newcomer_article_via_api(
     test_db: AsyncSession,
 ) -> None:
     learner = _user("user")
+    unit = SalesTrainerUnit(
+        unit_id="newcomer-article-api-empty-unit",
+        name="商务技巧",
+        unit_type="quiz",
+        status="published",
+        config={},
+    )
     content = _content("newcomer-article-api-empty-chapters", status="published")
-    test_db.add_all([learner, content])
+    test_db.add_all([learner, unit, content])
     await test_db.commit()
+    await _publish_article_path(
+        test_db,
+        actor=learner,
+        unit_id=unit.unit_id,
+        learning_content_id=content.learning_content_id,
+    )
 
     response = await async_client.get(
         "/api/v1/newcomer-training/modules/business_skills/article",
@@ -342,3 +468,116 @@ async def test_should_reject_empty_chapter_newcomer_article_via_api(
 
     assert response.status_code == 409
     assert response.json()["error"] == "[LEARNING_CONTENT_CHAPTERS_MISSING]"
+
+
+@pytest.mark.asyncio
+async def test_should_reject_article_progress_for_content_outside_active_path(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    learner = _user("user")
+    unit = SalesTrainerUnit(
+        unit_id="newcomer-article-api-progress-unit",
+        name="商务技巧",
+        unit_type="quiz",
+        status="published",
+        config={},
+    )
+    bound_content = _content("newcomer-article-bound-for-progress", status="published")
+    bound_chapter = LearningChapter(
+        chapter_id="bound-progress-chapter",
+        learning_content_id=bound_content.learning_content_id,
+        title="路径内章节",
+        content="路径内文章内容。",
+        order_index=1,
+    )
+    outside_content = _content("newcomer-article-outside-progress", status="published")
+    outside_chapter = LearningChapter(
+        chapter_id="outside-progress-chapter",
+        learning_content_id=outside_content.learning_content_id,
+        title="路径外章节",
+        content="路径外文章内容。",
+        order_index=1,
+    )
+    test_db.add_all(
+        [learner, unit, bound_content, bound_chapter, outside_content, outside_chapter]
+    )
+    await test_db.commit()
+    await _publish_article_path(
+        test_db,
+        actor=learner,
+        unit_id=unit.unit_id,
+        learning_content_id=bound_content.learning_content_id,
+    )
+
+    read_response = await async_client.get(
+        "/api/v1/newcomer-training/modules/business_skills/article",
+        headers=_auth_headers(learner),
+        params={"learning_content_id": outside_content.learning_content_id},
+    )
+    write_response = await async_client.post(
+        "/api/v1/newcomer-training/modules/business_skills/article-progress",
+        headers=_auth_headers(learner),
+        json={
+            "learning_content_id": outside_content.learning_content_id,
+            "chapter_id": outside_chapter.chapter_id,
+        },
+    )
+
+    assert read_response.status_code == 409
+    assert read_response.json()["error"] == "[LEARNING_CONTENT_MISMATCH]"
+    assert write_response.status_code == 409
+    assert write_response.json()["error"] == "[LEARNING_CONTENT_MISMATCH]"
+
+
+@pytest.mark.asyncio
+async def test_should_fail_closed_article_surfaces_when_journey_module_locked(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    learner = _user("user")
+    unit = SalesTrainerUnit(
+        unit_id="newcomer-article-api-locked-unit",
+        name="商务技巧",
+        unit_type="quiz",
+        status="published",
+        config={},
+    )
+    content = _content("newcomer-article-api-locked-content", status="published")
+    chapter = LearningChapter(
+        chapter_id="newcomer-article-api-locked-chapter",
+        learning_content_id=content.learning_content_id,
+        title="路径锁定章节",
+        content="路径锁定时不能读取。",
+        order_index=1,
+    )
+    test_db.add_all([learner, unit, content, chapter])
+    await test_db.commit()
+    await _publish_article_path(
+        test_db,
+        actor=learner,
+        unit_id=unit.unit_id,
+        learning_content_id=content.learning_content_id,
+        learner_level_required=["ready"],
+    )
+
+    read_response = await async_client.get(
+        "/api/v1/newcomer-training/modules/business_skills/article",
+        headers=_auth_headers(learner),
+    )
+    progress_response = await async_client.get(
+        "/api/v1/newcomer-training/modules/business_skills/article-progress",
+        headers=_auth_headers(learner),
+    )
+    write_response = await async_client.post(
+        "/api/v1/newcomer-training/modules/business_skills/article-progress",
+        headers=_auth_headers(learner),
+        json={
+            "learning_content_id": content.learning_content_id,
+            "chapter_id": chapter.chapter_id,
+        },
+    )
+
+    for response in (read_response, progress_response, write_response):
+        assert response.status_code == 404, response.text
+        assert response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"

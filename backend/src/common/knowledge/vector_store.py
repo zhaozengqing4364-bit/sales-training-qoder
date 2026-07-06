@@ -18,6 +18,7 @@ from typing import Any, cast
 import chromadb
 from chromadb.api import ClientAPI
 from chromadb.api.models.Collection import Collection
+from chromadb.api.types import IncludeEnum
 from chromadb.config import Settings
 
 from common.error_handling.result import Result
@@ -244,7 +245,11 @@ class KnowledgeVectorStore:
                 query_embeddings=cast(Any, [query_embedding]),
                 n_results=top_k,
                 where=where,
-                include=["documents", "metadatas", "distances"],
+                include=[
+                    IncludeEnum.documents,
+                    IncludeEnum.metadatas,
+                    IncludeEnum.distances,
+                ],
             )
 
             # Format results
@@ -312,7 +317,7 @@ class KnowledgeVectorStore:
         try:
             results = collection.get(
                 ids=parent_ids,
-                include=["documents", "metadatas"],
+                include=[IncludeEnum.documents, IncludeEnum.metadatas],
             )
 
             parents: list[dict[str, Any]] = []

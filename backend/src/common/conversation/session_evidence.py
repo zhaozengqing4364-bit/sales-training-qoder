@@ -160,8 +160,10 @@ class SessionEvidenceService:
             if current_session is None:
                 session_result = await self._get_session(session_id)
                 if not session_result.is_success:
-                    return session_result
+                    return Result.fail(session_result.fallback or "[SESSION_NOT_FOUND]")
                 current_session = session_result.value
+                if current_session is None:
+                    return Result.fail("[SESSION_NOT_FOUND]")
 
             resolved_scenario_type = self.resolve_scenario_type(
                 current_session,
@@ -179,11 +181,16 @@ class SessionEvidenceService:
 
             messages_result = await self._get_ordered_messages(session_id)
             if not messages_result.is_success:
-                return messages_result
+                return Result.fail(
+                    messages_result.fallback or "[SESSION_MESSAGES_NOT_FOUND]"
+                )
+            messages = messages_result.value
+            if messages is None:
+                return Result.fail("[SESSION_MESSAGES_NOT_FOUND]")
 
             projection = self.build_projection(
                 current_session,
-                messages_result.value,
+                messages,
                 scenario_type=resolved_scenario_type,
             )
             if resolved_scenario_type == "presentation":
@@ -195,7 +202,10 @@ class SessionEvidenceService:
                     return Result.fail(
                         presentation_result.fallback or "[PRESENTATION_REVIEW_FAILED]"
                     )
-                projection = presentation_result.value
+                presentation_projection = presentation_result.value
+                if presentation_projection is None:
+                    return Result.fail("[PRESENTATION_REVIEW_FAILED]")
+                projection = presentation_projection
 
             logger.info(
                 "practice_session_evidence_projection_built",
@@ -1375,13 +1385,15 @@ class SessionEvidenceService:
                 objection_ledger=latest_objection_ledger,
             )
             if alignment.get("alignment_used") is True:
-                return alignment
+                return dict(alignment)
 
-        return resolve_sales_report_alignment(
-            sales_stage=latest_stage,
-            score_snapshot=latest_score_snapshot,
-            fallback_snapshot=snapshot,
-            objection_ledger=latest_objection_ledger,
+        return dict(
+            resolve_sales_report_alignment(
+                sales_stage=latest_stage,
+                score_snapshot=latest_score_snapshot,
+                fallback_snapshot=snapshot,
+                objection_ledger=latest_objection_ledger,
+            )
         )
 
     @classmethod
@@ -1579,7 +1591,7 @@ def ensure_effectiveness_snapshot(
                 not_evaluable_reason=not_evaluable_reason,
             ),
         }
-        session.effectiveness_snapshot = merged_snapshot
+        setattr(session, "effectiveness_snapshot", merged_snapshot)
         return merged_snapshot
 
     metrics, main_capability_passed, evaluable, not_evaluable_reason = (
@@ -1591,7 +1603,7 @@ def ensure_effectiveness_snapshot(
         evaluable=evaluable,
         not_evaluable_reason=not_evaluable_reason,
     )
-    session.effectiveness_snapshot = snapshot
+    setattr(session, "effectiveness_snapshot", snapshot)
     return snapshot
 
 

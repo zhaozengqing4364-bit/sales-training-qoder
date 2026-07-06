@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypeAlias
 
 from fastapi import (
     APIRouter,
@@ -28,7 +28,7 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
@@ -69,6 +69,7 @@ admin_router = APIRouter(prefix="/admin/knowledge", tags=["admin-knowledge"])
 
 ALLOWED_FILE_TYPES = {"pdf", "docx", "txt", "md", "xlsx", "xls"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+KnowledgeApiResponse: TypeAlias = dict[str, Any] | JSONResponse
 
 
 async def _commit_or_error(
@@ -135,16 +136,13 @@ async def process_document_background(
     db_url: str,
 ) -> None:
     """Background task to process uploaded document."""
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.ext.asyncio import create_async_engine
 
     engine = None
     try:
         # Create new database session for background task
         engine = create_async_engine(db_url)
-        async_session = sessionmaker(
-            engine, class_=AsyncSession, expire_on_commit=False
-        )
+        async_session = async_sessionmaker(engine, expire_on_commit=False)
 
         async with async_session() as session:
             # Update status to processing
@@ -164,7 +162,8 @@ async def process_document_background(
                 kb_obj = kb_result.value
                 # 1. Try active config version's chunking presets (new unified system)
                 chunking_resolved = False
-                if getattr(kb_obj, "chunking_preset_key", None):
+                chunking_preset_key = getattr(kb_obj, "chunking_preset_key", None)
+                if chunking_preset_key:
                     try:
                         from sqlalchemy.orm import Session as SyncSession
 
@@ -182,7 +181,7 @@ async def process_document_background(
                                 config_snapshot = config_repo.get_active_config()
                                 if config_snapshot and config_snapshot.chunking_presets:
                                     preset = config_snapshot.chunking_presets.get(
-                                        kb_obj.chunking_preset_key
+                                        str(chunking_preset_key)
                                     )
                                     if preset:
                                         chunking_strategy = preset.chunking_strategy
@@ -290,9 +289,7 @@ async def process_document_background(
         # Try to mark document as failed
         if engine:
             try:
-                async_session = sessionmaker(
-                    engine, class_=AsyncSession, expire_on_commit=False
-                )
+                async_session = async_sessionmaker(engine, expire_on_commit=False)
                 async with async_session() as session:
                     service = KnowledgeService(session)
                     await service.update_document_status(
@@ -314,7 +311,7 @@ async def create_knowledge_base(
     request: CreateKnowledgeBaseRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> KnowledgeApiResponse:
     """Create a new KnowledgeBase - R5.1"""
     service = KnowledgeService(db)
     result = await service.create(request)
@@ -416,7 +413,7 @@ async def update_knowledge_base(
     request: UpdateKnowledgeBaseRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> KnowledgeApiResponse:
     """Update KnowledgeBase - R5.3"""
     service = KnowledgeService(db)
     result = await service.update(kb_id, request)
@@ -439,7 +436,7 @@ async def delete_knowledge_base(
     kb_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> KnowledgeApiResponse:
     """Delete KnowledgeBase - R5.4"""
     service = KnowledgeService(db)
 
@@ -480,7 +477,7 @@ async def assign_rag_profile(
 
     kb = result.value
     assert kb is not None
-    kb.rag_profile_id = rag_profile_id
+    setattr(kb, "rag_profile_id", rag_profile_id)
     await db.commit()
 
     return {"success": True, "data": {"rag_profile_id": rag_profile_id}}
@@ -516,7 +513,7 @@ async def create_dictionary_entry(
     request: CreateKnowledgeDictionaryEntryRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> KnowledgeApiResponse:
     service = KnowledgeService(db)
     result = await service.create_dictionary_entry(kb_id, request)
     if not result.is_success:
@@ -537,7 +534,7 @@ async def update_dictionary_entry(
     request: UpdateKnowledgeDictionaryEntryRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> KnowledgeApiResponse:
     service = KnowledgeService(db)
     result = await service.update_dictionary_entry(kb_id, entry_id, request)
     if not result.is_success:
@@ -557,7 +554,7 @@ async def delete_dictionary_entry(
     entry_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> KnowledgeApiResponse:
     service = KnowledgeService(db)
     result = await service.delete_dictionary_entry(kb_id, entry_id)
     if not result.is_success:
@@ -574,7 +571,7 @@ async def generate_dictionary_entries(
     limit: int = Query(30, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> KnowledgeApiResponse:
     service = KnowledgeService(db)
     result = await service.generate_dictionary_drafts(kb_id, limit=limit)
     if not result.is_success or result.value is None:
@@ -604,7 +601,7 @@ async def upload_document(
     title: str | None = Form(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> KnowledgeApiResponse:
     """Upload a document to KnowledgeBase - R5.3"""
     import uuid
 
@@ -723,12 +720,12 @@ async def upload_document(
     # Schedule background processing
     background_tasks.add_task(
         process_document_background,
-        doc_id=doc.id,
+        doc_id=str(doc.id),
         file_path=file_path,
         file_type=file_ext,
         document_title=doc_title,
         knowledge_base_id=kb_id,
-        vector_collection=kb.vector_collection,
+        vector_collection=str(kb.vector_collection),
         db_url=db_url,
     )
 
@@ -824,7 +821,7 @@ async def delete_document(
     doc_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> KnowledgeApiResponse:
     """Delete document"""
     service = KnowledgeService(db)
 
@@ -834,7 +831,7 @@ async def delete_document(
         doc = doc_result.value
         if doc is not None:
             storage = get_document_storage_service()
-            await storage.delete_document(kb_id, doc_id, doc.file_type)
+            await storage.delete_document(kb_id, doc_id, str(doc.file_type))
 
     result = await service.delete_document(kb_id, doc_id)
 
@@ -965,7 +962,7 @@ async def reprocess_document(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> KnowledgeApiResponse:
     """Reprocess a failed or pending document"""
     service = KnowledgeService(db)
 
@@ -994,10 +991,10 @@ async def reprocess_document(
 
     # Delete existing vectors if any
     vector_store = get_knowledge_vector_store()
-    await vector_store.delete_document_chunks(kb.vector_collection, doc_id)
+    await vector_store.delete_document_chunks(str(kb.vector_collection), doc_id)
 
     storage = get_document_storage_service()
-    storage.delete_parse_artifact(doc.file_url)
+    storage.delete_parse_artifact(str(doc.file_url))
 
     # Reset status
     await service.update_document_status(
@@ -1018,12 +1015,12 @@ async def reprocess_document(
     # Schedule background processing
     background_tasks.add_task(
         process_document_background,
-        doc_id=doc.id,
-        file_path=doc.file_url,
-        file_type=doc.file_type,
-        document_title=doc.title,
+        doc_id=str(doc.id),
+        file_path=str(doc.file_url),
+        file_type=str(doc.file_type),
+        document_title=str(doc.title),
         knowledge_base_id=kb_id,
-        vector_collection=kb.vector_collection,
+        vector_collection=str(kb.vector_collection),
         db_url=db_url,
     )
 

@@ -200,6 +200,7 @@ class AiCoachChatResponseInternalV1(BaseModel):
         default_factory=list,
         max_length=8,
     )
+    runtime_audit: dict[str, object] = Field(default_factory=dict)
 
 
 class AiCoachChatSessionCreate(BaseModel):

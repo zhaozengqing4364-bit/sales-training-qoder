@@ -1,0 +1,7 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "backend/AGENTS.md", "reason": "后端总体约束与验证命令"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端 Trellis 入口规范"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查时保证错误处理语义未变"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "检查日志与敏感信息约束"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "类型检查、ruff、pytest 质量门禁"}
+{"file": ".trellis/tasks/07-03-tail-mypy-fixes/prd.md", "reason": "本次尾部类型债修复目标与范围"}

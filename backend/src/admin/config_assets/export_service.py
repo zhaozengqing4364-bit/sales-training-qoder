@@ -26,11 +26,13 @@ class ConfigAssetExportService:
         actor_identifier: str,
         source_instance: str | None = None,
         notes: str | None = None,
-        record_audit: bool = False,
+        record_audit: bool = True,
     ) -> dict[str, Any]:
         if not asset_refs:
             raise ValueError("[EXPORT_REFS_REQUIRED] at least one asset ref is required")
 
+        # Export audit is mandatory; keep the flag only for backward-compatible callers.
+        should_record_audit = True
         assets: list[dict[str, Any]] = []
         missing: list[str] = []
         for ref in asset_refs:
@@ -50,24 +52,25 @@ class ConfigAssetExportService:
             raise ValueError(f"[EXPORT_ASSETS_NOT_FOUND] {', '.join(missing)}")
 
         topology_order = sort_topology(assets)
-        bundle = {
-            "export_meta": {
-                "version": "config-asset-export-v1",
-                "exported_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-                "exported_by": actor_id,
-                "export_audit_recorded": record_audit,
-            },
+        export_meta: dict[str, Any] = {
+            "version": "config-asset-export-v1",
+            "exported_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "exported_by": actor_id,
+            "export_audit_recorded": should_record_audit,
+        }
+        bundle: dict[str, Any] = {
+            "export_meta": export_meta,
             "assets": assets,
             "topology_order": topology_order,
         }
         if source_instance:
-            bundle["export_meta"]["source_instance"] = source_instance
+            export_meta["source_instance"] = source_instance
         if notes:
-            bundle["export_meta"]["notes"] = notes
+            export_meta["notes"] = notes
 
         validate_export_bundle(bundle)
 
-        if record_audit:
+        if should_record_audit:
             await record_export_audit(
                 self._db,
                 actor_id=actor_id,
@@ -76,6 +79,6 @@ class ConfigAssetExportService:
                 topology_order=topology_order,
                 notes=notes,
             )
-            bundle["export_meta"]["export_audit_recorded"] = True
+            export_meta["export_audit_recorded"] = True
 
         return bundle

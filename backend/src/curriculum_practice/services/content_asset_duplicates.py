@@ -8,6 +8,7 @@ from curriculum_practice.services.content_asset_payloads import (
     case_item_payload,
     copy_suffix,
 )
+from curriculum_practice.services.orm_payload_typing import orm_str
 
 
 def build_case_item_duplicate(
@@ -16,7 +17,7 @@ def build_case_item_duplicate(
     actor_id: str | None,
 ) -> CaseItem:
     payload = case_item_payload(item)
-    payload["customer_role"] = copy_suffix(item.customer_role)
+    payload["customer_role"] = copy_suffix(orm_str(item.customer_role))
     return CaseItem(
         case_item_id=str(uuid.uuid4()),
         industry=item.industry,

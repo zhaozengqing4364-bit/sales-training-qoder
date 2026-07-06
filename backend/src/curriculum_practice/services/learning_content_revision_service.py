@@ -9,7 +9,7 @@ from common.db.models import User
 from common.error_handling.result import Result
 from common.monitoring.logger import get_trace_id
 from curriculum_practice.models import LearningChapter, LearningContent
-from curriculum_practice.schemas import LearningContentUpdate
+from curriculum_practice.schemas import LearningContentUpdate, PublishGateDecision
 from curriculum_practice.services.learning_content_revision_apply import (
     LearningContentRevisionApplier,
 )
@@ -132,7 +132,7 @@ class LearningContentRevisionService:
         content: LearningContent,
         *,
         actor: User,
-    ) -> Result[bool]:
+    ) -> Result[bool | PublishGateDecision]:
         working = await self._revisions.latest_working_revision(
             resource_type=LEARNING_CONTENT_RESOURCE_TYPE,
             logical_id=str(content.learning_content_id),

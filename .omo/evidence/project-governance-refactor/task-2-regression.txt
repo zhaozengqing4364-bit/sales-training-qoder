@@ -1,9 +1,0 @@
-9:- `surface_key`：稳定识别名。
-11:- `backing_store`：当前权威存储或兼容存储。
-14:- `audit_policy`：操作记录或审计事件来源。
-15:- `snapshot_policy`：运行时或历史记录如何冻结当时内容。
-21:| surface_key | owner | backing_store | lifecycle | permission_policy | audit_policy | snapshot_policy | public_projection | phase_0_gap |
-54:| composition_root | owner | backing_store | lifecycle | permission_policy | audit_policy | snapshot_policy | public_projection | phase_0_gap |
-63:| api_domain | owner | backing_store | lifecycle | permission_policy | audit_policy | snapshot_policy | public_projection | phase_0_gap |
-74:| audit_carrier | owner | backing_store | lifecycle | permission_policy | audit_policy | snapshot_policy | public_projection | phase_0_gap |
-84:| quality_gate | owner | backing_store | lifecycle | permission_policy | audit_policy | snapshot_policy | public_projection | phase_0_gap |

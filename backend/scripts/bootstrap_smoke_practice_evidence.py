@@ -18,13 +18,14 @@ from sqlalchemy import delete, select
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agent.models import Agent, AgentPersona, Persona
+from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
 from common.conversation.models import ConversationMessage
 from common.db.models import (
     ComprehensiveReport,
     EvaluationRun,
     PracticeSession,
     Scenario,
+    ScoringRuleset,
     SessionAudioSegment,
     SessionStatus,
     StagedEvaluationResult,
@@ -33,13 +34,20 @@ from common.db.models import (
     User,
 )
 from common.db.session import AsyncSessionLocal
-from curriculum_practice.models import PracticeTemplate  # noqa: F401 - registers practice_templates metadata
+from common.effectiveness.scoring_rulesets import ScoringRulesetService
+from common.knowledge.models import KnowledgeBase
+from curriculum_practice.models import CaseItem, PracticeTemplate
 
 SMOKE_SCENARIO_NAME = "Smoke critical report session"
 SMOKE_AGENT_NAME = "Smoke Phase 4 Sales Agent"
 SMOKE_PERSONA_NAME = "Smoke Phase 4 Budget Buyer"
 SMOKE_TEMPLATE_NAME = "Smoke Phase 4 Sales Curriculum Template"
 SMOKE_TRAINING_TASK_TITLE = "Smoke Phase 4 Sales Curriculum Task"
+SMOKE_RUNTIME_PROFILE_ID = "smoke-runtime-profile"
+SMOKE_RULESET_ID = "smoke-sales-ruleset"
+SMOKE_KNOWLEDGE_BASE_ID = "kb-smoke-1"
+SMOKE_CASE_ITEM_ID = "smoke-phase4-case-item"
+SMOKE_REPORT_SESSION_ID = "00000000-0000-4000-8000-000000000901"
 
 
 def _make_effectiveness_snapshot() -> dict[str, object]:
@@ -255,6 +263,114 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
             )
             await db.flush()
 
+        runtime_profile = await db.get(VoiceRuntimeProfile, SMOKE_RUNTIME_PROFILE_ID)
+        if runtime_profile is None:
+            runtime_profile = VoiceRuntimeProfile(
+                id=SMOKE_RUNTIME_PROFILE_ID,
+                name="Smoke Phase 4 StepFun Runtime Profile",
+            )
+            db.add(runtime_profile)
+            await db.flush()
+        runtime_profile.description = "Deterministic local StepFun profile for smoke E2E flows"
+        runtime_profile.is_active = True
+        runtime_profile.voice_mode = "stepfun_realtime"
+        runtime_profile.model_name = "stepaudio-2.5-realtime"
+        runtime_profile.voice_name = "qingchunshaonv"
+        runtime_profile.temperature = 0.2
+        runtime_profile.input_audio_format = "pcm16"
+        runtime_profile.output_audio_format = "pcm16"
+        runtime_profile.output_sample_rate = 24000
+        runtime_profile.tool_policy = {
+            "network_access_mode": "off",
+            "enable_internal_retrieval": True,
+            "enable_web_search": False,
+            "require_kb_grounding": False,
+        }
+
+        knowledge_base = await db.get(KnowledgeBase, SMOKE_KNOWLEDGE_BASE_ID)
+        if knowledge_base is None:
+            knowledge_base = KnowledgeBase(
+                id=SMOKE_KNOWLEDGE_BASE_ID,
+                name="Smoke 知识库",
+                category="product",
+                vector_collection="smoke_phase4_sales_kb",
+            )
+            db.add(knowledge_base)
+            await db.flush()
+        knowledge_base.description = "Deterministic smoke knowledge base for ROI evidence."
+        knowledge_base.status = "active"
+        knowledge_base.document_count = max(int(knowledge_base.document_count or 0), 1)
+        knowledge_base.total_chunks = max(int(knowledge_base.total_chunks or 0), 1)
+
+        ruleset = await db.get(ScoringRuleset, SMOKE_RULESET_ID)
+        if ruleset is None:
+            ruleset = ScoringRuleset(
+                ruleset_id=SMOKE_RULESET_ID,
+                scenario_type="sales",
+                version="smoke-phase4-v1",
+                display_name="Smoke Phase 4 Sales Scoring Ruleset",
+            )
+            db.add(ruleset)
+            await db.flush()
+        ruleset.status = "published"
+        ruleset.is_active = True
+        ruleset.description = "Deterministic scoring ruleset for local realtime smoke flows."
+        ruleset_definition = ScoringRulesetService.build_default_definition("sales")
+        ruleset_definition.passing_score = 70
+        ruleset.definition_json = ruleset_definition.model_dump(mode="json")
+        ruleset.published_by = str(user.user_id)
+        ruleset.published_at = now
+
+        case_item = await db.get(CaseItem, SMOKE_CASE_ITEM_ID)
+        if case_item is None:
+            case_item = CaseItem(
+                case_item_id=SMOKE_CASE_ITEM_ID,
+                industry="数据安全",
+                company_profile="预算谨慎的成长型企业，正在评估数据流动治理和 API 风险监测方案。",
+                customer_role="预算负责人",
+                hidden_information="客户内部希望 6 个月内看到 ROI，并担心迁移期服务中断。",
+                content_hash="smoke-phase4-case-v1",
+            )
+            db.add(case_item)
+            await db.flush()
+        case_item.pain_points = ["预算压力", "ROI 证据不足", "迁移期 SLA 风险"]
+        case_item.objections = ["你们方案为什么值得现在投入？", "试点会不会影响现有业务？"]
+        case_item.success_criteria = [
+            "用案例或数据说明 ROI",
+            "提出低风险试点范围",
+            "明确下一步决策动作",
+        ]
+        case_item.allowed_disclosure_policy = {
+            "roleplay": {
+                "situation_code": "first_visit",
+                "visible_information_keys": [
+                    "industry",
+                    "company_profile",
+                    "customer_role",
+                    "pain_points",
+                    "objections",
+                    "success_criteria",
+                ],
+                "hidden_information_keys": [
+                    "budget",
+                    "internal_floor_price",
+                    "renewal_risk",
+                ],
+                "relationship_context_override": {
+                    "prior_interactions": "none",
+                    "has_prior_meeting": False,
+                    "has_seen_proposal": False,
+                    "has_discussed_budget": False,
+                },
+            }
+        }
+        case_item.version = 1
+        case_item.status = "published"
+        case_item.published_by = str(user.user_id)
+        case_item.published_at = now
+        case_item.updated_by = str(user.user_id)
+        case_item.updated_at = now
+
         template_result = await db.execute(
             select(PracticeTemplate).where(PracticeTemplate.name == SMOKE_TEMPLATE_NAME)
         )
@@ -268,25 +384,12 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
                 mode="customer_roleplay",
                 agent_id=str(agent.id),
                 persona_id=str(persona.id),
-                runtime_profile_id="smoke-runtime-profile",
+                runtime_profile_id=SMOKE_RUNTIME_PROFILE_ID,
                 voice_mode="stepfun_realtime",
-                scoring_ruleset_id="smoke-sales-ruleset",
-                knowledge_base_refs=["kb-smoke-1"],
-                curriculum_plan={
-                    "version": "smoke-v1",
-                    "stages": [
-                        {
-                            "stage_id": "evidence-backed-value",
-                            "name": "证据支撑价值表达",
-                            "goal": "用案例、数据或 ROI 回应预算疑虑",
-                        },
-                        {
-                            "stage_id": "next-step-close",
-                            "name": "推进下一步",
-                            "goal": "提出低风险试点作为下一步",
-                        },
-                    ],
-                },
+                scoring_ruleset_id=SMOKE_RULESET_ID,
+                knowledge_base_refs=[SMOKE_KNOWLEDGE_BASE_ID],
+                case_item_id=SMOKE_CASE_ITEM_ID,
+                curriculum_plan={"version": "smoke-v1", "stages": []},
                 max_stage_duration_seconds=180,
                 status="published",
                 version=1,
@@ -301,21 +404,16 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
         else:
             template.agent_id = str(agent.id)
             template.persona_id = str(persona.id)
-            template.runtime_profile_id = "smoke-runtime-profile"
-            template.scoring_ruleset_id = "smoke-sales-ruleset"
+            template.runtime_profile_id = SMOKE_RUNTIME_PROFILE_ID
+            template.scoring_ruleset_id = SMOKE_RULESET_ID
+            template.knowledge_base_refs = [SMOKE_KNOWLEDGE_BASE_ID]
+            template.case_item_id = SMOKE_CASE_ITEM_ID
+            template.curriculum_plan = {"version": "smoke-v1", "stages": []}
             template.status = "published"
             template.updated_by = str(user.user_id)
             template.updated_at = now
 
-        session_result = await db.execute(
-            select(PracticeSession)
-            .where(
-                PracticeSession.user_id == str(user.user_id),
-                PracticeSession.scenario_id == scenario.scenario_id,
-            )
-            .order_by(PracticeSession.start_time.desc())
-        )
-        session = session_result.scalars().first()
+        session = await db.get(PracticeSession, SMOKE_REPORT_SESSION_ID)
 
         # Keep the deterministic smoke record visible on dashboard even when a local
         # developer database contains newer ad-hoc sessions from previous runs.
@@ -323,12 +421,15 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
 
         if session is None:
             session = PracticeSession(
-                session_id=str(uuid.uuid4()),
+                session_id=SMOKE_REPORT_SESSION_ID,
                 user_id=str(user.user_id),
                 scenario_id=scenario.scenario_id,
             )
             db.add(session)
             await db.flush()
+        else:
+            session.user_id = str(user.user_id)
+            session.scenario_id = scenario.scenario_id
 
         template_id = str(template.template_id)
         dimension_scores = _make_dimension_scores()
@@ -356,6 +457,10 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
                     "goal": "提出低风险试点作为下一步",
                 },
             },
+        }
+        session.runtime_state = {
+            "source": "bootstrap_smoke_practice_evidence",
+            "deterministic_session_id": SMOKE_REPORT_SESSION_ID,
         }
         session.logic_score = 88.0
         session.accuracy_score = 84.0

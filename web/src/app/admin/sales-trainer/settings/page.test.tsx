@@ -1,15 +1,17 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerSettingsPage from "./page";
 
 const {
+    getCapabilitiesMock,
     getSettingsMock,
     getPathConfigMock,
     listPathConfigRevisionsMock,
     listAudioSubmissionsMock,
     listScoreResultsMock,
 } = vi.hoisted(() => ({
+    getCapabilitiesMock: vi.fn(),
     getSettingsMock: vi.fn(),
     getPathConfigMock: vi.fn(),
     listPathConfigRevisionsMock: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     getSettings: getSettingsMock,
                     listAudioSubmissions: listAudioSubmissionsMock,
                     listScoreResults: listScoreResultsMock,
@@ -47,11 +50,30 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("SalesTrainerSettingsPage", () => {
     beforeEach(() => {
+        getCapabilitiesMock.mockReset();
         getSettingsMock.mockReset();
         getPathConfigMock.mockReset();
         listPathConfigRevisionsMock.mockReset();
         listAudioSubmissionsMock.mockReset();
         listScoreResultsMock.mockReset();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_questions: false,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: true,
+            },
+            capability_keys: ["view_settings"],
+        });
         getSettingsMock.mockResolvedValue({
             storage_backend: "local",
             direct_upload_supported: false,
@@ -245,6 +267,12 @@ describe("SalesTrainerSettingsPage", () => {
         expect(screen.getByRole("link", { name: "打开策略治理" }).getAttribute("href")).toBe(
             "/admin/business-rules/sales-trainer-phase2",
         );
+        expect(screen.getByRole("link", { name: "打开运行时健康" }).getAttribute("href")).toBe(
+            "/support/runtime",
+        );
+        expect(screen.getByRole("link", { name: "查看运行时健康" }).getAttribute("href")).toBe(
+            "/support/runtime",
+        );
         expect(screen.getByText("当前生效版本 v3")).toBeTruthy();
         expect(screen.getByText("最近发布原因：发布绑定")).toBeTruthy();
         expect(screen.getByText("legacy 快照记录 2 条")).toBeTruthy();
@@ -263,5 +291,46 @@ describe("SalesTrainerSettingsPage", () => {
             "/admin/sales-trainer/score-results",
         );
         expect(screen.getByRole("link", { name: "查看评分结果" }).querySelector("button")).toBeNull();
+    });
+
+    it("shows a page-level loading state while configuration diagnostics are loading", () => {
+        getSettingsMock.mockReturnValue(new Promise(() => undefined));
+
+        render(<SalesTrainerSettingsPage />);
+
+        expect(screen.getByRole("status").textContent).toContain("正在加载配置诊断...");
+        expect(screen.queryByText("音频上传")).toBeNull();
+    });
+
+    it("keeps dependency failures visible and retries the diagnostics load", async () => {
+        getSettingsMock.mockRejectedValueOnce(new Error("settings unavailable"));
+
+        render(<SalesTrainerSettingsPage />);
+
+        expect(await screen.findByText("配置诊断加载失败")).toBeTruthy();
+        expect(screen.getByText("settings unavailable")).toBeTruthy();
+        expect(screen.queryByText("音频上传")).toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: "重新加载配置" }));
+
+        await waitFor(() => {
+            expect(getSettingsMock).toHaveBeenCalledTimes(2);
+        });
+        expect(await screen.findByText("音频上传")).toBeTruthy();
+    });
+
+    it("fails closed before loading diagnostics when capabilities are unavailable", async () => {
+        getCapabilitiesMock.mockRejectedValueOnce(new Error("capability unavailable"));
+
+        render(<SalesTrainerSettingsPage />);
+
+        expect(await screen.findByText("页面访问受限")).toBeTruthy();
+        expect(screen.getByText("capability unavailable")).toBeTruthy();
+        expect(getSettingsMock).not.toHaveBeenCalled();
+        expect(getPathConfigMock).not.toHaveBeenCalled();
+        expect(listPathConfigRevisionsMock).not.toHaveBeenCalled();
+        expect(listAudioSubmissionsMock).not.toHaveBeenCalled();
+        expect(listScoreResultsMock).not.toHaveBeenCalled();
+        expect(screen.queryByText("音频上传")).toBeNull();
     });
 });

@@ -11,8 +11,9 @@ References:
 
 from __future__ import annotations
 
+import builtins
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -50,13 +51,11 @@ class PersonaService:
     ) -> Result[Persona]:
         """Create a new Persona - R3.1"""
         try:
-            behavior_config = data.behavior_config
-            if hasattr(behavior_config, "model_dump"):
-                behavior_config = behavior_config.model_dump()
+            behavior_config: dict[str, Any] = data.behavior_config.model_dump()
 
-            tts_config = data.tts_config
-            if hasattr(tts_config, "model_dump"):
-                tts_config = tts_config.model_dump()
+            tts_config: dict[str, Any] | None = (
+                data.tts_config.model_dump() if data.tts_config is not None else None
+            )
 
             persona = Persona(
                 name=data.name,
@@ -84,7 +83,7 @@ class PersonaService:
                 return Result.fail(
                     format_persona_policy_validation_failure(validation_errors)
                 )
-            persona.persona_policy = persona_policy
+            setattr(persona, "persona_policy", persona_policy)
             sync_legacy_persona_fields(persona, persona_policy)
 
             self.db.add(persona)
@@ -105,7 +104,7 @@ class PersonaService:
         category: str | None = None,
         difficulty: str | None = None,
         status: str | None = None,
-    ) -> tuple[list[PersonaListItem], int]:
+    ) -> tuple[builtins.list[PersonaListItem], int]:
         """Get paginated Persona list with optional filters - R3.2"""
         stmt = select(Persona)
 
@@ -125,7 +124,7 @@ class PersonaService:
         result = await self.db.execute(stmt)
         personas = result.scalars().all()
 
-        persona_ids = [persona.id for persona in personas]
+        persona_ids = [str(persona.id) for persona in personas]
         agent_counts: dict[str, int] = {}
         usage_counts: dict[str, int] = {}
 
@@ -160,7 +159,9 @@ class PersonaService:
 
         for persona in personas:
             persona_id = str(persona.id)
-            updated_at = RuntimeStatusService._coerce_datetime(persona.updated_at)
+            updated_at = RuntimeStatusService._coerce_datetime(
+                cast(datetime | str | None, persona.updated_at)
+            )
             policy_issue_types = self._collect_policy_issue_types(persona)
             extra_anomalies = [
                 self._policy_issue_to_anomaly(issue_type, detected_at=updated_at)
@@ -201,8 +202,9 @@ class PersonaService:
         if not persona:
             return Result.fail("[PERSONA_NOT_FOUND]")
 
-        persona.persona_policy = self._build_normalized_policy(persona)
-        sync_legacy_persona_fields(persona, persona.persona_policy)
+        persona_policy = self._build_normalized_policy(persona)
+        setattr(persona, "persona_policy", persona_policy)
+        sync_legacy_persona_fields(persona, persona_policy)
         return Result.ok(persona)
 
     async def update(
@@ -216,12 +218,10 @@ class PersonaService:
         if not persona:
             return Result.fail("[PERSONA_NOT_FOUND]")
 
-        update_data = data.model_dump(exclude_unset=True)
+        update_data: dict[str, Any] = data.model_dump(exclude_unset=True)
         legacy_system_prompt = str(persona.system_prompt or "")
-        legacy_kb_ids = (
-            list(persona.knowledge_base_ids)
-            if isinstance(persona.knowledge_base_ids, list)
-            else []
+        legacy_kb_ids: builtins.list[str] = self._normalize_kb_ids(
+            persona.knowledge_base_ids
         )
         incoming_persona_policy = update_data.pop("persona_policy", None)
 
@@ -236,25 +236,22 @@ class PersonaService:
             if "system_prompt" in update_data
             else legacy_system_prompt
         )
-        next_kb_ids = (
-            update_data.get("knowledge_base_ids")
+        next_kb_ids: builtins.list[str] = (
+            self._normalize_kb_ids(update_data.get("knowledge_base_ids"))
             if "knowledge_base_ids" in update_data
             else legacy_kb_ids
         )
-        next_kb_ids = next_kb_ids if isinstance(next_kb_ids, list) else legacy_kb_ids
         touched_legacy_policy_fields = (
             "system_prompt" in update_data or "knowledge_base_ids" in update_data
         )
         if incoming_persona_policy is not None or touched_legacy_policy_fields:
-            existing_policy = (
-                dict(persona.persona_policy)
-                if isinstance(persona.persona_policy, dict)
-                else {}
+            existing_policy: dict[str, Any] = self._as_policy_dict(
+                persona.persona_policy
             )
-            raw_persona_policy = (
-                incoming_persona_policy
+            raw_persona_policy: dict[str, Any] = (
+                self._as_policy_dict(incoming_persona_policy)
                 if incoming_persona_policy is not None
-                else existing_policy
+                else dict(existing_policy)
             )
             if incoming_persona_policy is None:
                 # Let explicit legacy field updates take precedence over stale policy fields.
@@ -273,10 +270,10 @@ class PersonaService:
                 return Result.fail(
                     format_persona_policy_validation_failure(validation_errors)
                 )
-            persona.persona_policy = persona_policy
+            setattr(persona, "persona_policy", persona_policy)
             sync_legacy_persona_fields(persona, persona_policy)
 
-        persona.updated_at = datetime.now(UTC)
+        setattr(persona, "updated_at", datetime.now(UTC))
 
         await self.db.flush()
         await self.db.refresh(persona)
@@ -336,17 +333,11 @@ class PersonaService:
                 created_by=user_id,
             )
             persona_policy = normalize_persona_policy(
-                original.persona_policy
-                if isinstance(original.persona_policy, dict)
-                else {},
-                fallback_system_prompt=original.system_prompt,
-                fallback_kb_ids=(
-                    original.knowledge_base_ids
-                    if isinstance(original.knowledge_base_ids, list)
-                    else []
-                ),
+                self._as_policy_dict(original.persona_policy),
+                fallback_system_prompt=str(original.system_prompt or ""),
+                fallback_kb_ids=self._normalize_kb_ids(original.knowledge_base_ids),
             )
-            new_persona.persona_policy = persona_policy
+            setattr(new_persona, "persona_policy", persona_policy)
             sync_legacy_persona_fields(new_persona, persona_policy)
 
             self.db.add(new_persona)
@@ -371,11 +362,7 @@ class PersonaService:
         healthy_count = 0
 
         for persona in personas:
-            raw_policy = (
-                persona.persona_policy
-                if isinstance(persona.persona_policy, dict)
-                else {}
-            )
+            raw_policy: dict[str, Any] = self._as_policy_dict(persona.persona_policy)
             normalized_policy = self._build_normalized_policy(persona)
             persona_issues = self._collect_policy_issue_types(persona)
 
@@ -425,14 +412,12 @@ class PersonaService:
         }
 
     @classmethod
-    def _collect_policy_issue_types(cls, persona: Persona) -> list[str]:
-        raw_policy = (
-            persona.persona_policy if isinstance(persona.persona_policy, dict) else {}
-        )
+    def _collect_policy_issue_types(cls, persona: Persona) -> builtins.list[str]:
+        raw_policy: dict[str, Any] = cls._as_policy_dict(persona.persona_policy)
         normalized_policy = cls._build_normalized_policy(persona)
-        persona_issues: list[str] = []
+        persona_issues: builtins.list[str] = []
 
-        if not isinstance(persona.persona_policy, dict) or not persona.persona_policy:
+        if not raw_policy:
             persona_issues.append("missing_policy")
 
         raw_version = (
@@ -502,10 +487,10 @@ class PersonaService:
         }
 
     @staticmethod
-    def _normalize_kb_ids(raw_ids: Any) -> list[str]:
-        if not isinstance(raw_ids, list):
+    def _normalize_kb_ids(raw_ids: Any) -> builtins.list[str]:
+        if not isinstance(raw_ids, builtins.list):
             return []
-        deduped: list[str] = []
+        deduped: builtins.list[str] = []
         seen: set[str] = set()
         for item in raw_ids:
             normalized = str(item).strip()
@@ -516,13 +501,17 @@ class PersonaService:
         return deduped
 
     @staticmethod
+    def _as_policy_dict(raw_policy: Any) -> dict[str, Any]:
+        if not isinstance(raw_policy, dict):
+            return {}
+        return dict(raw_policy)
+
+    @staticmethod
     def _build_normalized_policy(persona: Persona) -> dict[str, Any]:
         return normalize_persona_policy(
-            persona.persona_policy if isinstance(persona.persona_policy, dict) else {},
+            PersonaService._as_policy_dict(persona.persona_policy),
             fallback_system_prompt=str(persona.system_prompt or ""),
-            fallback_kb_ids=(
-                list(persona.knowledge_base_ids)
-                if isinstance(persona.knowledge_base_ids, list)
-                else []
+            fallback_kb_ids=PersonaService._normalize_kb_ids(
+                persona.knowledge_base_ids
             ),
         )

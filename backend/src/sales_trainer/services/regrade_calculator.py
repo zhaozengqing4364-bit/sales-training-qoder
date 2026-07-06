@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db.typing import json_dict_or_empty, orm_scalar
 from sales_trainer.models import SalesTrainerAssetRevision, SalesTrainerQuizAttempt
 from sales_trainer.services.paper_snapshot_scoring import (
     RevisionQuestion,
@@ -33,6 +34,8 @@ async def build_quiz_regrade_preview(
     attempt: SalesTrainerQuizAttempt,
     target_revision: SalesTrainerAssetRevision,
 ) -> QuizRegradePreview:
+    attempt_id = orm_scalar(attempt.attempt_id, str)
+    target_revision_id = orm_scalar(target_revision.revision_id, str)
     before_snapshot = await _attempt_snapshot(db, attempt)
     after_snapshot = _regrade_against_revision(
         before_snapshot,
@@ -40,9 +43,9 @@ async def build_quiz_regrade_preview(
     )
     return QuizRegradePreview(
         target_type="quiz_attempt",
-        target_id=attempt.attempt_id,
-        target_revision_id=target_revision.revision_id,
-        impact_scope=_impact_scope(attempt.attempt_id),
+        target_id=attempt_id,
+        target_revision_id=target_revision_id,
+        impact_scope=_impact_scope(attempt_id),
         before_snapshot=before_snapshot,
         after_snapshot=after_snapshot,
     )
@@ -84,9 +87,7 @@ def _regrade_against_revision(
     before_snapshot: dict[str, Any],
     revision: SalesTrainerAssetRevision,
 ) -> dict[str, Any]:
-    revision_payload = (
-        revision.payload_json if isinstance(revision.payload_json, dict) else {}
-    )
+    revision_payload = json_dict_or_empty(revision.payload_json)
     answer_map = _answer_map(before_snapshot)
     answers: list[dict[str, Any]] = []
     total_score = 0.0

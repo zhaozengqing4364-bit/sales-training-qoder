@@ -10,13 +10,16 @@ from curriculum_practice.schemas import (
     PracticeTemplateUpdate,
     PublishedTemplateRef,
 )
+from curriculum_practice.services.orm_payload_typing import orm_int, set_orm_field
 from curriculum_practice.services.practice_template_revision_metadata import (
     template_payload_hash,
 )
 
 
 def serialize_template(template: PracticeTemplate) -> PracticeTemplateResponse:
-    return PracticeTemplateResponse.model_validate(template_lifecycle_snapshot(template))
+    return PracticeTemplateResponse.model_validate(
+        template_lifecycle_snapshot(template)
+    )
 
 
 def template_lifecycle_snapshot(template: PracticeTemplate) -> dict[str, Any]:
@@ -73,35 +76,72 @@ def apply_template_revision_payload(
     situation_pack_code: str,
     published_at: datetime,
 ) -> None:
-    template.name = _required_str(payload, "name")
-    template.description = _optional_str(payload, "description")
-    template.scenario_type = _required_str(payload, "scenario_type")
-    template.mode = _required_str(payload, "mode")
-    template.agent_id = _required_str(payload, "agent_id")
-    template.persona_id = _required_str(payload, "persona_id")
-    template.runtime_profile_id = _required_str(payload, "runtime_profile_id")
-    template.voice_mode = _required_str(payload, "voice_mode")
-    template.scoring_ruleset_id = _required_str(payload, "scoring_ruleset_id")
-    template.knowledge_base_refs = _list_value(payload, "knowledge_base_refs")
-    template.case_item_id = _optional_str(payload, "case_item_id")
-    template.role_profile_id = _optional_str(payload, "role_profile_id")
-    template.learning_content_id = _optional_str(payload, "learning_content_id")
-    template.examiner_agent_id = _optional_str(payload, "examiner_agent_id")
-    template.target_learner_level = _optional_str(payload, "target_learner_level")
-    template.timeout_config = _dict_or_none(payload.get("timeout_config"))
-    template.curriculum_plan = _dict_or_none(payload.get("curriculum_plan"))
-    template.max_stage_duration_seconds = _optional_int(
-        payload,
-        "max_stage_duration_seconds",
+    set_orm_field(template, "name", _required_str(payload, "name"))
+    set_orm_field(template, "description", _optional_str(payload, "description"))
+    set_orm_field(template, "scenario_type", _required_str(payload, "scenario_type"))
+    set_orm_field(template, "mode", _required_str(payload, "mode"))
+    set_orm_field(template, "agent_id", _required_str(payload, "agent_id"))
+    set_orm_field(template, "persona_id", _required_str(payload, "persona_id"))
+    set_orm_field(
+        template,
+        "runtime_profile_id",
+        _required_str(payload, "runtime_profile_id"),
     )
-    template.situation_pack_code = situation_pack_code
-    template.published_asset_refs = published_asset_refs
-    template.status = "published"
-    template.version = _int_value(payload, "version", fallback=template.version or 1)
-    template.content_hash = template_payload_hash(payload)
-    template.published_by = actor_id
-    template.published_at = published_at
-    template.updated_by = actor_id
+    set_orm_field(template, "voice_mode", _required_str(payload, "voice_mode"))
+    set_orm_field(
+        template,
+        "scoring_ruleset_id",
+        _required_str(payload, "scoring_ruleset_id"),
+    )
+    set_orm_field(
+        template,
+        "knowledge_base_refs",
+        _list_value(payload, "knowledge_base_refs"),
+    )
+    set_orm_field(template, "case_item_id", _optional_str(payload, "case_item_id"))
+    set_orm_field(
+        template, "role_profile_id", _optional_str(payload, "role_profile_id")
+    )
+    set_orm_field(
+        template,
+        "learning_content_id",
+        _optional_str(payload, "learning_content_id"),
+    )
+    set_orm_field(
+        template,
+        "examiner_agent_id",
+        _optional_str(payload, "examiner_agent_id"),
+    )
+    set_orm_field(
+        template,
+        "target_learner_level",
+        _optional_str(payload, "target_learner_level"),
+    )
+    set_orm_field(
+        template, "timeout_config", _dict_or_none(payload.get("timeout_config"))
+    )
+    set_orm_field(
+        template,
+        "curriculum_plan",
+        _dict_or_none(payload.get("curriculum_plan")),
+    )
+    set_orm_field(
+        template,
+        "max_stage_duration_seconds",
+        _optional_int(payload, "max_stage_duration_seconds"),
+    )
+    set_orm_field(template, "situation_pack_code", situation_pack_code)
+    set_orm_field(template, "published_asset_refs", published_asset_refs)
+    set_orm_field(template, "status", "published")
+    set_orm_field(
+        template,
+        "version",
+        _int_value(payload, "version", fallback=template.version),
+    )
+    set_orm_field(template, "content_hash", template_payload_hash(payload))
+    set_orm_field(template, "published_by", actor_id)
+    set_orm_field(template, "published_at", published_at)
+    set_orm_field(template, "updated_by", actor_id)
 
 
 def template_publish_payload(
@@ -192,9 +232,9 @@ def _optional_int(payload: dict[str, Any], field_name: str) -> int | None:
     return value if isinstance(value, int) else None
 
 
-def _int_value(payload: dict[str, Any], field_name: str, *, fallback: int) -> int:
+def _int_value(payload: dict[str, Any], field_name: str, *, fallback: object) -> int:
     value = payload.get(field_name)
-    return value if isinstance(value, int) else int(fallback)
+    return value if isinstance(value, int) else orm_int(fallback)
 
 
 def _datetime_value(value: Any) -> str | None:

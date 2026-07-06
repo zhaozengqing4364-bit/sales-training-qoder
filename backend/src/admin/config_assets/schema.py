@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SCHEMA_PATH = REPO_ROOT / "docs/architecture/config-asset-export-v1.schema.json"
@@ -24,7 +24,10 @@ class ConfigAssetSchemaError(ValueError):
 
 @lru_cache(maxsize=1)
 def load_export_schema() -> dict[str, Any]:
-    return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    raw_schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    if not isinstance(raw_schema, dict):
+        raise ConfigAssetSchemaError(["export schema root must be an object"])
+    return cast(dict[str, Any], raw_schema)
 
 
 @lru_cache(maxsize=1)

@@ -12,6 +12,7 @@ from curriculum_practice.models import LearningContent
 from curriculum_practice.schemas import (
     LearningContentCreate,
     LearningContentUpdate,
+    PublishGateDecision,
 )
 from curriculum_practice.services.learning_chapter_service import (
     LearningChapterServiceMixin,
@@ -26,6 +27,7 @@ from curriculum_practice.services.learning_content_revision_payloads import (
 from curriculum_practice.services.learning_content_revision_service import (
     LearningContentRevisionService,
 )
+from curriculum_practice.services.orm_payload_typing import set_orm_field
 
 SERVER_ERROR = "[LEARNING_CONTENT_SERVICE_FAILED]"
 
@@ -90,7 +92,7 @@ class LearningContentService(LearningChapterServiceMixin):
             actor_result = await self._actor_result(actor_id)
             if not actor_result.is_success or actor_result.value is None:
                 return Result.fail(actor_result.fallback or "[LEARNING_CONTENT_ACTOR_REQUIRED]")
-            chapters_result = await self.list_chapters(content.learning_content_id)
+            chapters_result = await self.list_chapters(str(content.learning_content_id))
             if not chapters_result.is_success:
                 return Result.fail(chapters_result.fallback or SERVER_ERROR)
             try:
@@ -108,7 +110,7 @@ class LearningContentService(LearningChapterServiceMixin):
             return Result.ok(content)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(content, field, value)
-        content.updated_by = actor_id
+        set_orm_field(content, "updated_by", actor_id)
         try:
             await self._db.commit()
             await self._db.refresh(content)
@@ -133,8 +135,8 @@ class LearningContentService(LearningChapterServiceMixin):
             return Result.fail(SERVER_ERROR)
         if not impact.can_archive:
             return Result.fail("[LEARNING_CONTENT_BOUND_TO_NEWCOMER_PATH]")
-        content.status = "archived"
-        content.updated_by = actor_id
+        set_orm_field(content, "status", "archived")
+        set_orm_field(content, "updated_by", actor_id)
         try:
             await self._db.commit()
             await self._db.refresh(content)
@@ -159,7 +161,7 @@ class LearningContentService(LearningChapterServiceMixin):
 
     async def publish_content(
         self, content: LearningContent, *, actor_id: str | None
-    ) -> Result[LearningContent]:
+    ) -> Result[LearningContent | PublishGateDecision]:
         if content.status == "archived":
             return Result.fail("[LEARNING_CONTENT_NOT_EDITABLE]")
         actor_result = await self._actor_result(actor_id)
@@ -182,7 +184,7 @@ class LearningContentService(LearningChapterServiceMixin):
             except SQLAlchemyError:
                 await self._db.rollback()
                 return Result.fail(SERVER_ERROR)
-        chapters_result = await self.list_chapters(content.learning_content_id)
+        chapters_result = await self.list_chapters(str(content.learning_content_id))
         if not chapters_result.is_success:
             return Result.fail(chapters_result.fallback or SERVER_ERROR)
         chapters = chapters_result.value or []
@@ -194,13 +196,17 @@ class LearningContentService(LearningChapterServiceMixin):
                 is_success=False,
             )
         if content.status != "published":
-            content.status = "published"
-            content.published_by = actor_id
-            content.published_at = datetime.now(UTC)
-        content.content_hash = learning_content_payload_hash(
-            learning_content_lifecycle_snapshot(content, chapters)
+            set_orm_field(content, "status", "published")
+            set_orm_field(content, "published_by", actor_id)
+            set_orm_field(content, "published_at", datetime.now(UTC))
+        set_orm_field(
+            content,
+            "content_hash",
+            learning_content_payload_hash(
+                learning_content_lifecycle_snapshot(content, chapters)
+            ),
         )
-        content.updated_by = actor_id
+        set_orm_field(content, "updated_by", actor_id)
         try:
             await LearningContentRevisionService(
                 self._db

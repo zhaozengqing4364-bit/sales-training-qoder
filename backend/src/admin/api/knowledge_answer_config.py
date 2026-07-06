@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import traceback
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -56,6 +56,22 @@ def error_response(
             "trace_id": get_trace_id(),
         },
     )
+
+
+def route_error_response(
+    error_code: str,
+    *,
+    status_code: int,
+    message: str | None = None,
+) -> dict[str, Any]:
+    return cast(
+        dict[str, Any],
+        error_response(error_code, status_code=status_code, message=message),
+    )
+
+
+def _set_model_attr(model: object, field: str, value: object) -> None:
+    setattr(model, field, value)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -418,8 +434,8 @@ async def _archive_current_active(db: AsyncSession, user_id: str) -> None:
     )
     result = await db.execute(stmt)
     for v in result.scalars().all():
-        v.status = "archived"
-        v.updated_by = user_id
+        _set_model_attr(v, "status", "archived")
+        _set_model_attr(v, "updated_by", user_id)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -513,10 +529,10 @@ async def update_admin_knowledge_answer_config(
     request: KnowledgeAnswerConfigUpdateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
-):
+) -> dict[str, Any]:
     target = await db.get(KnowledgeConfigVersion, request.config_version_id)
     if target is None or not target.enabled:
-        return error_response(
+        return route_error_response(
             "[KNOWLEDGE_CONFIG_NOT_FOUND]",
             status_code=404,
             message="Knowledge config version not found",
@@ -524,11 +540,11 @@ async def update_admin_knowledge_answer_config(
 
     current_active = await _get_active_version(db)
     if current_active is not None and str(current_active.id) != str(target.id):
-        current_active.status = "archived"
-        current_active.updated_by = str(current_user.user_id)
+        _set_model_attr(current_active, "status", "archived")
+        _set_model_attr(current_active, "updated_by", str(current_user.user_id))
 
-    target.status = "active"
-    target.updated_by = str(current_user.user_id)
+    _set_model_attr(target, "status", "active")
+    _set_model_attr(target, "updated_by", str(current_user.user_id))
     await db.commit()
 
     return await get_admin_knowledge_answer_config(db=db)
@@ -575,7 +591,7 @@ async def create_config_version(
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response(
+        return route_error_response(
             "[VERSION_NAME_DUPLICATE]",
             status_code=409,
             message=f"Version name '{request.version_name}' already exists",
@@ -645,23 +661,23 @@ async def update_config_version(
     user_id = str(current_user.user_id)
 
     if request.version_name is not None:
-        version.version_name = request.version_name
+        _set_model_attr(version, "version_name", request.version_name)
     if request.notes is not None:
-        version.notes = request.notes
+        _set_model_attr(version, "notes", request.notes)
     if request.enabled is not None:
-        version.enabled = request.enabled
+        _set_model_attr(version, "enabled", request.enabled)
     if request.status == "active":
         await _archive_current_active(db, user_id)
-        version.status = "active"
+        _set_model_attr(version, "status", "active")
     elif request.status is not None:
-        version.status = request.status
-    version.updated_by = user_id
+        _set_model_attr(version, "status", request.status)
+    _set_model_attr(version, "updated_by", user_id)
 
     try:
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response(
+        return route_error_response(
             "[VERSION_NAME_DUPLICATE]",
             status_code=409,
             message="Version name already exists",
@@ -749,7 +765,7 @@ async def create_query_profile(
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response(
+        return route_error_response(
             "[PROFILE_KEY_DUPLICATE]",
             status_code=409,
             message=f"Profile key '{request.profile_key}' already exists in this version",
@@ -782,7 +798,7 @@ async def update_query_profile(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeQueryProfile, profile_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[PROFILE_NOT_FOUND]", status_code=404)
+        return route_error_response("[PROFILE_NOT_FOUND]", status_code=404)
     user_id = str(current_user.user_id)
     for field, val in [
         ("profile_key", request.profile_key),
@@ -794,12 +810,12 @@ async def update_query_profile(
     ]:
         if val is not None:
             setattr(row, field, val)
-    row.updated_by = user_id
+    _set_model_attr(row, "updated_by", user_id)
     try:
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response("[PROFILE_KEY_DUPLICATE]", status_code=409)
+        return route_error_response("[PROFILE_KEY_DUPLICATE]", status_code=409)
     await db.commit()
     await db.refresh(row)
     resp = QueryProfileResponse(
@@ -826,7 +842,7 @@ async def delete_query_profile(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeQueryProfile, profile_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[PROFILE_NOT_FOUND]", status_code=404)
+        return route_error_response("[PROFILE_NOT_FOUND]", status_code=404)
     await db.delete(row)
     await db.commit()
     return success_response({"deleted": True, "id": profile_id})
@@ -920,7 +936,7 @@ async def update_intent_rule(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeIntentRule, rule_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[RULE_NOT_FOUND]", status_code=404)
+        return route_error_response("[RULE_NOT_FOUND]", status_code=404)
     user_id = str(current_user.user_id)
     for field, val in [
         ("intent_key", request.intent_key),
@@ -932,7 +948,7 @@ async def update_intent_rule(
     ]:
         if val is not None:
             setattr(row, field, val)
-    row.updated_by = user_id
+    _set_model_attr(row, "updated_by", user_id)
     await db.commit()
     await db.refresh(row)
     resp = IntentRuleResponse(
@@ -957,7 +973,7 @@ async def delete_intent_rule(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeIntentRule, rule_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[RULE_NOT_FOUND]", status_code=404)
+        return route_error_response("[RULE_NOT_FOUND]", status_code=404)
     await db.delete(row)
     await db.commit()
     return success_response({"deleted": True, "id": rule_id})
@@ -1025,7 +1041,7 @@ async def create_entity_alias(
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response(
+        return route_error_response(
             "[ALIAS_DUPLICATE]",
             status_code=409,
             message=f"Alias '{request.alias}' already exists in this version",
@@ -1057,7 +1073,7 @@ async def update_entity_alias(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeEntityAlias, alias_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[ALIAS_NOT_FOUND]", status_code=404)
+        return route_error_response("[ALIAS_NOT_FOUND]", status_code=404)
     user_id = str(current_user.user_id)
     for field, val in [
         ("canonical_entity", request.canonical_entity),
@@ -1068,12 +1084,12 @@ async def update_entity_alias(
     ]:
         if val is not None:
             setattr(row, field, val)
-    row.updated_by = user_id
+    _set_model_attr(row, "updated_by", user_id)
     try:
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response("[ALIAS_DUPLICATE]", status_code=409)
+        return route_error_response("[ALIAS_DUPLICATE]", status_code=409)
     await db.commit()
     await db.refresh(row)
     resp = EntityAliasResponse(
@@ -1097,7 +1113,7 @@ async def delete_entity_alias(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeEntityAlias, alias_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[ALIAS_NOT_FOUND]", status_code=404)
+        return route_error_response("[ALIAS_NOT_FOUND]", status_code=404)
     await db.delete(row)
     await db.commit()
     return success_response({"deleted": True, "id": alias_id})
@@ -1186,7 +1202,7 @@ async def create_ranking_profile(
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response("[PROFILE_KEY_DUPLICATE]", status_code=409)
+        return route_error_response("[PROFILE_KEY_DUPLICATE]", status_code=409)
     await db.commit()
     await db.refresh(row)
     return success_response(_ranking_to_response(row).model_dump(mode="json"))
@@ -1203,45 +1219,45 @@ async def update_ranking_profile(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeRankingProfile, profile_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[PROFILE_NOT_FOUND]", status_code=404)
+        return route_error_response("[PROFILE_NOT_FOUND]", status_code=404)
     user_id = str(current_user.user_id)
     if request.profile_key is not None:
-        row.profile_key = request.profile_key
+        _set_model_attr(row, "profile_key", request.profile_key)
     if request.title_exact_boost is not None:
-        row.title_exact_boost = request.title_exact_boost
+        _set_model_attr(row, "title_exact_boost", request.title_exact_boost)
     if request.entity_match_boost is not None:
-        row.entity_match_boost = request.entity_match_boost
+        _set_model_attr(row, "entity_match_boost", request.entity_match_boost)
     if request.doc_type_weights is not None:
-        row.doc_type_weights_json = request.doc_type_weights
+        _set_model_attr(row, "doc_type_weights_json", request.doc_type_weights)
     if request.section_weights is not None:
-        row.section_weights_json = request.section_weights
+        _set_model_attr(row, "section_weights_json", request.section_weights)
     if request.min_pass_score is not None:
-        row.min_pass_score = request.min_pass_score
+        _set_model_attr(row, "min_pass_score", request.min_pass_score)
     if request.min_pass_score_keyword is not None:
-        row.min_pass_score_keyword = request.min_pass_score_keyword
+        _set_model_attr(row, "min_pass_score_keyword", request.min_pass_score_keyword)
     if request.enabled is not None:
-        row.enabled = request.enabled
+        _set_model_attr(row, "enabled", request.enabled)
     # Unified scoring weights
     if request.base_weight is not None:
-        row.base_weight = request.base_weight
+        _set_model_attr(row, "base_weight", request.base_weight)
     if request.coverage_weight is not None:
-        row.coverage_weight = request.coverage_weight
+        _set_model_attr(row, "coverage_weight", request.coverage_weight)
     if request.phrase_bonus is not None:
-        row.phrase_bonus = request.phrase_bonus
+        _set_model_attr(row, "phrase_bonus", request.phrase_bonus)
     if request.title_bonus_max is not None:
-        row.title_bonus_max = request.title_bonus_max
+        _set_model_attr(row, "title_bonus_max", request.title_bonus_max)
     if request.ratio_bonus_max is not None:
-        row.ratio_bonus_max = request.ratio_bonus_max
+        _set_model_attr(row, "ratio_bonus_max", request.ratio_bonus_max)
     if request.cross_encoder_weight is not None:
-        row.cross_encoder_weight = request.cross_encoder_weight
+        _set_model_attr(row, "cross_encoder_weight", request.cross_encoder_weight)
     if request.diversity_penalty is not None:
-        row.diversity_penalty = request.diversity_penalty
-    row.updated_by = user_id
+        _set_model_attr(row, "diversity_penalty", request.diversity_penalty)
+    _set_model_attr(row, "updated_by", user_id)
     try:
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response("[PROFILE_KEY_DUPLICATE]", status_code=409)
+        return route_error_response("[PROFILE_KEY_DUPLICATE]", status_code=409)
     await db.commit()
     await db.refresh(row)
     return success_response(_ranking_to_response(row).model_dump(mode="json"))
@@ -1254,7 +1270,7 @@ async def delete_ranking_profile(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeRankingProfile, profile_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[PROFILE_NOT_FOUND]", status_code=404)
+        return route_error_response("[PROFILE_NOT_FOUND]", status_code=404)
     await db.delete(row)
     await db.commit()
     return success_response({"deleted": True, "id": profile_id})
@@ -1327,7 +1343,7 @@ async def create_answerability_profile(
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response("[PROFILE_KEY_DUPLICATE]", status_code=409)
+        return route_error_response("[PROFILE_KEY_DUPLICATE]", status_code=409)
     await db.commit()
     await db.refresh(row)
     return success_response(_answerability_to_response(row).model_dump(mode="json"))
@@ -1344,26 +1360,26 @@ async def update_answerability_profile(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeAnswerabilityProfile, profile_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[PROFILE_NOT_FOUND]", status_code=404)
+        return route_error_response("[PROFILE_NOT_FOUND]", status_code=404)
     user_id = str(current_user.user_id)
     if request.profile_key is not None:
-        row.profile_key = request.profile_key
+        _set_model_attr(row, "profile_key", request.profile_key)
     if request.required_slots is not None:
-        row.required_slots_json = request.required_slots
+        _set_model_attr(row, "required_slots_json", request.required_slots)
     if request.optional_slots is not None:
-        row.optional_slots_json = request.optional_slots
+        _set_model_attr(row, "optional_slots_json", request.optional_slots)
     if request.sufficient_threshold is not None:
-        row.sufficient_threshold = request.sufficient_threshold
+        _set_model_attr(row, "sufficient_threshold", request.sufficient_threshold)
     if request.partial_threshold is not None:
-        row.partial_threshold = request.partial_threshold
+        _set_model_attr(row, "partial_threshold", request.partial_threshold)
     if request.enabled is not None:
-        row.enabled = request.enabled
-    row.updated_by = user_id
+        _set_model_attr(row, "enabled", request.enabled)
+    _set_model_attr(row, "updated_by", user_id)
     try:
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response("[PROFILE_KEY_DUPLICATE]", status_code=409)
+        return route_error_response("[PROFILE_KEY_DUPLICATE]", status_code=409)
     await db.commit()
     await db.refresh(row)
     return success_response(_answerability_to_response(row).model_dump(mode="json"))
@@ -1376,7 +1392,7 @@ async def delete_answerability_profile(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeAnswerabilityProfile, profile_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[PROFILE_NOT_FOUND]", status_code=404)
+        return route_error_response("[PROFILE_NOT_FOUND]", status_code=404)
     await db.delete(row)
     await db.commit()
     return success_response({"deleted": True, "id": profile_id})
@@ -1449,7 +1465,7 @@ async def create_chunking_preset(
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response("[PRESET_KEY_DUPLICATE]", status_code=409)
+        return route_error_response("[PRESET_KEY_DUPLICATE]", status_code=409)
     await db.commit()
     await db.refresh(row)
     return success_response(_chunking_preset_to_response(row).model_dump(mode="json"))
@@ -1466,28 +1482,28 @@ async def update_chunking_preset(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeChunkingPreset, preset_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[PRESET_NOT_FOUND]", status_code=404)
+        return route_error_response("[PRESET_NOT_FOUND]", status_code=404)
     user_id = str(current_user.user_id)
     if request.profile_key is not None:
-        row.profile_key = request.profile_key
+        _set_model_attr(row, "profile_key", request.profile_key)
     if request.description is not None:
-        row.description = request.description
+        _set_model_attr(row, "description", request.description)
     if request.chunking_strategy is not None:
-        row.chunking_strategy = request.chunking_strategy
+        _set_model_attr(row, "chunking_strategy", request.chunking_strategy)
     if request.chunk_size is not None:
-        row.chunk_size = request.chunk_size
+        _set_model_attr(row, "chunk_size", request.chunk_size)
     if request.chunk_overlap is not None:
-        row.chunk_overlap = request.chunk_overlap
+        _set_model_attr(row, "chunk_overlap", request.chunk_overlap)
     if request.is_default is not None:
-        row.is_default = request.is_default
+        _set_model_attr(row, "is_default", request.is_default)
     if request.enabled is not None:
-        row.enabled = request.enabled
-    row.updated_by = user_id
+        _set_model_attr(row, "enabled", request.enabled)
+    _set_model_attr(row, "updated_by", user_id)
     try:
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return error_response("[PRESET_KEY_DUPLICATE]", status_code=409)
+        return route_error_response("[PRESET_KEY_DUPLICATE]", status_code=409)
     await db.commit()
     await db.refresh(row)
     return success_response(_chunking_preset_to_response(row).model_dump(mode="json"))
@@ -1500,7 +1516,7 @@ async def delete_chunking_preset(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeChunkingPreset, preset_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[PRESET_NOT_FOUND]", status_code=404)
+        return route_error_response("[PRESET_NOT_FOUND]", status_code=404)
     await db.delete(row)
     await db.commit()
     return success_response({"deleted": True, "id": preset_id})
@@ -1516,7 +1532,7 @@ async def set_default_chunking_preset(
     await _ensure_version(db, version_id)
     row = await db.get(KnowledgeChunkingPreset, preset_id)
     if row is None or str(row.config_version_id) != version_id:
-        return error_response("[PRESET_NOT_FOUND]", status_code=404)
+        return route_error_response("[PRESET_NOT_FOUND]", status_code=404)
     # Clear existing defaults for this version
     existing_defaults = list(
         (
@@ -1529,9 +1545,9 @@ async def set_default_chunking_preset(
         ).scalars()
     )
     for existing in existing_defaults:
-        existing.is_default = False
-    row.is_default = True
-    row.updated_by = str(current_user.user_id)
+        _set_model_attr(existing, "is_default", False)
+    _set_model_attr(row, "is_default", True)
+    _set_model_attr(row, "updated_by", str(current_user.user_id))
     await db.commit()
     await db.refresh(row)
     return success_response(_chunking_preset_to_response(row).model_dump(mode="json"))
@@ -1559,7 +1575,7 @@ async def debug_trigger_knowledge_answer(
         ).get_active_config()
     )
     if snapshot is None:
-        return error_response(
+        return route_error_response(
             "[KNOWLEDGE_NO_ACTIVE_CONFIG]",
             status_code=422,
             message="No active config version found. Create and activate a config version first.",
@@ -1592,7 +1608,7 @@ async def debug_trigger_knowledge_answer(
             strict_kb_mode=request.strict_kb_mode,
         )
     except Exception as e:
-        return error_response(
+        return route_error_response(
             "[ENGINE_EXECUTION_ERROR]",
             status_code=500,
             message=f"Knowledge answer engine error: {e!s}\n{traceback.format_exc()}",

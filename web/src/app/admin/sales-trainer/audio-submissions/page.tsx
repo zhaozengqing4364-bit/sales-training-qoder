@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
+import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import { formatAdminRecordStatus, formatAudioSourceLabel } from "@/lib/sales-trainer/admin-display";
 import type { SalesTrainerAudioSubmission } from "@/lib/api/types";
+import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 
 function formatSubmissionUser(item: SalesTrainerAudioSubmission): string {
     const primary = item.user_name || item.user_email || item.user_id;
@@ -24,23 +26,34 @@ export default function SalesTrainerAudioSubmissionsPage() {
     const [items, setItems] = useState<SalesTrainerAudioSubmission[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const routeAccess = useSalesTrainerAdminRouteAccess(pathname);
+
+    const loadItems = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const result = await api.admin.salesTrainer.listAudioSubmissions({ limit: 100 });
+            setItems(result.items);
+        } catch (loadError) {
+            setItems([]);
+            setError(getApiErrorMessage(loadError));
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
-        async function loadItems() {
-            setIsLoading(true);
+        if (routeAccess.isLoading) {
+            return;
+        }
+        if (!routeAccess.canAccess) {
+            setItems([]);
             setError(null);
-            try {
-                const result = await api.admin.salesTrainer.listAudioSubmissions({ limit: 100 });
-                setItems(result.items);
-            } catch (loadError) {
-                setItems([]);
-                setError(getApiErrorMessage(loadError));
-            } finally {
-                setIsLoading(false);
-            }
+            setIsLoading(false);
+            return;
         }
         void loadItems();
-    }, []);
+    }, [loadItems, routeAccess.canAccess, routeAccess.isLoading]);
 
     return (
         <AdminIndexShell
@@ -48,16 +61,28 @@ export default function SalesTrainerAudioSubmissionsPage() {
                 <AdminPageHeader
                     title="新人训练路径录音记录"
                     description="查看录音状态、转写和评分入口。详情页提供重试和授权文件访问。"
-                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={routeAccess.capabilities} />}
                 />
             )}
         >
-            <GlassCard className="overflow-hidden p-0">
-                {error ? (
-                    <div className="border-b border-red-100 bg-red-50 px-6 py-4 text-sm text-red-700">
-                        {error}
-                    </div>
-                ) : null}
+            {routeAccess.denialMessage ? (
+                <AdminLoadErrorCard
+                    title="页面访问受限"
+                    description="当前页不会在能力接口失败或权限不足时继续加载录音记录，避免把不可访问状态伪装成空列表。"
+                    message={routeAccess.denialMessage}
+                    retryLabel="重新检查权限"
+                    onRetry={routeAccess.reloadCapabilities}
+                />
+            ) : error ? (
+                <AdminLoadErrorCard
+                    title="录音记录加载失败"
+                    description="当前页不会在录音列表读取失败时渲染空列表，避免把权限、任务服务或后端异常伪装成暂无录音。"
+                    message={error}
+                    retryLabel="重新加载录音记录"
+                    onRetry={() => void loadItems()}
+                />
+            ) : (
+                <GlassCard className="overflow-hidden p-0">
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="border-b border-slate-100 text-left text-slate-500">
@@ -104,7 +129,8 @@ export default function SalesTrainerAudioSubmissionsPage() {
                         ))}
                     </tbody>
                 </table>
-            </GlassCard>
+                </GlassCard>
+            )}
         </AdminIndexShell>
     );
 }

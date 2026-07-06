@@ -169,7 +169,7 @@ class SessionRuntimeStateService:
                 updated_at=None,
             )
 
-        runtime_state = (
+        runtime_state: dict[str, Any] = (
             session.runtime_state if isinstance(session.runtime_state, dict) else {}
         )
         current = read_lifecycle_snapshot(runtime_state)
@@ -298,7 +298,7 @@ class SessionRuntimeStateService:
                 rejected=True,
             )
 
-        runtime_state = (
+        runtime_state: dict[str, Any] = (
             dict(session.runtime_state)
             if isinstance(session.runtime_state, dict)
             else {}
@@ -367,7 +367,7 @@ class SessionRuntimeStateService:
             lifecycle_payload["failure_hint"] = None
 
         runtime_state[LIFECYCLE_KEY] = lifecycle_payload
-        session.runtime_state = runtime_state
+        setattr(session, "runtime_state", runtime_state)
         flag_modified(session, "runtime_state")
         await self._db.commit()
 

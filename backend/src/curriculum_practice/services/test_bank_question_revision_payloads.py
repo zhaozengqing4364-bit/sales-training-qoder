@@ -11,6 +11,7 @@ from curriculum_practice.schemas import (
     PublishGateDecision,
     QuestionItemUpdate,
 )
+from curriculum_practice.services.orm_payload_typing import orm_int, set_orm_field
 from curriculum_practice.services.sales_trainer_revision_adapter import AssetChangeClass
 
 QUESTION_ITEM_RESOURCE_TYPE: Final = "curriculum_question_item"
@@ -65,23 +66,35 @@ def apply_question_item_revision_payload(
     *,
     actor_id: str,
 ) -> None:
-    question.category_id = _required_str(payload, "category_id")
-    question.title = _required_str(payload, "title")
-    question.stem = _required_str(payload, "stem")
-    question.reference_answer = _optional_str(payload, "reference_answer")
-    question.scoring_criteria = _dict_value(payload, "scoring_criteria")
-    question.scoring_dimensions = _list_value(payload, "scoring_dimensions")
-    question.tags = _list_value(payload, "tags")
-    question.usage_scope = _required_str(payload, "usage_scope")
-    question.difficulty = _required_str(payload, "difficulty")
-    question.safety_flagged = bool(payload.get("safety_flagged"))
-    question.department = _optional_str(payload, "department")
-    question.status = "published"
-    question.version = _int_value(payload, "version", fallback=question.version or 1)
-    question.content_hash = question_item_payload_hash(payload)
-    question.published_by = actor_id
-    question.published_at = datetime.now(UTC)
-    question.updated_by = actor_id
+    set_orm_field(question, "category_id", _required_str(payload, "category_id"))
+    set_orm_field(question, "title", _required_str(payload, "title"))
+    set_orm_field(question, "stem", _required_str(payload, "stem"))
+    set_orm_field(
+        question, "reference_answer", _optional_str(payload, "reference_answer")
+    )
+    set_orm_field(
+        question, "scoring_criteria", _dict_value(payload, "scoring_criteria")
+    )
+    set_orm_field(
+        question,
+        "scoring_dimensions",
+        _list_value(payload, "scoring_dimensions"),
+    )
+    set_orm_field(question, "tags", _list_value(payload, "tags"))
+    set_orm_field(question, "usage_scope", _required_str(payload, "usage_scope"))
+    set_orm_field(question, "difficulty", _required_str(payload, "difficulty"))
+    set_orm_field(question, "safety_flagged", bool(payload.get("safety_flagged")))
+    set_orm_field(question, "department", _optional_str(payload, "department"))
+    set_orm_field(question, "status", "published")
+    set_orm_field(
+        question,
+        "version",
+        _int_value(payload, "version", fallback=question.version),
+    )
+    set_orm_field(question, "content_hash", question_item_payload_hash(payload))
+    set_orm_field(question, "published_by", actor_id)
+    set_orm_field(question, "published_at", datetime.now(UTC))
+    set_orm_field(question, "updated_by", actor_id)
 
 
 def question_item_publish_decision_from_payload(
@@ -171,15 +184,18 @@ def question_item_payload_hash(payload: dict[str, Any]) -> str:
         "department": payload.get("department"),
         "version": payload.get("version"),
     }
-    return "sha256:" + sha256(
-        dumps(
-            hash_payload,
-            sort_keys=True,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            default=str,
-        ).encode("utf-8")
-    ).hexdigest()
+    return (
+        "sha256:"
+        + sha256(
+            dumps(
+                hash_payload,
+                sort_keys=True,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                default=str,
+            ).encode("utf-8")
+        ).hexdigest()
+    )
 
 
 def _criteria_with_dimensions(
@@ -259,9 +275,9 @@ def _list_value(payload: dict[str, Any], field_name: str) -> list[Any]:
     return list(value) if isinstance(value, list) else []
 
 
-def _int_value(payload: dict[str, Any], field_name: str, *, fallback: int) -> int:
+def _int_value(payload: dict[str, Any], field_name: str, *, fallback: object) -> int:
     value = payload.get(field_name)
-    return value if isinstance(value, int) else int(fallback)
+    return value if isinstance(value, int) else orm_int(fallback)
 
 
 def _datetime_value(value: Any) -> str | None:

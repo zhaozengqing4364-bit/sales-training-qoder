@@ -10,12 +10,14 @@ import BusinessEtiquetteImportPage from "./page";
 
 const {
     getBusinessEtiquetteReleaseImpactMock,
+    getCapabilitiesMock,
     importBusinessEtiquetteMarkdownMock,
     publishBusinessEtiquetteReleaseMock,
     toastErrorMock,
     toastSuccessMock,
 } = vi.hoisted(() => ({
     getBusinessEtiquetteReleaseImpactMock: vi.fn(),
+    getCapabilitiesMock: vi.fn(),
     importBusinessEtiquetteMarkdownMock: vi.fn(),
     publishBusinessEtiquetteReleaseMock: vi.fn(),
     toastErrorMock: vi.fn(),
@@ -45,6 +47,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     getBusinessEtiquetteReleaseImpact:
                         getBusinessEtiquetteReleaseImpactMock,
                     importBusinessEtiquetteMarkdown:
@@ -202,6 +205,24 @@ function markdownFile(): File {
 describe("BusinessEtiquetteImportPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: true,
+                manage_questions: false,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_content"],
+        });
         importBusinessEtiquetteMarkdownMock.mockResolvedValue(importResult);
         getBusinessEtiquetteReleaseImpactMock.mockResolvedValue(releaseImpact);
         publishBusinessEtiquetteReleaseMock.mockResolvedValue({
@@ -219,13 +240,13 @@ describe("BusinessEtiquetteImportPage", () => {
         render(<BusinessEtiquetteImportPage />);
 
         const file = markdownFile();
-        fireEvent.change(screen.getByLabelText("Markdown 文件"), {
+        fireEvent.change(await screen.findByLabelText("Markdown 文件"), {
             target: { files: [file] },
         });
         fireEvent.change(screen.getByLabelText("操作原因"), {
             target: { value: "重新导入商务礼仪资料" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "生成草稿版本" }));
+        fireEvent.click(await screen.findByRole("button", { name: "生成草稿版本" }));
 
         await waitFor(() => {
             expect(importBusinessEtiquetteMarkdownMock).toHaveBeenCalledWith({
@@ -254,10 +275,10 @@ describe("BusinessEtiquetteImportPage", () => {
         render(<BusinessEtiquetteImportPage />);
 
         const file = markdownFile();
-        fireEvent.change(screen.getByLabelText("Markdown 文件"), {
+        fireEvent.change(await screen.findByLabelText("Markdown 文件"), {
             target: { files: [file] },
         });
-        fireEvent.click(screen.getByRole("button", { name: "生成草稿版本" }));
+        fireEvent.click(await screen.findByRole("button", { name: "生成草稿版本" }));
 
         await screen.findByText("发布影响分析");
         fireEvent.change(await screen.findByLabelText("发布影响范围"), {
@@ -282,10 +303,10 @@ describe("BusinessEtiquetteImportPage", () => {
         expect(toastSuccessMock).toHaveBeenCalledWith("已发布训练包 v2");
     });
 
-    it("does not submit without a markdown file", () => {
+    it("does not submit without a markdown file", async () => {
         render(<BusinessEtiquetteImportPage />);
 
-        fireEvent.click(screen.getByRole("button", { name: "生成草稿版本" }));
+        fireEvent.click(await screen.findByRole("button", { name: "生成草稿版本" }));
 
         expect(importBusinessEtiquetteMarkdownMock).not.toHaveBeenCalled();
         expect(toastErrorMock).toHaveBeenCalledWith("请先选择 Markdown 文件。");
@@ -295,7 +316,7 @@ describe("BusinessEtiquetteImportPage", () => {
         render(<BusinessEtiquetteImportPage />);
 
         const file = markdownFile();
-        fireEvent.change(screen.getByLabelText("Markdown 文件"), {
+        fireEvent.change(await screen.findByLabelText("Markdown 文件"), {
             target: { files: [file] },
         });
         fireEvent.click(screen.getByRole("checkbox", { name: "允许覆盖当前未发布草稿" }));
@@ -309,5 +330,36 @@ describe("BusinessEtiquetteImportPage", () => {
                 }),
             );
         });
+    });
+
+    it("fails closed without content management capability", async () => {
+        getCapabilitiesMock.mockResolvedValueOnce({
+            role: "viewer",
+            role_label: "只读人员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_questions: true,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_questions"],
+        });
+
+        render(<BusinessEtiquetteImportPage />);
+
+        expect(await screen.findByText("资料导入权限不足")).toBeTruthy();
+        expect(importBusinessEtiquetteMarkdownMock).not.toHaveBeenCalled();
+        expect(getBusinessEtiquetteReleaseImpactMock).not.toHaveBeenCalled();
+        expect(publishBusinessEtiquetteReleaseMock).not.toHaveBeenCalled();
+        expect(screen.queryByLabelText("Markdown 文件")).toBeNull();
+        expect(screen.queryByRole("button", { name: "生成草稿版本" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "确认发布新版" })).toBeNull();
     });
 });

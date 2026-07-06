@@ -14,6 +14,7 @@ from curriculum_practice.schemas import (
     QuestionItemCreate,
     QuestionItemUpdate,
 )
+from curriculum_practice.services.orm_payload_typing import set_orm_field
 from curriculum_practice.services.test_bank_constants import SERVER_ERROR
 from curriculum_practice.services.test_bank_question_revision_payloads import (
     question_item_lifecycle_snapshot,
@@ -120,7 +121,7 @@ class TestBankQuestionServiceMixin:
             )
         for field, value in data.items():
             setattr(question, field, value)
-        question.updated_by = actor_id
+        set_orm_field(question, "updated_by", actor_id)
         try:
             await self._db.commit()
             await self._db.refresh(question)
@@ -142,8 +143,18 @@ class TestBankQuestionServiceMixin:
                 question,
                 actor=actor_result.value,
             )
-            if not result.is_success or result.value:
-                return result
+            if not result.is_success:
+                return Result(
+                    value=(
+                        result.value
+                        if isinstance(result.value, PublishGateDecision)
+                        else None
+                    ),
+                    fallback=result.fallback,
+                    is_success=False,
+                )
+            if isinstance(result.value, QuestionItem):
+                return Result.ok(result.value)
         decision = publish_decision(question)
         if not decision.can_publish:
             return Result(
@@ -152,11 +163,11 @@ class TestBankQuestionServiceMixin:
                 is_success=False,
             )
         previous_snapshot = question_item_lifecycle_snapshot(question)
-        question.status = "published"
-        question.published_by = actor_id
-        question.published_at = datetime.now(UTC)
-        question.content_hash = question_hash(question)
-        question.updated_by = actor_id
+        set_orm_field(question, "status", "published")
+        set_orm_field(question, "published_by", actor_id)
+        set_orm_field(question, "published_at", datetime.now(UTC))
+        set_orm_field(question, "content_hash", question_hash(question))
+        set_orm_field(question, "updated_by", actor_id)
         try:
             await TestBankQuestionRevisionService(
                 self._db
@@ -175,8 +186,8 @@ class TestBankQuestionServiceMixin:
     async def archive_question(
         self, question: QuestionItem, *, actor_id: str | None
     ) -> Result[QuestionItem]:
-        question.status = "archived"
-        question.updated_by = actor_id
+        set_orm_field(question, "status", "archived")
+        set_orm_field(question, "updated_by", actor_id)
         try:
             await self._db.commit()
             await self._db.refresh(question)
@@ -216,14 +227,18 @@ class TestBankQuestionServiceMixin:
         question: QuestionItem,
         *,
         actor: User,
-    ) -> Result[QuestionItem | PublishGateDecision]:
+    ) -> Result[QuestionItem | PublishGateDecision | bool]:
         try:
             working_result = await TestBankQuestionRevisionService(
                 self._db
             ).stage_publish_working_revision(question, actor=actor)
             if not working_result.is_success:
                 return Result(
-                    value=working_result.value,
+                    value=(
+                        working_result.value
+                        if isinstance(working_result.value, PublishGateDecision)
+                        else None
+                    ),
                     fallback=working_result.fallback,
                     is_success=False,
                 )
@@ -261,4 +276,3 @@ class TestBankQuestionServiceMixin:
                 category_result.fallback or "[QUESTION_CATEGORY_NOT_FOUND]"
             )
         return Result.ok(None)
-

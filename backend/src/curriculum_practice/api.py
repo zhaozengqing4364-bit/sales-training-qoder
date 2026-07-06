@@ -28,6 +28,7 @@ from curriculum_practice.schemas import (
     CaseItemResponse,
     ExaminerAgentCreate,
     ExaminerAgentListResponse,
+    ExaminerAgentResponse,
     ExaminerAgentSimulationRequest,
     ExaminerAgentUpdate,
     LearnerAdminOverrideRequest,
@@ -336,7 +337,7 @@ def _examiner_agent_publish_gate_error(decision: object) -> JSONResponse:
     )
 
 
-def _serialize_examiner_agent(item: ExaminerAgent):
+def _serialize_examiner_agent(item: ExaminerAgent) -> ExaminerAgentResponse:
     return serialize_examiner_agent(item)
 
 
@@ -980,7 +981,14 @@ async def publish_question(
             server_error_code="[QUESTION_ITEM_PUBLISH_FAILED]",
             server_message="QuestionItem 发布失败。",
         )
-    return _success(serialize_question(result.value))
+    published_question = result.value
+    if isinstance(published_question, PublishGateDecision):
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_ITEM_PUBLISH_FAILED]",
+            server_message="QuestionItem 发布失败。",
+        )
+    return _success(serialize_question(published_question))
 
 
 @test_bank_router.post("/questions/{question_id}/archive", response_model=None)
@@ -1357,7 +1365,14 @@ async def publish_learning_content(
             server_error_code="[LEARNING_CONTENT_PUBLISH_FAILED]",
             server_message="LearningContent 发布失败。",
         )
-    serialized_result = await serialize_learning_content(service, publish_result.value)
+    published_content = publish_result.value
+    if isinstance(published_content, PublishGateDecision):
+        return _learning_content_result_error(
+            publish_result.fallback,
+            server_error_code="[LEARNING_CONTENT_PUBLISH_FAILED]",
+            server_message="LearningContent 发布失败。",
+        )
+    serialized_result = await serialize_learning_content(service, published_content)
     if not serialized_result.is_success or serialized_result.value is None:
         return _learning_content_result_error(
             serialized_result.fallback,
@@ -1738,10 +1753,10 @@ async def get_practice_template_runtime_dossier_preview(
         )
     if preview is None:
         return _not_found()
-    preview = dict(preview)
-    preview["roleplay_contract"] = roleplay_contract
-    preview["roleplay_gate_results"] = roleplay_gate_results
-    return _success(preview)
+    preview_payload = preview.model_dump()
+    preview_payload["roleplay_contract"] = roleplay_contract
+    preview_payload["roleplay_gate_results"] = roleplay_gate_results
+    return _success(preview_payload)
 
 
 @router.get("/roleplay-situation-packs", response_model=None)

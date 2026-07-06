@@ -564,7 +564,7 @@ class VoiceRuntimePolicyService:
                 session_id=session_id,
             )
 
-        return decision
+        return cast(dict[str, Any], decision)
 
     async def list_profiles(self, only_active: bool = False) -> list[dict[str, Any]]:
         stmt = select(VoiceRuntimeProfile).order_by(
@@ -599,7 +599,7 @@ class VoiceRuntimePolicyService:
             ),
             model_name=str(
                 payload.get("model_name")
-                or os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-2")
+                or os.getenv("STEPFUN_REALTIME_MODEL", "stepaudio-2.5-realtime")
             ),
             voice_name=str(
                 payload.get("voice_name")
@@ -1127,10 +1127,13 @@ class VoiceRuntimePolicyService:
             return ""
 
         persona_name = str(getattr(persona, "name", "") or "").strip()
-        return VoiceInstructionCompiler.build_role_anchor(
-            persona_policy,
-            pack_dto,
-            persona_name,
+        return cast(
+            str,
+            VoiceInstructionCompiler.build_role_anchor(
+                persona_policy,
+                pack_dto,
+                persona_name,
+            ),
         )
 
     def _compile_direct_practice_roleplay_contract(
@@ -1274,7 +1277,7 @@ class VoiceRuntimePolicyService:
             "voice_mode": env_mode,
             "runtime_profile_id": None,
             "runtime_profile_name": None,
-            "model_name": os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-2"),
+            "model_name": os.getenv("STEPFUN_REALTIME_MODEL", "stepaudio-2.5-realtime"),
             "voice_name": os.getenv("STEPFUN_REALTIME_VOICE", "qingchunshaonv"),
             "temperature": _to_float(
                 os.getenv("STEPFUN_REALTIME_TEMPERATURE", 0.7), 0.7
@@ -1525,11 +1528,14 @@ class VoiceRuntimePolicyService:
         agent: Agent | None,
         persona: Persona | None,
     ) -> str:
-        return VoiceInstructionCompiler.compile_base_contract(
-            policy=policy,
-            agent=agent,
-            persona=persona,
-        ).base_instructions
+        return cast(
+            str,
+            VoiceInstructionCompiler.compile_base_contract(
+                policy=policy,
+                agent=agent,
+                persona=persona,
+            ).base_instructions,
+        )
 
     def _serialize_profile(self, profile: VoiceRuntimeProfile) -> dict[str, Any]:
         return {

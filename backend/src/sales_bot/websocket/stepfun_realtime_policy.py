@@ -18,9 +18,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
-from urllib.parse import urlencode
 
-import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from websockets.exceptions import ConnectionClosed
@@ -142,7 +140,6 @@ from sales_bot.websocket.components.stepfun_runtime_metrics_helpers import (
 from sales_bot.websocket.components.stepfun_roleplay_runtime_helpers import (
     restore_roleplay_runtime_state,
 )
-from sales_bot.websocket.components.stepfun_voice_selection import resolve_session_voice
 from sales_bot.websocket.components.stepfun_tool_helpers import (
     build_stepfun_tools_from_policy,
 )
@@ -1066,81 +1063,6 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
         await self._send_error(code, message)
         await self._send_status("idle")
         return False
-
-    async def _connect_upstream(self) -> None:
-        """Connect to StepFun realtime WebSocket and initialize session."""
-        query = urlencode({"model": self._stepfun_model})
-        endpoint = f"{self._stepfun_url}?{query}"
-        headers = {"Authorization": f"Bearer {self._stepfun_api_key}"}
-
-        logger.info(f"Connecting StepFun realtime: model={self._stepfun_model}")
-        self.upstream_ws = await websockets.connect(
-            endpoint, additional_headers=headers
-        )
-        now = asyncio.get_running_loop().time()
-        self._upstream_connected_at = now
-        self._upstream_last_activity_at = now
-        self._last_upstream_event_type = ""
-
-        turn_detection_value = None
-        if self._effective_policy.get("turn_detection") == "server_vad":
-            turn_detection_value = {"type": "server_vad"}
-
-        selected_voice = resolve_session_voice(
-            default_voice=self._stepfun_voice,
-            runtime_snapshot=self._curriculum_snapshot,
-        )
-        session_payload: dict = {
-            "type": "session.update",
-            "session": {
-                "voice": selected_voice,
-                "temperature": self._stepfun_temperature,
-                "input_audio_format": self._stepfun_input_audio_format,
-                "output_audio_format": self._stepfun_output_audio_format,
-                "turn_detection": turn_detection_value,
-            },
-        }
-        if self._stepfun_input_transcription_enabled:
-            input_audio_transcription: dict[str, Any] = {}
-            if self._stepfun_input_transcription_language:
-                input_audio_transcription["language"] = (
-                    self._stepfun_input_transcription_language
-                )
-            if self._stepfun_input_transcription_model:
-                input_audio_transcription["model"] = (
-                    self._stepfun_input_transcription_model
-                )
-            if input_audio_transcription:
-                session_payload["session"]["input_audio_transcription"] = (
-                    input_audio_transcription
-                )
-        if self._stepfun_instructions:
-            session_payload["session"]["instructions"] = self._stepfun_instructions
-        tools = self._enforce_stepfun_tool_guardrails(
-            self._build_stepfun_tools_from_policy()
-        )
-        knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
-        has_bound_knowledge_base = isinstance(knowledge_base_ids, list) and bool(
-            [item for item in knowledge_base_ids if str(item).strip()]
-        )
-        tool_policy = self._effective_policy.get("tool_policy")
-        if not isinstance(tool_policy, dict):
-            tool_policy = {}
-        logger.info(
-            "StepFun tools prepared",
-            session_id=self.session_id,
-            tool_types=[str(tool.get("type") or "") for tool in tools],
-            kb_bound=has_bound_knowledge_base,
-            network_access_mode=str(tool_policy.get("network_access_mode") or ""),
-            input_transcription_enabled=self._stepfun_input_transcription_enabled,
-        )
-        if tools:
-            session_payload["session"]["tools"] = tools
-
-        await self._send_upstream(session_payload)
-        self._ensure_upstream_keepalive_task()
-        logger.info("StepFun session.update sent")
-        await self._maybe_start_kb_lock_warmup()
 
     async def _close_upstream(self) -> None:
         """Close upstream connection safely."""

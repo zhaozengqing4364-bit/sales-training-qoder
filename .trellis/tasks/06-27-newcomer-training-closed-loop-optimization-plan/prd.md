@@ -4,7 +4,7 @@
 
 把新人训练路径从“已有异步训练骨架”升级为可长期运营的完整闭环系统：角色、学员等级、训练阶段都可区分；内容、配置、权限、训练、报告、可视化、审计和测试形成闭环；前后端契约紧密一致；没有伪成功、死数据、不可流通数据和靠前端隐藏的权限。
 
-本任务是总规划任务，不直接实现全部代码。输出物必须完整记录问题、决策、阶段路线、验收标准和后续可拆任务，保证后续迭代不会丢上下文。
+本任务最初是总规划任务；后续 `/goal` 已扩大为全量实现与验收任务。当前 PRD 保留原始目标、决策和验收口径，真实执行状态以 [`execution-plan.md`](execution-plan.md) 的阶段总账、验证记录和最终门禁证据为准。
 
 ## What I Already Know
 
@@ -109,17 +109,32 @@
 
 ## Acceptance Criteria
 
-- [ ] 文档记录所有 10 个 Agent 审计发现和用户最新决策。
-- [ ] 文档明确 P0/P1/P2 风险分级。
-- [ ] 文档明确三类等级模型。
-- [ ] 文档明确无需强制顺序解锁的产品行为。
-- [ ] 文档明确实时对练纳入完整闭环的 ADR/契约前置要求。
-- [ ] 文档明确 AI Coach 首版必过的治理要求。
-- [ ] 文档明确废弃 learner catalog fallback 和 active path revision 唯一真源策略。
-- [ ] 文档拆出可执行阶段路线。
-- [ ] 文档列出可拆分后续任务。
-- [ ] 文档列出测试和验收矩阵。
-- [ ] Trellis implement/check context 已登记相关 spec 和研究文件。
+- [x] 文档记录所有 10 个 Agent 审计发现和用户最新决策。
+- [x] 文档明确 P0/P1/P2 风险分级。
+- [x] 文档明确三类等级模型。
+- [x] 文档明确无需强制顺序解锁的产品行为。
+- [x] 文档明确实时对练纳入完整闭环的 ADR/契约前置要求。
+- [x] 文档明确 AI Coach 首版必过的治理要求。
+- [x] 文档明确废弃 learner catalog fallback 和 active path revision 唯一真源策略。
+- [x] 文档拆出可执行阶段路线。
+- [x] 文档列出可拆分后续任务。
+- [x] 文档列出测试和验收矩阵。
+- [x] Trellis implement/check context 已登记相关 spec 和研究文件。
+
+## Implementation Status
+
+- 原规划验收项已闭环到 [`execution-plan.md`](execution-plan.md) 的“审计问题归属总账”“已执行验证记录”和“Phase 9 Final Gate 记录”。
+- 逐项审计索引见 [`audit-closure-matrix.md`](audit-closure-matrix.md)。
+- 最终验收报告见 [`final-verification-report.md`](final-verification-report.md)。
+- 外部凭证与生产回填执行路径见 [`external-verification-runbook.md`](external-verification-runbook.md)。
+- 完整门禁证据：`.sisyphus/evidence/task-9-quality-gate.txt`，`bash scripts/critical-quality-gate.sh` 已通过。
+- 外部 provider 执行状态：
+  - AI Coach real provider stream：2026-06-29 06:06 CST 已使用真实 DeepSeek/OpenAI-compatible provider 执行通过，证据为 `.sisyphus/evidence/newcomer-ai-coach-real-provider-gate.json`；复跑需要真实 `LLM_API_KEY` 或 `OPENAI_API_KEY`。
+  - Realtime real provider gate：2026-06-29 06:05 CST 已使用 `step-audio-2.3` 执行到 StepFun 上游，但上游返回 HTTP 401 `upstream_auth_rejected`；开放平台 URL 与候选 Step Plan URL 均复现，复跑和闭环通过需要有效且已授权 realtime/model 的 `STEPFUN_API_KEY`。
+- 仍需产品/运维决策才能进入生产治理闭环：
+  - 学员等级首版枚举与人工/自动来源。
+  - 历史生产数据回填策略与不可回填数据标记口径。
+  - git 历史疑似 secret/token 的轮换、清史和回写判定。
 
 ## Technical Approach
 
@@ -222,10 +237,10 @@
 
 ## Out of Scope
 
-- 本任务不直接实现全部代码。
-- 本任务不提交生产迁移。
-- 本任务不启动服务做浏览器截图验收。
-- 本任务不解决所有既有 dirty worktree 改动。
+- 不提交生产破坏性迁移。
+- 不操作真实生产数据。
+- 不内置真实第三方 API 密钥。
+- 不解决与新人训练闭环无关的既有 dirty worktree 改动。
 
 ## Technical Notes
 
@@ -239,14 +254,12 @@
 ## Open Questions
 
 - 学员等级的首版枚举和来源：用户表字段、组织分层、后台配置，还是训练数据自动计算。
-- 实时对练接入方式：复用 `training_runtime` 作为外部 runtime binding，还是在 `sales_trainer` 建薄投影。
-- TrainingJourney 是否需要新表，还是先用投影服务聚合现有表。
-- AI Coach 必过是否要求每个学员必须完成一次 session，还是必须达到 mastery threshold。
+- 历史生产数据回填策略：哪些记录可回填 revision，哪些只能标记 `legacy_snapshot_only` 或 `regrade_unavailable`。
+- 真实 provider smoke 的凭证来源、secret 轮换和是否在人工 release dispatch 时强制启用真实 provider required 模式。
 
 ## Definition of Done
 
-- PRD 和审计总账落盘。
-- implement/check context 登记完成。
-- 后续可按 milestone 拆子任务。
-- 本任务不要求跑测试，但必须说明未执行原因。
-
+- PRD、审计总账、执行计划和验证证据落盘。
+- P0/P1/P2 审计问题均在执行计划中标记处理结果、验证命令和剩余外部条件。
+- 新人训练完整闭环进入 `scripts/critical-quality-gate.sh` 并通过本地 deterministic 门禁。
+- 未执行的真实第三方 provider 路径明确列为外部凭证项，不被计作绿色完成。

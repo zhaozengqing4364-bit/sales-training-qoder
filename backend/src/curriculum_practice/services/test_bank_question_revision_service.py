@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,7 +8,7 @@ from common.db.models import User
 from common.error_handling.result import Result
 from common.monitoring.logger import get_trace_id
 from curriculum_practice.models import QuestionItem
-from curriculum_practice.schemas import QuestionItemUpdate
+from curriculum_practice.schemas import PublishGateDecision, QuestionItemUpdate
 from curriculum_practice.services.sales_trainer_revision_adapter import (
     OperationLogService,
     SalesTrainerAssetRevision,
@@ -122,7 +122,7 @@ class TestBankQuestionRevisionService:
         question: QuestionItem,
         *,
         actor: User,
-    ) -> Result[bool]:
+    ) -> Result[bool | PublishGateDecision]:
         working = await self._revisions.latest_working_revision(
             resource_type=QUESTION_ITEM_RESOURCE_TYPE,
             logical_id=str(question.question_id),
@@ -177,7 +177,7 @@ def _snapshot_from_revision(
     question: QuestionItem,
 ) -> dict[str, Any]:
     if revision is None:
-        return question_item_lifecycle_snapshot(question)
+        return cast(dict[str, Any], question_item_lifecycle_snapshot(question))
     return _payload_dict(revision.payload_json)
 
 

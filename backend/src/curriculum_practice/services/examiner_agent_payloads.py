@@ -11,6 +11,7 @@ from curriculum_practice.schemas import (
     ExaminerAgentResponse,
     ExaminerAgentUpdate,
 )
+from curriculum_practice.services.orm_payload_typing import orm_int, set_orm_field
 
 HASH_EXCLUDED_FIELDS = {
     "examiner_agent_id",
@@ -32,7 +33,9 @@ class ModelDumpable(Protocol):
 
 
 def serialize_examiner_agent(agent: ExaminerAgent) -> ExaminerAgentResponse:
-    return ExaminerAgentResponse.model_validate(examiner_agent_lifecycle_snapshot(agent))
+    return ExaminerAgentResponse.model_validate(
+        examiner_agent_lifecycle_snapshot(agent)
+    )
 
 
 def examiner_agent_ref(agent: ExaminerAgent) -> dict[str, object]:
@@ -99,21 +102,33 @@ def apply_examiner_agent_revision_payload(
     actor_id: str,
     published_at: datetime,
 ) -> None:
-    agent.name = _required_str(payload, "name")
-    agent.description = _optional_str(payload, "description")
-    agent.question_source_ids = _list_value(payload, "question_source_ids")
-    agent.learner_level_strategy = _dict_value(payload, "learner_level_strategy")
-    agent.scoring_policy_id = _required_str(payload, "scoring_policy_id")
-    agent.timeout_config = _dict_value(payload, "timeout_config")
-    agent.safety_config = _dict_value(payload, "safety_config")
-    agent.prompt_config = _dict_value(payload, "prompt_config")
-    agent.simulation_config = _dict_value(payload, "simulation_config")
-    agent.status = "published"
-    agent.version = _int_value(payload, "version", fallback=agent.version or 1)
-    agent.content_hash = examiner_agent_content_hash(payload)
-    agent.published_by = actor_id
-    agent.published_at = published_at
-    agent.updated_by = actor_id
+    set_orm_field(agent, "name", _required_str(payload, "name"))
+    set_orm_field(agent, "description", _optional_str(payload, "description"))
+    set_orm_field(
+        agent,
+        "question_source_ids",
+        _list_value(payload, "question_source_ids"),
+    )
+    set_orm_field(
+        agent,
+        "learner_level_strategy",
+        _dict_value(payload, "learner_level_strategy"),
+    )
+    set_orm_field(
+        agent, "scoring_policy_id", _required_str(payload, "scoring_policy_id")
+    )
+    set_orm_field(agent, "timeout_config", _dict_value(payload, "timeout_config"))
+    set_orm_field(agent, "safety_config", _dict_value(payload, "safety_config"))
+    set_orm_field(agent, "prompt_config", _dict_value(payload, "prompt_config"))
+    set_orm_field(agent, "simulation_config", _dict_value(payload, "simulation_config"))
+    set_orm_field(agent, "status", "published")
+    set_orm_field(
+        agent, "version", _int_value(payload, "version", fallback=agent.version)
+    )
+    set_orm_field(agent, "content_hash", examiner_agent_content_hash(payload))
+    set_orm_field(agent, "published_by", actor_id)
+    set_orm_field(agent, "published_at", published_at)
+    set_orm_field(agent, "updated_by", actor_id)
 
 
 def _content_hash(payload: object) -> str:
@@ -179,9 +194,9 @@ def _optional_str(payload: dict[str, Any], field_name: str) -> str | None:
     return None
 
 
-def _int_value(payload: dict[str, Any], field_name: str, *, fallback: int) -> int:
+def _int_value(payload: dict[str, Any], field_name: str, *, fallback: object) -> int:
     value = payload.get(field_name)
-    return value if isinstance(value, int) else int(fallback)
+    return value if isinstance(value, int) else orm_int(fallback)
 
 
 def _datetime_value(value: object) -> str | None:

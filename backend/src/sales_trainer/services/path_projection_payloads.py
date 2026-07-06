@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TypeAlias
+from typing import Any, TypeAlias, cast
 
 from pydantic import ValidationError
 
@@ -110,12 +110,15 @@ def _serialize_level(
         "unit_type": unit.unit_type,
         "module_key": path_config.module_key,
         "module_type": path_config.module_type,
+        "learning_content_id": path_config.learning_content_id,
+        "exam_paper_id": path_config.exam_paper_id,
         "order_index": path_config.order_index,
         "level_title": path_config.level_title or unit.name,
         "level_description": path_config.level_description or unit.description,
         "locked": disabled,
         "lock_reason": path_config.disabled_reason if disabled else None,
         "status": status,
+        "learner_level_required": path_config.learner_level_required,
         "completion_rule": path_config.completion_rule,
         "primary_action_label": path_config.primary_action_label
         or ("开始做题" if unit.unit_type == "quiz" else "上传录音"),
@@ -135,7 +138,7 @@ def _serialize_level(
 def _public_level(level: dict[str, Any]) -> dict[str, Any]:
     payload = dict(level)
     payload.pop("guidance_templates", None)
-    return strip_learner_internal_fields(payload)
+    return cast(dict[str, Any], strip_learner_internal_fields(payload))
 
 
 def _is_completed(progress: UnitProgress | None, rule: str) -> bool:
@@ -151,9 +154,9 @@ def _is_completed(progress: UnitProgress | None, rule: str) -> bool:
             "scoring",
             "scoring_failed",
             "scored",
-        }
+    }
     if rule == "scored":
-        return progress.status == "scored"
+        return bool(progress.status == "scored")
     return progress.passed is True
 
 

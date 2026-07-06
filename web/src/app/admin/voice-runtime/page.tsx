@@ -87,6 +87,8 @@ const DEFAULT_RUNTIME_TOOL_POLICY: RuntimeProfile["tool_policy"] = {
     transcript_normalization_lexicon: [],
 };
 
+const DEFAULT_STEPFUN_REALTIME_MODEL = "stepaudio-2.5-realtime";
+
 function sanitizeRuntimeToolPolicy(input: Record<string, unknown> | undefined) {
     const output: RuntimeProfile["tool_policy"] = { ...DEFAULT_RUNTIME_TOOL_POLICY };
     if (!input || typeof input !== "object") {
@@ -147,7 +149,7 @@ const EMPTY_FORM: Omit<RuntimeProfile, "id"> = {
     is_default: false,
     is_active: true,
     voice_mode: "stepfun_realtime",
-    model_name: "step-audio-2",
+    model_name: DEFAULT_STEPFUN_REALTIME_MODEL,
     voice_name: "qingchunshaonv",
     temperature: 0.7,
     input_audio_format: "pcm16",

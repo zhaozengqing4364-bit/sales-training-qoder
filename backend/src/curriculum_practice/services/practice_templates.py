@@ -14,6 +14,7 @@ from curriculum_practice.schemas import (
     PracticeTemplateUpdate,
     PublishGateDecision,
 )
+from curriculum_practice.services.orm_payload_typing import set_orm_field
 from curriculum_practice.services.practice_template_revision_metadata import (
     template_payload_hash,
 )
@@ -98,7 +99,7 @@ class PracticeTemplateService:
             return template
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(template, field, value)
-        template.updated_by = actor_id
+        set_orm_field(template, "updated_by", actor_id)
         await self._db.commit()
         await self._db.refresh(template)
         return template
@@ -106,8 +107,8 @@ class PracticeTemplateService:
     async def archive_template(
         self, template: PracticeTemplate, *, actor_id: str | None
     ) -> PracticeTemplate:
-        template.status = "archived"
-        template.updated_by = actor_id
+        set_orm_field(template, "status", "archived")
+        set_orm_field(template, "updated_by", actor_id)
         await self._db.commit()
         await self._db.refresh(template)
         return template
@@ -139,14 +140,16 @@ class PracticeTemplateService:
         if not decision.can_publish:
             return None, decision
 
-        template.status = "published"
-        template.published_by = actor_id
-        template.published_at = datetime.now(UTC)
-        template.content_hash = template_payload_hash(
-            template_lifecycle_snapshot(template)
+        set_orm_field(template, "status", "published")
+        set_orm_field(template, "published_by", actor_id)
+        set_orm_field(template, "published_at", datetime.now(UTC))
+        set_orm_field(
+            template,
+            "content_hash",
+            template_payload_hash(template_lifecycle_snapshot(template)),
         )
-        template.situation_pack_code = situation_pack_code
-        template.published_asset_refs = published_asset_refs
+        set_orm_field(template, "situation_pack_code", situation_pack_code)
+        set_orm_field(template, "published_asset_refs", published_asset_refs)
         await revision_service.stage_initial_published_revision(template, actor=actor)
         await self._db.commit()
         await self._db.refresh(template)

@@ -4,10 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import SalesTrainerScoreResultsPage from "./page";
 
 const {
+    getCapabilitiesMock,
     pushMock,
     listQuizAttemptsMock,
     listScoreResultsMock,
 } = vi.hoisted(() => ({
+    getCapabilitiesMock: vi.fn(),
     pushMock: vi.fn(),
     listQuizAttemptsMock: vi.fn(),
     listScoreResultsMock: vi.fn(),
@@ -28,6 +30,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     listQuizAttempts: listQuizAttemptsMock,
                     listScoreResults: listScoreResultsMock,
                 },
@@ -38,9 +41,27 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("SalesTrainerScoreResultsPage", () => {
     beforeEach(() => {
+        getCapabilitiesMock.mockReset();
         pushMock.mockReset();
         listQuizAttemptsMock.mockReset();
         listScoreResultsMock.mockReset();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "ops",
+            role_label: "运维人员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: false,
+                view_records: true,
+                view_global_records: true,
+                retry_jobs: true,
+                regrade_history: true,
+                view_settings: true,
+                view_logs: true,
+            },
+        });
         listQuizAttemptsMock.mockResolvedValue({
             items: [
                 {
@@ -143,5 +164,47 @@ describe("SalesTrainerScoreResultsPage", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "查看录音" }));
         expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/audio-submissions/submission-1");
+    });
+
+    it("does not request result lists before view_records capability is confirmed", async () => {
+        getCapabilitiesMock.mockResolvedValue({
+            role: "content_admin",
+            role_label: "内容管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: true,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
+
+        render(<SalesTrainerScoreResultsPage />);
+
+        expect(await screen.findByText("学员结果权限不足")).toBeTruthy();
+        expect(screen.queryByText("暂无做题结果")).toBeNull();
+        expect(screen.queryByText("暂无评分结果")).toBeNull();
+        expect(listQuizAttemptsMock).not.toHaveBeenCalled();
+        expect(listScoreResultsMock).not.toHaveBeenCalled();
+    });
+
+    it("keeps list load failures visible instead of rendering empty result states", async () => {
+        listQuizAttemptsMock.mockRejectedValueOnce(new Error("quiz results unavailable"));
+        listScoreResultsMock.mockRejectedValueOnce(new Error("score results unavailable"));
+
+        render(<SalesTrainerScoreResultsPage />);
+
+        expect(await screen.findByText("quiz results unavailable")).toBeTruthy();
+        expect(await screen.findByText("score results unavailable")).toBeTruthy();
+        expect(screen.getByText("做题结果加载失败，请检查权限、筛选条件或后端接口后重试。")).toBeTruthy();
+        expect(screen.getByText("评分结果加载失败，请检查权限、筛选条件或后端接口后重试。")).toBeTruthy();
+        expect(screen.queryByText("暂无做题结果")).toBeNull();
+        expect(screen.queryByText("暂无评分结果")).toBeNull();
     });
 });

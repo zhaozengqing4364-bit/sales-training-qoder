@@ -9,6 +9,14 @@ from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.auth.roles import (
+    ROLE_ADMIN,
+    ROLE_CONTENT_ADMIN,
+    ROLE_OPERATIONS,
+    ROLE_READONLY_AUDITOR,
+    ROLE_SUPPORT,
+    admin_permission_role_for,
+)
 from common.auth.service import get_current_user
 from common.db.models import AdminRolePermission, User
 from common.db.session import get_db
@@ -30,7 +38,7 @@ CONFIG_ASSET_IMPORT_PERMISSION: Final = "config_asset.import"
 SCORING_RULESET_DRY_RUN_PERMISSION: Final = "scoring_ruleset.dry_run"
 
 DEFAULT_ADMIN_ROLE_PERMISSIONS: Final[dict[str, frozenset[str]]] = {
-    "admin": frozenset(
+    ROLE_ADMIN: frozenset(
         {
             BUSINESS_RULE_PUBLISH_PERMISSION,
             RELEASE_VERIFICATION_MANAGE_PERMISSION,
@@ -49,7 +57,7 @@ DEFAULT_ADMIN_ROLE_PERMISSIONS: Final[dict[str, frozenset[str]]] = {
             SCORING_RULESET_DRY_RUN_PERMISSION,
         }
     ),
-    "content_admin": frozenset(
+    ROLE_CONTENT_ADMIN: frozenset(
         {
             BUSINESS_RULE_PUBLISH_PERMISSION,
             SCORING_RULESET_MANAGE_PERMISSION,
@@ -66,7 +74,7 @@ DEFAULT_ADMIN_ROLE_PERMISSIONS: Final[dict[str, frozenset[str]]] = {
             SCORING_RULESET_DRY_RUN_PERMISSION,
         }
     ),
-    "operations": frozenset(
+    ROLE_OPERATIONS: frozenset(
         {
             BUSINESS_RULE_PUBLISH_PERMISSION,
             CONFIG_BUNDLE_READ_PERMISSION,
@@ -76,8 +84,8 @@ DEFAULT_ADMIN_ROLE_PERMISSIONS: Final[dict[str, frozenset[str]]] = {
             CONFIG_AUDIT_READ_PERMISSION,
         }
     ),
-    "support": frozenset({CONFIG_AUDIT_READ_PERMISSION}),
-    "readonly_auditor": frozenset({CONFIG_AUDIT_READ_PERMISSION}),
+    ROLE_SUPPORT: frozenset({CONFIG_AUDIT_READ_PERMISSION}),
+    ROLE_READONLY_AUDITOR: frozenset({CONFIG_AUDIT_READ_PERMISSION}),
 }
 
 
@@ -96,7 +104,7 @@ async def user_has_admin_permission(
     user: User,
     permission: str,
 ) -> bool:
-    role = str(getattr(user, "role", "") or "").strip().lower()
+    role = admin_permission_role_for(getattr(user, "role", None))
     if not role:
         return False
     await _ensure_default_role_permissions(db)

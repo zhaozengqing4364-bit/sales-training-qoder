@@ -1,8 +1,16 @@
-import type { NewcomerArticleChapter, SalesTrainerUnit } from "@/lib/api/types";
+import type {
+    NewcomerArticleChapter,
+    SalesTrainerUnit,
+    TrainingJourneyModuleProgress,
+} from "@/lib/api/types";
 import { ApiRequestError, getApiErrorMessage } from "@/lib/api/client";
 
 export const BUSINESS_SKILLS_MODULE_KEY = "business_skills";
 export const BUSINESS_SKILLS_COACH_ACTION_LABEL = "先去 AI 教练练一轮";
+export const BUSINESS_SKILLS_ACTIVE_UNIT_MISSING_MESSAGE =
+    "商务技巧入口缺少 active path revision 的训练单元，请从新人训练路径首页进入。";
+export const BUSINESS_SKILLS_ACTIVE_UNIT_NOT_FOUND_MESSAGE =
+    "active path revision 指向的商务技巧训练单元不存在，请联系管理员重新发布新人训练路径。";
 
 export const BUSINESS_SKILLS_EXAM_COPY = {
     pageTitle: "商务技巧考试",
@@ -66,27 +74,43 @@ export function hasCompletedBusinessSkillsChapters(
     return chapters.length > 0 && chapters.every((chapter) => completedIds.has(chapter.chapter_id));
 }
 
-export function paperIdFromUnit(unit: SalesTrainerUnit | undefined): string | null {
-    const paperId = unit?.config.path?.exam_paper_id;
+export function paperIdFromJourneyModule(module: TrainingJourneyModuleProgress | null | undefined): string | null {
+    const paperId = module?.exam_paper_id;
     return typeof paperId === "string" && paperId.trim() ? paperId.trim() : null;
 }
 
-export function learningContentIdFromUnit(unit: SalesTrainerUnit | undefined): string | null {
-    const contentId = unit?.config.path?.learning_content_id;
+export function learningContentIdFromJourneyModule(module: TrainingJourneyModuleProgress | null | undefined): string | null {
+    const contentId = module?.learning_content_id;
     return typeof contentId === "string" && contentId.trim() ? contentId.trim() : null;
+}
+
+export function isBusinessSkillsJourneyModule(module: TrainingJourneyModuleProgress): boolean {
+    return module.module_key === BUSINESS_SKILLS_MODULE_KEY && module.kind === "quiz_attempt";
+}
+
+export function findBusinessSkillsModuleFromJourney(
+    modules: readonly TrainingJourneyModuleProgress[],
+    unitId: string | null,
+): TrainingJourneyModuleProgress | null {
+    return modules.find((module) => (
+        isBusinessSkillsJourneyModule(module)
+        && (!unitId || module.target_unit_id === unitId || module.target_unit_ids?.includes(unitId))
+    )) ?? null;
+}
+
+export function unitIdFromJourneyModule(module: TrainingJourneyModuleProgress | null | undefined): string | null {
+    const unitId = module?.target_unit_id ?? module?.target_unit_ids?.[0] ?? null;
+    return typeof unitId === "string" && unitId.trim() ? unitId.trim() : null;
 }
 
 export function resolveBusinessSkillsUnit(
     units: readonly SalesTrainerUnit[],
     unitId: string | null,
 ): SalesTrainerUnit | undefined {
-    return units.find((unit) => unit.unit_id === unitId)
-        ?? units.find((unit) => unit.config.path?.module_key === BUSINESS_SKILLS_MODULE_KEY)
-        ?? units.find((unit) => paperIdFromUnit(unit));
-}
-
-export function fallbackPaperId(units: readonly SalesTrainerUnit[]): string | null {
-    return paperIdFromUnit(units.find((unit) => paperIdFromUnit(unit)));
+    if (!unitId) {
+        return undefined;
+    }
+    return units.find((unit) => unit.unit_id === unitId);
 }
 
 export function businessSkillsExamHref(unitId: string | null): string {

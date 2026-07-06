@@ -18,7 +18,17 @@ from common.monitoring.trace_context import generate_trace_id
 trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
 
 REDACTED_VALUE = "[REDACTED]"
-SENSITIVE_LOG_FIELD_MARKERS = ("token", "password", "cookie", "email")
+SENSITIVE_LOG_FIELD_MARKERS = (
+    "token",
+    "password",
+    "cookie",
+    "email",
+    "api_key",
+    "apikey",
+    "secret",
+    "authorization",
+    "bearer",
+)
 SYSTEM_LOG_ADMIN_POLICY_VERSION = "admin_support_redaction_v1"
 ADMIN_LOG_ALLOWLIST_FIELDS = (
     "id",

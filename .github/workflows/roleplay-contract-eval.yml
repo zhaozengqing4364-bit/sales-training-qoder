@@ -6,13 +6,42 @@ on:
       - "backend/src/curriculum_practice/services/roleplay_contracts.py"
       - "backend/src/sales_bot/services/voice_instruction_compiler.py"
       - "backend/src/sales_bot/services/roleplay_compliance_checker.py"
+      - "backend/src/sales_bot/websocket/router.py"
       - "backend/src/sales_bot/websocket/stepfun_realtime_*.py"
+      - "backend/src/sales_trainer/services/roleplay_observation_evaluator.py"
+      - "backend/src/sales_trainer/services/roleplay_observation_service.py"
+      - "backend/src/sales_trainer/services/training_journey_service.py"
+      - "backend/src/sales_trainer/services/realtime_roleplay_start_service.py"
+      - "backend/src/sales_trainer/api.py"
+      - "backend/src/sales_trainer/models.py"
+      - "backend/src/sales_trainer/schemas.py"
+      - "backend/src/common/services/runtime_outcome_projection.py"
+      - "backend/src/common/services/external_session_start.py"
+      - "backend/alembic/versions/*sales_trainer_roleplay_observations*.py"
+      - "docs/api-contract/sales-trainer.md"
       - "backend/src/common/business_rules/defaults.py"
       - "backend/src/common/business_rules/validators.py"
       - "backend/src/curriculum_practice/services/roleplay/**"
       - "backend/src/admin/config_assets/**"
       - "backend/src/evaluation/services/roleplay_contract_eval.py"
       - "backend/tests/fixtures/roleplay_contract_eval_cases.json"
+      - "backend/tests/unit/test_roleplay_observability_contract.py"
+      - "backend/tests/unit/test_roleplay_observation_evaluator.py"
+      - "backend/tests/unit/test_sales_trainer_roleplay_observation_service.py"
+      - "backend/tests/unit/test_sales_websocket_router.py"
+      - "backend/tests/unit/test_stepfun_realtime_upstream.py"
+      - "backend/tests/unit/test_stepfun_realtime_handler.py"
+      - "backend/tests/unit/test_stepfun_payload_snapshots.py"
+      - "backend/tests/integration/test_sales_trainer_api.py"
+      - "web/src/app/admin/sales-trainer/analytics/**"
+      - "web/src/app/admin/sales-trainer/training-records/**"
+      - "web/src/lib/sales-trainer/roleplay-observation.ts"
+      - "web/src/lib/sales-trainer/roleplay-observation.test.ts"
+      - "web/tests/e2e/newcomer-training-closed-loop.spec.ts"
+      - "web/package.json"
+      - "web/package-lock.json"
+      - "web/tsconfig.json"
+      - "web/vitest.config.ts"
       - "backend/scripts/run_roleplay_contract_eval.py"
       - "backend/scripts/repair_runtime_snapshots.py"
       - "backend/src/common/services/session_runtime_repair_service.py"
@@ -23,13 +52,42 @@ on:
       - "backend/src/curriculum_practice/services/roleplay_contracts.py"
       - "backend/src/sales_bot/services/voice_instruction_compiler.py"
       - "backend/src/sales_bot/services/roleplay_compliance_checker.py"
+      - "backend/src/sales_bot/websocket/router.py"
       - "backend/src/sales_bot/websocket/stepfun_realtime_*.py"
+      - "backend/src/sales_trainer/services/roleplay_observation_evaluator.py"
+      - "backend/src/sales_trainer/services/roleplay_observation_service.py"
+      - "backend/src/sales_trainer/services/training_journey_service.py"
+      - "backend/src/sales_trainer/services/realtime_roleplay_start_service.py"
+      - "backend/src/sales_trainer/api.py"
+      - "backend/src/sales_trainer/models.py"
+      - "backend/src/sales_trainer/schemas.py"
+      - "backend/src/common/services/runtime_outcome_projection.py"
+      - "backend/src/common/services/external_session_start.py"
+      - "backend/alembic/versions/*sales_trainer_roleplay_observations*.py"
+      - "docs/api-contract/sales-trainer.md"
       - "backend/src/common/business_rules/defaults.py"
       - "backend/src/common/business_rules/validators.py"
       - "backend/src/curriculum_practice/services/roleplay/**"
       - "backend/src/admin/config_assets/**"
       - "backend/src/evaluation/services/roleplay_contract_eval.py"
       - "backend/tests/fixtures/roleplay_contract_eval_cases.json"
+      - "backend/tests/unit/test_roleplay_observability_contract.py"
+      - "backend/tests/unit/test_roleplay_observation_evaluator.py"
+      - "backend/tests/unit/test_sales_trainer_roleplay_observation_service.py"
+      - "backend/tests/unit/test_sales_websocket_router.py"
+      - "backend/tests/unit/test_stepfun_realtime_upstream.py"
+      - "backend/tests/unit/test_stepfun_realtime_handler.py"
+      - "backend/tests/unit/test_stepfun_payload_snapshots.py"
+      - "backend/tests/integration/test_sales_trainer_api.py"
+      - "web/src/app/admin/sales-trainer/analytics/**"
+      - "web/src/app/admin/sales-trainer/training-records/**"
+      - "web/src/lib/sales-trainer/roleplay-observation.ts"
+      - "web/src/lib/sales-trainer/roleplay-observation.test.ts"
+      - "web/tests/e2e/newcomer-training-closed-loop.spec.ts"
+      - "web/package.json"
+      - "web/package-lock.json"
+      - "web/tsconfig.json"
+      - "web/vitest.config.ts"
       - "backend/scripts/run_roleplay_contract_eval.py"
       - "backend/scripts/repair_runtime_snapshots.py"
       - "backend/src/common/services/session_runtime_repair_service.py"
@@ -42,7 +100,12 @@ jobs:
   roleplay-contract-eval:
     name: roleplay-contract-eval
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    env:
+      PHASE4_E2E_PROVIDER: local
+      STEPFUN_API_KEY: phase4-local-e2e
+      LLM_API_KEY: local-test-key
+      ROLEPLAY_EVAL_LLM_GRADER_MODE: warn_only
 
     steps:
       - name: Checkout repository
@@ -62,6 +125,59 @@ jobs:
           python -m venv backend/venv
           backend/venv/bin/pip install --upgrade pip
           backend/venv/bin/pip install -r backend/requirements.txt
+
+      - name: Run focused backend roleplay tests
+        run: |
+          cd backend
+          venv/bin/python -m pytest -c pyproject.toml \
+            tests/unit/test_roleplay_observability_contract.py \
+            tests/unit/test_roleplay_observation_evaluator.py \
+            tests/unit/test_sales_trainer_roleplay_observation_service.py \
+            tests/unit/test_sales_websocket_router.py \
+            tests/integration/test_sales_trainer_api.py \
+            tests/unit/test_stepfun_realtime_upstream.py \
+            tests/unit/test_stepfun_realtime_handler.py \
+            tests/unit/test_stepfun_payload_snapshots.py \
+            --no-cov -q
+
+      - name: Run focused backend mypy
+        run: |
+          cd backend
+          venv/bin/python -m mypy --config-file pyproject.toml \
+            --follow-imports=skip \
+            src/common/business_rules \
+            src/common/services/runtime_outcome_projection.py \
+            src/common/services/external_session_start.py \
+            src/sales_trainer/services/training_journey_service.py \
+            src/sales_trainer/services/realtime_roleplay_start_service.py \
+            src/sales_trainer/services/roleplay_observation_evaluator.py \
+            src/sales_trainer/services/roleplay_observation_service.py \
+            src/sales_bot/websocket/router.py
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          cd web
+          npm ci
+
+      - name: Run focused frontend roleplay tests
+        run: |
+          cd web
+          npx vitest run \
+            src/lib/sales-trainer/roleplay-observation.test.ts \
+            src/app/admin/sales-trainer/analytics/page.test.tsx \
+            'src/app/admin/sales-trainer/training-records/[recordType]/[recordId]/page.test.tsx'
+
+      - name: Run frontend typecheck
+        run: |
+          cd web
+          npx tsc --noEmit --pretty false
 
       - name: Run deterministic Roleplay Contract eval release gate
         run: |

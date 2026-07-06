@@ -2,18 +2,23 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from types import SimpleNamespace
 from typing import Literal
 
+from common.ai.llm_service import LLMService, LLMStreamChunk
 from prompt_templates.compiled_contract import CompiledPromptContract
 from sales_trainer.ai_coach_chat_schemas import (
     AiCoachChatResponseInternalV1,
     AiCoachQuizCardDraftInteractionPublicV1,
     AiCoachQuizCardDraftPayloadPublicV1,
 )
-from sales_trainer.schemas import AiCoachConfig, AiCoachPublicInteractionOptionV1
+from sales_trainer.schemas import (
+    AiCoachConfig,
+    AiCoachInteractionTypeV1,
+    AiCoachPublicInteractionOptionV1,
+    AiCoachTrainingCardTypeV1,
+)
 from sales_trainer.services.ai_coach_chat_errors import AiCoachChatGenerationError
 from sales_trainer.services.ai_coach_chat_generation_parser import (
     AiCoachChatResponseParser,
@@ -108,24 +113,9 @@ class AiCoachQuizCardDraftExtractor:
             interaction=AiCoachQuizCardDraftInteractionPublicV1(
                 interaction_id=f"stream-{self._session_id}",
                 session_id=self._session_id,
-                training_card_type=(
-                    training_card_type
-                    if training_card_type in {
-                        "scenario_judgment",
-                        "expression_rewrite",
-                        "role_response",
-                    }
-                    else None
-                ),
-                interaction_type=(
-                    interaction_type
-                    if interaction_type in {
-                        "single_choice",
-                        "multiple_choice",
-                        "short_answer",
-                    }
-                    else None
-                ),
+                turn_number=None,
+                training_card_type=_draft_training_card_type(training_card_type),
+                interaction_type=_draft_interaction_type(interaction_type),
                 stem=stem,
                 options=options or None,
                 answer_constraints=constraints,
@@ -289,7 +279,7 @@ class AiCoachQuizCardDraftExtractor:
 
 async def emit_streamed_response(
     *,
-    llm,
+    llm: LLMService,
     parser: AiCoachChatResponseParser,
     contract: CompiledPromptContract,
     config: AiCoachConfig,
@@ -317,7 +307,15 @@ async def emit_streamed_response(
             if stream_chunks is not None:
                 chunk_source = stream_chunks(**stream_kwargs)
             else:
-                chunk_source = _text_only_chunks(llm.stream_generate(**stream_kwargs))
+                chunk_source = _text_only_chunks(
+                    llm.stream_generate(
+                        prompt=prompt,
+                        session_id=session_id,
+                        system_message=contract.system_message,
+                        allow_fallback_response=False,
+                        response_format=AI_COACH_JSON_RESPONSE_FORMAT,
+                    )
+                )
             async for chunk in chunk_source:
                 if stream_public_deltas and chunk.reasoning_text:
                     await on_generation_delta(
@@ -368,9 +366,9 @@ async def emit_streamed_response(
     )
 
 
-async def _text_only_chunks(tokens):
+async def _text_only_chunks(tokens: AsyncIterator[str]) -> AsyncIterator[LLMStreamChunk]:
     async for token in tokens:
-        yield SimpleNamespace(text=token, reasoning_text="")
+        yield LLMStreamChunk(text=token, reasoning_text="")
 
 
 def prompt_for_attempt(
@@ -384,3 +382,25 @@ def prompt_for_attempt(
         "上一轮输出字段类型或结构不符合要求。请直接重新输出一份严格合法 JSON。"
         "不要解释修复过程，不要输出 Markdown。"
     )
+
+
+def _draft_training_card_type(
+    value: str | None,
+) -> AiCoachTrainingCardTypeV1 | None:
+    if value == "scenario_judgment":
+        return "scenario_judgment"
+    if value == "expression_rewrite":
+        return "expression_rewrite"
+    if value == "role_response":
+        return "role_response"
+    return None
+
+
+def _draft_interaction_type(value: str | None) -> AiCoachInteractionTypeV1 | None:
+    if value == "single_choice":
+        return "single_choice"
+    if value == "multiple_choice":
+        return "multiple_choice"
+    if value == "short_answer":
+        return "short_answer"
+    return None

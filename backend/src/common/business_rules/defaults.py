@@ -19,6 +19,11 @@ ADMIN_SETTINGS_NOTIFICATIONS_KEY = "admin.settings.notifications"
 SALES_TRAINER_PHASE2_CLOSED_LOOP_POLICY_KEY = (
     "sales_trainer.phase2.closed_loop_policy"
 )
+SALES_TRAINER_LEARNER_LEVEL_POLICY_KEY = "sales_trainer.learner_level.policy"
+SALES_TRAINER_ROLE_LEVEL_POLICY_KEY = "sales_trainer.role_level.policy"
+SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY = (
+    "sales_trainer.realtime_provider.registry"
+)
 
 BUSINESS_RULE_SCHEMA_VERSION = "business_rule_config_v1"
 
@@ -81,6 +86,13 @@ DEFAULT_SALES_TRAINER_PHASE2_POLICY: dict[str, Any] = {
             "priority": "medium",
         },
         {
+            "record_type": "business_etiquette_quiz_attempt",
+            "action_label": "复习后重做小测",
+            "reason_template": "商务礼仪小测存在薄弱能力点，需要回看对应章节后重做。",
+            "target_path_template": "/sales-trainer/business-skills?learningUnitKey={unit_id}",
+            "priority": "medium",
+        },
+        {
             "record_type": "ai_coach_session",
             "action_label": "继续 AI 教练训练",
             "reason_template": "AI 教练训练尚未完成或未达到掌握状态，需要继续训练。",
@@ -101,6 +113,77 @@ DEFAULT_SALES_TRAINER_PHASE2_POLICY: dict[str, Any] = {
             "target_path_template": "{result_path}",
             "priority": "low",
         },
+    ],
+}
+
+DEFAULT_SALES_TRAINER_LEARNER_LEVEL_POLICY: dict[str, Any] = {
+    "version": "sales_trainer_learner_level_policy_v1",
+    "enabled": True,
+    "default_level": {
+        "key": "unassigned",
+        "label": "未分层",
+        "rank": 0,
+        "description": "未发布学员等级规则时的安全默认分层。",
+    },
+    "levels": [
+        {
+            "key": "unassigned",
+            "label": "未分层",
+            "rank": 0,
+            "description": "未发布学员等级规则时的安全默认分层。",
+        }
+    ],
+    "rules": [],
+}
+
+DEFAULT_SALES_TRAINER_ROLE_LEVEL_POLICY: dict[str, Any] = {
+    "version": "sales_trainer_role_level_policy_v1",
+    "enabled": True,
+    "default_level": {
+        "key": "learner",
+        "label": "普通学员",
+        "rank": 0,
+        "description": "未发布组织角色等级规则时的安全默认角色等级。",
+    },
+    "levels": [
+        {
+            "key": "learner",
+            "label": "普通学员",
+            "rank": 0,
+            "description": "未发布组织角色等级规则时的安全默认角色等级。",
+        }
+    ],
+    "rules": [
+        {
+            "key": "default_user_role",
+            "level_key": "learner",
+            "priority": 1,
+            "enabled": True,
+            "conditions": {"role_in": ["user"]},
+        }
+    ],
+}
+
+DEFAULT_SALES_TRAINER_REALTIME_PROVIDER_REGISTRY: dict[str, Any] = {
+    "version": "sales_trainer_realtime_provider_registry_v1",
+    "enabled": False,
+    "descriptors": [
+        {
+            "descriptor_id": "newcomer-realtime-runtime",
+            "label": "新人训练实时对练",
+            "provider": "stepfun_realtime",
+            "runtime_owner": "training_runtime",
+            "enabled": False,
+            "runtime_profile_id": None,
+            "config_revision_id": "default-disabled",
+            "rollback_to_descriptor_id": None,
+            "readiness": {
+                "ready": False,
+                "checked_at": None,
+                "failure_code": "REGISTRY_DISABLED",
+                "failure_message": "实时对练 provider registry 尚未发布启用。",
+            },
+        }
     ],
 }
 
@@ -1008,6 +1091,7 @@ _BUSINESS_RULE_DEFINITIONS = {
             "remediation_record_types": [
                 "audio_submission",
                 "quiz_attempt",
+                "business_etiquette_quiz_attempt",
                 "ai_coach_session",
                 "default",
                 "no_action",
@@ -1019,6 +1103,75 @@ _BUSINESS_RULE_DEFINITIONS = {
         audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
         fallback_policy="use bundled default phase-2 policy when database config is missing, invalid, or disabled",
         rollback_policy="restore a prior archived/published phase-2 policy version",
+    ),
+    SALES_TRAINER_LEARNER_LEVEL_POLICY_KEY: BusinessRuleDefinition(
+        key=SALES_TRAINER_LEARNER_LEVEL_POLICY_KEY,
+        domain="sales_trainer",
+        schema_version=BUSINESS_RULE_SCHEMA_VERSION,
+        default_value=DEFAULT_SALES_TRAINER_LEARNER_LEVEL_POLICY,
+        type="rule_json",
+        range_or_allowlist={
+            "level_key": "admin-defined stable string",
+            "condition_fields": [
+                "training_stage_in",
+                "department_in",
+                "min_pass_rate",
+                "max_pass_rate",
+                "min_completed_modules",
+                "min_passed_modules",
+                "max_failed_modules",
+            ],
+        },
+        read_path="sales_trainer.services.training_journey_service.TrainingJourneyService._learner_level",
+        admin_entry="/admin/business-rules/sales-trainer-learner-level",
+        permission="admin_publish_only",
+        audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
+        fallback_policy="use bundled unassigned level when database config is missing, invalid, or disabled; expose fallback_applied/fallback_reason",
+        rollback_policy="restore a prior archived/published learner-level policy version",
+    ),
+    SALES_TRAINER_ROLE_LEVEL_POLICY_KEY: BusinessRuleDefinition(
+        key=SALES_TRAINER_ROLE_LEVEL_POLICY_KEY,
+        domain="sales_trainer",
+        schema_version=BUSINESS_RULE_SCHEMA_VERSION,
+        default_value=DEFAULT_SALES_TRAINER_ROLE_LEVEL_POLICY,
+        type="rule_json",
+        range_or_allowlist={
+            "level_key": "admin-defined stable string",
+            "condition_fields": [
+                "role_in",
+                "department_in",
+                "training_stage_in",
+                "min_pass_rate",
+                "max_pass_rate",
+                "min_completed_modules",
+                "min_passed_modules",
+                "max_failed_modules",
+            ],
+        },
+        read_path="sales_trainer.services.training_journey_service.TrainingJourneyService._role_level",
+        admin_entry="/admin/business-rules/sales-trainer-role-level",
+        permission="admin_publish_only",
+        audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
+        fallback_policy="use bundled learner level when database config is missing, invalid, or disabled; expose fallback_applied/fallback_reason",
+        rollback_policy="restore a prior archived/published role-level policy version",
+    ),
+    SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY: BusinessRuleDefinition(
+        key=SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY,
+        domain="sales_trainer",
+        schema_version=BUSINESS_RULE_SCHEMA_VERSION,
+        default_value=DEFAULT_SALES_TRAINER_REALTIME_PROVIDER_REGISTRY,
+        type="rule_json",
+        range_or_allowlist={
+            "descriptor_id": "stable runtime descriptor id referenced by path runtime_binding",
+            "provider": ["stepfun_realtime", "phase4_local_stepfun", "mock"],
+            "runtime_owner": ["training_runtime", "sales_bot"],
+        },
+        read_path="sales_trainer.services.realtime_roleplay_start_service.RealtimeRoleplayStartService.start",
+        admin_entry="/admin/config-bundles/sales_trainer.realtime_provider.registry",
+        permission="admin_publish_only",
+        audit_policy="draft/validate/preview/publish/rollback/disable require actor, before/after version, reason, trace_id",
+        fallback_policy="default registry is disabled and fails closed when database config is missing, invalid, or disabled",
+        rollback_policy="restore a prior published realtime provider registry version through ConfigBundleLifecycleService.rollback",
     ),
 }
 

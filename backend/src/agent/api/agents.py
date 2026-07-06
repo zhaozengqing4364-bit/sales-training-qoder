@@ -11,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -128,7 +128,7 @@ async def create_agent(
     request: CreateAgentRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """
     Create a new Agent with draft status
 
@@ -139,7 +139,7 @@ async def create_agent(
         return admin_error
 
     service = AgentService(db)
-    result = await service.create(request, user_id=current_user.user_id)
+    result = await service.create(request, user_id=cast(str, current_user.user_id))
 
     if not result.is_success:
         return _agent_result_error(status_code=400, fallback=result.fallback)
@@ -169,7 +169,7 @@ async def list_agents_admin(
     status: str | None = Query(None, description="Filter by status"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """
     Get paginated Agent list (admin view)
 
@@ -195,7 +195,7 @@ async def list_agents_admin(
 @admin_router.get("/industry-pack-contract", response_model=dict)
 async def get_industry_pack_contract(
     current_user: User = Depends(get_current_user),
-) -> dict[str, Any]:
+) -> Any:
     """Expose the composed industry-pack authority on top of existing admin entrypoints."""
     admin_error = _require_admin_or_error(current_user)
     if admin_error is not None:
@@ -212,7 +212,7 @@ async def get_agent_admin(
     agent_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """
     Get Agent details (admin view with system_prompt)
 
@@ -240,7 +240,7 @@ async def update_agent(
     request: UpdateAgentRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """
     Update Agent (partial update)
 
@@ -281,7 +281,7 @@ async def delete_agent(
     agent_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """
     Delete Agent (fails if has associated sessions)
 
@@ -313,7 +313,7 @@ async def publish_agent(
     agent_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """
     Publish Agent (draft -> published)
 
@@ -350,7 +350,7 @@ async def archive_agent(
     agent_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """
     Archive Agent
 
@@ -380,7 +380,7 @@ async def unpublish_agent(
     agent_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """
     Unpublish Agent (revert to draft status)
     """
@@ -440,7 +440,7 @@ async def get_agent_user(
     agent_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """
     Get Agent details (user view without system_prompt)
 
@@ -469,7 +469,7 @@ async def get_agent_personas(
     agent_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """
     Get Personas associated with an Agent (user view)
 

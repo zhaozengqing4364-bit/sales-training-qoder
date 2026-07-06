@@ -15,7 +15,7 @@ import io
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -236,7 +236,7 @@ def _user_audit_snapshot(user: User) -> dict[str, Any]:
     return {
         "user_id": str(user.user_id),
         "name": user.name,
-        "email": _mask_email(user.email),
+        "email": _mask_email(cast(str | None, user.email)),
         "department": user.department,
         "role": user.role,
         "is_active": bool(user.is_active),
@@ -251,7 +251,9 @@ def _normalize_audit_reason(reason: str | None) -> str:
 
 def _operator_identifier(user: User) -> str:
     """Pick a stable operator identifier for audit logs."""
-    return user.email or user.name or str(user.user_id)
+    email = cast(str | None, user.email)
+    name = cast(str | None, user.name)
+    return email or name or str(user.user_id)
 
 
 def _queue_user_audit_log(
@@ -268,7 +270,7 @@ def _queue_user_audit_log(
     """Queue an audit log row in the current transaction."""
     details = {
         "operator_id": str(operator.user_id),
-        "operator_email_masked": _mask_email(operator.email),
+        "operator_email_masked": _mask_email(cast(str | None, operator.email)),
         "target_user_id": target_user_id,
         "reason": _normalize_audit_reason(reason),
         "timestamp": datetime.now(UTC).isoformat(),
@@ -485,7 +487,7 @@ async def get_user_stats(
     )
     if not projection_score_result.is_success:
         raise HTTPException(status_code=500, detail="[ADMIN_USER_STATS_FAILED]")
-    projection_scores = projection_score_result.value
+    projection_scores = projection_score_result.unwrap()
 
     # Session statistics that are still truthful from raw session rows.
     stats_query = select(
@@ -688,7 +690,7 @@ async def get_user_sessions(
         )
     )
     if intervention_results_result.is_success:
-        manager_intervention_results = intervention_results_result.value
+        manager_intervention_results = intervention_results_result.unwrap()
     else:
         logger.warning(
             "admin_user_intervention_results_degraded",
@@ -836,7 +838,7 @@ async def delete_user(
 
     # Soft delete - set is_active to False
     before_snapshot = _user_audit_snapshot(user)
-    user.is_active = False
+    setattr(user, "is_active", False)
     after_snapshot = _user_audit_snapshot(user)
     _queue_user_audit_log(
         db,
@@ -939,15 +941,15 @@ async def update_user(
         existing = await db.execute(select(User).where(User.email == payload.email))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="[EMAIL_ALREADY_EXISTS]")
-        user.email = payload.email
+        setattr(user, "email", payload.email)
 
     # Update fields
     if payload.name is not None:
-        user.name = payload.name
+        setattr(user, "name", payload.name)
     if payload.department is not None:
-        user.department = payload.department
+        setattr(user, "department", payload.department)
     if payload.is_active is not None:
-        user.is_active = payload.is_active
+        setattr(user, "is_active", payload.is_active)
 
     after_snapshot = _user_audit_snapshot(user)
     _queue_user_audit_log(
@@ -990,17 +992,17 @@ async def update_user_role(
 
     _assert_role_transition_allowed(
         is_self=is_self,
-        current_role=user.role,
+        current_role=cast(str | None, user.role),
         new_role=payload.role,
     )
     await _assert_admin_demotion_keeps_active_admin(
         db,
-        current_role=user.role,
+        current_role=cast(str | None, user.role),
         new_role=payload.role,
     )
 
     before_snapshot = _user_audit_snapshot(user)
-    user.role = payload.role
+    setattr(user, "role", payload.role)
     after_snapshot = _user_audit_snapshot(user)
 
     _queue_user_audit_log(
@@ -1046,7 +1048,7 @@ async def suspend_user(
         raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
 
     before_snapshot = _user_audit_snapshot(user)
-    user.is_active = False
+    setattr(user, "is_active", False)
     after_snapshot = _user_audit_snapshot(user)
     _queue_user_audit_log(
         db,
@@ -1083,7 +1085,7 @@ async def activate_user(
         raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
 
     before_snapshot = _user_audit_snapshot(user)
-    user.is_active = True
+    setattr(user, "is_active", True)
     after_snapshot = _user_audit_snapshot(user)
     _queue_user_audit_log(
         db,
@@ -1109,7 +1111,7 @@ async def export_users(
     status: str | None = Query(None, description="Status filter"),
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> StreamingResponse:
     """
     Export users to CSV or JSON
 

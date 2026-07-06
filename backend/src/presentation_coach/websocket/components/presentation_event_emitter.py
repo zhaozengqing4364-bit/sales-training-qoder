@@ -10,7 +10,7 @@ from fastapi import WebSocket
 
 from common.monitoring.logger import get_trace_id
 
-SendJsonCallable = Callable[[WebSocket, dict[str, Any]], Awaitable[None]]
+SendJsonCallable = Callable[[WebSocket, dict[str, Any]], Awaitable[Any]]
 WebSocketProvider = Callable[[], WebSocket | None]
 
 
@@ -39,8 +39,8 @@ class PresentationEventEmitter:
         ws = websocket or self._websocket_provider()
         if ws is None:
             return False
-        await self._send_json(ws, payload)
-        return True
+        result = await self._send_json(ws, payload)
+        return getattr(result, "success", True) is not False
 
     async def send_status(
         self,

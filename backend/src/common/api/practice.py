@@ -20,7 +20,7 @@ import os
 import uuid
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -31,6 +31,7 @@ from sqlalchemy.orm import selectinload
 
 from common.analytics.report_trends import ReportTrendService
 from common.api.server_error import build_server_error
+from common.auth.roles import is_platform_admin_role
 from common.auth.service import get_current_user
 from common.conversation.models import ConversationMessage
 from common.conversation.runtime_diagnostics import (
@@ -79,6 +80,12 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+class _SupportsStepfunToolPreview(Protocol):
+    def build_stepfun_tools(
+        self, effective_policy: dict[str, Any]
+    ) -> list[dict[str, Any]]: ...
 
 
 def _practice_services(db: AsyncSession) -> PracticeRouteServices:
@@ -152,7 +159,7 @@ def error_response(
 
 
 def _is_admin_user(user: User) -> bool:
-    return str(getattr(user, "role", "user")).lower() == "admin"
+    return is_platform_admin_role(getattr(user, "role", None))
 
 
 def _can_read_session(session: PracticeSession, user: User) -> bool:
@@ -740,7 +747,11 @@ async def get_session_knowledge_check(
         return error_response("[ACCESS_DENIED]", status_code=403)
 
     snapshot = extract_voice_policy_snapshot(session)
-    preview_tools = _practice_services(db).runtime_policy.build_stepfun_tools(snapshot)
+    runtime_policy = cast(
+        _SupportsStepfunToolPreview,
+        _practice_services(db).runtime_policy,
+    )
+    preview_tools = runtime_policy.build_stepfun_tools(snapshot)
     effective_tool_types = [
         str(tool.get("type") or "") for tool in preview_tools if isinstance(tool, dict)
     ]

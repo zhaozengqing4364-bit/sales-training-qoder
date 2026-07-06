@@ -68,6 +68,7 @@ from common.monitoring.trace_context import normalize_trace_id
 from common.resilience.backoff import compute_jitter_backoff_seconds
 from common.websocket.base_handler import (
     BaseWebSocketHandler,
+    WebSocketSendResult,
     _get_websocket_header_value,
 )
 from common.websocket.session_manager import get_session_manager
@@ -788,11 +789,15 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
                 error=result.fallback,
             )
 
-    async def send_message(self, message: dict[str, Any]) -> None:
+    async def send_message(self, message: dict[str, Any]) -> WebSocketSendResult:
         """Send SessionManager notifications with reconnect diagnostics."""
         websocket = self._get_active_websocket()
         if not websocket:
-            return
+            return WebSocketSendResult.skipped_send(
+                self.manager._message_type(message),
+                error_type="MissingWebSocket",
+                error="Handler has no active WebSocket",
+            )
 
         outbound = copy.deepcopy(message)
         if outbound.get("type") == "session_timeout":
@@ -811,7 +816,12 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
             self._timeout_disconnect_requested = True
             self._record_disconnect_reason("session_timeout")
 
-        await self.manager.send_json(websocket, outbound)
+        return await self.manager.send_json(
+            websocket,
+            outbound,
+            scenario=self.scenario,
+            session_id=self.session_id,
+        )
 
     async def handle_connection(
         self,

@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.db.typing import orm_scalar
 from sales_trainer.models import SalesTrainerExamPaper, SalesTrainerUnit
 from sales_trainer.schemas import ExamPaperUpdate, UnitQuestionBinding
 from sales_trainer.services.asset_revision_service import AssetChangeClass
@@ -51,7 +52,7 @@ class ExamPaperRevisionPayloadBuilder:
             self._db,
             {
                 **previous_snapshot,
-                "paper_id": paper.paper_id,
+                "paper_id": orm_scalar(paper.paper_id, str),
                 "paper_key": paper_key,
                 "title": data.get("title", previous_snapshot.get("title")),
                 "description": data.get(
@@ -62,7 +63,7 @@ class ExamPaperRevisionPayloadBuilder:
                     "module_key",
                     previous_snapshot.get("module_key"),
                 ),
-                "unit_id": unit.unit_id,
+                "unit_id": orm_scalar(unit.unit_id, str),
                 "unit_status": "published",
                 "status": "published",
                 "pass_threshold": (
@@ -82,20 +83,21 @@ class ExamPaperRevisionPayloadBuilder:
         actor: User,
         unit_service: UnitService,
     ) -> None:
-        paper.paper_key = str(payload["paper_key"])
-        paper.title = str(payload["title"])
-        paper.description = payload.get("description")
-        paper.module_key = str(payload["module_key"])
-        paper.pass_threshold = decimal_or_none(payload.get("pass_threshold"))
-        paper.status = "published"
-        paper.updated_by = str(actor.user_id)
-        unit.name = str(payload["title"])
-        unit.description = payload.get("description")
-        unit.config = quiz_config(paper.pass_threshold)
-        unit.status = "published"
-        unit.updated_by = str(actor.user_id)
+        pass_threshold = decimal_or_none(payload.get("pass_threshold"))
+        setattr(paper, "paper_key", str(payload["paper_key"]))
+        setattr(paper, "title", str(payload["title"]))
+        setattr(paper, "description", payload.get("description"))
+        setattr(paper, "module_key", str(payload["module_key"]))
+        setattr(paper, "pass_threshold", pass_threshold)
+        setattr(paper, "status", "published")
+        setattr(paper, "updated_by", str(actor.user_id))
+        setattr(unit, "name", str(payload["title"]))
+        setattr(unit, "description", payload.get("description"))
+        setattr(unit, "config", quiz_config(pass_threshold))
+        setattr(unit, "status", "published")
+        setattr(unit, "updated_by", str(actor.user_id))
         await unit_service._replace_questions(
-            unit.unit_id,
+            orm_scalar(unit.unit_id, str),
             paper_revision_unit_bindings(payload),
         )
 

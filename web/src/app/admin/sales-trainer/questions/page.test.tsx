@@ -2,9 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerQuestionsPage from "./page";
+import { ApiRequestError } from "@/lib/api/client";
 
 const {
     archiveQuestionMock,
+    getCapabilitiesMock,
     listCategoriesMock,
     listQuestionsMock,
     publishQuestionMock,
@@ -12,6 +14,7 @@ const {
     toastErrorMock,
 } = vi.hoisted(() => ({
     archiveQuestionMock: vi.fn(),
+    getCapabilitiesMock: vi.fn(),
     listCategoriesMock: vi.fn(),
     listQuestionsMock: vi.fn(),
     publishQuestionMock: vi.fn(),
@@ -42,6 +45,7 @@ vi.mock("@/lib/api/client", async () => {
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
                     archiveQuestion: archiveQuestionMock,
+                    getCapabilities: getCapabilitiesMock,
                     listQuestionCategories: listCategoriesMock,
                     listQuestions: listQuestionsMock,
                     publishQuestion: publishQuestionMock,
@@ -54,11 +58,30 @@ vi.mock("@/lib/api/client", async () => {
 describe("SalesTrainerQuestionsPage", () => {
     beforeEach(() => {
         archiveQuestionMock.mockReset();
+        getCapabilitiesMock.mockReset();
         listCategoriesMock.mockReset();
         listQuestionsMock.mockReset();
         publishQuestionMock.mockReset();
         pushMock.mockReset();
         toastErrorMock.mockReset();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_questions: true,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_questions"],
+        });
         listCategoriesMock.mockResolvedValue({
             items: [
                 {
@@ -154,5 +177,88 @@ describe("SalesTrainerQuestionsPage", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "新建题目" }));
         expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/questions/new");
+    });
+
+    it("keeps load failures visible instead of falling back to an empty list", async () => {
+        listQuestionsMock
+            .mockRejectedValueOnce(
+                new ApiRequestError({
+                    status: 403,
+                    errorCode: "[ROLE_REQUIRED]",
+                    message: "权限不足",
+                    traceId: "trace-question-403",
+                    details: null,
+                }),
+            )
+            .mockResolvedValueOnce({
+                items: [],
+                total: 0,
+            });
+
+        render(<SalesTrainerQuestionsPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText("题目加载失败")).toBeTruthy();
+        });
+        expect(screen.getByText(/权限不足/)).toBeTruthy();
+        expect(screen.queryByText("暂无题目")).toBeNull();
+        expect(toastErrorMock).toHaveBeenCalledWith(expect.stringContaining("权限不足"));
+
+        fireEvent.click(screen.getByRole("button", { name: "重新加载题目" }));
+
+        await waitFor(() => {
+            expect(listQuestionsMock).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    it("fails closed before loading questions when capability loading fails", async () => {
+        getCapabilitiesMock.mockRejectedValueOnce(
+            new ApiRequestError({
+                status: 403,
+                errorCode: "[ROLE_REQUIRED]",
+                message: "权限不足",
+                traceId: "trace-capability-403",
+                details: null,
+            }),
+        );
+
+        render(<SalesTrainerQuestionsPage />);
+
+        expect(await screen.findByText("题库管理权限不足")).toBeTruthy();
+        expect(screen.getByText(/trace-capability-403/)).toBeTruthy();
+        expect(listQuestionsMock).not.toHaveBeenCalled();
+        expect(listCategoriesMock).not.toHaveBeenCalled();
+        expect(screen.queryByRole("button", { name: "新建题目" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "AI 出题审核" })).toBeNull();
+    });
+
+    it("does not expose question write actions without manage_questions", async () => {
+        getCapabilitiesMock.mockResolvedValueOnce({
+            role: "viewer",
+            role_label: "只读人员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: true,
+                manage_questions: false,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["manage_content"],
+        });
+
+        render(<SalesTrainerQuestionsPage />);
+
+        expect(await screen.findByText("题库管理权限不足")).toBeTruthy();
+        expect(listQuestionsMock).not.toHaveBeenCalled();
+        expect(listCategoriesMock).not.toHaveBeenCalled();
+        expect(screen.queryByRole("button", { name: "新建题目" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "发布" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "归档" })).toBeNull();
     });
 });

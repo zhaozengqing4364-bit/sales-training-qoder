@@ -9,7 +9,6 @@ import type {
 import SalesTrainerPathsPage from "./page";
 import {
     defaultMaterialsResponse,
-    defaultModuleArticle,
     defaultPathConfigResponse,
     defaultPathRevisionsResponse,
     defaultScorePromptsResponse,
@@ -18,7 +17,6 @@ import {
 } from "./page.test-data";
 
 const {
-    getModuleArticleMock,
     getPathConfigMock,
     getSettingsMock,
     listLearningContentsMock,
@@ -30,7 +28,6 @@ const {
     savePathConfigMock,
     searchParamsMock,
 } = vi.hoisted(() => ({
-    getModuleArticleMock: vi.fn(),
     getPathConfigMock: vi.fn(),
     getSettingsMock: vi.fn(),
     listLearningContentsMock: vi.fn(),
@@ -78,10 +75,6 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.learningContents,
                 list: listLearningContentsMock,
             },
-            newcomerTraining: {
-                ...actual.api.newcomerTraining,
-                getModuleArticle: getModuleArticleMock,
-            },
         },
     };
 });
@@ -93,7 +86,6 @@ describe("SalesTrainerPathsPage business skill bindings", () => {
         getPathConfigMock.mockResolvedValue(defaultPathConfigResponse());
         listPathConfigRevisionsMock.mockResolvedValue(defaultPathRevisionsResponse());
         listLearningContentsMock.mockResolvedValue(learningContents());
-        getModuleArticleMock.mockResolvedValue(defaultModuleArticle());
         listPapersMock.mockResolvedValue(papers());
         listMaterialsMock.mockResolvedValue(defaultMaterialsResponse());
         listScorePromptsMock.mockResolvedValue(defaultScorePromptsResponse());

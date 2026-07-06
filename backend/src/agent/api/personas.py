@@ -12,7 +12,7 @@ References:
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -40,7 +40,9 @@ logger = get_logger(__name__)
 admin_router = APIRouter(prefix="/admin/personas", tags=["admin-personas"])
 
 
-def _raise_persona_service_error(result_fallback: str | None, *, not_found_status: int = 404) -> None:
+def _raise_persona_service_error(
+    result_fallback: str | None, *, not_found_status: int = 404
+) -> None:
     fallback = str(result_fallback or "")
     if fallback.startswith("{"):
         try:
@@ -76,15 +78,15 @@ async def create_persona(
     request: CreatePersonaRequest,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """Create a new Persona - R3.1"""
     service = PersonaService(db)
-    result = await service.create(request, user_id=current_user.user_id)
+    result = await service.create(request, user_id=cast(str, current_user.user_id))
 
     if not result.is_success:
         _raise_persona_service_error(result.fallback)
 
-    persona = result.value
+    persona = cast(Any, result.value)
     commit_error = await commit_or_500(db, "create_persona")
     if commit_error is not None:
         return commit_error
@@ -181,7 +183,7 @@ async def update_persona(
     request: UpdatePersonaRequest,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """Update Persona - R3.4"""
     service = PersonaService(db)
     result = await service.update(persona_id, request)
@@ -204,7 +206,7 @@ async def delete_persona(
     persona_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """Delete Persona - R3.5"""
     service = PersonaService(db)
     result = await service.delete(persona_id)
@@ -228,15 +230,17 @@ async def duplicate_persona(
     persona_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Any:
     """Duplicate Persona - R3.6"""
     service = PersonaService(db)
-    result = await service.duplicate(persona_id, user_id=current_user.user_id)
+    result = await service.duplicate(
+        persona_id, user_id=cast(str, current_user.user_id)
+    )
 
     if not result.is_success:
         _raise_persona_service_error(result.fallback, not_found_status=404)
 
-    persona = result.value
+    persona = cast(Any, result.value)
     commit_error = await commit_or_500(db, "duplicate_persona")
     if commit_error is not None:
         return commit_error

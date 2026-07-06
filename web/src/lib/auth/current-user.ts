@@ -1,30 +1,48 @@
 export type CurrentUserRole = "admin" | "user" | "support" | (string & {});
 
-const PLATFORM_ADMIN_ROLES = new Set(["admin", "super_admin"]);
-const SALES_TRAINER_ADMIN_CONSOLE_ROLES = new Set([
-    "admin",
-    "super_admin",
-    "support",
+export const PLATFORM_ADMIN_ROLE_VALUES = ["admin", "super_admin"] as const;
+export const SALES_TRAINER_CONTENT_ADMIN_ROLE_VALUES = [
     "content_admin",
     "newcomer_content_admin",
-    "training_lead",
-    "training_manager",
-    "ops",
-    "operator",
-    "operations",
-    "sre",
-]);
-const SALES_TRAINER_MANAGER_ENTRY_ROLES = new Set([
+] as const;
+export const SALES_TRAINER_MANAGER_ROLE_VALUES = [
     "support",
-    "content_admin",
-    "newcomer_content_admin",
     "training_lead",
     "training_manager",
+] as const;
+export const SALES_TRAINER_OPERATIONS_ROLE_VALUES = [
+    "operations",
     "ops",
     "operator",
-    "operations",
     "sre",
-]);
+] as const;
+export const READONLY_AUDITOR_ROLE_VALUES = ["readonly_auditor"] as const;
+export const ADMIN_CONSOLE_ROLE_VALUES = [
+    ...PLATFORM_ADMIN_ROLE_VALUES,
+    ...SALES_TRAINER_CONTENT_ADMIN_ROLE_VALUES,
+    ...SALES_TRAINER_MANAGER_ROLE_VALUES,
+    ...SALES_TRAINER_OPERATIONS_ROLE_VALUES,
+    ...READONLY_AUDITOR_ROLE_VALUES,
+] as const;
+export const SALES_TRAINER_MANAGER_ENTRY_ROLE_VALUES = [
+    ...SALES_TRAINER_CONTENT_ADMIN_ROLE_VALUES,
+    ...SALES_TRAINER_MANAGER_ROLE_VALUES,
+    ...SALES_TRAINER_OPERATIONS_ROLE_VALUES,
+] as const;
+
+const PLATFORM_ADMIN_ROLES = new Set<string>(PLATFORM_ADMIN_ROLE_VALUES);
+const ADMIN_CONSOLE_ROLES = new Set<string>(ADMIN_CONSOLE_ROLE_VALUES);
+const SALES_TRAINER_MANAGER_ENTRY_ROLES = new Set<string>(
+    SALES_TRAINER_MANAGER_ENTRY_ROLE_VALUES,
+);
+const SALES_TRAINER_CONTENT_ADMIN_ROLES = new Set<string>(
+    SALES_TRAINER_CONTENT_ADMIN_ROLE_VALUES,
+);
+const SALES_TRAINER_OPERATIONS_ROLES = new Set<string>(
+    SALES_TRAINER_OPERATIONS_ROLE_VALUES,
+);
+
+export const SALES_TRAINER_ADMIN_CONSOLE_ROLE_VALUES = ADMIN_CONSOLE_ROLE_VALUES;
 
 type CurrentUserRecord = {
     id?: unknown;
@@ -67,6 +85,25 @@ function normalizeRole(value: unknown): CurrentUserRole {
     return "user";
 }
 
+function roleMatchesRequiredRole(role: CurrentUserRole, requiredRole: CurrentUserRole): boolean {
+    if (role === requiredRole) {
+        return true;
+    }
+    if (requiredRole === "admin" && PLATFORM_ADMIN_ROLES.has(role)) {
+        return true;
+    }
+    if (
+        requiredRole === "content_admin"
+        && SALES_TRAINER_CONTENT_ADMIN_ROLES.has(role)
+    ) {
+        return true;
+    }
+    if (requiredRole === "operations" && SALES_TRAINER_OPERATIONS_ROLES.has(role)) {
+        return true;
+    }
+    return false;
+}
+
 export function normalizeCurrentUser(input: unknown): CurrentUser {
     const raw = toRecord(input);
     const id = toStringValue(raw.id, toStringValue(raw.user_id));
@@ -96,17 +133,22 @@ export function hasRequiredRole(
     if (!requiredRoles || requiredRoles.length === 0) {
         return true;
     }
-    return Boolean(user && requiredRoles.includes(user.role));
+    return Boolean(
+        user
+        && requiredRoles.some((requiredRole) =>
+            roleMatchesRequiredRole(user.role, normalizeRole(requiredRole)),
+        ),
+    );
 }
 
 export function isPlatformAdminRole(role: string | undefined): boolean {
-    return Boolean(role && PLATFORM_ADMIN_ROLES.has(role));
+    return Boolean(role && PLATFORM_ADMIN_ROLES.has(normalizeRole(role)));
 }
 
 export function canUseAdminConsoleRole(role: string | undefined): boolean {
-    return Boolean(role && SALES_TRAINER_ADMIN_CONSOLE_ROLES.has(role));
+    return Boolean(role && ADMIN_CONSOLE_ROLES.has(normalizeRole(role)));
 }
 
 export function shouldStayInSalesTrainerAdmin(role: string | undefined): boolean {
-    return Boolean(role && SALES_TRAINER_MANAGER_ENTRY_ROLES.has(role));
+    return Boolean(role && SALES_TRAINER_MANAGER_ENTRY_ROLES.has(normalizeRole(role)));
 }

@@ -22,7 +22,8 @@ from sales_trainer.services.ai_coach_chat_generation_streaming import (
 )
 from sales_trainer.services.ai_coach_model_config import (
     AiCoachModelConfigError,
-    resolve_ai_coach_llm_model_config,
+    model_config_id,
+    resolve_ai_coach_llm_model_config_from_db,
 )
 
 
@@ -41,7 +42,10 @@ class AiCoachChatGenerator:
         on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> AiCoachChatResponseInternalV1:
         try:
-            model_config = resolve_ai_coach_llm_model_config(config.generation_model)
+            model_config = await resolve_ai_coach_llm_model_config_from_db(
+                self._db,
+                config.generation_model,
+            )
         except AiCoachModelConfigError as exc:
             raise AiCoachChatGenerationError(exc.code, exc.message, 409) from exc
         contract = await AiCoachChatPromptCompiler(self._db).compile(
@@ -51,13 +55,12 @@ class AiCoachChatGenerator:
             history=history,
             model_config=model_config,
         )
-        session.prompt_contract_hash = contract.contract_hash
+        setattr(session, "prompt_contract_hash", contract.contract_hash)
         max_attempts = config.retry_policy.max_retries + 1
+        llm_service = LLMService(config=model_config) if model_config is not None else LLMService()
         if on_generation_delta is not None:
             streamed = await emit_streamed_response(
-                llm=LLMService(config=model_config)
-                if model_config is not None
-                else LLMService(),
+                llm=llm_service,
                 parser=self._parser,
                 contract=contract,
                 config=config,
@@ -66,18 +69,18 @@ class AiCoachChatGenerator:
                 failure_message="AI 教练生成失败，请稍后重试。",
                 on_generation_delta=on_generation_delta,
             )
+            streamed.response.runtime_audit = self._llm_runtime_audit(
+                llm_service,
+                model_config,
+                session_id=str(session.session_id),
+            )
             return streamed.response
         last_error: AiCoachChatGenerationError | None = None
         for attempt in range(max_attempts):
             prompt = prompt_for_attempt(contract.rendered_prompt, last_error)
-            llm_service = (
-                LLMService(config=model_config)
-                if model_config is not None
-                else LLMService()
-            )
             result = await llm_service.generate(
                 prompt=prompt,
-                session_id=session.session_id,
+                session_id=str(session.session_id),
                 system_message=contract.system_message,
                 allow_fallback_response=False,
                 response_format=AI_COACH_JSON_RESPONSE_FORMAT,
@@ -94,6 +97,11 @@ class AiCoachChatGenerator:
             except AiCoachChatGenerationError as exc:
                 last_error = exc
                 continue
+            parsed.runtime_audit = self._llm_runtime_audit(
+                llm_service,
+                model_config,
+                session_id=str(session.session_id),
+            )
             return parsed
         if last_error is not None:
             raise last_error
@@ -113,3 +121,59 @@ class AiCoachChatGenerator:
         last_error: AiCoachChatGenerationError | None,
     ) -> str:
         return prompt_for_attempt(base_prompt, last_error)
+
+    @staticmethod
+    def _llm_runtime_audit(
+        llm_service: LLMService,
+        model_config: object | None,
+        *,
+        session_id: str | None = None,
+    ) -> dict[str, object]:
+        effective_config = getattr(llm_service, "_effective_config", None)
+        base_url = ""
+        if isinstance(effective_config, dict):
+            base_url = str(effective_config.get("base_url") or "")
+        audit: dict[str, object] = {
+            "provider": str(getattr(llm_service, "provider", "") or ""),
+            "model_name": str(getattr(llm_service, "model_name", "") or ""),
+            "base_url": base_url,
+            "base_url_configured": bool(base_url.strip()),
+            "model_config_id": model_config_id(model_config),
+            "source": "model_config" if model_config is not None else "env_fallback",
+            "is_configured": bool(getattr(llm_service, "is_configured", False)),
+        }
+        if session_id:
+            provider_event = AiCoachChatGenerator._latest_provider_response_event(
+                llm_service,
+                session_id,
+            )
+            if provider_event:
+                audit["provider_response"] = provider_event
+        return audit
+
+    @staticmethod
+    def _latest_provider_response_event(
+        llm_service: LLMService,
+        session_id: str,
+    ) -> dict[str, object] | None:
+        event_reader = getattr(llm_service, "get_session_runtime_events", None)
+        if not callable(event_reader):
+            return None
+        events = event_reader(session_id)
+        for event in reversed(events):
+            if event.get("event_id") != "llm_provider_response_received":
+                continue
+            details = event.get("details")
+            metrics = event.get("metrics")
+            return {
+                "event_id": "llm_provider_response_received",
+                "status": str(event.get("status") or ""),
+                "source": str(event.get("source") or ""),
+                "fallback_used": bool(
+                    details.get("fallback_used")
+                    if isinstance(details, dict)
+                    else True
+                ),
+                "metrics": dict(metrics) if isinstance(metrics, dict) else {},
+            }
+        return None

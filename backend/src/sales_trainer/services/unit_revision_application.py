@@ -28,11 +28,11 @@ class UnitRevisionPayloadApplicator:
         *,
         actor_id: str,
     ) -> None:
-        unit.name = str(payload["name"])
-        unit.description = payload.get("description")
-        unit.config = payload_dict(payload.get("config"))
-        unit.status = "published"
-        unit.updated_by = actor_id
+        setattr(unit, "name", str(payload["name"]))
+        setattr(unit, "description", payload.get("description"))
+        setattr(unit, "config", payload_dict(payload.get("config")))
+        setattr(unit, "status", "published")
+        setattr(unit, "updated_by", actor_id)
         await self.replace_questions(str(unit.unit_id), payload)
 
     async def replace_questions(self, unit_id: str, payload: dict[str, Any]) -> None:

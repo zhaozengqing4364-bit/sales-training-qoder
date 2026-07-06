@@ -2,6 +2,7 @@ import type {
     NewcomerArticle,
     NewcomerExamPaper,
     NewcomerPathConfigResponse,
+    NewcomerPathPublishPreviewResponse,
     NewcomerPathRevisionSummary,
     SalesTrainerAudioScorePrompt,
     SalesTrainerMaterial,
@@ -13,6 +14,7 @@ export type NewcomerConfigModuleKey =
     | "ppt_explanation"
     | "business_skills"
     | "elevator_pitch"
+    | "realtime_roleplay"
     | "realtime_roleplay_placeholder";
 
 export type NewcomerConfigStatus = "ready" | "warning" | "missing" | "disabled";
@@ -55,7 +57,7 @@ export interface NewcomerConfigCenterSummary {
 }
 
 export interface NewcomerConfigCenterGovernance {
-    readonly source: "active_revision" | "unit_backfill" | "legacy_units";
+    readonly source: "active_revision" | "legacy_migration_snapshot" | "legacy_units";
     readonly sourceLabel: string;
     readonly activeRevisionLabel: string;
     readonly workingRevisionLabel: string;
@@ -63,6 +65,10 @@ export interface NewcomerConfigCenterGovernance {
     readonly revisionCount: number;
     readonly latestReason: string | null;
     readonly revisions: readonly NewcomerPathRevisionSummary[];
+    readonly fallbackApplied: boolean;
+    readonly fallbackReason: string | null;
+    readonly publishPreview: NewcomerPathPublishPreviewResponse | null;
+    readonly publishPreviewLoadError: string | null;
 }
 
 export interface NewcomerConfigCenterModel {
@@ -80,8 +86,11 @@ export interface NewcomerConfigCenterInput {
     readonly scorePrompts: readonly SalesTrainerAudioScorePrompt[];
     readonly settings: SalesTrainerSettings | null;
     readonly boundArticle: NewcomerArticle | null;
+    readonly boundArticleLoadError?: string | null;
     readonly pathConfig?: NewcomerPathConfigResponse | null;
     readonly pathRevisions?: readonly NewcomerPathRevisionSummary[];
+    readonly publishPreview?: NewcomerPathPublishPreviewResponse | null;
+    readonly publishPreviewLoadError?: string | null;
 }
 
 export interface ModuleDefinition {

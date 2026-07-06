@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentPersona
 from agent.models import Persona as AgentPersonaModel
+from common.db.typing import json_dict_or_empty
 from common.services.practice_session_ports import (
     PracticeSessionPortError,
     register_agent_persona_pair_validator,
@@ -51,7 +52,8 @@ async def validate_agent_persona_pair(
             "[PERSONA_NOT_LINKED_TO_AGENT]",
             status_code=400,
         )
-    return link.override_config or None
+    override_config = json_dict_or_empty(link.override_config)
+    return override_config or None
 
 
 def register_agent_practice_session_contributor() -> None:

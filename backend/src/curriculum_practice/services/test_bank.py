@@ -14,6 +14,7 @@ from curriculum_practice.schemas import (
     TestBankImportJobResponse,
     TestBankImportResultResponse,
 )
+from curriculum_practice.services.orm_payload_typing import set_orm_field
 from curriculum_practice.services.test_bank_constants import SERVER_ERROR
 from curriculum_practice.services.test_bank_importer import (
     ImportRowError,
@@ -94,7 +95,7 @@ class TestBankService(TestBankQuestionServiceMixin):
                 return Result.fail(parent_result.fallback or "[QUESTION_CATEGORY_NOT_FOUND]")
         for field, value in data.items():
             setattr(category, field, value)
-        category.updated_by = actor_id
+        set_orm_field(category, "updated_by", actor_id)
         try:
             await self._db.commit()
             await self._db.refresh(category)
@@ -104,12 +105,12 @@ class TestBankService(TestBankQuestionServiceMixin):
         return Result.ok(category)
 
     async def delete_category(self, category: QuestionCategory) -> Result[None]:
-        child_count = await self._count_categories(parent_id=category.category_id)
+        child_count = await self._count_categories(parent_id=str(category.category_id))
         if child_count is None:
             return Result.fail(SERVER_ERROR)
         if child_count > 0:
             return Result.fail("[QUESTION_CATEGORY_HAS_CHILDREN]")
-        question_count = await self._count_questions(category_id=category.category_id)
+        question_count = await self._count_questions(category_id=str(category.category_id))
         if question_count is None:
             return Result.fail(SERVER_ERROR)
         if question_count > 0:
@@ -157,13 +158,15 @@ class TestBankService(TestBankQuestionServiceMixin):
         categories = await self.list_categories()
         if not categories.is_success:
             return Result.fail(categories.fallback or SERVER_ERROR)
-        job.status = "processing"
+        set_orm_field(job, "status", "processing")
         await self._persist_job(job)
 
         importer = TestBankImporter(
-            known_category_ids={category.category_id for category in categories.value or []}
+            known_category_ids={
+                str(category.category_id) for category in categories.value or []
+            }
         )
-        parsed = importer.parse(raw, filename=job.filename)
+        parsed = importer.parse(raw, filename=str(job.filename))
         imported_count = 0
         errors: list[ImportRowError] = list(parsed.errors)
         for item in parsed.items:
@@ -178,13 +181,17 @@ class TestBankService(TestBankQuestionServiceMixin):
                         message=create_result.fallback or "question import failed",
                     )
                 )
-        job.status = "completed"
-        job.imported = imported_count
-        job.failed = len({error.row for error in errors})
-        job.errors = [
-            {"row": error.row, "field": error.field, "message": error.message}
-            for error in errors
-        ]
+        set_orm_field(job, "status", "completed")
+        set_orm_field(job, "imported", imported_count)
+        set_orm_field(job, "failed", len({error.row for error in errors}))
+        set_orm_field(
+            job,
+            "errors",
+            [
+                {"row": error.row, "field": error.field, "message": error.message}
+                for error in errors
+            ],
+        )
         return await self._persist_job(job)
 
     async def _count_categories(self, *, parent_id: str) -> int | None:

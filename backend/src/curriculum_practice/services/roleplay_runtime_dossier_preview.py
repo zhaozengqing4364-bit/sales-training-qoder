@@ -230,28 +230,28 @@ class RoleplayRuntimeDossierPreviewService:
         checks = [
             _asset_check(
                 "persona_reference",
-                persona is not None and persona.status == "active",
+                _has_status(persona, "active"),
                 "Persona 可用并处于 active 状态。",
                 "Persona 缺失或不是 active，模板运行时角色合同不可用。",
                 {"persona_id": _string(template.persona_id)},
             ),
             _asset_check(
                 "case_item_reference",
-                case_item is not None and case_item.status == "published",
+                _has_status(case_item, "published"),
                 "CaseItem 已发布，可作为公司与需求事实源。",
                 "CaseItem 缺失或未发布，无法预览完整客户剧本。",
                 {"case_item_id": _string(template.case_item_id)},
             ),
             _asset_check(
                 "role_profile_reference",
-                role_profile is not None and role_profile.status == "published",
+                _has_status(role_profile, "published"),
                 "RoleProfile 已发布，可作为行为规则事实源。",
                 "RoleProfile 缺失或未发布，无法预览客户行为约束。",
                 {"role_profile_id": _string(template.role_profile_id)},
             ),
             _asset_check(
                 "scoring_ruleset_reference",
-                ruleset is not None and ruleset.status == "published",
+                _has_status(ruleset, "published"),
                 "ScoringRuleset 已发布，可作为复盘评价事实源。",
                 "ScoringRuleset 缺失或未发布，无法校验隐藏信息触发评价。",
                 {"scoring_ruleset_id": _string(template.scoring_ruleset_id)},
@@ -503,6 +503,10 @@ class RoleplayRuntimeDossierPreviewService:
                 source_assets=["Persona", "CaseItem", "RoleProfile"],
             ),
         ]
+
+
+def _has_status(asset: object | None, expected_status: str) -> bool:
+    return asset is not None and _string(getattr(asset, "status", None)) == expected_status
 
 
 def _asset_check(

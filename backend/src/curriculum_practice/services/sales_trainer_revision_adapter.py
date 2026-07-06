@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,15 +46,18 @@ class SalesTrainerAssetRevisionService:
         reason: str | None = None,
         trace_id: str | None = None,
     ) -> SalesTrainerAssetRevision:
-        return await self._impl.save_working_revision(
-            resource_type=resource_type,
-            logical_id=logical_id,
-            payload=payload,
-            actor=actor,
-            change_class=change_class,
-            source_revision_id=source_revision_id,
-            reason=reason,
-            trace_id=trace_id,
+        return cast(
+            SalesTrainerAssetRevision,
+            await self._impl.save_working_revision(
+                resource_type=resource_type,
+                logical_id=logical_id,
+                payload=payload,
+                actor=actor,
+                change_class=change_class,
+                source_revision_id=source_revision_id,
+                reason=reason,
+                trace_id=trace_id,
+            ),
         )
 
     async def create_published_revision(
@@ -68,14 +71,17 @@ class SalesTrainerAssetRevisionService:
         reason: str | None = None,
         trace_id: str | None = None,
     ) -> AssetPublishResult:
-        return await self._impl.create_published_revision(
-            resource_type=resource_type,
-            logical_id=logical_id,
-            payload=payload,
-            actor=actor,
-            change_class=change_class,
-            reason=reason,
-            trace_id=trace_id,
+        return cast(
+            AssetPublishResult,
+            await self._impl.create_published_revision(
+                resource_type=resource_type,
+                logical_id=logical_id,
+                payload=payload,
+                actor=actor,
+                change_class=change_class,
+                reason=reason,
+                trace_id=trace_id,
+            ),
         )
 
     async def active_revision(
@@ -84,9 +90,12 @@ class SalesTrainerAssetRevisionService:
         resource_type: str,
         logical_id: str,
     ) -> SalesTrainerAssetRevision | None:
-        return await self._impl.active_revision(
-            resource_type=resource_type,
-            logical_id=logical_id,
+        return cast(
+            SalesTrainerAssetRevision | None,
+            await self._impl.active_revision(
+                resource_type=resource_type,
+                logical_id=logical_id,
+            ),
         )
 
     async def latest_working_revision(
@@ -95,9 +104,12 @@ class SalesTrainerAssetRevisionService:
         resource_type: str,
         logical_id: str,
     ) -> SalesTrainerAssetRevision | None:
-        return await self._impl.latest_working_revision(
-            resource_type=resource_type,
-            logical_id=logical_id,
+        return cast(
+            SalesTrainerAssetRevision | None,
+            await self._impl.latest_working_revision(
+                resource_type=resource_type,
+                logical_id=logical_id,
+            ),
         )
 
     async def publish_working_revision(
@@ -108,11 +120,14 @@ class SalesTrainerAssetRevisionService:
         reason: str | None = None,
         trace_id: str | None = None,
     ) -> AssetPublishResult:
-        return await self._impl.publish_working_revision(
-            revision,
-            actor=actor,
-            reason=reason,
-            trace_id=trace_id,
+        return cast(
+            AssetPublishResult,
+            await self._impl.publish_working_revision(
+                cast(Any, revision),
+                actor=actor,
+                reason=reason,
+                trace_id=trace_id,
+            ),
         )
 
 

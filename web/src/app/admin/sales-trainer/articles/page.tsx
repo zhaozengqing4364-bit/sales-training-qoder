@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Plus, RefreshCcw } from "lucide-react";
+import { AlertTriangle, BookOpen, Plus, RefreshCcw } from "lucide-react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import {
@@ -14,8 +14,14 @@ import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/mod
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { useToast } from "@/components/ui/toast";
-import { ApiRequestError, api, getApiErrorMessage } from "@/lib/api/client";
-import type { LearningContent, NewcomerArticleBinding } from "@/lib/api/types";
+import { api, getApiErrorMessage } from "@/lib/api/client";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
+import type {
+    LearningContent,
+    NewcomerArticleBinding,
+    NewcomerPathConfigResponse,
+    SalesTrainerAdminCapabilities,
+} from "@/lib/api/types";
 
 const BUSINESS_SKILLS_MODULE_KEY = "business_skills";
 const NEWCOMER_PATH_KEY = "newcomer_training_path_v1";
@@ -51,6 +57,12 @@ function belongsToBusinessSkillsContent(
         || item.source === SEEDED_NEWCOMER_CONTENT_SOURCE;
 }
 
+function boundContentIdFromPathConfig(pathConfig: NewcomerPathConfigResponse): string | null {
+    return pathConfig.path.modules.find(
+        (module) => module.module_key === BUSINESS_SKILLS_MODULE_KEY,
+    )?.learning_content_id ?? null;
+}
+
 function articleBindingActionLabel(
     contentId: string,
     boundContentId: string | null,
@@ -76,6 +88,10 @@ export default function NewcomerArticleBindingPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [capabilities, setCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessArticles = isSalesTrainerAdminPathAllowedForCapabilities(pathname, capabilities);
 
     const boundContent = useMemo(
         () => items.find((item) => item.learning_content_id === boundContentId) ?? null,
@@ -91,42 +107,71 @@ export default function NewcomerArticleBindingPage() {
     );
 
     const load = useCallback(async () => {
+        if (!canAccessArticles) {
+            return;
+        }
         setIsLoading(true);
         setError(null);
         setPendingBinding(null);
         try {
-            const contents = await api.learningContents.list();
+            const [contents, pathConfig] = await Promise.all([
+                api.learningContents.list(),
+                api.admin.newcomerTraining.getPathConfig(),
+            ]);
             setItems(contents.items);
+            const nextBoundContentId = boundContentIdFromPathConfig(pathConfig);
+            setBoundContentId(nextBoundContentId);
+            if (
+                nextBoundContentId
+                && !contents.items.some((item) => item.learning_content_id === nextBoundContentId)
+            ) {
+                setError(`当前路径配置绑定的商务技巧文章不在内容列表中：${nextBoundContentId}`);
+            }
         } catch (loadError) {
-            if (loadError instanceof Error) {
-                setItems([]);
-                setError(getApiErrorMessage(loadError));
-            } else {
-                throw loadError;
-            }
-        }
-        try {
-            const article = await api.newcomerTraining.getModuleArticle(BUSINESS_SKILLS_MODULE_KEY);
-            setBoundContentId(article.learning_content_id);
-        } catch (articleError) {
-            if (articleError instanceof ApiRequestError && articleError.status === 404) {
-                setBoundContentId(null);
-                return;
-            }
-            if (articleError instanceof Error) {
-                setBoundContentId(null);
-                setError(getApiErrorMessage(articleError));
-            } else {
-                throw articleError;
-            }
+            setItems([]);
+            setBoundContentId(null);
+            setError(getApiErrorMessage(loadError));
         } finally {
             setIsLoading(false);
         }
+    }, [canAccessArticles]);
+
+    useEffect(() => {
+        let isCurrent = true;
+        void api.admin.salesTrainer.getCapabilities()
+            .then((result) => {
+                if (!isCurrent) return;
+                setCapabilities(result);
+                setCapabilityError(null);
+            })
+            .catch((error) => {
+                if (!isCurrent) return;
+                setCapabilities(null);
+                setCapabilityError(getApiErrorMessage(error));
+            })
+            .finally(() => {
+                if (!isCurrent) return;
+                setIsCapabilityLoading(false);
+            });
+        return () => {
+            isCurrent = false;
+        };
     }, []);
 
     useEffect(() => {
+        if (isCapabilityLoading) {
+            return;
+        }
+        if (!canAccessArticles) {
+            setItems([]);
+            setBoundContentId(null);
+            setPendingBinding(null);
+            setError(null);
+            setIsLoading(false);
+            return;
+        }
         void load();
-    }, [load]);
+    }, [canAccessArticles, isCapabilityLoading, load]);
 
     async function bindContent(content: LearningContent) {
         if (content.status !== "published") {
@@ -179,24 +224,46 @@ export default function NewcomerArticleBindingPage() {
                 <AdminPageHeader
                     title="商务技巧文章"
                     description="管理学习页展示的 Markdown 文章与章节；章节数量可随时扩展，不改变新人训练路径外层模块。"
-                    primaryAction={(
+                    primaryAction={canAccessArticles ? (
                         <Button className="rounded-full bg-slate-900 text-white" onClick={() => void createArticle()} disabled={isCreating}>
                             <Plus className="mr-2 h-4 w-4" />
                             新建商务技巧文章
                         </Button>
-                    )}
+                    ) : null}
                     secondaryActions={(
                         <div className="flex flex-wrap gap-2">
+                            {canAccessArticles ? (
                             <Button variant="outline" className="rounded-full" onClick={() => void load()} disabled={isLoading}>
                                 <RefreshCcw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
                                 刷新
                             </Button>
-                            <SalesTrainerAdminModuleNav currentPath={pathname} />
+                            ) : null}
+                            <SalesTrainerAdminModuleNav currentPath={pathname} capabilities={capabilities} />
                         </div>
                     )}
                 />
             )}
         >
+            {isCapabilityLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                    正在校验文章管理权限...
+                </div>
+            ) : capabilityError || !canAccessArticles ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
+                        <div>
+                            <h2 className="font-bold text-amber-950">文章管理权限不足</h2>
+                            <p className="mt-1 text-sm leading-6">
+                                当前页不会在权限未确认时展示文章写入入口。请联系管理员开通内容管理权限后重试。
+                            </p>
+                            {capabilityError ? (
+                                <p className="mt-2 text-sm font-medium">{capabilityError}</p>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+            ) : null}
             {error ? <GlassCard className="p-4 text-sm font-medium text-red-700">{error}</GlassCard> : null}
 
             {pendingBinding && pendingContent ? (
@@ -207,6 +274,7 @@ export default function NewcomerArticleBindingPage() {
                 <CurrentArticleBindingCard content={boundContent} statusLabel={statusLabel(boundContent.status)} />
             ) : null}
 
+            {canAccessArticles ? (
             <GlassCard className="overflow-hidden">
                 <div className="border-b border-slate-100 px-6 py-4">
                     <h2 className="text-lg font-bold text-slate-900">可绑定学习内容</h2>
@@ -259,6 +327,7 @@ export default function NewcomerArticleBindingPage() {
                     </div>
                 )}
             </GlassCard>
+            ) : null}
         </AdminIndexShell>
     );
 }

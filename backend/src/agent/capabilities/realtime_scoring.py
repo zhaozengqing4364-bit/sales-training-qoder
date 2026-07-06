@@ -6,7 +6,7 @@ RealtimeScoringCapability - 实时评分能力
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from agent.capabilities.base import BaseCapability, CapabilityConfig, CapabilityResult
 from agent.capabilities.registry import CapabilityRegistry
@@ -249,14 +249,19 @@ class RealtimeScoringCapability(BaseCapability):
                 context.state[prev_key] = score
 
             emotion_dimension_scores = self._evaluate_emotion_dimensions(context)
-            for dim_name, score in emotion_dimension_scores.items():
+            for dim_name, emotion_score in emotion_dimension_scores.items():
                 display_name = (
                     "表达信心" if dim_name == "response_confidence" else "表达流畅度"
                 )
                 dimension_scores.append(
-                    {"name": display_name, "score": score, "trend": "stable", "delta": 0}
+                    {
+                        "name": display_name,
+                        "score": emotion_score,
+                        "trend": "stable",
+                        "delta": 0,
+                    }
                 )
-                canonical_scores[display_name] = float(score)
+                canonical_scores[display_name] = float(emotion_score)
 
             standard_overall_score = round(
                 sum(
@@ -485,7 +490,7 @@ class RealtimeScoringCapability(BaseCapability):
         logger.info("Realtime scoring initialized", session_id=context.session_id)
 
     async def on_session_end(self, context: AgentContext) -> dict[str, Any]:
-        stats = await super().on_session_end(context)
+        stats = cast(dict[str, Any], await super().on_session_end(context))
 
         history = context.state.get("score_history", [])
         if history:

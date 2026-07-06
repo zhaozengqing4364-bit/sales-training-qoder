@@ -1,12 +1,14 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerAudioSubmissionsPage from "./page";
 
 const {
+    getCapabilitiesMock,
     listAudioSubmissionsMock,
     pushMock,
 } = vi.hoisted(() => ({
+    getCapabilitiesMock: vi.fn(),
     listAudioSubmissionsMock: vi.fn(),
     pushMock: vi.fn(),
 }));
@@ -26,6 +28,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     listAudioSubmissions: listAudioSubmissionsMock,
                 },
             },
@@ -35,8 +38,27 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("SalesTrainerAudioSubmissionsPage", () => {
     beforeEach(() => {
+        getCapabilitiesMock.mockReset();
         pushMock.mockReset();
         listAudioSubmissionsMock.mockReset();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_questions: false,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: true,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: false,
+                view_settings: false,
+            },
+            capability_keys: ["view_records"],
+        });
         listAudioSubmissionsMock.mockResolvedValue({
             items: [
                 {
@@ -84,5 +106,35 @@ describe("SalesTrainerAudioSubmissionsPage", () => {
         expect(screen.getByText("audio/wav · 学员录音上传页")).toBeTruthy();
         expect(screen.queryByText("/sales-trainer/audio/unit-1")).toBeNull();
         expect(screen.queryByText("transcription_failed")).toBeNull();
+    });
+
+    it("keeps list load failures visible instead of rendering an empty recording list", async () => {
+        listAudioSubmissionsMock.mockRejectedValueOnce(new Error("audio list unavailable"));
+
+        render(<SalesTrainerAudioSubmissionsPage />);
+
+        expect(await screen.findByText("录音记录加载失败")).toBeTruthy();
+        expect(screen.getByText("audio list unavailable")).toBeTruthy();
+        expect(screen.queryByText("暂无录音记录")).toBeNull();
+        expect(screen.queryByText("ppt.wav")).toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: "重新加载录音记录" }));
+
+        await waitFor(() => {
+            expect(listAudioSubmissionsMock).toHaveBeenCalledTimes(2);
+        });
+        expect(await screen.findByText("ppt.wav")).toBeTruthy();
+        expect(screen.queryByText("录音记录加载失败")).toBeNull();
+    });
+
+    it("fails closed before loading audio submissions when capabilities are unavailable", async () => {
+        getCapabilitiesMock.mockRejectedValueOnce(new Error("capability unavailable"));
+
+        render(<SalesTrainerAudioSubmissionsPage />);
+
+        expect(await screen.findByText("页面访问受限")).toBeTruthy();
+        expect(screen.getByText("capability unavailable")).toBeTruthy();
+        expect(listAudioSubmissionsMock).not.toHaveBeenCalled();
+        expect(screen.queryByText("暂无录音记录")).toBeNull();
     });
 });

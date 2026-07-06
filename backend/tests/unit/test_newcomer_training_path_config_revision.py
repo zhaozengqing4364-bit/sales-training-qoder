@@ -3,20 +3,24 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.db.models import User
+from common.db.models import PromptTemplate, User
 from curriculum_practice.models import LearningContent
+from prompt_templates.models import PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
 from sales_trainer.models import (
     SalesTrainerExamPaper,
     SalesTrainerOperationLog,
     SalesTrainerUnit,
 )
 from sales_trainer.schemas import (
+    NewcomerPathConfigResponse,
     NewcomerPathConfigSaveRequest,
     NewcomerPathModuleConfig,
 )
+from sales_trainer.services.path_config_models import SalesTrainerPathConfigError
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
 from sales_trainer.services.path_service import SalesTrainerPathService
 
@@ -33,6 +37,29 @@ def _admin() -> User:
 
 BUSINESS_CONTENT_ID = "path-config-business-content"
 BUSINESS_PAPER_ID = "path-config-business-paper"
+BUSINESS_AI_COACH_PROMPT_ID = "11111111-1111-1111-1111-111111111111"
+
+
+def _ai_coach_config() -> dict[str, object]:
+    return {
+        "enabled": True,
+        "coach_mode": "mixed_drill",
+        "allowed_interaction_types": ["single_choice", "multiple_choice"],
+        "prompt_template_id": BUSINESS_AI_COACH_PROMPT_ID,
+        "prompt_revision_id": None,
+        "prompt_contract_hash": None,
+        "scoring_prompt_template_id": None,
+        "scoring_prompt_revision_id": None,
+        "scoring_contract_hash": None,
+        "min_turns": 3,
+        "max_turns": 10,
+        "mastery_threshold": 90,
+        "output_schema_version": "ai_coach_interaction_v1",
+        "generation_model": None,
+        "scoring_model": None,
+        "retry_policy": {"max_retries": 2, "retry_backoff": 1.0},
+        "failure_behavior": "skip_turn",
+    }
 
 
 def _unit(unit_id: str, *, title: str, order_index: int = 1) -> SalesTrainerUnit:
@@ -100,6 +127,7 @@ def _payload(*, unit_id: str, title: str) -> NewcomerPathConfigSaveRequest:
                 target_unit_id=unit_id,
                 learning_content_id=BUSINESS_CONTENT_ID,
                 exam_paper_id=BUSINESS_PAPER_ID,
+                ai_coach=_ai_coach_config(),
                 completion_rule="submitted",
                 primary_action_label="开始学习",
             )
@@ -107,7 +135,61 @@ def _payload(*, unit_id: str, title: str) -> NewcomerPathConfigSaveRequest:
     )
 
 
-def _business_assets(admin: User, unit: SalesTrainerUnit) -> tuple[LearningContent, SalesTrainerExamPaper]:
+def _payload_from_modules(
+    modules: list[dict[str, object]],
+    *,
+    path_key: str = "newcomer_training_path_v1",
+    enabled: bool = True,
+) -> NewcomerPathConfigSaveRequest:
+    return NewcomerPathConfigSaveRequest.model_validate(
+        {
+            "path_key": path_key,
+            "title": "新人训练路径",
+            "goal_title": "完成新人训练",
+            "enabled": enabled,
+            "reason": "校验新人路径配置",
+            "modules": modules,
+        }
+    )
+
+
+def _realtime_binding(*, ready: bool = True) -> dict[str, object]:
+    return {
+        "binding_key": "newcomer_realtime_roleplay_v1",
+        "runtime_owner": "training_runtime",
+        "runtime_descriptor_id": "newcomer-realtime-runtime",
+        "scenario_key": "newcomer-realtime-roleplay",
+        "runtime_config_revision_id": "runtime-config-rev-1",
+        "provider_readiness_snapshot": {
+            "provider": "mock",
+            "ready": ready,
+            "checked_at": "2026-06-27T00:00:00Z",
+            "config_revision_id": "runtime-config-rev-1",
+            "failure_code": None if ready else "[MOCK_PROVIDER_NOT_READY]",
+            "failure_message": None if ready else "mock provider not ready",
+        },
+        "permission_policy": {
+            "learner_enter": "sales_trainer.enter_realtime",
+            "admin_configure": "sales_trainer.manage_modules",
+            "admin_provider_health": "sales_trainer.view_settings",
+        },
+        "failure_policy": {
+            "terminal_codes": ["CONFIG_INVALID"],
+            "transient_codes": ["PROVIDER_TIMEOUT"],
+            "voluntary_codes": ["USER_CANCELLED"],
+            "terminal_retry_allowed": False,
+        },
+        "rollback_policy": {
+            "rollback_via_active_revision": True,
+            "disable_module_on_invalid_binding": True,
+            "fallback_to_placeholder": False,
+        },
+    }
+
+
+def _business_assets(
+    admin: User, unit: SalesTrainerUnit
+) -> tuple[LearningContent, SalesTrainerExamPaper, PromptTemplate]:
     return (
         LearningContent(
             learning_content_id=BUSINESS_CONTENT_ID,
@@ -130,6 +212,18 @@ def _business_assets(admin: User, unit: SalesTrainerUnit) -> tuple[LearningConte
             created_by=str(admin.user_id),
             updated_by=str(admin.user_id),
         ),
+        PromptTemplate(
+            id=BUSINESS_AI_COACH_PROMPT_ID,
+            name="商务技巧 AI 教练对话生成",
+            prompt_type="stage",
+            business_purpose=PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION,
+            category="sales_trainer_ai_coach",
+            template="请根据 {{ module_key }} 和 {{ coach_mode }} 生成教练回复。",
+            variables=["module_key", "coach_mode"],
+            is_active=True,
+            is_default=False,
+            is_system=False,
+        ),
     )
 
 
@@ -144,9 +238,11 @@ async def test_should_backfill_path_config_from_published_unit_when_no_revision(
 
     config = await SalesTrainerPathConfigService(test_db).get_config()
 
-    assert config["source"] == "unit_backfill"
+    assert config["source"] == "legacy_migration_snapshot"
     assert config["fallback_reason"] == "active_revision_missing"
     assert config["legacy_snapshot_only"] is True
+    assert config["diagnostics"]["fallback_applied"] is True
+    assert config["diagnostics"]["fallback_reason"] == "active_revision_missing"
     assert config["management_entry"] == "/admin/newcomer-training/path-config"
     assert config["permission"] == "sales_trainer.manage_modules"
     assert config["active_revision_id"] is None
@@ -154,6 +250,253 @@ async def test_should_backfill_path_config_from_published_unit_when_no_revision(
     assert config["path"]["title"] == "新人训练路径"
     assert config["path"]["modules"][0]["title"] == "商务技巧"
     assert config["path"]["modules"][0]["target_unit_id"] == unit.unit_id
+
+
+@pytest.mark.asyncio
+async def test_should_validate_path_config_diagnostics_contract(
+    test_db: AsyncSession,
+) -> None:
+    admin = _admin()
+    unit = _unit("path-config-diagnostics-unit", title="商务技巧")
+    test_db.add_all([admin, unit])
+    await test_db.commit()
+
+    config = await SalesTrainerPathConfigService(test_db).get_config()
+
+    validated = NewcomerPathConfigResponse.model_validate(config)
+    assert validated.diagnostics.fallback_applied is True
+    assert validated.diagnostics.permission_policy.publish == (
+        "sales_trainer.manage_modules"
+    )
+    assert validated.diagnostics.high_risk_actions.publish.preview_endpoint == (
+        "/api/v1/admin/newcomer-training/path-config/publish/preview"
+    )
+
+    invalid_config = dict(config)
+    invalid_config["diagnostics"] = dict(config["diagnostics"])
+    invalid_config["diagnostics"].pop("high_risk_actions")
+
+    with pytest.raises(ValidationError):
+        NewcomerPathConfigResponse.model_validate(invalid_config)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload", "expected_code", "expected_status", "message_fragment"),
+    [
+        (
+            _payload_from_modules(
+                [
+                    {
+                        "module_key": "business_skills",
+                        "module_type": "article_exam",
+                        "enabled": True,
+                        "order_index": 1,
+                        "title": "商务技巧",
+                    }
+                ],
+                path_key="new_seller_modules_v1",
+            ),
+            "[NEWCOMER_PATH_CONFIG_ALIAS_READ_ONLY]",
+            409,
+            "兼容路径标识只允许读取",
+        ),
+        (
+            _payload_from_modules(
+                [
+                    {
+                        "module_key": "business_skills",
+                        "module_type": "article_exam",
+                        "enabled": True,
+                        "order_index": 1,
+                        "title": "商务技巧 1",
+                    },
+                    {
+                        "module_key": "business_skills",
+                        "module_type": "article_exam",
+                        "enabled": True,
+                        "order_index": 2,
+                        "title": "商务技巧 2",
+                    },
+                ]
+            ),
+            "[NEWCOMER_PATH_CONFIG_INVALID]",
+            422,
+            "重复 module_key",
+        ),
+        (
+            _payload_from_modules(
+                [
+                    {
+                        "module_key": "ppt_explanation",
+                        "module_type": "audio_scoring",
+                        "enabled": True,
+                        "order_index": 1,
+                        "title": "PPT 讲解",
+                    },
+                    {
+                        "module_key": "business_skills",
+                        "module_type": "article_exam",
+                        "enabled": True,
+                        "order_index": 1,
+                        "title": "商务技巧",
+                    },
+                ]
+            ),
+            "[NEWCOMER_PATH_CONFIG_INVALID]",
+            422,
+            "重复 order_index",
+        ),
+        (
+            _payload_from_modules(
+                [
+                    {
+                        "module_key": "pyramid_speech",
+                        "module_type": "audio_scoring_group",
+                        "enabled": True,
+                        "order_index": 1,
+                        "title": "电梯演讲",
+                    }
+                ]
+            ),
+            "[NEWCOMER_PATH_CONFIG_INVALID]",
+            422,
+            "兼容 module_key",
+        ),
+        (
+            _payload_from_modules(
+                [
+                    {
+                        "module_key": "business_skills",
+                        "module_type": "audio_scoring",
+                        "enabled": True,
+                        "order_index": 1,
+                        "title": "商务技巧",
+                    }
+                ]
+            ),
+            "[NEWCOMER_PATH_CONFIG_INVALID]",
+            422,
+            "必须使用 module_type=article_exam",
+        ),
+        (
+            _payload_from_modules(
+                [
+                    {
+                        "module_key": "realtime_roleplay_placeholder",
+                        "module_type": "realtime_roleplay",
+                        "enabled": False,
+                        "order_index": 1,
+                        "title": "实时对练占位",
+                    }
+                ]
+            ),
+            "[NEWCOMER_PATH_CONFIG_INVALID]",
+            422,
+            "必须使用 module_type=realtime_placeholder",
+        ),
+        (
+            _payload_from_modules(
+                [
+                    {
+                        "module_key": "business_skills",
+                        "module_type": "article_exam",
+                        "enabled": True,
+                        "order_index": 1,
+                        "title": "商务技巧",
+                    }
+                ],
+                enabled=False,
+            ),
+            "[NEWCOMER_PATH_CONFIG_INVALID]",
+            422,
+            "enabled=false",
+        ),
+    ],
+)
+async def test_should_reject_invalid_path_payload_on_save(
+    test_db: AsyncSession,
+    payload: NewcomerPathConfigSaveRequest,
+    expected_code: str,
+    expected_status: int,
+    message_fragment: str,
+) -> None:
+    admin = _admin()
+    test_db.add(admin)
+    await test_db.commit()
+
+    with pytest.raises(SalesTrainerPathConfigError) as exc_info:
+        await SalesTrainerPathConfigService(test_db).save_config(payload, actor=admin)
+
+    assert exc_info.value.code == expected_code
+    assert exc_info.value.status_code == expected_status
+    assert message_fragment in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_should_reject_enabled_realtime_roleplay_without_runtime_binding_on_publish(
+    test_db: AsyncSession,
+) -> None:
+    admin = _admin()
+    test_db.add(admin)
+    await test_db.commit()
+
+    service = SalesTrainerPathConfigService(test_db)
+    await service.save_config(
+        _payload_from_modules(
+            [
+                {
+                    "module_key": "realtime_roleplay",
+                    "module_type": "realtime_roleplay",
+                    "enabled": True,
+                    "order_index": 1,
+                    "title": "实时对练",
+                    "completion_rule": "submitted",
+                }
+            ]
+        ),
+        actor=admin,
+    )
+
+    with pytest.raises(SalesTrainerPathConfigError) as exc_info:
+        await service.publish_config(actor=admin, reason="启用实时对练")
+
+    assert exc_info.value.code == "[NEWCOMER_REALTIME_BINDING_INVALID]"
+    assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_should_reject_realtime_roleplay_when_provider_is_not_ready(
+    test_db: AsyncSession,
+) -> None:
+    admin = _admin()
+    test_db.add(admin)
+    await test_db.commit()
+
+    service = SalesTrainerPathConfigService(test_db)
+    await service.save_config(
+        _payload_from_modules(
+            [
+                {
+                    "module_key": "realtime_roleplay",
+                    "module_type": "realtime_roleplay",
+                    "enabled": True,
+                    "order_index": 1,
+                    "title": "实时对练",
+                    "completion_rule": "submitted",
+                    "runtime_binding": _realtime_binding(ready=False),
+                }
+            ]
+        ),
+        actor=admin,
+    )
+
+    with pytest.raises(SalesTrainerPathConfigError) as exc_info:
+        await service.publish_config(actor=admin, reason="启用实时对练")
+
+    assert exc_info.value.code == "[NEWCOMER_REALTIME_PROVIDER_NOT_READY]"
+    assert exc_info.value.status_code == 503
+    assert "mock provider not ready" in exc_info.value.message
 
 
 @pytest.mark.asyncio
@@ -280,7 +623,7 @@ async def test_should_keep_learner_path_on_active_revision_until_working_is_publ
     before_publish = await SalesTrainerPathService(test_db).list_paths_for_user(
         str(admin.user_id)
     )
-    assert before_publish[0]["levels"][0]["level_title"] == "商务技巧旧版"
+    assert before_publish == []
 
     await service.publish_config(actor=admin, reason="新版商务技巧路径生效")
     after_publish = await SalesTrainerPathService(test_db).list_paths_for_user(
@@ -315,6 +658,8 @@ async def test_should_expose_active_revision_module_identity_to_learner_path(
     assert config["source"] == "active_revision"
     assert config["fallback_reason"] is None
     assert config["legacy_snapshot_only"] is False
+    assert config["diagnostics"]["fallback_applied"] is False
+    assert config["diagnostics"]["fallback_reason"] is None
     assert config["active_revision_snapshot"]["revision_id"] == str(
         publish_result.revision.revision_id
     )
@@ -326,6 +671,76 @@ async def test_should_expose_active_revision_module_identity_to_learner_path(
     assert level["module_key"] == "business_skills"
     assert level["module_type"] == "article_exam"
     assert level["target_path"] == "/sales-trainer/business-skills"
+
+
+@pytest.mark.asyncio
+async def test_publish_preview_projects_realtime_provider_readiness(
+    test_db: AsyncSession,
+) -> None:
+    admin = _admin()
+    test_db.add(admin)
+    await test_db.commit()
+
+    service = SalesTrainerPathConfigService(test_db)
+    await service.save_config(
+        _payload_from_modules(
+            [
+                {
+                    "module_key": "realtime_roleplay",
+                    "module_type": "realtime_roleplay",
+                    "enabled": True,
+                    "order_index": 1,
+                    "title": "实时对练",
+                    "completion_rule": "submitted",
+                    "runtime_binding": _realtime_binding(ready=True),
+                }
+            ]
+        ),
+        actor=admin,
+    )
+
+    preview = await service.publish_preview()
+
+    readiness = preview["impact_scope"]["realtime_provider_readiness"]
+    assert readiness == [
+        {
+            "module_key": "realtime_roleplay",
+            "module_type": "realtime_roleplay",
+            "title": "实时对练",
+            "enabled": True,
+            "runtime_descriptor_id": "newcomer-realtime-runtime",
+            "provider_readiness_snapshot": {
+                "provider": "mock",
+                "ready": True,
+                "checked_at": "2026-06-27T00:00:00Z",
+                "config_revision_id": "runtime-config-rev-1",
+                "failure_code": None,
+                "failure_message": None,
+            },
+            "ready": True,
+            "failure_code": None,
+            "failure_message": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_should_require_working_revision_before_publish(
+    test_db: AsyncSession,
+) -> None:
+    admin = _admin()
+    unit = _unit("path-config-no-working-unit", title="商务技巧")
+    test_db.add_all([admin, unit, *_business_assets(admin, unit)])
+    await test_db.commit()
+
+    with pytest.raises(SalesTrainerPathConfigError) as exc_info:
+        await SalesTrainerPathConfigService(test_db).publish_config(
+            actor=admin,
+            reason="试图直接发布 backfill 路径",
+        )
+
+    assert exc_info.value.code == "[NEWCOMER_PATH_WORKING_REVISION_REQUIRED]"
+    assert exc_info.value.status_code == 409
 
 
 @pytest.mark.asyncio

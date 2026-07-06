@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.db.models import PracticeSession
 from common.error_handling.result import Result
 from curriculum_practice.models import QuestionItem
+from curriculum_practice.services.orm_payload_typing import orm_dict, set_orm_field
 from curriculum_practice.websocket.examiner_runtime import FrozenExamQuestion
 
 
@@ -17,7 +18,7 @@ def examiner_report_frontend_path(session_id: str) -> str:
 
 
 def _questions_from_snapshot(session: PracticeSession) -> dict[str, FrozenExamQuestion]:
-    snapshot = session.curriculum_snapshot if isinstance(session.curriculum_snapshot, dict) else {}
+    snapshot: dict[str, Any] = orm_dict(session.curriculum_snapshot)
     assets = snapshot.get("content_assets")
     if not isinstance(assets, list):
         return {}
@@ -144,22 +145,21 @@ class ExaminerReportService:
             questions_by_id=questions_by_id,
         )
 
-        runtime_state = (
-            dict(session.runtime_state) if isinstance(session.runtime_state, dict) else {}
-        )
+        runtime_state: dict[str, Any] = orm_dict(session.runtime_state)
         runtime_state["examiner_report"] = report
-        session.runtime_state = runtime_state
-        session.status = "completed"
-        session.logic_score = report["overall_score"]
-        session.accuracy_score = report["overall_score"]
-        session.completeness_score = report["overall_score"]
+        report_score = float(report.get("overall_score") or 0.0)
+        set_orm_field(session, "runtime_state", runtime_state)
+        set_orm_field(session, "status", "completed")
+        set_orm_field(session, "logic_score", report_score)
+        set_orm_field(session, "accuracy_score", report_score)
+        set_orm_field(session, "completeness_score", report_score)
         if getattr(session, "report_status", None) != "completed":
             now = datetime.now(UTC)
-            session.report_status = "completed"
-            session.report_status_updated_at = now
-            session.report_retryable = False
-            session.report_generated_at = now
-            session.report_error = None
+            set_orm_field(session, "report_status", "completed")
+            set_orm_field(session, "report_status_updated_at", now)
+            set_orm_field(session, "report_retryable", False)
+            set_orm_field(session, "report_generated_at", now)
+            set_orm_field(session, "report_error", None)
 
         await self._db.commit()
 
@@ -185,13 +185,11 @@ class ExaminerReportService:
         if str(session.user_id) != user_id:
             return Result.fail("[ACCESS_DENIED]")
 
-        snapshot = (
-            session.curriculum_snapshot if isinstance(session.curriculum_snapshot, dict) else {}
-        )
+        snapshot: dict[str, Any] = orm_dict(session.curriculum_snapshot)
         if snapshot.get("kind") != "curriculum_examiner_session":
             return Result.fail("[EXAMINER_REPORT_NOT_AVAILABLE]")
 
-        runtime_state = session.runtime_state if isinstance(session.runtime_state, dict) else {}
+        runtime_state: dict[str, Any] = orm_dict(session.runtime_state)
         report = runtime_state.get("examiner_report")
         if isinstance(report, dict) and report.get("items"):
             return Result.ok(report)

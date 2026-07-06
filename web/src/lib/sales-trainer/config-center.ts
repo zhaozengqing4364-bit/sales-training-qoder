@@ -26,6 +26,7 @@ import type {
     NewcomerConfigStatus,
     NewcomerOperationalCheck,
 } from "./config-center-types";
+import { readRealtimeProviderReadinessDiagnostics } from "./realtime-provider-readiness";
 
 export type {
     ModuleDefinition,
@@ -40,6 +41,15 @@ export type {
 } from "./config-center-types";
 
 const PATH_KEYS = new Set<string>([NEWCOMER_TRAINING_PATH_KEY, NEW_SELLER_MODULES_PATH_KEY]);
+const RUNTIME_HEALTH_HREF = "/support/runtime";
+const REALTIME_ROLEPLAY_DEFINITION = {
+    moduleKey: "realtime_roleplay",
+    title: "实时对练",
+    orderLabel: "第四关",
+    description: "绑定实时运行时、provider readiness 和权限策略，学员进入真实对练会话。",
+    remediationHref: "/admin/sales-trainer/paths?module=realtime_roleplay",
+    learnerPreview: "进入实时对练前会先检查运行时绑定和 provider readiness。",
+} as const satisfies ModuleDefinition;
 
 export function buildNewcomerConfigCenter(
     input: NewcomerConfigCenterInput,
@@ -85,7 +95,10 @@ function orderedDefinitions(input: NewcomerConfigCenterInput): readonly ModuleDe
         return MODULE_DEFINITIONS;
     }
     const definitionByKey = new Map<NewcomerConfigModuleKey, ModuleDefinition>(
-        MODULE_DEFINITIONS.map((definition) => [definition.moduleKey, definition]),
+        [...MODULE_DEFINITIONS, REALTIME_ROLEPLAY_DEFINITION].map((definition) => [
+            definition.moduleKey,
+            definition,
+        ]),
     );
     const configured = [...modules]
         .filter((module): module is NewcomerPathModuleConfig & { readonly module_key: NewcomerConfigModuleKey } => (
@@ -95,7 +108,12 @@ function orderedDefinitions(input: NewcomerConfigCenterInput): readonly ModuleDe
         .map((module) => definitionByKey.get(module.module_key))
         .filter((definition): definition is ModuleDefinition => Boolean(definition));
     const configuredKeys = new Set(configured.map((definition) => definition.moduleKey));
-    const remaining = MODULE_DEFINITIONS.filter((definition) => !configuredKeys.has(definition.moduleKey));
+    const remaining = MODULE_DEFINITIONS.filter((definition) => {
+        if (definition.moduleKey === "realtime_roleplay_placeholder" && configuredKeys.has("realtime_roleplay")) {
+            return false;
+        }
+        return !configuredKeys.has(definition.moduleKey);
+    });
     return [...configured, ...remaining];
 }
 
@@ -133,7 +151,9 @@ function moduleKeyForUnit(unit: SalesTrainerUnit): NewcomerConfigModuleKey | nul
 }
 
 function isModuleKey(value: string | null | undefined): value is NewcomerConfigModuleKey {
-    return MODULE_DEFINITIONS.some((definition) => definition.moduleKey === value);
+    return [...MODULE_DEFINITIONS, REALTIME_ROLEPLAY_DEFINITION].some(
+        (definition) => definition.moduleKey === value,
+    );
 }
 
 function moduleStatus(
@@ -170,6 +190,9 @@ function moduleIssues(
     if (moduleKey === "business_skills") {
         appendBusinessIssues(issues, units, input, pathModule);
     }
+    if (moduleKey === "realtime_roleplay") {
+        appendRealtimeIssues(issues, pathModule);
+    }
     return issues;
 }
 
@@ -180,9 +203,16 @@ function appendBusinessIssues(
     pathModule: NewcomerPathModuleConfig | null,
 ): void {
     const article = businessArticle(input, pathModule);
-    if (!article) {
+    if (input.boundArticleLoadError) {
+        issues.push(issue(
+            "article_binding_unavailable",
+            `商务技巧文章绑定状态读取失败：${input.boundArticleLoadError}`,
+            "/admin/sales-trainer/articles",
+        ));
+    }
+    if (!article && !input.boundArticleLoadError) {
         issues.push(issue("article_missing", "缺少已发布商务技巧学习文章绑定。", "/admin/sales-trainer/articles"));
-    } else if (article.chapters.length === 0) {
+    } else if (article && article.chapters.length === 0) {
         issues.push(issue("article_chapters_missing", "商务技巧文章还没有学习章节。", "/admin/sales-trainer/articles"));
     }
     const paperIds = new Set(units.map((unit) => unit.config.path?.exam_paper_id).filter(Boolean));
@@ -211,6 +241,9 @@ function moduleBindings(
     }
     if (moduleKey === "realtime_roleplay_placeholder") {
         return ["实时对练：当前版本仅占位，不创建实时会话"];
+    }
+    if (moduleKey === "realtime_roleplay") {
+        return realtimeBindings(pathModule);
     }
     return audioBindings(units, input, pathModule);
 }
@@ -242,7 +275,16 @@ function businessPaper(
 
 function buildOperationalChecks(input: NewcomerConfigCenterInput): NewcomerOperationalCheck[] {
     const settings = input.settings;
-    return [
+    const checks: NewcomerOperationalCheck[] = [
+        {
+            key: "path_revision_authority",
+            label: "路径真源",
+            ok: input.pathConfig?.source === "active_revision",
+            detail: input.pathConfig
+                ? pathAuthorityDetail(input.pathConfig.fallback_reason ?? null)
+                : "路径配置读取失败",
+            href: "/admin/sales-trainer/paths",
+        },
         {
             key: "asr",
             label: "ASR 转写",
@@ -258,6 +300,25 @@ function buildOperationalChecks(input: NewcomerConfigCenterInput): NewcomerOpera
             href: "/admin/sales-trainer/settings",
         },
     ];
+    for (const diagnostic of realtimeProviderDiagnostics(input)) {
+        checks.push({
+            key: `realtime_provider_${diagnostic.moduleKey}`,
+            label: "实时对练 Provider",
+            ok: diagnostic.ready,
+            detail: diagnostic.detail,
+            href: RUNTIME_HEALTH_HREF,
+        });
+    }
+    if (input.pathConfig?.has_unpublished_revision) {
+        checks.push({
+            key: "path_publish_preview",
+            label: "发布预览",
+            ok: Boolean(input.publishPreview && !input.publishPreviewLoadError),
+            detail: publishPreviewDetail(input),
+            href: "/admin/sales-trainer/paths",
+        });
+    }
+    return checks;
 }
 
 function buildSummary(modules: readonly NewcomerConfigModuleSummary[]): NewcomerConfigCenterSummary {
@@ -287,6 +348,10 @@ function buildGovernance(input: NewcomerConfigCenterInput): NewcomerConfigCenter
             revisionCount: revisions.length,
             latestReason: revisions[0]?.reason ?? null,
             revisions,
+            fallbackApplied: true,
+            fallbackReason: "path_config_unavailable",
+            publishPreview: null,
+            publishPreviewLoadError: input.publishPreviewLoadError ?? null,
         };
     }
     return {
@@ -302,6 +367,10 @@ function buildGovernance(input: NewcomerConfigCenterInput): NewcomerConfigCenter
         revisionCount: revisions.length,
         latestReason: revisions[0]?.reason ?? null,
         revisions,
+        fallbackApplied: Boolean(pathConfig.fallback_reason || pathConfig.legacy_snapshot_only),
+        fallbackReason: pathConfig.fallback_reason ?? null,
+        publishPreview: input.publishPreview ?? null,
+        publishPreviewLoadError: input.publishPreviewLoadError ?? null,
     };
 }
 
@@ -369,4 +438,90 @@ function moduleEnabled(
 
 function issue(code: string, message: string, href: string): NewcomerConfigIssue {
     return { code, message, href };
+}
+
+function appendRealtimeIssues(
+    issues: NewcomerConfigIssue[],
+    pathModule: NewcomerPathModuleConfig | null,
+): void {
+    if (!pathModule?.runtime_binding) {
+        issues.push(issue(
+            "runtime_binding_missing",
+            "实时对练缺少 runtime binding，发布会被后端拒绝。",
+            "/admin/sales-trainer/paths?module=realtime_roleplay",
+        ));
+        return;
+    }
+    const readiness = pathModule.runtime_binding.provider_readiness_snapshot;
+    if (!readiness.ready) {
+        issues.push(issue(
+            "provider_readiness_not_ready",
+            `实时对练 provider readiness 未通过：${readiness.failure_message ?? readiness.failure_code ?? "provider 未就绪"}`,
+            RUNTIME_HEALTH_HREF,
+        ));
+    }
+}
+
+function realtimeBindings(pathModule: NewcomerPathModuleConfig | null): string[] {
+    const binding = pathModule?.runtime_binding;
+    if (!binding) {
+        return ["运行时绑定：未配置", "Provider readiness：未检查"];
+    }
+    const readiness = binding.provider_readiness_snapshot;
+    return [
+        `运行时：${binding.runtime_descriptor_id} / ${binding.runtime_config_revision_id}`,
+        readiness.ready
+            ? `Provider readiness：${readiness.provider ?? "unknown"} 已就绪`
+            : `Provider readiness：未就绪（${readiness.failure_message ?? readiness.failure_code ?? "unknown"}）`,
+    ];
+}
+
+function pathAuthorityDetail(fallbackReason: string | null): string {
+    if (!fallbackReason) {
+        return "active path revision";
+    }
+    return `fallback_applied=true / ${fallbackReason}`;
+}
+
+function publishPreviewDetail(input: NewcomerConfigCenterInput): string {
+    if (input.publishPreviewLoadError) {
+        return input.publishPreviewLoadError;
+    }
+    const preview = input.publishPreview;
+    if (!preview) {
+        return "待发布修订存在，但发布预览尚未生成";
+    }
+    const changedModules = stringListFromUnknown(preview.impact_scope.changed_module_keys);
+    return `${preview.risk_level} 风险 / 影响 ${changedModules.length ? changedModules.join(", ") : "路径元数据"}`;
+}
+
+function realtimeProviderDiagnostics(input: NewcomerConfigCenterInput): {
+    readonly moduleKey: string;
+    readonly ready: boolean;
+    readonly detail: string;
+}[] {
+    const fromDiagnostics = readRealtimeProviderReadinessDiagnostics(input.pathConfig?.diagnostics);
+    if (fromDiagnostics) {
+        return fromDiagnostics;
+    }
+    return (input.pathConfig?.path.modules ?? [])
+        .filter((module) => module.module_type === "realtime_roleplay")
+        .map((module) => {
+            const binding = module.runtime_binding;
+            const readiness = binding?.provider_readiness_snapshot;
+            return {
+                moduleKey: module.module_key,
+                ready: Boolean(readiness?.ready),
+                detail: readiness?.ready
+                    ? `${readiness.provider ?? "unknown"} / ${binding?.runtime_descriptor_id ?? "runtime 未知"}`
+                    : readiness?.failure_message ?? readiness?.failure_code ?? "runtime binding 或 provider readiness 未就绪",
+            };
+        });
+}
+
+function stringListFromUnknown(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value.filter((item): item is string => typeof item === "string");
 }

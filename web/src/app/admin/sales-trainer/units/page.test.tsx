@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import SalesTrainerUnitsPage from "./page";
 
 const {
+    getAdminCapabilitiesMock,
     pushMock,
     listUnitsMock,
     listUnitRevisionsMock,
     rollbackUnitMock,
 } = vi.hoisted(() => ({
+    getAdminCapabilitiesMock: vi.fn(),
     pushMock: vi.fn(),
     listUnitsMock: vi.fn(),
     listUnitRevisionsMock: vi.fn(),
@@ -37,6 +39,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getAdminCapabilitiesMock,
                     publishUnit: vi.fn(),
                     archiveUnit: vi.fn(),
                 },
@@ -56,6 +59,20 @@ vi.mock("@/lib/api/client", async () => {
 describe("SalesTrainerUnitsPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        getAdminCapabilitiesMock.mockResolvedValue({
+            role: "admin",
+            role_label: "管理员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: true,
+                manage_prompts: false,
+                manage_questions: false,
+                view_records: false,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
         listUnitsMock.mockResolvedValue({
             items: [
                 {
@@ -86,6 +103,34 @@ describe("SalesTrainerUnitsPage", () => {
         rollbackUnitMock.mockResolvedValue({});
     });
 
+    it("fails closed before loading units without module management permission", async () => {
+        getAdminCapabilitiesMock.mockResolvedValue({
+            role: "viewer",
+            role_label: "只读成员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: false,
+                view_records: true,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
+
+        render(<SalesTrainerUnitsPage />);
+
+        expect(await screen.findByText("模块单元权限不足")).toBeTruthy();
+        expect(listUnitsMock).not.toHaveBeenCalled();
+        expect(listUnitRevisionsMock).not.toHaveBeenCalled();
+        expect(rollbackUnitMock).not.toHaveBeenCalled();
+        expect(screen.queryByRole("button", { name: "新建训练单元" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "编辑" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "发布并生效" })).toBeNull();
+        expect(screen.queryByRole("button", { name: /历史版本/ })).toBeNull();
+    });
+
     it("keeps the units list as an index page and routes creation to /new", async () => {
         render(<SalesTrainerUnitsPage />);
 
@@ -97,6 +142,24 @@ describe("SalesTrainerUnitsPage", () => {
         expect(screen.queryByText("训练单元名称")).toBeNull();
         fireEvent.click(screen.getByRole("button", { name: "新建训练单元" }));
         expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/units/new");
+    });
+
+    it("shows a blocking load error instead of an empty units table when list loading fails", async () => {
+        listUnitsMock.mockRejectedValueOnce(new Error("units backend down"));
+
+        render(<SalesTrainerUnitsPage />);
+
+        expect(await screen.findByText("训练单元列表加载失败")).toBeTruthy();
+        expect(screen.getByText("units backend down")).toBeTruthy();
+        expect(screen.queryByText("暂无训练单元")).toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: "重新加载训练单元" }));
+
+        expect(await screen.findByText("列表页项目")).toBeTruthy();
+        expect(screen.queryByText("训练单元列表加载失败")).toBeNull();
+        await waitFor(() => {
+            expect(listUnitsMock).toHaveBeenCalledTimes(2);
+        });
     });
 
     it("does not show copy draft action for published units", async () => {

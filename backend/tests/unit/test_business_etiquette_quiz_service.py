@@ -3,11 +3,13 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
 from common.error_handling.result import Result
 from curriculum_practice.models import QuestionCategory, QuestionItem
+from sales_trainer.models import SalesTrainerOperationLog
 from sales_trainer.schemas import (
     BusinessEtiquetteQuizAnswerSubmit,
     BusinessEtiquetteTrainingUnitConfig,
@@ -307,6 +309,15 @@ async def test_should_submit_business_etiquette_unit_quiz_and_score_capabilities
     assert result.capability_scores[0].mastered is True
     assert result.answers[0].is_correct is True
     assert result.recommended_chapter_orders == [1]
+    log = await test_db.scalar(
+        select(SalesTrainerOperationLog).where(
+            SalesTrainerOperationLog.action == "business_etiquette_unit_quiz.submitted",
+            SalesTrainerOperationLog.target_type == "business_etiquette_unit_quiz_attempt",
+            SalesTrainerOperationLog.target_id == result.attempt_id,
+        )
+    )
+    assert log is not None
+    assert log.metadata_json["learning_unit_key"] == "trust_foundation"
 
 
 @pytest.mark.asyncio

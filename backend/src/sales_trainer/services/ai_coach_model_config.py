@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from common.ai.config_manager import get_config_manager
 from common.ai.models import ModelConfig, ModelType
 
@@ -24,6 +27,29 @@ def resolve_ai_coach_llm_model_config(model_name: str | None) -> ModelConfig | N
         "[AI_COACH_MODEL_CONFIG_NOT_FOUND]",
         f"AI 教练模型配置不存在或未启用：{normalized}",
     )
+
+
+async def resolve_ai_coach_llm_model_config_from_db(
+    db: AsyncSession,
+    model_name: str | None,
+) -> ModelConfig | None:
+    normalized = str(model_name or "").strip()
+    if not normalized:
+        return None
+    result = await db.execute(
+        select(ModelConfig)
+        .where(
+            ModelConfig.model_type == ModelType.LLM.value,
+            ModelConfig.model_name == normalized,
+            ModelConfig.is_active.is_(True),
+        )
+        .order_by(ModelConfig.is_default.desc(), ModelConfig.updated_at.desc())
+        .limit(1)
+    )
+    config = result.scalar_one_or_none()
+    if config is not None:
+        return config
+    return resolve_ai_coach_llm_model_config(normalized)
 
 
 def model_config_contract_payload(config: Any | None) -> dict[str, Any] | None:

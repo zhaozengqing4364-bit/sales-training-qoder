@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import csv
 import json
 from io import StringIO
-import csv
 
 from curriculum_practice.services.test_bank_importer import TestBankImporter
-
 
 KNOWN_CATEGORY_ID = "11111111-1111-1111-1111-111111111111"
 UNKNOWN_CATEGORY_ID = "22222222-2222-2222-2222-222222222222"

@@ -23,7 +23,9 @@
 - 前端 API client 有统一 trace、401 处理和 `ApiRequestError` 标准化。
 - 后端主链路不是纯前端隐藏：录音、做题、训练记录等多数路径已有 owner/department 级校验。
 
-## 总体缺口
+## 2026-06-27 审计时总体缺口
+
+本节为原始审计基线，不代表当前实现状态；当前闭环状态以 `../audit-closure-matrix.md` 和 `../final-verification-report.md` 为准。
 
 系统还没达到“完整闭环、可拓展可配置、无死数据、前后端紧密准确、等级可见内容区分、可视化充分、UI/UX 合格”的最终标准。最核心问题不是某个页面缺功能，而是以下治理面尚未完全收口：
 
@@ -53,7 +55,7 @@
 2. `content_admin` 可能看到商务礼仪学员测验记录。
 3. `support/training_lead/training_manager` 当前可能看到 operation logs 和 settings。
 4. 学员文章进度接口可传任意已发布 `learning_content_id`，没有强制当前模块绑定。
-5. `SALES_TRAINER_MANAGER_ROLES` 非法值未按契约回退默认，误配可能扩大权限。
+5. `SALES_TRAINER_MANAGER_ROLES` 非法值缺少 allowlist/fail-closed 语义，误配可能扩大或误保留权限。
 6. 历史重评服务层缺对象范围校验，当前依赖 admin/ops 角色门槛兜底。
 7. JWT 有默认密钥兜底风险，生产漏配会导致认证安全风险。
 8. 配置资产导出审计默认关闭。
@@ -157,7 +159,7 @@
 - 收紧 logs/settings：只允许 admin/super_admin/ops。
 - 商务礼仪 quiz attempts 改用 view_records 权限并增加部门过滤。
 - 学员 article-progress 不再接受任意 `learning_content_id`，只读 active module binding。
-- `SALES_TRAINER_MANAGER_ROLES` 增加 allowlist 校验，非法值回退默认并记录诊断。
+- `SALES_TRAINER_MANAGER_ROLES` 增加 allowlist 校验：缺失/空值使用默认；显式配置只保留合法角色；全非法配置 fail-closed 并记录诊断。
 - 历史重评增加对象级 scope 校验，为未来部门负责人重评预留边界。
 - 配置资产导出默认强制审计。
 - 模型配置 CRUD/test/tts-preview 增加持久化审计。
@@ -310,4 +312,3 @@
 - 管理者 3 次点击内能从风险学员进入证据并发起补救。
 - 所有关键操作有 actor、action、target、before/after 或 metadata、trace_id。
 - 核心路径有 unit/integration/contract/e2e 覆盖并进入 CI gate。
-

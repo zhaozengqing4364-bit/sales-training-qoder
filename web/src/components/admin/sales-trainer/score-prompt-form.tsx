@@ -10,9 +10,11 @@ import {
     TRAINING_PURPOSE_OPTIONS,
 } from "@/lib/sales-trainer/admin-display";
 import type {
+    SalesTrainerAudioScoreOutputSchema,
     SalesTrainerAudioScorePrompt,
     SalesTrainerAudioScorePromptCreateRequest,
     SalesTrainerAudioScorePromptUpdateRequest,
+    SalesTrainerLearnerRubric,
 } from "@/lib/api/types";
 
 interface SalesTrainerScorePromptFormProps {
@@ -55,6 +57,72 @@ function getDefaultScoringTemplate(prompt?: SalesTrainerAudioScorePrompt | null)
         "录音转写：",
         "{transcript}",
     ].join("\n");
+}
+
+function parseJsonObject(text: string, fieldLabel: string): Record<string, unknown> {
+    const parsed = JSON.parse(text || "{}") as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error(`${fieldLabel} 必须是 JSON 对象。`);
+    }
+    return parsed as Record<string, unknown>;
+}
+
+function normalizeOutputSchema(value: Record<string, unknown>): SalesTrainerAudioScoreOutputSchema {
+    const type = value.type ?? "object";
+    if (type !== "object") {
+        throw new Error("output_schema.type 必须是 object。");
+    }
+    const properties = value.properties;
+    if (
+        properties !== undefined
+        && (!properties || typeof properties !== "object" || Array.isArray(properties))
+    ) {
+        throw new Error("output_schema.properties 必须是对象。");
+    }
+    const required = value.required;
+    if (
+        required !== undefined
+        && (!Array.isArray(required) || required.some((item) => typeof item !== "string" || !item.trim()))
+    ) {
+        throw new Error("output_schema.required 必须是字符串数组。");
+    }
+    const propertyMap = properties as Record<string, unknown> | undefined;
+    if (Array.isArray(required) && propertyMap) {
+        const missing = required.filter((item) => !(item in propertyMap));
+        if (missing.length > 0) {
+            throw new Error("output_schema.required 字段必须先在 properties 中声明。");
+        }
+    }
+    return value as SalesTrainerAudioScoreOutputSchema;
+}
+
+function normalizeLearnerRubric(value: Record<string, unknown>): SalesTrainerLearnerRubric {
+    const criteria = value.criteria;
+    if (criteria !== undefined && !Array.isArray(criteria)) {
+        throw new Error("learner_rubric.criteria 必须是数组。");
+    }
+    if (Array.isArray(criteria)) {
+        for (const item of criteria) {
+            if (!item || typeof item !== "object" || Array.isArray(item)) {
+                throw new Error("learner_rubric.criteria 每一项都必须是对象。");
+            }
+            const criterion = item as Record<string, unknown>;
+            if (typeof criterion.key !== "string" || !criterion.key.trim()) {
+                throw new Error("learner_rubric.criteria 每一项必须包含 key。");
+            }
+            if (typeof criterion.label !== "string" || !criterion.label.trim()) {
+                throw new Error("learner_rubric.criteria 每一项必须包含 label。");
+            }
+        }
+    }
+    const commonMistakes = value.common_mistakes;
+    if (
+        commonMistakes !== undefined
+        && (!Array.isArray(commonMistakes) || commonMistakes.some((item) => typeof item !== "string" || !item.trim()))
+    ) {
+        throw new Error("learner_rubric.common_mistakes 必须是非空字符串数组。");
+    }
+    return value as SalesTrainerLearnerRubric;
 }
 
 function PublishedRevisionGuidance() {
@@ -115,18 +183,22 @@ export function SalesTrainerScorePromptForm({
             return;
         }
 
-        let outputSchema: Record<string, unknown> = {};
-        let learnerRubric: Record<string, unknown> = {};
+        let outputSchema: SalesTrainerAudioScoreOutputSchema = {};
+        let learnerRubric: SalesTrainerLearnerRubric = {};
         try {
-            outputSchema = JSON.parse(outputSchemaText || "{}") as Record<string, unknown>;
-        } catch {
-            setError("输出 schema 必须是合法 JSON。");
+            outputSchema = normalizeOutputSchema(
+                parseJsonObject(outputSchemaText, "输出 schema"),
+            );
+        } catch (parseError) {
+            setError(parseError instanceof Error ? parseError.message : "输出 schema 必须是合法 JSON 对象。");
             return;
         }
         try {
-            learnerRubric = JSON.parse(learnerRubricText || "{}") as Record<string, unknown>;
-        } catch {
-            setError("学员可见评分标准必须是合法 JSON。");
+            learnerRubric = normalizeLearnerRubric(
+                parseJsonObject(learnerRubricText, "学员可见评分标准"),
+            );
+        } catch (parseError) {
+            setError(parseError instanceof Error ? parseError.message : "学员可见评分标准必须是合法 JSON 对象。");
             return;
         }
 

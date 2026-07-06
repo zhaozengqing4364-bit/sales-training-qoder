@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.db.typing import orm_scalar
 from common.monitoring.logger import get_trace_id
 from sales_trainer.models import SalesTrainerAssetRevision, SalesTrainerQuizAttempt
 from sales_trainer.regrade_models import SalesTrainerRegradeRun
@@ -17,6 +18,7 @@ from sales_trainer.services.regrade_calculator import (
     QuizRegradePreview,
     build_quiz_regrade_preview,
 )
+from sales_trainer.services.training_record_service import TrainingRecordService
 
 
 class SalesTrainerRegradeService:
@@ -30,7 +32,14 @@ class SalesTrainerRegradeService:
         attempt_id: str,
         *,
         target_revision_id: str | None = None,
+        viewer: User,
+        team_department: str | None,
     ) -> QuizRegradePreview:
+        await self._require_attempt_for_viewer(
+            attempt_id,
+            viewer=viewer,
+            team_department=team_department,
+        )
         attempt = await self._require_attempt(attempt_id)
         target_revision = await self._resolve_target_revision(
             attempt,
@@ -49,11 +58,14 @@ class SalesTrainerRegradeService:
         target_revision_id: str | None,
         reason: str,
         actor: User,
+        team_department: str | None,
     ) -> SalesTrainerRegradeRun:
         trace_id = get_trace_id()
         preview = await self.preview_quiz_attempt(
             attempt_id,
             target_revision_id=target_revision_id,
+            viewer=actor,
+            team_department=team_department,
         )
         run = SalesTrainerRegradeRun(
             target_type=preview.target_type,
@@ -95,6 +107,26 @@ class SalesTrainerRegradeService:
         await self._db.refresh(run)
         return run
 
+    async def _require_attempt_for_viewer(
+        self,
+        attempt_id: str,
+        *,
+        viewer: User,
+        team_department: str | None,
+    ) -> None:
+        record = await TrainingRecordService(self._db).get_record_for_viewer(
+            "quiz_attempt",
+            attempt_id,
+            viewer=viewer,
+            team_department=team_department,
+        )
+        if record is None:
+            raise SalesTrainerRegradeServiceError(
+                "[REGRADING_TARGET_NOT_FOUND]",
+                "历史考试记录不存在，无法重新评分。",
+                404,
+            )
+
     async def _require_attempt(self, attempt_id: str) -> SalesTrainerQuizAttempt:
         attempt = await self._db.get(SalesTrainerQuizAttempt, attempt_id)
         if attempt is None:
@@ -117,7 +149,7 @@ class SalesTrainerRegradeService:
         elif source_revision is not None:
             target_revision = await self._revisions.active_revision(
                 resource_type=PAPER_RESOURCE_TYPE,
-                logical_id=source_revision.logical_id,
+                logical_id=orm_scalar(source_revision.logical_id, str),
             )
         else:
             target_revision = None

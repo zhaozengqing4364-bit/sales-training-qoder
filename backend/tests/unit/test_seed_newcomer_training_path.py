@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.auth.service import pwd_context
 from common.db.models import PromptTemplate, User
 from curriculum_practice.models import (
     LearningChapter,
@@ -528,6 +529,48 @@ async def test_verify_newcomer_training_path_ignores_unselected_path_units(
             },
         )
     )
+
+
+@pytest.mark.asyncio
+async def test_seed_newcomer_training_path_syncs_seed_account_passwords(
+    monkeypatch: pytest.MonkeyPatch,
+    test_db: AsyncSession,
+) -> None:
+    seed_module = _load_seed_module()
+    monkeypatch.setenv("SMOKE_ADMIN_PASSWORD", "SeedSmokePass123!")
+
+    await seed_module.seed(test_db)
+
+    for email in (
+        seed_module.OWNER_EMAIL,
+        seed_module.LEARNER_EMAIL,
+        seed_module.MANAGER_EMAIL,
+    ):
+        user = (
+            (
+                await test_db.execute(
+                    select(User).where(User.email == email)
+                )
+            )
+            .scalars()
+            .one()
+        )
+        assert pwd_context.verify("SeedSmokePass123!", user.hashed_password)
+
+    monkeypatch.setenv("SMOKE_ADMIN_PASSWORD", "SeedSmokePass456!")
+    await seed_module.seed(test_db)
+
+    learner = (
+        (
+            await test_db.execute(
+                select(User).where(User.email == seed_module.LEARNER_EMAIL)
+            )
+        )
+        .scalars()
+        .one()
+    )
+    assert pwd_context.verify("SeedSmokePass456!", learner.hashed_password)
+    assert not pwd_context.verify("SeedSmokePass123!", learner.hashed_password)
     await test_db.commit()
 
     verified = await seed_module.verify(test_db)

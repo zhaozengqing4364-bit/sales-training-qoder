@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertTriangle, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
@@ -11,12 +11,14 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 import type {
     BusinessEtiquetteCapabilityConfig,
     BusinessEtiquetteCapabilitySnapshotResponse,
     BusinessEtiquetteChapterCapabilityBinding,
     BusinessEtiquetteEvidenceRuleConfig,
     BusinessEtiquetteMasteryLevelConfig,
+    SalesTrainerAdminCapabilities,
 } from "@/lib/api/types";
 
 function sourceLabel(source: BusinessEtiquetteCapabilitySnapshotResponse["source"]): string {
@@ -90,6 +92,10 @@ export default function BusinessEtiquetteCapabilitiesPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [archiveKey, setArchiveKey] = useState<string | null>(null);
+    const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
+    const [capabilityError, setCapabilityError] = useState<string | null>(null);
+    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const canAccessCapabilities = isSalesTrainerAdminPathAllowedForCapabilities(pathname, adminCapabilities);
 
     const selectedCapability = useMemo(
         () => capabilities.find((capability) => capability.capability_key === selectedKey) ?? capabilities[0] ?? null,
@@ -112,6 +118,45 @@ export default function BusinessEtiquetteCapabilitiesPage() {
 
     useEffect(() => {
         let isActive = true;
+        void api.admin.salesTrainer.getCapabilities()
+            .then((result) => {
+                if (!isActive) {
+                    return;
+                }
+                setAdminCapabilities(result);
+                setCapabilityError(null);
+            })
+            .catch((error) => {
+                if (!isActive) {
+                    return;
+                }
+                setAdminCapabilities(null);
+                setCapabilityError(getApiErrorMessage(error));
+            })
+            .finally(() => {
+                if (isActive) {
+                    setIsCapabilityLoading(false);
+                }
+            });
+        return () => {
+            isActive = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (isCapabilityLoading) {
+            return;
+        }
+        if (!canAccessCapabilities) {
+            setSnapshot(null);
+            setCapabilities([]);
+            setChapterBindings([]);
+            selectCapability(null);
+            setIsLoading(false);
+            return;
+        }
+        let isActive = true;
+        setIsLoading(true);
         void api.admin.salesTrainer.getBusinessEtiquetteCapabilities()
             .then((nextSnapshot) => {
                 if (!isActive) {
@@ -130,7 +175,7 @@ export default function BusinessEtiquetteCapabilitiesPage() {
         return () => {
             isActive = false;
         };
-    }, [applySnapshot, toast]);
+    }, [applySnapshot, canAccessCapabilities, isCapabilityLoading, selectCapability, toast]);
 
     function updateCapability(
         capabilityKey: string,
@@ -185,7 +230,7 @@ export default function BusinessEtiquetteCapabilitiesPage() {
     }
 
     async function saveSnapshot() {
-        if (!snapshot) {
+        if (!snapshot || !canAccessCapabilities) {
             return;
         }
         setIsSaving(true);
@@ -206,7 +251,7 @@ export default function BusinessEtiquetteCapabilitiesPage() {
     }
 
     async function publishCapability(capabilityKey: string) {
-        if (!snapshot) {
+        if (!snapshot || !canAccessCapabilities) {
             return;
         }
         setIsSaving(true);
@@ -228,7 +273,7 @@ export default function BusinessEtiquetteCapabilitiesPage() {
     }
 
     async function archiveSelectedCapability() {
-        if (!snapshot || !archiveCapability) {
+        if (!snapshot || !archiveCapability || !canAccessCapabilities) {
             return;
         }
         setIsSaving(true);
@@ -258,32 +303,55 @@ export default function BusinessEtiquetteCapabilitiesPage() {
                     description="管理训练包版本快照内的能力点、章节绑定、达标线和证据规则。"
                     secondaryActions={(
                         <div className="flex flex-wrap gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="rounded-full"
-                                onClick={addCapability}
-                                disabled={isLoading || !capabilities.length}
-                            >
-                                <Plus className="mr-2 h-4 w-4" />
-                                新增能力点
-                            </Button>
-                            <Button
-                                type="button"
-                                className="rounded-full bg-slate-900 text-white"
-                                onClick={() => void saveSnapshot()}
-                                disabled={isLoading || isSaving || !snapshot}
-                            >
-                                <Save className="mr-2 h-4 w-4" />
-                                保存能力点快照
-                            </Button>
-                            <SalesTrainerAdminModuleNav currentPath={pathname} />
+                            {canAccessCapabilities ? (
+                                <>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="rounded-full"
+                                        onClick={addCapability}
+                                        disabled={isLoading || !capabilities.length}
+                                    >
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        新增能力点
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        className="rounded-full bg-slate-900 text-white"
+                                        onClick={() => void saveSnapshot()}
+                                        disabled={isLoading || isSaving || !snapshot}
+                                    >
+                                        <Save className="mr-2 h-4 w-4" />
+                                        保存能力点快照
+                                    </Button>
+                                </>
+                            ) : null}
+                            <SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />
                         </div>
                     )}
                 />
             )}
         >
-            {isLoading ? (
+            {isCapabilityLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                    正在校验能力点管理权限...
+                </div>
+            ) : capabilityError || !canAccessCapabilities ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
+                        <div>
+                            <h2 className="font-bold text-amber-950">能力点管理权限不足</h2>
+                            <p className="mt-1 text-sm leading-6">
+                                当前页不会在权限未确认时读取或展示商务礼仪能力点写入入口。请联系管理员开通内容管理权限后重试。
+                            </p>
+                            {capabilityError ? (
+                                <p className="mt-2 text-sm font-medium">{capabilityError}</p>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+            ) : isLoading ? (
                 <div className="h-64 animate-pulse rounded-3xl border border-white/60 bg-white/60" />
             ) : snapshot ? (
                 <div className="space-y-6">

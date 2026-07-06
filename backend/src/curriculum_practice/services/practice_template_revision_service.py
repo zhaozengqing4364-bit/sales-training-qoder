@@ -168,7 +168,7 @@ class PracticeTemplateRevisionService:
             situation_pack_code=situation_pack_code,
         )
         working.payload_json = published_payload
-        working.payload_hash = _revision_storage_hash(published_payload)
+        setattr(working, "payload_hash", _revision_storage_hash(published_payload))
         apply_template_revision_payload(
             template,
             published_payload,

@@ -65,6 +65,14 @@ class _FakeDb:
         return None
 
 
+class _SessionLookupDb(_FakeDb):
+    def __init__(self, session: object | None) -> None:
+        self._session = session
+
+    async def get(self, _model: object, _record_id: str) -> object | None:
+        return self._session
+
+
 def _compiled_contract() -> CompiledPromptContract:
     return CompiledPromptContract(
         contract_version="prompt_contract_v1",
@@ -608,7 +616,7 @@ def test_score_short_answer_accepts_resolver_ok_status(
         extra_config={"temperature": 0.1},
     )
 
-    def fake_resolve_model(model_name: str | None) -> object | None:
+    async def fake_resolve_model(_db: object, model_name: str | None) -> object | None:
         assert model_name == "coach-score-model"
         return model_config
 
@@ -625,7 +633,7 @@ def test_score_short_answer_accepts_resolver_ok_status(
         FakeLLMService,
     )
     monkeypatch.setattr(
-        "sales_trainer.services.ai_coach_session_service.resolve_ai_coach_llm_model_config",
+        "sales_trainer.services.ai_coach_session_service.resolve_ai_coach_llm_model_config_from_db",
         fake_resolve_model,
     )
     service = AiCoachSessionService(_FakeDb())  # type: ignore[arg-type]
@@ -685,8 +693,8 @@ def test_create_session_v1_rejects_disallowed_coach_mode(
         async def get_config(self) -> dict[str, object]:
             return {
                 "path": _path_payload_with_ai_coach(mastery_threshold=80),
-                "active_revision_id": None,
-                "active_revision_no": None,
+                "active_revision_id": "revision-1",
+                "active_revision_no": 1,
             }
 
     monkeypatch.setattr(
@@ -718,8 +726,8 @@ def test_create_session_v1_rejects_disallowed_explicit_interaction_type(
         async def get_config(self) -> dict[str, object]:
             return {
                 "path": _path_payload_with_ai_coach(mastery_threshold=80),
-                "active_revision_id": None,
-                "active_revision_no": None,
+                "active_revision_id": "revision-1",
+                "active_revision_no": 1,
             }
 
     monkeypatch.setattr(
@@ -739,6 +747,77 @@ def test_create_session_v1_rejects_disallowed_explicit_interaction_type(
 
     assert exc_info.value.code == "[AI_COACH_INTERACTION_TYPE_NOT_ALLOWED]"
     assert exc_info.value.status_code == 403
+
+
+def test_create_session_v1_rejects_missing_active_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakePathConfigService:
+        def __init__(self, db: object) -> None:
+            self._db = db
+
+        async def get_config(self) -> dict[str, object]:
+            return {
+                "path": _path_payload_with_ai_coach(mastery_threshold=80),
+                "active_revision_id": None,
+                "active_revision_no": None,
+            }
+
+    monkeypatch.setattr(
+        "sales_trainer.services.ai_coach_session_service.SalesTrainerPathConfigService",
+        FakePathConfigService,
+    )
+    service = AiCoachSessionService(_FakeDb())  # type: ignore[arg-type]
+
+    with pytest.raises(AiCoachSessionServiceError) as exc_info:
+        asyncio.run(
+            service.create_session_v1(
+                user_id="user-1",
+                module_key="business_skills",
+            )
+        )
+
+    assert exc_info.value.code == "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]"
+    assert exc_info.value.status_code == 409
+
+
+def test_create_session_v1_rejects_module_without_ai_coach_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path_payload = _path_payload_with_ai_coach(mastery_threshold=80)
+    modules = path_payload["modules"]
+    assert isinstance(modules, list)
+    module = modules[0]
+    assert isinstance(module, dict)
+    module["ai_coach"] = None
+
+    class FakePathConfigService:
+        def __init__(self, db: object) -> None:
+            self._db = db
+
+        async def get_config(self) -> dict[str, object]:
+            return {
+                "path": path_payload,
+                "active_revision_id": "revision-1",
+                "active_revision_no": 1,
+            }
+
+    monkeypatch.setattr(
+        "sales_trainer.services.ai_coach_session_service.SalesTrainerPathConfigService",
+        FakePathConfigService,
+    )
+    service = AiCoachSessionService(_FakeDb())  # type: ignore[arg-type]
+
+    with pytest.raises(AiCoachSessionServiceError) as exc_info:
+        asyncio.run(
+            service.create_session_v1(
+                user_id="user-1",
+                module_key="business_skills",
+            )
+        )
+
+    assert exc_info.value.code == "[AI_COACH_NOT_CONFIGURED]"
+    assert exc_info.value.status_code == 409
 
 
 def test_submit_feedback_projection_drops_contaminated_public_interaction() -> None:
@@ -903,6 +982,25 @@ def test_validate_answer_payload_rejects_text_for_choice_interaction() -> None:
         AiCoachSessionService._validate_answer_payload(interaction, payload)
 
     assert exc_info.value.code == "[AI_COACH_ANSWER_PAYLOAD_INVALID]"
+
+
+@pytest.mark.asyncio
+async def test_submit_turn_v1_rechecks_actor_ownership() -> None:
+    service = AiCoachSessionService(
+        _SessionLookupDb(SimpleNamespace(session_id="session-1", user_id="owner-1"))  # type: ignore[arg-type]
+    )
+    payload = AiCoachAnswerPayloadV1.model_validate(
+        {"variant": "choice", "option_ids": ["A"]}
+    )
+
+    with pytest.raises(AiCoachSessionServiceError) as exc_info:
+        await service.submit_turn_v1(
+            "session-1",
+            payload,
+            actor=SimpleNamespace(user_id="intruder-1"),  # type: ignore[arg-type]
+        )
+
+    assert exc_info.value.code == "[ACCESS_DENIED]"
 
 
 def test_submit_ai_coach_turn_v1_returns_submitted_turn_feedback_when_next_turn_exists(

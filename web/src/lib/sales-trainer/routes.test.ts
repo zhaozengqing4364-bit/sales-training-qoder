@@ -2,13 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
     SALES_TRAINER_ADMIN_NAV_ITEMS,
+    filterSalesTrainerAdminRouteItemsForCapabilities,
     getSalesTrainerAdminContextNavGroup,
+    getSalesTrainerAdminContextNavGroupForCapabilities,
+    isSalesTrainerAdminPathAllowedForCapabilities,
     salesTrainerAdminItemsForCapabilities,
 } from "./routes";
 import type { SalesTrainerAdminCapabilities } from "@/lib/api/types";
 
 function capabilities(
     overrides: Partial<SalesTrainerAdminCapabilities["capabilities"]>,
+    role = "support",
 ): SalesTrainerAdminCapabilities {
     const values = {
         admin_full_access: false,
@@ -25,7 +29,7 @@ function capabilities(
         ...overrides,
     };
     return {
-        role: "support",
+        role,
         role_label: "培训负责人",
         capabilities: values,
         capability_keys: Object.entries(values)
@@ -61,5 +65,91 @@ describe("sales trainer admin routes", () => {
             "/admin/sales-trainer/paths",
             "/admin/sales-trainer/ai-coach",
         ]);
+    });
+
+    it("filters context navigation by the same sales trainer capabilities", () => {
+        const group = getSalesTrainerAdminContextNavGroupForCapabilities(
+            "/admin/sales-trainer/ai-coach",
+            capabilities({ manage_modules: true }),
+        );
+
+        expect(group.items.map((item) => item.href)).toEqual([
+            "/admin/sales-trainer/paths",
+        ]);
+    });
+
+    it("allows nested article routes when the parent route is capability-visible", () => {
+        const items = filterSalesTrainerAdminRouteItemsForCapabilities(
+            [
+                {
+                    key: "articleImport",
+                    href: "/admin/sales-trainer/articles/import",
+                    label: "资料导入",
+                    icon: SALES_TRAINER_ADMIN_NAV_ITEMS[0].icon,
+                },
+                {
+                    key: "settings",
+                    href: "/admin/sales-trainer/settings",
+                    label: "配置",
+                    icon: SALES_TRAINER_ADMIN_NAV_ITEMS[0].icon,
+                },
+            ],
+            capabilities({ manage_content: true }),
+        );
+
+        expect(items.map((item) => item.href)).toEqual([
+            "/admin/sales-trainer/articles/import",
+        ]);
+    });
+
+    it("checks nested page access from the same capability map", () => {
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/questions/new",
+            capabilities({ manage_questions: true }),
+        )).toBe(true);
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/questions/new",
+            capabilities({ manage_content: true }),
+        )).toBe(false);
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer",
+            capabilities({ manage_questions: true }),
+        )).toBe(false);
+    });
+
+    it("allows Journey Analytics through the records capability", () => {
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/analytics",
+            capabilities({ view_records: true }),
+        )).toBe(true);
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/analytics",
+            capabilities({ manage_content: true }),
+        )).toBe(false);
+    });
+
+    it("allows hidden quiz attempt detail routes through the records capability", () => {
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/quiz-attempts/attempt-1",
+            capabilities({ view_records: true }),
+        )).toBe(true);
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/quiz-attempts/attempt-1",
+            capabilities({ manage_questions: true }),
+        )).toBe(false);
+        expect(salesTrainerAdminItemsForCapabilities(
+            capabilities({ view_records: true }),
+        ).some((item) => item.href === "/admin/sales-trainer/quiz-attempts")).toBe(false);
+    });
+
+    it("keeps route authorization based on capability projection instead of role labels", () => {
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/operation-logs",
+            capabilities({ view_logs: true }, "readonly_auditor"),
+        )).toBe(true);
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/operation-logs",
+            capabilities({}, "readonly_auditor"),
+        )).toBe(false);
     });
 });

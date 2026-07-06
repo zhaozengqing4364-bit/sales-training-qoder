@@ -152,14 +152,15 @@ class LearningProgressService:
         content = result.scalar_one_or_none()
         if content is None:
             return Result.ok(None)
-        chapters_result = await self._chapters(content.learning_content_id)
+        content_id = str(content.learning_content_id)
+        chapters_result = await self._chapters(content_id)
         if not chapters_result.is_success:
             return Result.fail(chapters_result.fallback or SERVER_ERROR)
         if not chapters_result.value:
             return Result.ok(None)
         progress_result = await self.progress_for_user(
             user_id=user_id,
-            content_id=content.learning_content_id,
+            content_id=content_id,
             chapters=chapters_result.value,
         )
         if not progress_result.is_success or progress_result.value is None:

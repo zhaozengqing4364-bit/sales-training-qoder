@@ -137,6 +137,83 @@ async def test_should_validate_export_output_from_service(
 
 
 @pytest.mark.asyncio
+async def test_should_record_export_audit_by_default(
+    test_db,
+) -> None:
+    admin = await _admin(test_db)
+    await _seed_bootstrap(test_db)
+    test_db.add(
+        KnowledgeBase(
+            id="kb-export-default-audit",
+            name="default-audit-kb",
+            description="kb",
+            category="product",
+            vector_collection="default_audit_kb",
+            status="active",
+        )
+    )
+    await test_db.flush()
+
+    bundle = await ConfigAssetExportService(test_db).export_bundle(
+        asset_refs=[
+            AssetRef(
+                asset_type="knowledge_base",
+                natural_key="default-audit-kb",
+            )
+        ],
+        actor_id=str(admin.user_id),
+        actor_identifier=str(admin.email),
+    )
+
+    assert bundle["export_meta"]["export_audit_recorded"] is True
+    logs = (
+        await test_db.execute(
+            select(SystemLog).where(SystemLog.action == "config_asset_export")
+        )
+    ).scalars().all()
+    assert len(logs) == 1
+
+
+@pytest.mark.asyncio
+async def test_should_ignore_false_record_audit_flag_and_still_record_export_audit(
+    test_db,
+) -> None:
+    admin = await _admin(test_db)
+    await _seed_bootstrap(test_db)
+    test_db.add(
+        KnowledgeBase(
+            id="kb-export-forced-audit",
+            name="forced-audit-kb",
+            description="kb",
+            category="product",
+            vector_collection="forced_audit_kb",
+            status="active",
+        )
+    )
+    await test_db.flush()
+
+    bundle = await ConfigAssetExportService(test_db).export_bundle(
+        asset_refs=[
+            AssetRef(
+                asset_type="knowledge_base",
+                natural_key="forced-audit-kb",
+            )
+        ],
+        actor_id=str(admin.user_id),
+        actor_identifier=str(admin.email),
+        record_audit=False,
+    )
+
+    assert bundle["export_meta"]["export_audit_recorded"] is True
+    logs = (
+        await test_db.execute(
+            select(SystemLog).where(SystemLog.action == "config_asset_export")
+        )
+    ).scalars().all()
+    assert len(logs) == 1
+
+
+@pytest.mark.asyncio
 async def test_should_export_practice_template_with_natural_asset_refs(
     test_db,
 ) -> None:

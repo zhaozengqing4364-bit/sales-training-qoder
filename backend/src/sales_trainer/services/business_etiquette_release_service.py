@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,6 +46,10 @@ from sales_trainer.services.business_etiquette_import_service import (
 )
 from sales_trainer.services.business_etiquette_learning_service import (
     BUSINESS_SKILLS_MODULE_KEY,
+)
+from sales_trainer.services.learner_unit_access import (
+    LearnerUnitAccessError,
+    require_learner_active_path_module_access,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import SalesTrainerPathConfigError
@@ -246,7 +250,7 @@ class BusinessEtiquetteReleaseService:
             },
         )
         await self._db.commit()
-        return session.session_id
+        return str(session.session_id)
 
     async def assign_retraining(
         self,
@@ -292,13 +296,19 @@ class BusinessEtiquetteReleaseService:
     ) -> BusinessEtiquetteReleaseImpactResponse:
         path_payload = await self._path_payload()
         module = _business_skills_module(path_payload)
+        active_payload = (
+            cast(dict[str, Any], active_revision.payload_json)
+            if active_revision is not None
+            else {}
+        )
+        target_payload = cast(dict[str, Any], target_revision.payload_json or {})
         chapter_changes = _chapter_changes(
-            active_revision.payload_json if active_revision is not None else {},
-            target_revision.payload_json or {},
+            active_payload,
+            target_payload,
         )
         impacted_capabilities = _capability_changes(
-            active_revision.payload_json if active_revision is not None else {},
-            target_revision.payload_json or {},
+            active_payload,
+            target_payload,
         )
         changed_chapter_orders = {
             item.chapter_order for item in chapter_changes
@@ -477,8 +487,12 @@ class BusinessEtiquetteReleaseService:
             for attempt in quiz_result.scalars().all():
                 user_id = str(attempt.user_id)
                 sources[user_id].add("quiz_attempt")
-                latest_path_revision_no[user_id] = attempt.path_revision_no
-                latest_pack_revision_no[user_id] = attempt.training_pack_revision_no
+                latest_path_revision_no[user_id] = cast(
+                    int | None, attempt.path_revision_no
+                )
+                latest_pack_revision_no[user_id] = cast(
+                    int | None, attempt.training_pack_revision_no
+                )
                 active_session_by_user.setdefault(user_id, False)
         session_result = await self._db.execute(
             select(SalesTrainerAiCoachSession).where(
@@ -488,7 +502,7 @@ class BusinessEtiquetteReleaseService:
         for session in session_result.scalars().all():
             user_id = str(session.user_id)
             sources[user_id].add("ai_coach_session")
-            latest_path_revision_no[user_id] = session.path_revision_no
+            latest_path_revision_no[user_id] = cast(int | None, session.path_revision_no)
             latest_pack_revision_no.setdefault(user_id, None)
             active_session_by_user[user_id] = (
                 active_session_by_user.get(user_id, False)
@@ -528,6 +542,7 @@ class BusinessEtiquetteReleaseService:
                     f"指定重练用户不存在：{user_id}。",
                     404,
                 )
+            await self._ensure_retraining_target_allowed(user)
             session = await self._chat.create_session_shell(
                 user_id=user_id,
                 module_key=BUSINESS_SKILLS_MODULE_KEY,
@@ -536,6 +551,26 @@ class BusinessEtiquetteReleaseService:
             )
             created.append(session.session_id)
         return created
+
+    async def _ensure_retraining_target_allowed(self, user: User) -> None:
+        if not bool(user.is_active) or str(user.role) not in {"user", "learner"}:
+            raise BusinessEtiquetteReleaseServiceError(
+                "[BUSINESS_ETIQUETTE_RETRAINING_TARGET_INVALID]",
+                "指定重练用户不是可训练的有效学员。",
+                422,
+            )
+        try:
+            await require_learner_active_path_module_access(
+                self._db,
+                actor=user,
+                module_key=BUSINESS_SKILLS_MODULE_KEY,
+            )
+        except LearnerUnitAccessError as exc:
+            raise BusinessEtiquetteReleaseServiceError(
+                "[BUSINESS_ETIQUETTE_RETRAINING_TARGET_NOT_ALLOWED]",
+                "指定重练用户当前不可进入商务礼仪训练模块。",
+                404,
+            ) from exc
 
     def _validate_strategy(
         self,

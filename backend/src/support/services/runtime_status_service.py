@@ -1330,8 +1330,9 @@ class RuntimeStatusService:
                 if isinstance(record.roleplay_diagnostics, dict)
                 else {}
             )
-            summary = (
-                diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
+            summary_value = diag.get("summary")
+            summary: dict[str, Any] = (
+                summary_value if isinstance(summary_value, dict) else {}
             )
             status = str(summary.get("status") or "")
             if status == "ready":

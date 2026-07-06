@@ -15,6 +15,7 @@ from common.services import practice_session_service as practice_service
 from common.services.practice_session_service import (
     PracticeSessionLifecycleApplicationService,
 )
+from common.websocket.base_handler import WebSocketSendResult
 from common.websocket.session_state_service import SessionStateSnapshot
 from sales_bot.services import (
     practice_session_contributor as sales_practice_session_contributor,
@@ -257,7 +258,9 @@ async def test_restore_session_state_suppresses_replayed_action_card_for_same_tu
     handler.session_id = "session-stepfun-replay-001"
     handler.websocket = MagicMock()
     handler.manager = MagicMock()
-    handler.manager.send_json = AsyncMock()
+    handler.manager.send_json = AsyncMock(
+        return_value=WebSocketSendResult.sent("session_timeout")
+    )
     handler._send_reconnection_success = AsyncMock()
     handler._fuzzy_detection_enabled = False
     handler._realtime_scoring_enabled = True
@@ -416,12 +419,14 @@ async def test_send_message_enriches_session_timeout_event_with_recovery_diagnos
     handler = StepFunRealtimeHandler()
     handler.websocket = AsyncMock()
     handler.manager = MagicMock()
-    handler.manager.send_json = AsyncMock()
+    handler.manager.send_json = AsyncMock(
+        return_value=WebSocketSendResult.sent("session_timeout")
+    )
     handler.session_status = "in_progress"
     handler.ai_state = "listening"
     handler.turn_count = 6
 
-    await handler.send_message(
+    result = await handler.send_message(
         {
             "type": "session_timeout",
             "timestamp": "2026-03-22T16:00:00+00:00",
@@ -433,6 +438,7 @@ async def test_send_message_enriches_session_timeout_event_with_recovery_diagnos
         }
     )
 
+    assert result.success is True
     sent = handler.manager.send_json.await_args_list[0].args[1]
     assert sent["type"] == "session_timeout"
     assert sent["data"]["session_status"] == "in_progress"
@@ -561,6 +567,7 @@ async def test_prepare_terminal_lifecycle_result_marks_stepfun_session_not_evalu
         lambda current_session: current_session.effectiveness_snapshot,
     )
     monkeypatch.setattr(practice_service.logger, "info", logger_info)
+    sales_practice_session_contributor.register_sales_bot_practice_session_contributor()
     lifecycle_app = PracticeSessionLifecycleApplicationService(
         MagicMock(),
         lifecycle_service=lifecycle_service,

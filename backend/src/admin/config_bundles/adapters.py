@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.business_rules.defaults import (
     ROLEPLAY_SITUATION_PACKS_KEY,
     SALES_COMBINATION_RULES_KEY,
+    SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY,
+    BusinessRuleDefinition,
     get_business_rule_definition,
 )
 from common.business_rules.service import BusinessRuleConfigService
@@ -22,6 +24,11 @@ from common.effectiveness.scoring_rulesets import (
     ScoringRulesetService,
     ScoringRulesetView,
 )
+
+if TYPE_CHECKING:
+    from curriculum_practice.services.roleplay.situation_pack_projection_sync import (
+        SituationPackProjectionSyncResult,
+    )
 
 
 @dataclass(frozen=True)
@@ -218,7 +225,7 @@ class RoleplaySituationPacksConfigBundleAdapter:
         *,
         snapshot: dict[str, Any] | None = None,
         actor_id: str | None = None,
-    ):
+    ) -> SituationPackProjectionSyncResult:
         from curriculum_practice.services.roleplay.situation_pack_projection_sync import (
             SituationPackProjectionSyncService,
         )
@@ -232,22 +239,71 @@ class RoleplaySituationPacksConfigBundleAdapter:
         return await service.sync_active_published_ruleset(actor_id=actor_id)
 
 
-def service_definition():
+class SalesTrainerRealtimeProviderRegistryBundleAdapter:
+    """ConfigBundle adapter for the newcomer realtime provider registry."""
+
+    adapter_key = "sales_trainer_realtime_provider_registry"
+    bundle_key = SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY
+    display_name = "新人训练实时对练 Provider Registry"
+    domain = "voice_runtime"
+
+    async def bundle(self, db: AsyncSession) -> ConfigBundleSnapshot:
+        definition = get_business_rule_definition(self.bundle_key)
+        versions = await self.versions(db)
+        active = next(
+            (item for item in versions if item.status in {"published", "disabled"}),
+            versions[0] if versions else None,
+        )
+        snapshot = active.snapshot if active else {}
+        return ConfigBundleSnapshot(
+            bundle_key=self.bundle_key,
+            display_name=self.display_name,
+            domain=self.domain,
+            legacy_domain=definition.domain,
+            adapter_key=self.adapter_key,
+            read_path=definition.read_path,
+            admin_entry=definition.admin_entry,
+            status=active.status if active else "default",
+            overview=_realtime_provider_registry_overview(snapshot),
+            active_version=active,
+        )
+
+    async def versions(self, db: AsyncSession) -> list[ConfigVersionSnapshot]:
+        service = BusinessRuleConfigService(db)
+        rows = await service.list_configs(key=self.bundle_key)
+        if not rows:
+            resolution = await service.resolve_active_config(self.bundle_key)
+            return [
+                ConfigVersionSnapshot(
+                    source_config_id=resolution.config_id,
+                    version=resolution.version,
+                    version_label=_version_label(resolution.value, resolution.version),
+                    status=resolution.status or "default",
+                    snapshot=deepcopy(resolution.value),
+                    created_at=None,
+                    updated_at=None,
+                )
+            ]
+        return [_version_from_business_rule_row(row) for row in rows]
+
+
+def service_definition() -> BusinessRuleDefinition:
     from common.business_rules.defaults import get_business_rule_definition
 
     return get_business_rule_definition(SALES_COMBINATION_RULES_KEY)
 
 
 def _version_from_business_rule_row(row: BusinessRuleConfig) -> ConfigVersionSnapshot:
-    value = dict(row.value_json or {})
+    row_any = cast(Any, row)
+    value = dict(row_any.value_json or {})
     return ConfigVersionSnapshot(
-        source_config_id=str(row.id),
-        version=int(row.version),
-        version_label=_version_label(value, int(row.version)),
-        status=str(row.status),
+        source_config_id=str(row_any.id),
+        version=int(row_any.version),
+        version_label=_version_label(value, int(row_any.version)),
+        status=str(row_any.status),
         snapshot=deepcopy(value),
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=row_any.created_at,
+        updated_at=row_any.updated_at,
     )
 
 
@@ -329,6 +385,31 @@ def _roleplay_situation_pack_overview(snapshot: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _realtime_provider_registry_overview(snapshot: dict[str, Any]) -> dict[str, Any]:
+    descriptors = [
+        item for item in snapshot.get("descriptors", []) if isinstance(item, dict)
+    ]
+    enabled = [item for item in descriptors if item.get("enabled") is True]
+    ready = [
+        item
+        for item in enabled
+        if isinstance(item.get("readiness"), dict)
+        and item["readiness"].get("ready") is True
+    ]
+    return {
+        "registry_version": snapshot.get("version"),
+        "registry_enabled": snapshot.get("enabled") is True,
+        "descriptor_count": len(descriptors),
+        "enabled_descriptor_count": len(enabled),
+        "ready_descriptor_count": len(ready),
+        "descriptor_ids": sorted(
+            str(item.get("descriptor_id"))
+            for item in descriptors
+            if item.get("descriptor_id")
+        ),
+    }
+
+
 def list_config_bundle_adapters() -> list[ConfigBundleAdapter]:
     from admin.config_bundles.inventory_adapters import (
         PromptTemplatesConfigBundleAdapter,
@@ -340,6 +421,7 @@ def list_config_bundle_adapters() -> list[ConfigBundleAdapter]:
         BusinessRuleSalesCombinationConfigBundleAdapter(),
         ScoringRulesetBundleAdapter(),
         RoleplaySituationPacksConfigBundleAdapter(),
+        SalesTrainerRealtimeProviderRegistryBundleAdapter(),
         SalesTrainerPathConfigBundleAdapter(),
         SalesTrainerAiCoachConfigBundleAdapter(),
         PromptTemplatesConfigBundleAdapter(),

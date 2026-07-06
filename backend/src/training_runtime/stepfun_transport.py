@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import websockets
 from websockets.exceptions import InvalidStatus
@@ -17,6 +17,23 @@ from websockets.exceptions import InvalidStatus
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+STEPFUN_DEFAULT_SESSION_MODALITIES = ("text", "audio")
+STEPFUN_SENSITIVE_QUERY_KEYS = frozenset(
+    {
+        "access_token",
+        "api_key",
+        "apikey",
+        "auth",
+        "authorization",
+        "client_secret",
+        "key",
+        "secret",
+        "sig",
+        "signature",
+        "token",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +44,7 @@ class StepFunSessionConfig:
     temperature: float
     input_audio_format: str
     output_audio_format: str
+    modalities: tuple[str, ...] = STEPFUN_DEFAULT_SESSION_MODALITIES
     turn_detection: dict[str, Any] | None = None
     input_transcription_enabled: bool = False
     input_transcription_language: str = ""
@@ -78,6 +96,7 @@ def build_stepfun_session_update_payload(
     """Build the StepFun ``session.update`` payload from transport config."""
 
     session: dict[str, Any] = {
+        "modalities": list(config.modalities),
         "voice": config.voice,
         "temperature": config.temperature,
         "input_audio_format": config.input_audio_format,
@@ -100,6 +119,33 @@ def build_stepfun_session_update_payload(
         session["tools"] = config.tools
 
     return {"type": "session.update", "session": session}
+
+
+def build_stepfun_realtime_endpoint(url: str, *, model: str) -> str:
+    """Attach or replace the StepFun realtime model query parameter."""
+
+    parsed = urlsplit(url)
+    if parsed.username or parsed.password:
+        raise ValueError("stepfun_realtime_url_must_not_include_userinfo")
+
+    query_pairs: list[tuple[str, str]] = []
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        normalized_key = key.lower()
+        if normalized_key == "model":
+            continue
+        if normalized_key in STEPFUN_SENSITIVE_QUERY_KEYS:
+            raise ValueError("stepfun_realtime_url_must_not_include_sensitive_query")
+        query_pairs.append((key, value))
+    query_pairs.append(("model", model))
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(query_pairs),
+            parsed.fragment,
+        )
+    )
 
 
 class StepFunUpstreamConnectError(RuntimeError):
@@ -153,8 +199,7 @@ class StepFunTransport:
         ):
             return self._local_provider_factory()
 
-        query = urlencode({"model": model})
-        endpoint = f"{url}?{query}"
+        endpoint = build_stepfun_realtime_endpoint(url, model=model)
         headers = {"Authorization": f"Bearer {api_key}"}
         try:
             return await websockets.connect(endpoint, additional_headers=headers)
@@ -180,7 +225,9 @@ class StepFunTransport:
         except (RuntimeError, ValueError, OSError):
             pass
 
-    async def send_json(self, upstream_ws: Any, payload: dict[str, Any]) -> StepFunSendResult:
+    async def send_json(
+        self, upstream_ws: Any, payload: dict[str, Any]
+    ) -> StepFunSendResult:
         """Send one JSON payload through a WebSocket-like upstream."""
 
         event_type = str(payload.get("type") or "")

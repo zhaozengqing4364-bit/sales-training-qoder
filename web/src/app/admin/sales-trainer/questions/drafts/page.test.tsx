@@ -10,6 +10,7 @@ import type {
 import BusinessEtiquetteQuestionDraftsPage from "./page";
 
 const {
+    getAdminCapabilitiesMock,
     approveDraftMock,
     generateDraftsMock,
     getCapabilitiesMock,
@@ -22,6 +23,7 @@ const {
     const toastError = vi.fn();
     const toastSuccess = vi.fn();
     return {
+        getAdminCapabilitiesMock: vi.fn(),
         approveDraftMock: vi.fn(),
         generateDraftsMock: vi.fn(),
         getCapabilitiesMock: vi.fn(),
@@ -59,6 +61,7 @@ vi.mock("@/lib/api/client", async () => {
                     ...actual.api.admin.salesTrainer,
                     approveBusinessEtiquetteQuestionDraft: approveDraftMock,
                     generateBusinessEtiquetteQuestionDrafts: generateDraftsMock,
+                    getCapabilities: getAdminCapabilitiesMock,
                     getBusinessEtiquetteCapabilities: getCapabilitiesMock,
                     listBusinessEtiquetteQuestionDrafts: listDraftsMock,
                     listQuestionCategories: listCategoriesMock,
@@ -175,9 +178,31 @@ function capabilities(): BusinessEtiquetteCapabilitySnapshotResponse {
     };
 }
 
+function adminCapabilities(canManageQuestions = true) {
+    return {
+        role: canManageQuestions ? "admin" : "viewer",
+        role_label: canManageQuestions ? "管理员" : "只读人员",
+        capabilities: {
+            admin_full_access: false,
+            manage_content: false,
+            manage_questions: canManageQuestions,
+            manage_modules: false,
+            manage_prompts: false,
+            view_records: false,
+            view_global_records: false,
+            retry_jobs: false,
+            regrade_history: false,
+            view_logs: false,
+            view_settings: false,
+        },
+        capability_keys: canManageQuestions ? ["manage_questions"] : [],
+    };
+}
+
 describe("BusinessEtiquetteQuestionDraftsPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        getAdminCapabilitiesMock.mockResolvedValue(adminCapabilities());
         listDraftsMock.mockResolvedValue({
             items: [draft()],
             total: 1,
@@ -246,5 +271,50 @@ describe("BusinessEtiquetteQuestionDraftsPage", () => {
                 }),
             );
         });
+    });
+
+    it("shows a blocking load error instead of an empty draft queue when initial data fails", async () => {
+        listDraftsMock.mockRejectedValueOnce(new Error("draft backend down"));
+
+        render(<BusinessEtiquetteQuestionDraftsPage />);
+
+        expect(await screen.findByText("题目草稿加载失败")).toBeTruthy();
+        expect(screen.getByText("draft backend down")).toBeTruthy();
+        expect(screen.queryByText("暂无草稿")).toBeNull();
+        expect(screen.queryByText("请选择一条草稿")).toBeNull();
+        expect(toastApi.error).toHaveBeenCalledWith("draft backend down");
+
+        fireEvent.click(screen.getByRole("button", { name: "重新加载草稿" }));
+
+        expect(await screen.findByText("迟到处理")).toBeTruthy();
+        expect(screen.queryByText("题目草稿加载失败")).toBeNull();
+        await waitFor(() => {
+            expect(listDraftsMock).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    it("fails closed before loading drafts when capability lookup fails", async () => {
+        getAdminCapabilitiesMock.mockRejectedValueOnce(new Error("权限服务不可用"));
+
+        render(<BusinessEtiquetteQuestionDraftsPage />);
+
+        expect(await screen.findByText("题库管理权限不足")).toBeTruthy();
+        expect(screen.getByText("权限服务不可用")).toBeTruthy();
+        expect(listDraftsMock).not.toHaveBeenCalled();
+        expect(listCategoriesMock).not.toHaveBeenCalled();
+        expect(getCapabilitiesMock).not.toHaveBeenCalled();
+        expect(screen.queryByRole("button", { name: "生成草稿" })).toBeNull();
+    });
+
+    it("does not expose draft write workflow without manage_questions", async () => {
+        getAdminCapabilitiesMock.mockResolvedValueOnce(adminCapabilities(false));
+
+        render(<BusinessEtiquetteQuestionDraftsPage />);
+
+        expect(await screen.findByText("题库管理权限不足")).toBeTruthy();
+        expect(listDraftsMock).not.toHaveBeenCalled();
+        expect(listCategoriesMock).not.toHaveBeenCalled();
+        expect(getCapabilitiesMock).not.toHaveBeenCalled();
+        expect(screen.queryByText("按章节生成 AI 草稿")).toBeNull();
     });
 });

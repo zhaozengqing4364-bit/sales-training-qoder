@@ -15,7 +15,12 @@ from common.auth.service import create_access_token
 from common.db.models import Base, User
 from common.db.session import get_db
 from common.error_handling.result import Result
-from curriculum_practice.models import LearningChapter, LearningContent, QuestionCategory, QuestionItem
+from curriculum_practice.models import (
+    LearningChapter,
+    LearningContent,
+    QuestionCategory,
+    QuestionItem,
+)
 from main import app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

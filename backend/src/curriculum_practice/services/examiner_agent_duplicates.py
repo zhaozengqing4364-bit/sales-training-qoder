@@ -4,6 +4,7 @@ import uuid
 
 from curriculum_practice.models import ExaminerAgent
 from curriculum_practice.services.content_assets import _copy_suffix
+from curriculum_practice.services.orm_payload_typing import orm_str
 
 
 def build_examiner_agent_duplicate(
@@ -13,7 +14,7 @@ def build_examiner_agent_duplicate(
 ) -> ExaminerAgent:
     return ExaminerAgent(
         examiner_agent_id=str(uuid.uuid4()),
-        name=_copy_suffix(agent.name),
+        name=_copy_suffix(orm_str(agent.name)),
         description=agent.description,
         question_source_ids=list(agent.question_source_ids or []),
         learner_level_strategy=dict(agent.learner_level_strategy or {}),

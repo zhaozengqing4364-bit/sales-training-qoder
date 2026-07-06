@@ -28,6 +28,9 @@ function level(overrides: Partial<SalesTrainerPathLevel>): SalesTrainerPathLevel
         retry_action_label: overrides.retry_action_label ?? "重练本关",
         review_action_label: overrides.review_action_label ?? "查看结果",
         target_path: overrides.target_path ?? `/sales-trainer/audio/unit-${orderIndex}`,
+        module_key: overrides.module_key,
+        module_type: overrides.module_type,
+        ai_coach_availability: overrides.ai_coach_availability,
         latest_result: overrides.latest_result ?? null,
     };
 }
@@ -99,7 +102,7 @@ describe("module-path", () => {
         expect(filtered[0].path_key).toBe(NEWCOMER_TRAINING_PATH_KEY);
     });
 
-    it("keeps legacy order fallback only when no backend module keys exist", () => {
+    it("fails closed when an older module path has no backend module keys", () => {
         const legacyPath = path([
             level({ unit_id: "u1", order_index: 1, level_title: "PPT", target_path: "/sales-trainer/audio/u1" }),
             level({ unit_id: "u2", unit_type: "quiz", order_index: 2, level_title: "商务", target_path: "/sales-trainer/business-skills" }),
@@ -109,10 +112,7 @@ describe("module-path", () => {
 
         const views = buildModuleViews(legacyPath, new Map<string, SalesTrainerUnit>());
 
-        expect(views.map((view) => view.title)).toEqual(["PPT讲解录音", "商务技巧", "电梯演讲", "实时对练"]);
-        expect(views[1].learnHref).toBe("/sales-trainer/business-skills?unitId=u2");
-        expect(views[2].audioOptions.map((option) => option.durationLabel)).toEqual(["5 分钟", "10 分钟"]);
-        expect(views[3].disabled).toBe(true);
+        expect(views).toEqual([]);
     });
 
     it("does not render hardcoded modules for newcomer path without backend module keys", () => {
@@ -126,7 +126,7 @@ describe("module-path", () => {
         expect(views).toEqual([]);
     });
 
-    it("renders only modules provided by backend configuration", () => {
+    it("renders only modules projected by the active path revision", () => {
         const businessLevel = level({
             unit_id: "business-unit",
             unit_type: "quiz",
@@ -135,15 +135,12 @@ describe("module-path", () => {
             level_description: "先学三节内容，再进入考试。",
             primary_action_label: "进入学习页",
             target_path: "/sales-trainer/business-skills",
+            module_key: "business_skills",
+            module_type: "article_exam",
         });
         const views = buildModuleViews(
             path([businessLevel], NEWCOMER_TRAINING_PATH_KEY),
-            new Map([
-                [
-                    "business-unit",
-                    unitWithPath("business-unit", "business_skills", "article_exam"),
-                ],
-            ]),
+            new Map<string, SalesTrainerUnit>(),
         );
 
         expect(views).toHaveLength(1);
@@ -157,7 +154,7 @@ describe("module-path", () => {
         });
     });
 
-    it("adds coach href for available business skills AI coach", () => {
+    it("does not use legacy path ai_coach_availability as the AI Coach entry source", () => {
         const businessLevel: SalesTrainerPathLevel = {
             ...level({
                 unit_id: "business-unit",
@@ -185,7 +182,7 @@ describe("module-path", () => {
 
         expect(views[0]).toMatchObject({
             key: "business_skills",
-            coachHref: "/sales-trainer/business-skills/coach",
+            coachHref: null,
         });
     });
 
@@ -221,18 +218,72 @@ describe("module-path", () => {
         });
     });
 
-    it("uses backend module keys and disabled realtime placeholder without order fallback", () => {
+    it("ignores stale unit path configuration when the active path revision has no module keys", () => {
+        const legacyLevel = level({
+            unit_id: "legacy-business-unit",
+            unit_type: "quiz",
+            order_index: 1,
+            level_title: "旧商务技巧",
+            target_path: "/sales-trainer/business-skills",
+        });
+        const unitsById = new Map<string, SalesTrainerUnit>([
+            [
+                "legacy-business-unit",
+                unitWithPath("legacy-business-unit", "business_skills", "article_exam", {
+                    level_title: "旧配置标题",
+                    primary_action_label: "旧配置按钮",
+                }),
+            ],
+        ]);
+
+        const views = buildModuleViews(
+            path([legacyLevel], NEWCOMER_TRAINING_PATH_KEY),
+            unitsById,
+        );
+
+        expect(views).toEqual([]);
+    });
+
+    it("uses active path revision module keys and disabled realtime placeholder without order fallback", () => {
         const levels = [
-            level({ unit_id: "business-unit", order_index: 10, level_title: "第二关：商务技巧", unit_type: "quiz" }),
-            level({ unit_id: "ppt-unit", order_index: 20, level_title: "第一关：PPT 讲解录音", target_path: "/sales-trainer/audio/ppt-unit" }),
-            level({ unit_id: "pitch-10", order_index: 30, level_title: "电梯演讲 · 10 分钟" }),
-            level({ unit_id: "pitch-20", order_index: 40, level_title: "电梯演讲 · 20 分钟" }),
+            level({
+                unit_id: "business-unit",
+                order_index: 10,
+                level_title: "第二关：商务技巧",
+                unit_type: "quiz",
+                module_key: "business_skills",
+                module_type: "article_exam",
+            }),
+            level({
+                unit_id: "ppt-unit",
+                order_index: 20,
+                level_title: "第一关：PPT 讲解录音",
+                target_path: "/sales-trainer/audio/ppt-unit",
+                module_key: "ppt_explanation",
+                module_type: "audio_scoring",
+            }),
+            level({
+                unit_id: "pitch-10",
+                order_index: 30,
+                level_title: "电梯演讲 · 10 分钟",
+                module_key: "elevator_pitch",
+                module_type: "audio_scoring_group",
+            }),
+            level({
+                unit_id: "pitch-20",
+                order_index: 40,
+                level_title: "电梯演讲 · 20 分钟",
+                module_key: "elevator_pitch",
+                module_type: "audio_scoring_group",
+            }),
             level({
                 unit_id: "realtime",
                 order_index: 50,
                 level_title: "第四关：实时对练",
                 locked: true,
                 lock_reason: "后端配置占位，不开放实时对练",
+                module_key: "realtime_roleplay_placeholder",
+                module_type: "realtime_placeholder",
             }),
         ];
         const unitsById = new Map<string, SalesTrainerUnit>([

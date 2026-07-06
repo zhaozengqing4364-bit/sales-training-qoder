@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,10 @@ from sales_trainer.models import (
 )
 from sales_trainer.rules import resolve_quiz_pass_threshold
 from sales_trainer.schemas import QuizAttemptCreate
+from sales_trainer.services.learner_unit_access import (
+    LearnerUnitAccessError,
+    require_learner_active_path_unit_access,
+)
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.question_bank import QuestionBankAdapter
 from sales_trainer.services.quiz_attempt_payloads import (
@@ -66,7 +70,20 @@ class QuizService:
                 "[SALES_TRAINER_UNIT_TYPE_MISMATCH]",
                 "该训练单元不是做题模块。",
             )
-        bindings = await self._load_bindings(unit.unit_id)
+        try:
+            await require_learner_active_path_unit_access(
+                self._db,
+                actor=actor,
+                unit_id=str(unit.unit_id),
+            )
+        except LearnerUnitAccessError as exc:
+            raise QuizServiceError(
+                exc.code,
+                exc.message,
+                status_code=exc.status_code,
+            ) from exc
+        unit_id = str(unit.unit_id)
+        bindings = await self._load_bindings(unit_id)
         if not bindings:
             raise QuizServiceError(
                 "[SALES_TRAINER_QUIZ_HAS_NO_QUESTIONS]",
@@ -154,20 +171,26 @@ class QuizService:
             )
 
         if scored_values and not has_unscored:
-            attempt.total_score = Decimal(str(sum(scored_values)))
-            attempt.max_score = Decimal(str(max_score))
-            threshold = resolve_quiz_pass_threshold(unit.config)
-            attempt.passed = sum(scored_values) >= threshold if threshold is not None else None
-            attempt.status = "scored"
+            setattr(attempt, "total_score", Decimal(str(sum(scored_values))))
+            setattr(attempt, "max_score", Decimal(str(max_score)))
+            threshold = resolve_quiz_pass_threshold(
+                cast(dict[str, Any] | None, unit.config)
+            )
+            setattr(
+                attempt,
+                "passed",
+                sum(scored_values) >= threshold if threshold is not None else None,
+            )
+            setattr(attempt, "status", "scored")
         else:
-            attempt.status = "submitted"
+            setattr(attempt, "status", "submitted")
 
         await self._logs.record(
             actor=actor,
             action="quiz_submitted",
             target_type="sales_trainer_quiz_attempt",
-            target_id=attempt.attempt_id,
-            metadata={"unit_id": unit.unit_id, "question_count": len(bindings)},
+            target_id=str(attempt.attempt_id),
+            metadata={"unit_id": unit_id, "question_count": len(bindings)},
         )
         await self._db.commit()
         await self._db.refresh(attempt)

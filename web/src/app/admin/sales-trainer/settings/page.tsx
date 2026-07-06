@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
+import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
     buildNewcomerOperationalDiagnostics,
     type NewcomerOperationalDiagnostics,
 } from "@/lib/sales-trainer/operational-diagnostics";
+import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 
 import { OperationalDiagnosticsPanel } from "./operational-diagnostics-panel";
 
@@ -35,39 +37,55 @@ export default function SalesTrainerSettingsPage() {
     const [settings, setSettings] = useState<SalesTrainerSettings | null>(null);
     const [diagnostics, setDiagnostics] = useState<NewcomerOperationalDiagnostics | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const routeAccess = useSalesTrainerAdminRouteAccess(pathname);
+
+    const loadSettings = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const [
+                loadedSettings,
+                pathConfig,
+                pathRevisions,
+                audioSubmissions,
+                scoreResults,
+            ] = await Promise.all([
+                api.admin.salesTrainer.getSettings(),
+                api.admin.newcomerTraining.getPathConfig(),
+                api.admin.newcomerTraining.listPathConfigRevisions(),
+                api.admin.salesTrainer.listAudioSubmissions({ limit: 100 }),
+                api.admin.salesTrainer.listScoreResults({ limit: 100 }),
+            ]);
+            setSettings(loadedSettings);
+            setDiagnostics(buildNewcomerOperationalDiagnostics({
+                audioSubmissions: audioSubmissions.items,
+                scoreResults: scoreResults.items,
+                pathConfig,
+                pathRevisions: pathRevisions.items,
+            }));
+        } catch (loadError) {
+            setSettings(null);
+            setDiagnostics(null);
+            setError(getApiErrorMessage(loadError));
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
-        async function loadSettings() {
-            try {
-                const [
-                    loadedSettings,
-                    pathConfig,
-                    pathRevisions,
-                    audioSubmissions,
-                    scoreResults,
-                ] = await Promise.all([
-                    api.admin.salesTrainer.getSettings(),
-                    api.admin.newcomerTraining.getPathConfig(),
-                    api.admin.newcomerTraining.listPathConfigRevisions(),
-                    api.admin.salesTrainer.listAudioSubmissions({ limit: 100 }),
-                    api.admin.salesTrainer.listScoreResults({ limit: 100 }),
-                ]);
-                setSettings(loadedSettings);
-                setDiagnostics(buildNewcomerOperationalDiagnostics({
-                    audioSubmissions: audioSubmissions.items,
-                    scoreResults: scoreResults.items,
-                    pathConfig,
-                    pathRevisions: pathRevisions.items,
-                }));
-                setError(null);
-            } catch (loadError) {
-                setSettings(null);
-                setDiagnostics(null);
-                setError(getApiErrorMessage(loadError));
-            }
+        if (routeAccess.isLoading) {
+            return;
+        }
+        if (!routeAccess.canAccess) {
+            setSettings(null);
+            setDiagnostics(null);
+            setError(null);
+            setIsLoading(false);
+            return;
         }
         void loadSettings();
-    }, []);
+    }, [loadSettings, routeAccess.canAccess, routeAccess.isLoading]);
 
     return (
         <AdminIndexShell
@@ -75,14 +93,39 @@ export default function SalesTrainerSettingsPage() {
                 <AdminPageHeader
                     title="新人训练路径配置"
                     description="展示存储、ASR 和评分服务的健康状态；密钥仍由部署环境管理，页面不展示密钥值。"
-                    secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
+                    secondaryActions={(
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button asChild variant="outline" className="rounded-full">
+                                <Link href="/support/runtime">打开运行时健康</Link>
+                            </Button>
+                            <SalesTrainerAdminModuleNav currentPath={pathname} capabilities={routeAccess.capabilities} />
+                        </div>
+                    )}
                 />
             )}
         >
-            {error ? (
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+            {routeAccess.denialMessage ? (
+                <AdminLoadErrorCard
+                    title="页面访问受限"
+                    description="当前页不会在能力接口失败或权限不足时继续加载配置诊断，避免把不可访问状态伪装成配置缺失。"
+                    message={routeAccess.denialMessage}
+                    retryLabel="重新检查权限"
+                    onRetry={routeAccess.reloadCapabilities}
+                />
+            ) : isLoading ? (
+                <GlassCard className="p-8 text-center text-sm text-slate-500" role="status" aria-live="polite" aria-busy="true">
+                    正在加载配置诊断...
+                </GlassCard>
+            ) : error ? (
+                <AdminLoadErrorCard
+                    title="配置诊断加载失败"
+                    description="当前页不会在配置、路径修订或任务诊断读取失败时渲染空白状态。请检查权限、配置服务或后端接口后重试。"
+                    message={error}
+                    retryLabel="重新加载配置"
+                    onRetry={() => void loadSettings()}
+                />
             ) : null}
-            {settings ? (
+            {!isLoading && !error && settings ? (
                 <div className="grid gap-4 lg:grid-cols-2">
                     <GlassCard className="space-y-4 p-6">
                         <h2 className="text-lg font-bold text-slate-900">音频上传</h2>

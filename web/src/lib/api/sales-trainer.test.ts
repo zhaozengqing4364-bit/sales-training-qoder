@@ -569,6 +569,90 @@ describe("api.salesTrainer facade", () => {
         );
     });
 
+    it("loads admin training records with journey and record-status filters", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    items: [],
+                    total: 0,
+                },
+            }),
+        });
+
+        const result = await api.admin.salesTrainer.listTrainingRecords({
+            user_id: "user-1",
+            unit_id: "unit-1",
+            material_version_id: "material-version-1",
+            module_key: "business_skills",
+            training_stage: "needs_remediation",
+            learner_level: "unassigned",
+            role_level: "learner",
+            status: "scored",
+            limit: 100,
+            offset: 20,
+        });
+
+        expect(result.total).toBe(0);
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining(
+                "/admin/sales-trainer/training-records?user_id=user-1&unit_id=unit-1&material_version_id=material-version-1&training_stage=needs_remediation&module_key=business_skills&learner_level=unassigned&role_level=learner&status=scored&limit=100&offset=20",
+            ),
+            expect.any(Object),
+        );
+    });
+
+    it("loads realtime roleplay observations through the admin facade", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    session_id: "session-1",
+                    source_record_id: "session-1",
+                    total: 1,
+                    latest_turn_index: 2,
+                    source_counts: { heuristic: 1, llm_evaluator: 0 },
+                    status_counts: {
+                        pending: 0,
+                        completed: 1,
+                        failed: 0,
+                        ignored: 0,
+                    },
+                    items: [
+                        {
+                            observation_id: "obs-1",
+                            session_id: "session-1",
+                            source_record_id: "session-1",
+                            source: "heuristic",
+                            turn_index: 2,
+                            evaluator_status: "completed",
+                            dimensions: [],
+                            signals: [],
+                            error: null,
+                            trace_id: "trace-1",
+                            created_at: "2026-07-02T10:00:00Z",
+                            updated_at: "2026-07-02T10:00:00Z",
+                        },
+                    ],
+                },
+            }),
+        });
+
+        const result = await api.admin.salesTrainer.getRealtimeRoleplayObservations(
+            "session-1",
+        );
+
+        expect(result.total).toBe(1);
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining(
+                "/admin/sales-trainer/training-records/realtime-roleplay/session-1/observations",
+            ),
+            expect.any(Object),
+        );
+    });
+
     it("loads an admin quiz attempt detail through the central facade", async () => {
         fetchMock.mockResolvedValue({
             ok: true,

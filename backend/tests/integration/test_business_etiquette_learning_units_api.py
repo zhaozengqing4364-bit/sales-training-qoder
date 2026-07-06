@@ -12,6 +12,7 @@ from curriculum_practice.models import LearningChapter, LearningContent
 from curriculum_practice.services.learning_progress_service import (
     LearningProgressService,
 )
+from sales_trainer.models import SalesTrainerUnit
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
@@ -76,7 +77,17 @@ async def _seed_business_etiquette_path(
     *,
     admin: User,
     content: LearningContent,
+    learner_level_required: list[str] | None = None,
 ) -> None:
+    unit = SalesTrainerUnit(
+        unit_id=f"be-units-{uuid.uuid4().hex[:8]}",
+        name="商务礼仪考试",
+        unit_type="quiz",
+        status="published",
+        config={},
+    )
+    test_db.add(unit)
+    await test_db.flush()
     payload = {
         "path_key": NEWCOMER_PATH_LOGICAL_ID,
         "title": "新人训练路径",
@@ -91,8 +102,9 @@ async def _seed_business_etiquette_path(
                 "order_index": 2,
                 "title": "商务礼仪",
                 "description": "按 7 个小单元完成商务礼仪训练。",
-                "target_unit_id": None,
+                "target_unit_id": unit.unit_id,
                 "learning_content_id": content.learning_content_id,
+                "learner_level_required": learner_level_required or [],
                 "exam_paper_id": None,
                 "material_id": None,
                 "material_version_id": None,
@@ -227,6 +239,65 @@ async def test_should_list_business_etiquette_learning_units_via_api(
 
 
 @pytest.mark.asyncio
+async def test_should_list_admin_business_etiquette_learning_units_without_learner_progress(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    content = LearningContent(
+        learning_content_id="business-etiquette-admin-content",
+        title="商务礼仪：新人的第一本职业素养手册",
+        summary="商务礼仪训练包 v1。",
+        owner="新人训练路径",
+        source="sales_trainer.business_etiquette_import",
+        status="published",
+    )
+    chapters = [
+        LearningChapter(
+            chapter_id=f"business-etiquette-admin-chapter-{index}",
+            learning_content_id=content.learning_content_id,
+            title=f"第 {index} 节",
+            content=f"第 {index} 节内容。",
+            order_index=index,
+        )
+        for index in range(1, 9)
+    ]
+    test_db.add_all([admin, learner, content, *chapters])
+    await test_db.commit()
+    complete_result = await LearningProgressService(test_db).complete_chapter(
+        user_id=str(learner.user_id),
+        content_id=content.learning_content_id,
+        chapter_id="business-etiquette-admin-chapter-1",
+    )
+    assert complete_result.is_success
+    await _seed_business_etiquette_path(test_db, admin=admin, content=content)
+    await _seed_business_etiquette_capabilities(test_db, admin=admin)
+
+    response = await async_client.get(
+        "/api/v1/admin/newcomer-training/business-etiquette/learning-units",
+        headers=_auth_headers(admin),
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["module_key"] == "business_skills"
+    assert len(data["units"]) == 7
+    first_unit = data["units"][0]
+    assert first_unit["progress"]["completed_chapters"] == 0
+    assert first_unit["progress"]["total_chapters"] == 2
+    assert first_unit["progress"]["is_completed"] is False
+    assert first_unit["chapters"][0]["completed"] is False
+
+    forbidden = await async_client.get(
+        "/api/v1/admin/newcomer-training/business-etiquette/learning-units",
+        headers=_auth_headers(learner),
+    )
+    assert forbidden.status_code == 403
+    assert forbidden.json()["error"] == "[ROLE_REQUIRED]"
+
+
+@pytest.mark.asyncio
 async def test_should_reject_missing_business_etiquette_learning_unit_config(
     async_client: AsyncClient,
     test_db: AsyncSession,
@@ -247,6 +318,15 @@ async def test_should_reject_missing_business_etiquette_learning_unit_config(
     )
     test_db.add_all([admin, learner, content, chapter])
     await test_db.commit()
+    unit = SalesTrainerUnit(
+        unit_id="be-missing-units-target-unit",
+        name="商务礼仪考试",
+        unit_type="quiz",
+        status="published",
+        config={},
+    )
+    test_db.add(unit)
+    await test_db.flush()
     payload = {
         "path_key": NEWCOMER_PATH_LOGICAL_ID,
         "title": "新人训练路径",
@@ -261,7 +341,7 @@ async def test_should_reject_missing_business_etiquette_learning_unit_config(
                 "order_index": 2,
                 "title": "商务礼仪",
                 "description": None,
-                "target_unit_id": None,
+                "target_unit_id": unit.unit_id,
                 "learning_content_id": content.learning_content_id,
                 "exam_paper_id": None,
                 "material_id": None,
@@ -295,3 +375,127 @@ async def test_should_reject_missing_business_etiquette_learning_unit_config(
 
     assert response.status_code == 409
     assert response.json()["error"] == "[BUSINESS_ETIQUETTE_LEARNING_UNITS_MISSING]"
+
+
+@pytest.mark.asyncio
+async def test_should_fail_closed_learning_units_when_journey_module_locked(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    content = LearningContent(
+        learning_content_id="business-etiquette-locked-content",
+        title="商务礼仪：锁定路径",
+        summary="锁定路径时不能读取。",
+        owner="新人训练路径",
+        source="sales_trainer.business_etiquette_import",
+        status="published",
+    )
+    chapters = [
+        LearningChapter(
+            chapter_id=f"business-etiquette-locked-chapter-{index}",
+            learning_content_id=content.learning_content_id,
+            title=f"第 {index} 节",
+            content=f"第 {index} 节内容。",
+            order_index=index,
+        )
+        for index in range(1, 9)
+    ]
+    test_db.add_all([admin, learner, content, *chapters])
+    await test_db.commit()
+    await _seed_business_etiquette_path(
+        test_db,
+        admin=admin,
+        content=content,
+        learner_level_required=["ready"],
+    )
+
+    response = await async_client.get(
+        "/api/v1/newcomer-training/business-etiquette/learning-units",
+        headers=_auth_headers(learner),
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+
+
+@pytest.mark.asyncio
+async def test_should_fail_closed_learning_units_when_path_module_binding_missing(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    content = LearningContent(
+        learning_content_id="be-missing-target-content",
+        title="商务礼仪：缺少目标单元",
+        summary="缺少 target_unit_id 时不能绕过 Journey locked。",
+        owner="新人训练路径",
+        source="sales_trainer.business_etiquette_import",
+        status="published",
+    )
+    chapters = [
+        LearningChapter(
+            chapter_id=f"be-missing-target-chapter-{index}",
+            learning_content_id=content.learning_content_id,
+            title=f"第 {index} 节",
+            content=f"第 {index} 节内容。",
+            order_index=index,
+        )
+        for index in range(1, 9)
+    ]
+    test_db.add_all([admin, learner, content, *chapters])
+    await test_db.commit()
+    payload = {
+        "path_key": NEWCOMER_PATH_LOGICAL_ID,
+        "title": "新人训练路径",
+        "goal_title": "完成商务礼仪训练",
+        "description": None,
+        "enabled": True,
+        "modules": [
+            {
+                "module_key": "business_skills",
+                "module_type": "article_exam",
+                "enabled": True,
+                "order_index": 2,
+                "title": "商务礼仪",
+                "description": "缺少 target_unit_id 的坏历史 revision。",
+                "target_unit_id": None,
+                "learning_content_id": content.learning_content_id,
+                "learner_level_required": [],
+                "exam_paper_id": None,
+                "material_id": None,
+                "material_version_id": None,
+                "scoring_prompt_id": None,
+                "disabled_reason": None,
+                "unlock_after_unit_ids": [],
+                "completion_rule": "passed",
+                "primary_action_label": "开始训练",
+                "retry_action_label": None,
+                "review_action_label": None,
+                "guidance_templates": {},
+                "ai_coach": None,
+                "learning_units": [
+                    _learning_unit(1, chapter_orders=[1, 2]),
+                ],
+            }
+        ],
+    }
+    await SalesTrainerAssetRevisionService(test_db).create_published_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        payload=payload,
+        actor=admin,
+        change_class="binding",
+        reason="写入缺少 target_unit_id 的坏历史 revision",
+    )
+    await test_db.commit()
+
+    response = await async_client.get(
+        "/api/v1/newcomer-training/business-etiquette/learning-units",
+        headers=_auth_headers(learner),
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"

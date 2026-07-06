@@ -745,10 +745,10 @@ class SupervisorReviewService:
                 counts[key] += 1
                 learners[key].add(user_id)
         for review in reviews or []:
-            issue = _short_text(getattr(review, "comment", None))
-            if not issue:
+            review_issue = _short_text(getattr(review, "comment", None))
+            if not review_issue:
                 continue
-            key = (issue, None)
+            key = (review_issue, None)
             counts[key] += 1
             learners[key].add(_as_str(review.trainee_user_id))
         return [
@@ -819,21 +819,36 @@ class SupervisorReviewService:
             if not bool(review.required_retraining) and review.decision != "needs_retraining":
                 continue
             learner_id = _as_str(review.trainee_user_id)
-            linked_tasks = tasks_by_review.get(_as_str(review.review_id)) or [None]
-            for task in linked_tasks:
-                candidates.append(
-                    TeamInsightsRetrainingCandidate(
-                        learner_id=learner_id,
-                        learner_name=cast(str | None, getattr(users.get(learner_id), "name", None)),
-                        session_id=_as_str(review.session_id),
-                        review_id=_as_str(review.review_id),
-                        retraining_task_id=_as_str(getattr(task, "task_id", None)) or None,
-                        training_task_id=_as_str(getattr(task, "training_task_id", None)) or None,
-                        skill_dimension=cast(str | None, getattr(task, "skill_dimension", None)),
-                        readiness_status=cast(Any, review.readiness_status),
-                        reason=cast(str | None, review.comment),
+            linked_tasks = tasks_by_review.get(_as_str(review.review_id))
+            if linked_tasks:
+                for task in linked_tasks:
+                    candidates.append(
+                        TeamInsightsRetrainingCandidate(
+                            learner_id=learner_id,
+                            learner_name=cast(str | None, getattr(users.get(learner_id), "name", None)),
+                            session_id=_as_str(review.session_id),
+                            review_id=_as_str(review.review_id),
+                            retraining_task_id=_as_str(getattr(task, "task_id", None)) or None,
+                            training_task_id=_as_str(getattr(task, "training_task_id", None)) or None,
+                            skill_dimension=cast(str | None, getattr(task, "skill_dimension", None)),
+                            readiness_status=cast(Any, review.readiness_status),
+                            reason=cast(str | None, review.comment),
+                        )
                     )
+                continue
+            candidates.append(
+                TeamInsightsRetrainingCandidate(
+                    learner_id=learner_id,
+                    learner_name=cast(str | None, getattr(users.get(learner_id), "name", None)),
+                    session_id=_as_str(review.session_id),
+                    review_id=_as_str(review.review_id),
+                    retraining_task_id=None,
+                    training_task_id=None,
+                    skill_dimension=None,
+                    readiness_status=cast(Any, review.readiness_status),
+                    reason=cast(str | None, review.comment),
                 )
+            )
         return candidates
 
     async def _learner_summaries(
@@ -1371,7 +1386,9 @@ class SupervisorReviewService:
     ) -> list[TrainingReportThinkingEvidence]:
         if not _can_access_thinking_evidence(user):
             return []
-        runtime_state = session.runtime_state if isinstance(session.runtime_state, dict) else {}
+        runtime_state: dict[str, Any] = (
+            session.runtime_state if isinstance(session.runtime_state, dict) else {}
+        )
         thinking_log = runtime_state.get("thinking_log")
         if not isinstance(thinking_log, list):
             return []
@@ -1571,10 +1588,11 @@ class SupervisorReviewService:
         task = result.scalar_one_or_none()
         if task is not None:
             if getattr(task, "training_task_id", None) is None:
-                task.training_task_id = await self._resolve_training_task_id(
+                resolved_training_task_id = await self._resolve_training_task_id(
                     source_session_id=_as_str(review.session_id),
                     explicit_training_task_id=None,
                 ) or await self._ensure_followup_training_task(review, dimension)
+                setattr(task, "training_task_id", resolved_training_task_id)
                 if task.training_task_id is not None:
                     self.db.add(task)
                     await self.db.commit()

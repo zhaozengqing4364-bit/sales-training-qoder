@@ -135,17 +135,51 @@ const path: SalesTrainerPath = {
 };
 
 describe("SalesTrainerModuleGrid", () => {
-    it("renders newcomer module cards and keeps realtime practice disabled", () => {
-        render(<SalesTrainerModuleGrid path={path} unitsById={new Map()} />);
+    it("renders backend-configured module cards and keeps realtime practice disabled", () => {
+        const configuredPath: SalesTrainerPath = {
+            ...path,
+            levels: [
+                {
+                    ...path.levels[0],
+                    module_key: "ppt_explanation",
+                    module_type: "audio_scoring",
+                },
+                {
+                    ...path.levels[1],
+                    module_key: "business_skills",
+                    module_type: "article_exam",
+                },
+                {
+                    ...path.levels[2],
+                    module_key: "elevator_pitch",
+                    module_type: "audio_scoring_group",
+                },
+                {
+                    ...path.levels[3],
+                    module_key: "elevator_pitch",
+                    module_type: "audio_scoring_group",
+                },
+                {
+                    ...path.levels[4],
+                    level_title: "实时对练",
+                    module_key: "realtime_roleplay_placeholder",
+                    module_type: "realtime_placeholder",
+                    locked: true,
+                    lock_reason: "暂不开放",
+                },
+            ],
+        };
 
-        expect(screen.getByText("PPT讲解录音")).toBeTruthy();
-        expect(screen.getByText("商务技巧")).toBeTruthy();
-        expect(screen.getByText("电梯演讲")).toBeTruthy();
+        render(<SalesTrainerModuleGrid path={configuredPath} unitsById={new Map()} />);
+
+        expect(screen.getByText("PPT")).toBeTruthy();
+        expect(screen.getByText("商务")).toBeTruthy();
+        expect(screen.getByText(/电梯演讲/)).toBeTruthy();
         expect(screen.getByText("实时对练")).toBeTruthy();
-        expect(screen.getByRole("link", { name: /上传 PPT 讲解录音/ }).getAttribute("href")).toBe(
+        expect(screen.getByRole("link", { name: "上传" }).getAttribute("href")).toBe(
             "/sales-trainer/audio/a1",
         );
-        expect(screen.getByRole("link", { name: /开始学习/ }).getAttribute("href")).toBe(
+        expect(screen.getByRole("link", { name: "学习" }).getAttribute("href")).toBe(
             "/sales-trainer/business-skills?unitId=a2",
         );
         expect(screen.queryByRole("link", { name: "AI 教练" })).toBeNull();
@@ -202,9 +236,7 @@ describe("SalesTrainerModuleGrid", () => {
         expect(screen.getByRole("link", { name: "进入学习页" }).getAttribute("href")).toBe(
             "/sales-trainer/business-skills?unitId=business-unit",
         );
-        expect(screen.getByRole("link", { name: "AI 教练" }).getAttribute("href")).toBe(
-            "/sales-trainer/business-skills/coach",
-        );
+        expect(screen.queryByRole("link", { name: "AI 教练" })).toBeNull();
         expect(screen.queryByText("PPT讲解录音")).toBeNull();
         expect(screen.queryByText("实时对练")).toBeNull();
     });

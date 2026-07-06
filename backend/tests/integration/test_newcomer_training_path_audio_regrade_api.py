@@ -16,6 +16,10 @@ from sales_trainer.models import (
     SalesTrainerAudioSubmission,
     SalesTrainerOperationLog,
 )
+from sales_trainer.services.audio_regrade_service import (
+    SalesTrainerAudioRegradeService,
+    SalesTrainerAudioRegradeServiceError,
+)
 from sales_trainer.services.deucate_scoring_service import AudioScoreOutcome
 
 
@@ -24,13 +28,14 @@ def _auth_headers(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _user(role: str) -> User:
+def _user(role: str, *, department: str | None = None) -> User:
     return User(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"newcomer-audio-regrade-{role}-{uuid.uuid4().hex[:8]}",
         name=f"Newcomer Audio Regrade {role}",
         email=f"newcomer-audio-regrade-{role}-{uuid.uuid4().hex[:8]}@example.com",
         role=role,
+        department=department,
     )
 
 
@@ -75,8 +80,10 @@ async def test_should_regrade_audio_submission_as_explicit_append_only_action(
 ) -> None:
     admin = _user("admin")
     content_admin = _user("content_admin")
-    learner = _user("user")
-    test_db.add_all([admin, content_admin, learner])
+    learner = _user("user", department="华东销售")
+    manager = _user("training_manager", department="华东销售")
+    outside_manager = _user("training_manager", department="华南销售")
+    test_db.add_all([admin, content_admin, learner, manager, outside_manager])
     await test_db.commit()
 
     create_response = await async_client.post(
@@ -151,6 +158,49 @@ async def test_should_regrade_audio_submission_as_explicit_append_only_action(
         _FakeAudioScoringService,
         raising=False,
     )
+
+    service = SalesTrainerAudioRegradeService(
+        test_db,
+        scoring_service=_FakeAudioScoringService(),
+    )
+    same_scope_preview = await service.preview_audio_submission(
+        submission.submission_id,
+        target_revision_id=target_revision.revision_id,
+        viewer=manager,
+        team_department=manager.department,
+    )
+    assert same_scope_preview.target_id == submission.submission_id
+    with pytest.raises(SalesTrainerAudioRegradeServiceError) as denied:
+        await service.preview_audio_submission(
+            submission.submission_id,
+            target_revision_id=target_revision.revision_id,
+            viewer=outside_manager,
+            team_department=outside_manager.department,
+        )
+    assert denied.value.code == "[REGRADING_TARGET_NOT_FOUND]"
+    monkeypatch.setattr(
+        "sales_trainer.regrade_api.can_regrade_sales_trainer_history",
+        lambda user: user.role in {"admin", "ops", "training_manager"},
+    )
+    manager_preview = await async_client.post(
+        "/api/v1/admin/newcomer-training/regrades/"
+        f"audio-submissions/{submission.submission_id}/preview",
+        headers=_auth_headers(manager),
+        json={"target_revision_id": target_revision.revision_id},
+    )
+    assert manager_preview.status_code == 200
+    cross_department_run = await async_client.post(
+        "/api/v1/admin/newcomer-training/regrades/"
+        f"audio-submissions/{submission.submission_id}/run",
+        headers=_auth_headers(outside_manager),
+        json={
+            "target_revision_id": target_revision.revision_id,
+            "reason": "跨部门负责人不应能重评历史录音记录。",
+        },
+    )
+    assert cross_department_run.status_code == 404
+    assert cross_department_run.json()["error"] == "[REGRADING_TARGET_NOT_FOUND]"
+    assert await test_db.scalar(text("select count(*) from sales_trainer_regrade_runs")) == 0
 
     forbidden_preview = await async_client.post(
         "/api/v1/admin/newcomer-training/regrades/"

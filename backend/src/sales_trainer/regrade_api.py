@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -10,7 +10,10 @@ from common.api.response import error_response, success_response
 from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
-from sales_trainer.permissions import can_regrade_sales_trainer_history
+from sales_trainer.permissions import (
+    can_regrade_sales_trainer_history,
+    team_scope_department,
+)
 from sales_trainer.regrade_models import SalesTrainerRegradeRun
 from sales_trainer.regrade_schemas import (
     RegradePreviewRequest,
@@ -61,6 +64,10 @@ def _require_regrade_permission(user: User) -> JSONResponse | None:
     )
 
 
+def _team_scope(user: User) -> str | None:
+    return cast(str | None, team_scope_department(user))
+
+
 async def preview_quiz_attempt_regrade(
     attempt_id: str,
     payload: RegradePreviewRequest,
@@ -74,6 +81,8 @@ async def preview_quiz_attempt_regrade(
         preview = await service.preview_quiz_attempt(
             attempt_id,
             target_revision_id=payload.target_revision_id,
+            viewer=current_user,
+            team_department=_team_scope(current_user),
         )
     except SalesTrainerRegradeServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
@@ -97,6 +106,7 @@ async def run_quiz_attempt_regrade(
             target_revision_id=payload.target_revision_id,
             reason=payload.reason,
             actor=current_user,
+            team_department=_team_scope(current_user),
         )
     except SalesTrainerRegradeServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
@@ -118,6 +128,8 @@ async def preview_audio_submission_regrade(
         preview = await service.preview_audio_submission(
             submission_id,
             target_revision_id=payload.target_revision_id,
+            viewer=current_user,
+            team_department=_team_scope(current_user),
         )
     except SalesTrainerAudioRegradeServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
@@ -141,6 +153,7 @@ async def run_audio_submission_regrade(
             target_revision_id=payload.target_revision_id,
             reason=payload.reason,
             actor=current_user,
+            team_department=_team_scope(current_user),
         )
     except SalesTrainerAudioRegradeServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)

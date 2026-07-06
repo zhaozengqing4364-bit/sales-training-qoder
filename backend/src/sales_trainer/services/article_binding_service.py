@@ -42,9 +42,25 @@ class ArticleBindingService:
     async def resolve_module_article(
         self,
         binding: NewcomerArticleBinding,
+        *,
+        require_active_binding: bool = False,
     ) -> dict[str, object]:
         learning_content_id = binding.learning_content_id
-        if learning_content_id is None:
+        if require_active_binding:
+            active_learning_content_id = await self._active_learning_content_id(
+                binding.module_key
+            )
+            if (
+                learning_content_id is not None
+                and learning_content_id != active_learning_content_id
+            ):
+                raise ArticleBindingServiceError(
+                    "[LEARNING_CONTENT_MISMATCH]",
+                    "请求的 learning_content_id 与 active path 当前模块绑定不一致。",
+                    409,
+                )
+            learning_content_id = active_learning_content_id
+        elif learning_content_id is None:
             learning_content_id = await self._configured_learning_content_id(
                 binding.module_key
             )
@@ -205,6 +221,21 @@ class ArticleBindingService:
         if module is None or not module.enabled or module.module_type != "article_exam":
             return None
         return module.learning_content_id
+
+    async def _active_learning_content_id(self, module_key: str) -> str | None:
+        projection = await SalesTrainerPathConfigService(self._db).active_projection()
+        if projection is None:
+            raise ArticleBindingServiceError(
+                "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
+                "新人训练路径缺少 active revision，禁止回退到旧目录读取学习文章。",
+                409,
+            )
+        for item in projection.items:
+            config = item.path_config
+            if config.module_key != module_key or config.module_type != "article_exam":
+                continue
+            return config.learning_content_id
+        return None
 
 
 def _module_by_key(

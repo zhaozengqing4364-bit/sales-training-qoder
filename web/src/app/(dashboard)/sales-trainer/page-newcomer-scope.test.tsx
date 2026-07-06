@@ -4,13 +4,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerPage from "./page";
 
-const { listPathsMock, listUnitsMock } = vi.hoisted(() => ({
+const { getJourneyMock, listPathsMock, listUnitsMock, routerPushMock, startRealtimeRoleplayMock } = vi.hoisted(() => ({
+    getJourneyMock: vi.fn(),
     listPathsMock: vi.fn(),
     listUnitsMock: vi.fn(),
+    routerPushMock: vi.fn(),
+    startRealtimeRoleplayMock: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
     default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
+}));
+
+vi.mock("next/navigation", () => ({
+    useRouter: () => ({
+        push: routerPushMock,
+    }),
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -37,8 +46,10 @@ vi.mock("@/lib/api/client", async () => {
             ...actual.api,
             salesTrainer: {
                 ...actual.api.salesTrainer,
+                getJourney: getJourneyMock,
                 listUnits: listUnitsMock,
                 listPaths: listPathsMock,
+                startRealtimeRoleplay: startRealtimeRoleplayMock,
             },
         },
     };
@@ -69,11 +80,84 @@ function unitFixture(overrides: {
 
 describe("SalesTrainerPage newcomer scope", () => {
     beforeEach(() => {
+        getJourneyMock.mockReset();
         listPathsMock.mockReset();
         listUnitsMock.mockReset();
+        routerPushMock.mockReset();
+        startRealtimeRoleplayMock.mockReset();
     });
 
     it("does not expose legacy or verification units when the newcomer path is configured", async () => {
+        getJourneyMock.mockResolvedValue({
+            journey_id: "journey-scope-1",
+            learner_id: "learner-1",
+            learner_name: "测试学员",
+            department: "销售一部",
+            path_key: "newcomer_training_path_v1",
+            path_revision_id: "path-rev-scope",
+            path_revision_no: 1,
+            source: "active_revision",
+            legacy_snapshot_only: false,
+            role_capabilities: [],
+            learner_level: {
+                level_key: "unassigned",
+                label: "未分层",
+                source: "training_projection",
+                rank: 0,
+                effective_from: null,
+                effective_to: null,
+                config_revision_id: null,
+                description: null,
+            },
+            role_level: {
+                level_key: "learner",
+                label: "普通学员",
+                source: "training_projection",
+                rank: 0,
+                effective_from: null,
+                effective_to: null,
+                config_revision_id: null,
+                description: null,
+            },
+            training_stage: "not_started",
+            modules: [
+                {
+                    module_key: "business_skills",
+                    module_type: "article_exam",
+                    kind: "quiz_attempt",
+                    display_name: "商务技巧",
+                    order_index: 2,
+                    enabled: true,
+                    status: "not_started",
+                    stage: "not_started",
+                    passed: null,
+                    score: null,
+                    max_score: null,
+                    required: true,
+                    locked: false,
+                    block_reason: null,
+                    completion_rule: "passed",
+                    source: {
+                        path_revision_id: "path-rev-scope",
+                        path_revision_no: 1,
+                    },
+                    learner_level_required: null,
+                    unmet_reasons: [],
+                    diagnostics: [],
+                    latest_outcome: null,
+                    outcome_history: [],
+                },
+            ],
+            overall_progress: {
+                total_modules: 1,
+                completed_modules: 0,
+                passed_modules: 0,
+                failed_modules: 0,
+                needs_remediation_modules: 0,
+            },
+            diagnostics: [],
+            generated_at: baseTimestamp,
+        });
         listPathsMock.mockResolvedValue({
             items: [
                 {
@@ -137,9 +221,13 @@ describe("SalesTrainerPage newcomer scope", () => {
 
         render(<SalesTrainerPage />);
 
-        expect(await screen.findByText("选择下方模块开始训练")).toBeTruthy();
-        expect(screen.getByRole("heading", { name: /商务技巧/ })).toBeTruthy();
-        expect(screen.getByText((_, element) => element?.textContent === "已开放模块可随时进入，无强制解锁。当前开放模块：第2关：商务技巧。")).toBeTruthy();
+        expect(await screen.findByText("当前训练闭环状态")).toBeTruthy();
+        expect(screen.getByText("模块闭环状态")).toBeTruthy();
+        expect(screen.getAllByRole("heading", { name: /商务技巧/ }).length).toBeGreaterThanOrEqual(1);
+        expect(screen.getByText("最近记录：暂无训练结果")).toBeTruthy();
+        expect(listPathsMock).not.toHaveBeenCalled();
+        expect(listUnitsMock).not.toHaveBeenCalled();
+        expect(screen.queryByText("选择下方模块开始训练")).toBeNull();
         expect(screen.queryByText(/更多练习/)).toBeNull();
         expect(screen.queryByText(/PPT讲解录音/)).toBeNull();
         expect(screen.queryByText(/电梯演讲/)).toBeNull();

@@ -20,17 +20,29 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import agent.models as _agent_models  # noqa: F401 - register ORM mappers
 import curriculum_practice.models as _curriculum_models  # noqa: F401 - register ORM mappers
 import sales_trainer.models as _sales_trainer_models  # noqa: F401 - register ORM mappers
+from common.ai.encryption import encrypt_api_key
+from common.ai.models import ModelConfig, ModelProvider, ModelType
+from common.auth.service import pwd_context
+from common.business_rules.defaults import (
+    DEFAULT_SALES_TRAINER_REALTIME_PROVIDER_REGISTRY,
+    SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY,
+)
+from common.business_rules.service import BusinessRuleConfigService
 from common.db.models import PromptTemplate, User
 from common.db.session import AsyncSessionLocal
 from curriculum_practice.models import (
     LearningChapter,
     LearningContent,
+    PracticeTemplate,
     QuestionCategory,
     QuestionItem,
 )
 from prompt_templates.models import PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
 from sales_trainer.models import (
+    SalesTrainerAiCoachSession,
     SalesTrainerAudioScorePrompt,
+    SalesTrainerAudioScoreResult,
+    SalesTrainerAudioSubmission,
     SalesTrainerExamPaper,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
@@ -38,6 +50,7 @@ from sales_trainer.models import (
     SalesTrainerUnitQuestion,
 )
 from sales_trainer.schemas import (
+    AudioSubmissionCreate,
     ExamPaperQuestionBinding,
     NewcomerPathConfigPayload,
     NewcomerPathModuleConfig,
@@ -46,6 +59,8 @@ from sales_trainer.schemas import (
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
+from sales_trainer.services.audio_submission_lineage import freeze_submission_context
+from sales_trainer.services.audio_submission_service import AudioSubmissionService
 from sales_trainer.services.business_etiquette_capability_service import (
     CAPABILITY_SNAPSHOT_KEY,
     default_business_etiquette_capability_snapshot,
@@ -60,7 +75,12 @@ from sales_trainer.services.business_etiquette_import_service import (
 from sales_trainer.services.business_etiquette_learning_unit_defaults import (
     default_business_etiquette_learning_units_payload,
 )
+from sales_trainer.services.deucate_scoring_service import AudioScoreOutcome
+from sales_trainer.services.material_service import SalesTrainerMaterialService
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.path_attempt_context_service import (
+    PathAttemptContextService,
+)
 from sales_trainer.services.path_config_models import (
     CANONICAL_NEWCOMER_MODULE_KEYS,
     NEWCOMER_PATH_LOGICAL_ID,
@@ -74,6 +94,9 @@ from sales_trainer.services.path_config_operations import (
     load_published_path_units,
     record_path_config_event,
 )
+from sales_trainer.services.training_journey_service import TrainingJourneyService
+from sales_trainer.services.training_record_service import TrainingRecordService
+from sales_trainer.services.transcription_service import TranscriptionResult
 
 PATH_KEY = "newcomer_training_path_v1"
 LEGACY_PATH_KEY = "new_seller_modules_v1"
@@ -85,6 +108,15 @@ MODULE_KEYS = [
     "elevator_pitch",
     "realtime_roleplay_placeholder",
 ]
+BASELINE_REQUIRED_MODULE_KEYS = {
+    "ppt_explanation",
+    "business_skills",
+    "elevator_pitch",
+}
+BASELINE_REALTIME_MODULE_KEYS = {
+    "realtime_roleplay",
+    "realtime_roleplay_placeholder",
+}
 BUSINESS_SKILLS_MODULE_KEY = "business_skills"
 BUSINESS_SKILLS_PAPER_KEY = "newcomer_business_skills_paper_v1"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -95,6 +127,8 @@ BUSINESS_ETIQUETTE_SOURCE_FILE = (
     REPO_ROOT / "docs" / "lujingshuji" / "商务礼仪-新人的第一本职业素养手册-完整版.md"
 )
 PPT_PROMPT_NAME = "主胶片讲解录音评分"
+PPT_PROMPT_SNAPSHOT_MARKER = "历史回放快照基线：PPT 讲解评分 v2"
+PPT_PROMPT_DRIFT_MARKER = "当前 Prompt 漂移哨兵：不应出现在历史训练记录回放"
 PPT_MATERIAL_KEY = "newcomer_ppt_explanation_training_material"
 PPT_MATERIAL_NAME = "PPT 讲解任务与评分标准"
 PPT_MATERIAL_VERSION_LABEL = "v2026.06"
@@ -197,8 +231,83 @@ BUSINESS_SKILLS_QUESTION_TITLES = [
 PPT_PROMPT_VERSION = 2
 OWNER_EMAIL = "newcomer.training.seed.admin@example.com"
 LEARNER_EMAIL = "newcomer.training.seed.learner@example.com"
+MANAGER_EMAIL = "newcomer.training.seed.manager@example.com"
+PPT_E2E_AUDIO_FILENAME = "newcomer-ppt-explanation-e2e.wav"
+PPT_E2E_AUDIO_SOURCE_PAGE = "newcomer_closed_loop_e2e_seed"
+PPT_E2E_AUDIO_TRANSCRIPT_PROVIDER = "seed-asr-process-submission"
+PPT_E2E_AUDIO_SCORING_MODEL = "seed-deterministic-scorer"
+PPT_E2E_AUDIO_SCORE_SCHEMA = "seed_audio_score_v1"
+PPT_E2E_AUDIO_PROCESS_SOURCE = "audio_submission_service.process_submission"
+PPT_E2E_AUDIO_TRANSCRIPT_TEXT = (
+    "大家好，今天我按主胶片讲解石犀的数据流动治理方案。"
+    "客户可以先做旁路扫描，再基于分类分级、API 风险监测、"
+    "一键防护和溯源审计形成可落地的试点方案。"
+)
+AI_COACH_E2E_TRACE_ID = "newcomer_closed_loop_e2e_ai_coach_seed_v1"
+AI_COACH_REAL_PROVIDER_MODEL_CONFIG_NAME = "新人训练路径 AI Coach 真实 Provider"
+FRESH_E2E_RUN_ID_ENV = "NEWCOMER_E2E_FRESH_RUN_ID"
+REALTIME_E2E_PRACTICE_TEMPLATE_NAME = "Smoke Phase 4 Sales Curriculum Template"
+REALTIME_E2E_BINDING_KEY = "newcomer_realtime_roleplay_v1"
+REALTIME_E2E_LOCAL_RUNTIME_DESCRIPTOR_ID = "newcomer-realtime-phase4-local"
+REALTIME_E2E_REAL_RUNTIME_DESCRIPTOR_ID = "newcomer-realtime-stepfun-real"
+REALTIME_E2E_LOCAL_RUNTIME_CONFIG_REVISION_ID = "phase4-local-provider-v1"
+REALTIME_E2E_REAL_RUNTIME_CONFIG_REVISION_ID = "stepfun-realtime-provider-v1"
+SEED_PASSWORD_ENV_KEYS = ("NEWCOMER_E2E_PASSWORD", "SMOKE_ADMIN_PASSWORD", "AUTH_SHARED_PASSWORD")
+SEED_DEFAULT_PASSWORD = "change-me"
 
 ModelT = TypeVar("ModelT")
+
+
+class _SeedAudioTranscriptionService:
+    async def transcribe_file(self, storage_key: str) -> TranscriptionResult:
+        return TranscriptionResult(
+            provider=PPT_E2E_AUDIO_TRANSCRIPT_PROVIDER,
+            transcript_text=PPT_E2E_AUDIO_TRANSCRIPT_TEXT,
+            raw_payload={
+                "source": PPT_E2E_AUDIO_PROCESS_SOURCE,
+                "storage_key": storage_key,
+            },
+        )
+
+
+class _SeedAudioScoringService:
+    def __init__(self, *, path_revision_id: str, path_revision_no: int) -> None:
+        self._path_revision_id = path_revision_id
+        self._path_revision_no = path_revision_no
+
+    async def score_audio(self, **kwargs: Any) -> AudioScoreOutcome:
+        prompt = kwargs["prompt"]
+        pass_threshold = kwargs["pass_threshold"]
+        return AudioScoreOutcome(
+            prompt_hash=hashlib.sha256(
+                f"{prompt.system_prompt}\n{prompt.scoring_template}".encode()
+            ).hexdigest(),
+            deucate_model=PPT_E2E_AUDIO_SCORING_MODEL,
+            total_score=88,
+            passed=88 >= pass_threshold,
+            summary="结构完整，能把能力转成客户价值，适合作为首轮见客户讲解。",
+            strengths=["覆盖主胶片主线", "能提出旁路扫描和试点下一步"],
+            improvements=["可补充一个行业案例强化可信度"],
+            dimension_scores={
+                "ppt_structure": {"score": 23, "max_score": 25, "comment": "覆盖关键结构"},
+                "business_accuracy": {"score": 22, "max_score": 25, "comment": "能力表达准确"},
+                "customer_value": {"score": 18, "max_score": 20, "comment": "客户价值清晰"},
+                "delivery_logic": {"score": 13, "max_score": 15, "comment": "表达顺序清楚"},
+                "evidence_usage": {"score": 7, "max_score": 10, "comment": "案例可继续加强"},
+                "next_step": {"score": 5, "max_score": 5, "comment": "下一步明确"},
+            },
+            raw_response={
+                "schema_version": PPT_E2E_AUDIO_SCORE_SCHEMA,
+                "source": PPT_E2E_AUDIO_PROCESS_SOURCE,
+                "path_revision_id": self._path_revision_id,
+                "path_revision_no": self._path_revision_no,
+                "total_score": 88,
+                "pass_threshold": pass_threshold,
+            },
+            error_code=None,
+            error_message=None,
+            latency_ms=12,
+        )
 
 
 class VerifyError(Exception):
@@ -229,9 +338,30 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
+def _env_enabled(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _wechat_id(email: str) -> str:
     normalized = email.strip().lower()
     return f"local_{normalized.replace('@', '_at_').replace('.', '_')}"
+
+
+def _seed_login_password() -> str:
+    for env_key in SEED_PASSWORD_ENV_KEYS:
+        configured = os.getenv(env_key, "").strip()
+        if configured:
+            return configured
+    return SEED_DEFAULT_PASSWORD
+
+
+def _password_hash_matches(password: str, hashed_password: str | None) -> bool:
+    if not hashed_password:
+        return False
+    try:
+        return bool(pwd_context.verify(password, hashed_password))
+    except Exception:
+        return False
 
 
 async def _first(db: AsyncSession, stmt: Select[tuple[ModelT]]) -> ModelT | None:
@@ -268,6 +398,9 @@ async def _upsert_user(
         user.is_active = True
         if not user.wechat_user_id:
             user.wechat_user_id = _wechat_id(normalized_email)
+    seed_password = _seed_login_password()
+    if not _password_hash_matches(seed_password, user.hashed_password):
+        user.hashed_password = str(pwd_context.hash(seed_password))
     return user
 
 
@@ -363,7 +496,10 @@ def _ppt_learner_rubric() -> dict[str, Any]:
 
 
 def _ppt_scoring_template() -> str:
-    return """请对学员的 PPT 讲解录音进行评分。
+    return (
+        PPT_PROMPT_SNAPSHOT_MARKER
+        + "\n\n"
+        + """请对学员的 PPT 讲解录音进行评分。
 
 训练单元：{unit_name}
 录音用途：{purpose}
@@ -404,6 +540,7 @@ def _ppt_scoring_template() -> str:
   }
 }
 """
+    )
 
 
 def _elevator_learner_rubric() -> dict[str, Any]:
@@ -520,6 +657,23 @@ async def _upsert_audio_prompt(
     return prompt
 
 
+async def _apply_e2e_audio_prompt_drift_after_snapshot(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    prompt: SalesTrainerAudioScorePrompt,
+    owner_id: str,
+) -> None:
+    drifted_template = f"{_ppt_scoring_template()}\n\n{PPT_PROMPT_DRIFT_MARKER}"
+    if prompt.scoring_template != drifted_template:
+        summary.updated += 1
+    prompt.scoring_template = drifted_template
+    prompt.output_schema = _default_audio_output_schema()
+    prompt.status = "published"
+    prompt.updated_by = owner_id
+    await db.flush()
+
+
 def _store_seed_material_file(material_id: str) -> tuple[str, int, str]:
     if not PPT_MATERIAL_SOURCE_FILE.exists():
         raise VerifyError(
@@ -621,6 +775,7 @@ def _path_config(
     disabled_reason: str | None = None,
     primary_action_label: str | None = None,
     ai_coach: dict[str, Any] | None = None,
+    runtime_binding: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return SalesTrainerPathConfig(
         enabled=enabled,
@@ -641,6 +796,7 @@ def _path_config(
         retry_action_label="再练一次",
         review_action_label="查看结果",
         ai_coach=ai_coach,
+        runtime_binding=runtime_binding,
         guidance_templates={
             "not_started": "可按模块顺序开始本项训练。",
             "not_passed": "最近一次训练未通关，可重练。",
@@ -900,9 +1056,101 @@ async def _load_ai_coach_scoring_prompt_template(
     )
 
 
+def _ai_coach_model_config_seed_enabled() -> bool:
+    return (
+        os.getenv("CRITICAL_GATE_MODE") == "newcomer-ai-coach-real-provider"
+        or _env_enabled("NEWCOMER_AI_COACH_EXPECT_REAL_PROVIDER")
+        or _env_enabled("NEWCOMER_AI_COACH_USE_MODEL_CONFIG")
+    )
+
+
+def _ai_coach_llm_extra_config() -> dict[str, Any]:
+    extra_config: dict[str, Any] = {}
+    for key, env_name, parser in (
+        ("temperature", "LLM_TEMPERATURE", float),
+        ("timeout", "LLM_TIMEOUT", float),
+        ("max_retries", "LLM_MAX_RETRIES", int),
+    ):
+        raw = os.getenv(env_name)
+        if raw is None or not raw.strip():
+            continue
+        try:
+            extra_config[key] = parser(raw)
+        except ValueError:
+            continue
+    reasoning_effort = os.getenv("LLM_REASONING_EFFORT")
+    if reasoning_effort and reasoning_effort.strip():
+        extra_config["reasoning_effort"] = reasoning_effort.strip()
+    return extra_config
+
+
+async def _upsert_ai_coach_llm_model_config(
+    db: AsyncSession,
+    summary: SeedSummary,
+) -> str | None:
+    if not _ai_coach_model_config_seed_enabled():
+        return None
+
+    api_key = (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+    model_name = (os.getenv("LLM_MODEL") or os.getenv("OPENAI_MODEL") or "").strip()
+    if not api_key or not model_name:
+        return None
+
+    provider = (os.getenv("LLM_PROVIDER") or ModelProvider.OPENAI.value).strip().lower()
+    allowed_providers = {item.value for item in ModelProvider}
+    if provider not in allowed_providers:
+        provider = ModelProvider.OPENAI.value
+    base_url = (
+        os.getenv("LLM_BASE_URL")
+        or os.getenv("OPENAI_BASE_URL")
+        or "https://api.openai.com/v1"
+    ).strip()
+
+    encrypt_result = encrypt_api_key(api_key)
+    if not encrypt_result.is_success or not encrypt_result.value:
+        return None
+
+    config = await _first(
+        db,
+        select(ModelConfig).where(
+            ModelConfig.model_type == ModelType.LLM.value,
+            ModelConfig.provider == provider,
+            ModelConfig.model_name == model_name,
+        ),
+    )
+    extra_config = _ai_coach_llm_extra_config()
+    if config is None:
+        config = ModelConfig(
+            id=_uuid(),
+            name=AI_COACH_REAL_PROVIDER_MODEL_CONFIG_NAME,
+            model_type=ModelType.LLM.value,
+            provider=provider,
+            base_url=base_url,
+            api_key_encrypted=encrypt_result.value,
+            model_name=model_name,
+            extra_config=extra_config,
+            is_default=False,
+            is_active=True,
+        )
+        db.add(config)
+        summary.created += 1
+    else:
+        config.name = AI_COACH_REAL_PROVIDER_MODEL_CONFIG_NAME
+        config.base_url = base_url
+        config.api_key_encrypted = encrypt_result.value
+        config.extra_config = extra_config
+        config.is_active = True
+        summary.updated += 1
+    await db.flush()
+    return model_name
+
+
 def _ai_coach_seed_config(
     prompt_template_id: str,
     scoring_prompt_template_id: str,
+    *,
+    generation_model: str | None = None,
+    scoring_model: str | None = None,
 ) -> dict[str, Any]:
     return {
         "enabled": True,
@@ -959,8 +1207,8 @@ def _ai_coach_seed_config(
         "max_turns": 10,
         "mastery_threshold": 80,
         "output_schema_version": "ai_coach_interaction_v1",
-        "generation_model": None,
-        "scoring_model": None,
+        "generation_model": generation_model,
+        "scoring_model": scoring_model,
         "retry_policy": {"max_retries": 1, "retry_backoff": 1.0},
         "failure_behavior": "skip_turn",
     }
@@ -1402,6 +1650,167 @@ async def _upsert_unit(
     return unit
 
 
+async def _realtime_practice_template_or_none(
+    db: AsyncSession,
+) -> PracticeTemplate | None:
+    return await _first(
+        db,
+        select(PracticeTemplate).where(
+            PracticeTemplate.name == REALTIME_E2E_PRACTICE_TEMPLATE_NAME,
+            PracticeTemplate.scenario_type == "sales",
+            PracticeTemplate.mode == "customer_roleplay",
+            PracticeTemplate.voice_mode == "stepfun_realtime",
+            PracticeTemplate.status == "published",
+        ),
+    )
+
+
+def _expects_realtime_real_provider() -> bool:
+    provider = os.getenv("PHASE4_E2E_PROVIDER", "").strip().lower()
+    return os.getenv("NEWCOMER_E2E_EXPECT_REAL_PROVIDER") == "1" or (
+        provider not in {"", "local"}
+    )
+
+
+def _realtime_runtime_descriptor_id() -> str:
+    if _expects_realtime_real_provider():
+        return REALTIME_E2E_REAL_RUNTIME_DESCRIPTOR_ID
+    return REALTIME_E2E_LOCAL_RUNTIME_DESCRIPTOR_ID
+
+
+def _realtime_runtime_config_revision_id() -> str:
+    if _expects_realtime_real_provider():
+        return REALTIME_E2E_REAL_RUNTIME_CONFIG_REVISION_ID
+    return REALTIME_E2E_LOCAL_RUNTIME_CONFIG_REVISION_ID
+
+
+def _realtime_provider_registry_label() -> str:
+    if _expects_realtime_real_provider():
+        return "新人训练实时对练 StepFun Provider"
+    return "新人训练实时对练本地 Provider"
+
+
+def _realtime_runtime_binding(template: PracticeTemplate) -> dict[str, Any]:
+    runtime_descriptor_id = _realtime_runtime_descriptor_id()
+    runtime_config_revision_id = _realtime_runtime_config_revision_id()
+    return {
+        "binding_key": REALTIME_E2E_BINDING_KEY,
+        "runtime_owner": "training_runtime",
+        "runtime_descriptor_id": runtime_descriptor_id,
+        "scenario_key": "newcomer-realtime-roleplay",
+        "practice_template_id": str(template.template_id),
+        "runtime_config_revision_id": runtime_config_revision_id,
+        "roleplay_contract_revision_id": str(template.content_hash or template.version or "v1"),
+        "provider_readiness_snapshot": {
+            "provider": "stepfun_realtime",
+            "ready": True,
+            "checked_at": "2026-06-27T00:00:00Z",
+            "config_revision_id": runtime_config_revision_id,
+        },
+        "failure_policy": {
+            "terminal_codes": [
+                "STEPFUN_KEY_MISSING",
+                "NEWCOMER_REALTIME_BINDING_INVALID",
+                "NEWCOMER_REALTIME_PROVIDER_NOT_READY",
+            ],
+            "transient_codes": [
+                "STEPFUN_CONNECTION_ERROR",
+                "STEPFUN_TRANSPORT_ERROR",
+                "NETWORK_TIMEOUT",
+            ],
+            "voluntary_codes": ["USER_CANCELLED", "SESSION_ENDED"],
+            "terminal_retry_allowed": False,
+        },
+        "rollback_policy": {
+            "rollback_via_active_revision": True,
+            "disable_module_on_invalid_binding": True,
+            "fallback_to_placeholder": False,
+        },
+    }
+
+
+async def _publish_realtime_provider_registry(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner_id: str,
+) -> None:
+    value = json.loads(json.dumps(DEFAULT_SALES_TRAINER_REALTIME_PROVIDER_REGISTRY))
+    runtime_descriptor_id = _realtime_runtime_descriptor_id()
+    runtime_config_revision_id = _realtime_runtime_config_revision_id()
+    value["enabled"] = True
+    value["descriptors"] = [
+        {
+            "descriptor_id": runtime_descriptor_id,
+            "label": _realtime_provider_registry_label(),
+            "provider": "stepfun_realtime",
+            "runtime_owner": "training_runtime",
+            "enabled": True,
+            "runtime_profile_id": None,
+            "config_revision_id": runtime_config_revision_id,
+            "rollback_to_descriptor_id": None,
+            "readiness": {
+                "ready": True,
+                "checked_at": "2026-06-27T00:00:00Z",
+                "failure_code": None,
+                "failure_message": None,
+            },
+        }
+    ]
+    service = BusinessRuleConfigService(db)
+    draft = await service.create_or_update_draft(
+        key=SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY,
+        value=value,
+        actor_id=owner_id,
+        reason="seed newcomer realtime provider registry",
+    )
+    await service.publish(
+        key=SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY,
+        actor_id=owner_id,
+        config_id=str(draft.id),
+        reason="publish newcomer realtime provider registry",
+    )
+    summary.updated += 1
+
+
+async def _archive_realtime_placeholder_if_present(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner_id: str,
+) -> None:
+    placeholder = await _first(
+        db,
+        select(SalesTrainerUnit).where(
+            SalesTrainerUnit.name == "实时对练占位",
+            SalesTrainerUnit.unit_type == "quiz",
+        ),
+    )
+    if placeholder is not None and placeholder.status != "archived":
+        placeholder.status = "archived"
+        placeholder.updated_by = owner_id
+        summary.updated += 1
+
+
+async def _archive_realtime_unit_if_present(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner_id: str,
+) -> None:
+    unit = await _first(
+        db,
+        select(SalesTrainerUnit).where(
+            SalesTrainerUnit.name == "实时对练",
+            SalesTrainerUnit.unit_type == "quiz",
+        ),
+    )
+    if unit is not None and unit.status != "archived":
+        unit.status = "archived"
+        unit.updated_by = owner_id
+        summary.updated += 1
+
+
 async def _backfill_path_payload_from_units(
     db: AsyncSession,
 ) -> NewcomerPathConfigPayload:
@@ -1584,38 +1993,16 @@ async def _publish_seed_path_revision(
         except SalesTrainerPathConfigError:
             active_payload = None
 
-    business_module = _business_module_from_payload(active_payload)
-    should_rebind_learning_content = not await _learning_content_has_min_chapters(
-        db,
-        business_module.learning_content_id if business_module is not None else None,
-        min_chapter_count=8,
-    )
-    should_bind_exam_paper = (
-        business_module is None or not business_module.exam_paper_id
-    )
+    backfilled_payload = await _backfill_path_payload_from_units(db)
     next_payload = (
         _path_payload_with_business_etiquette_defaults(
-            active_payload,
+            backfilled_payload,
             ai_coach_config,
-            learning_content_id=(
-                learning_content_id if should_rebind_learning_content else None
-            ),
-            exam_paper_id=(exam_paper_id if should_bind_exam_paper else None),
+            learning_content_id=learning_content_id,
+            exam_paper_id=exam_paper_id,
         )
-        if active_payload is not None
-        else None
+        or backfilled_payload
     )
-    if next_payload is None:
-        backfilled_payload = await _backfill_path_payload_from_units(db)
-        next_payload = (
-            _path_payload_with_business_etiquette_defaults(
-                backfilled_payload,
-                ai_coach_config,
-                learning_content_id=learning_content_id,
-                exam_paper_id=exam_paper_id,
-            )
-            or backfilled_payload
-        )
 
     elevator_duration_options = await _elevator_duration_options_from_units(db)
     next_payload = _path_payload_with_elevator_defaults(
@@ -1653,6 +2040,404 @@ async def _publish_seed_path_revision(
         change_class=change_class,
     )
     summary.updated += 1
+
+
+async def _record_seed_log_once(
+    db: AsyncSession,
+    *,
+    actor: User,
+    action: str,
+    target_type: str,
+    target_id: str,
+    metadata: dict[str, Any],
+) -> None:
+    logs, total = await OperationLogService(db).list_logs(
+        target_type=target_type,
+        target_id=target_id,
+        limit=10,
+    )
+    if total and any(log.action == action for log in logs):
+        return
+    await OperationLogService(db).record(
+        actor=actor,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        metadata=metadata,
+    )
+
+
+async def _upsert_e2e_audio_result(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner: User,
+    learner: User,
+    ppt_unit: SalesTrainerUnit,
+    ppt_prompt: SalesTrainerAudioScorePrompt,
+    ppt_material: SalesTrainerMaterial,
+) -> SalesTrainerAudioSubmission:
+    current_version_id = str(ppt_material.current_version_id or "")
+    if not current_version_id:
+        raise VerifyError("ppt_explanation material current version missing")
+    context = await PathAttemptContextService(db).resolve_for_unit(ppt_unit)
+    audio_service = AudioSubmissionService(
+        db,
+        transcription_service=_SeedAudioTranscriptionService(),
+        scoring_service=_SeedAudioScoringService(
+            path_revision_id=context.path_revision_id,
+            path_revision_no=context.path_revision_no,
+        ),
+    )
+    submission = await _first(
+        db,
+        select(SalesTrainerAudioSubmission).where(
+            SalesTrainerAudioSubmission.user_id == str(learner.user_id),
+            SalesTrainerAudioSubmission.unit_id == str(ppt_unit.unit_id),
+            SalesTrainerAudioSubmission.original_filename == PPT_E2E_AUDIO_FILENAME,
+            SalesTrainerAudioSubmission.source_page == PPT_E2E_AUDIO_SOURCE_PAGE,
+        ),
+    )
+    if submission is None:
+        submission = await audio_service.create_submission(
+            AudioSubmissionCreate(
+                unit_id=str(ppt_unit.unit_id),
+                purpose="ppt_pitch",
+                original_filename=PPT_E2E_AUDIO_FILENAME,
+                content_type="audio/wav",
+                size_bytes=4096,
+                storage_key="/tmp/newcomer-ppt-explanation-e2e.wav",
+                file_hash=hashlib.sha256(PPT_E2E_AUDIO_FILENAME.encode()).hexdigest(),
+                duration_seconds=118,
+                source_page=PPT_E2E_AUDIO_SOURCE_PAGE,
+                confirmed_material_version_id=current_version_id,
+                auto_process=True,
+            ),
+            actor=learner,
+        )
+        summary.created += 3
+    else:
+        snapshots = await SalesTrainerMaterialService(db).freeze_submission_snapshots(
+            ppt_unit,
+            confirmed_material_version_id=current_version_id,
+        )
+        task_brief_snapshot = snapshots.get("task_brief_snapshot")
+        snapshots["task_brief_snapshot"] = freeze_submission_context(
+            task_brief_snapshot if isinstance(task_brief_snapshot, dict) else None,
+            context.to_payload(),
+        )
+        summary.updated += 1
+        submission.purpose = "ppt_pitch"
+        submission.content_type = "audio/wav"
+        submission.size_bytes = 4096
+        submission.storage_key = "/tmp/newcomer-ppt-explanation-e2e.wav"
+        submission.file_hash = hashlib.sha256(
+            PPT_E2E_AUDIO_FILENAME.encode()
+        ).hexdigest()
+        submission.duration_seconds = 118
+        baseline_refreshed_at = _now()
+        submission.created_at = baseline_refreshed_at
+        submission.updated_at = baseline_refreshed_at
+        submission.confirmed_material_version_id = current_version_id
+        submission.confirmed_material_at = baseline_refreshed_at
+        submission.material_snapshot = snapshots.get("material_snapshot")
+        submission.score_scheme_snapshot = snapshots.get("score_scheme_snapshot")
+        submission.task_brief_snapshot = snapshots.get("task_brief_snapshot")
+        submission.status = "uploaded"
+        submission.error_code = None
+        submission.error_message = None
+        await db.execute(
+            delete(SalesTrainerAudioScoreResult).where(
+                SalesTrainerAudioScoreResult.submission_id
+                == str(submission.submission_id)
+            )
+        )
+        await db.flush()
+        submission = await audio_service.process_submission(
+            str(submission.submission_id),
+            actor=learner,
+        )
+
+    if submission.status != "scored":
+        raise VerifyError(
+            f"e2e audio service processing did not score submission: {submission.status}"
+        )
+    await _record_seed_log_once(
+        db,
+        actor=owner,
+        action="audio_result.seed_closed_loop",
+        target_type="sales_trainer_audio_submission",
+        target_id=str(submission.submission_id),
+        metadata={
+            "path_revision_id": context.path_revision_id,
+            "path_revision_no": context.path_revision_no,
+            "module_key": context.module_key,
+            "prompt_id": str(ppt_prompt.prompt_id),
+            "source": PPT_E2E_AUDIO_PROCESS_SOURCE,
+        },
+    )
+    return submission
+
+
+async def _upsert_e2e_ai_coach_session(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner: User,
+    learner: User,
+) -> SalesTrainerAiCoachSession:
+    active = await SalesTrainerAssetRevisionService(db).active_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+    )
+    if active is None:
+        raise VerifyError("newcomer path active revision missing")
+    payload = payload_from_revision(active)
+    business_module = _business_module_from_payload(payload)
+    if business_module is None:
+        raise VerifyError("active path business_skills module missing")
+    module_snapshot = business_module.model_dump(mode="json")
+    lineage = {
+        "path_key": payload.path_key,
+        "path_revision_id": str(active.revision_id),
+        "path_revision_no": int(active.revision_no),
+        "module_key": BUSINESS_SKILLS_MODULE_KEY,
+        "legacy_snapshot_only": False,
+    }
+    session = await _first(
+        db,
+        select(SalesTrainerAiCoachSession).where(
+            SalesTrainerAiCoachSession.user_id == str(learner.user_id),
+            SalesTrainerAiCoachSession.trace_id == AI_COACH_E2E_TRACE_ID,
+        ),
+    )
+    if session is None:
+        session = SalesTrainerAiCoachSession(
+            session_id=_uuid(),
+            user_id=str(learner.user_id),
+            module_key=BUSINESS_SKILLS_MODULE_KEY,
+            trace_id=AI_COACH_E2E_TRACE_ID,
+        )
+        db.add(session)
+        summary.created += 1
+    else:
+        summary.updated += 1
+    baseline_refreshed_at = _now()
+    session.created_at = baseline_refreshed_at
+    session.updated_at = baseline_refreshed_at
+    session.path_key = payload.path_key
+    session.path_revision_id = str(active.revision_id)
+    session.path_revision_no = int(active.revision_no)
+    session.article_snapshot = {
+        "learning_content_id": business_module.learning_content_id,
+        "title": LEARNING_CONTENT_TITLE,
+        "snapshot_type": "active_article_snapshot",
+    }
+    session.path_config_snapshot = {
+        **module_snapshot,
+        **lineage,
+        "snapshot_type": "active_path_module_snapshot",
+    }
+    ai_coach_snapshot = (
+        business_module.ai_coach.model_dump(mode="json")
+        if business_module.ai_coach
+        else {}
+    )
+    session.prompt_template_id = ai_coach_snapshot.get("prompt_template_id")
+    session.prompt_revision_id = ai_coach_snapshot.get("prompt_revision_id")
+    session.prompt_contract_hash = ai_coach_snapshot.get("prompt_contract_hash")
+    session.config_snapshot = {
+        **ai_coach_snapshot,
+        "snapshot_type": "ai_coach_config_snapshot",
+        "path_revision_id": str(active.revision_id),
+        "path_revision_no": int(active.revision_no),
+    }
+    session.coach_state = {
+        "schema_version": "ai_coach_seed_state_v1",
+        "completed_turns": 3,
+        "mastery_threshold": 80,
+        "last_feedback": "已能完成拜访前准备、开场礼仪和异议回应。",
+    }
+    session.status = "completed"
+    session.mastery_state = "mastered"
+    session.total_score = 86
+    session.max_score = 100
+    await db.flush()
+    await _record_seed_log_once(
+        db,
+        actor=owner,
+        action="ai_coach_session.seed_closed_loop",
+        target_type="sales_trainer_ai_coach_session",
+        target_id=str(session.session_id),
+        metadata={
+            "path_revision_id": str(active.revision_id),
+            "path_revision_no": int(active.revision_no),
+            "module_key": BUSINESS_SKILLS_MODULE_KEY,
+            "trace_id": AI_COACH_E2E_TRACE_ID,
+        },
+    )
+    return session
+
+
+def _fresh_e2e_run_id() -> str | None:
+    value = os.getenv(FRESH_E2E_RUN_ID_ENV, "").strip()
+    if not value:
+        return None
+    return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "-" for ch in value)[:80]
+
+
+async def _create_fresh_e2e_audio_result(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner: User,
+    learner: User,
+    ppt_unit: SalesTrainerUnit,
+    ppt_prompt: SalesTrainerAudioScorePrompt,
+    ppt_material: SalesTrainerMaterial,
+    run_id: str,
+) -> SalesTrainerAudioSubmission:
+    current_version_id = str(ppt_material.current_version_id or "")
+    if not current_version_id:
+        raise VerifyError("fresh e2e ppt material current version missing")
+    context = await PathAttemptContextService(db).resolve_for_unit(ppt_unit)
+    audio_service = AudioSubmissionService(
+        db,
+        transcription_service=_SeedAudioTranscriptionService(),
+        scoring_service=_SeedAudioScoringService(
+            path_revision_id=context.path_revision_id,
+            path_revision_no=context.path_revision_no,
+        ),
+    )
+    filename = f"newcomer-ppt-explanation-fresh-{run_id}.wav"
+    submission = await audio_service.create_submission(
+        AudioSubmissionCreate(
+            unit_id=str(ppt_unit.unit_id),
+            purpose="ppt_pitch",
+            original_filename=filename,
+            content_type="audio/wav",
+            size_bytes=4096,
+            storage_key=f"/tmp/{filename}",
+            file_hash=hashlib.sha256(filename.encode()).hexdigest(),
+            duration_seconds=118,
+            source_page=f"newcomer_closed_loop_fresh_e2e:{run_id}",
+            confirmed_material_version_id=current_version_id,
+            auto_process=True,
+        ),
+        actor=learner,
+    )
+    if submission.status != "scored":
+        raise VerifyError(
+            f"fresh e2e audio processing did not score submission: {submission.status}"
+        )
+    await _record_seed_log_once(
+        db,
+        actor=owner,
+        action="audio_result.fresh_closed_loop",
+        target_type="sales_trainer_audio_submission",
+        target_id=str(submission.submission_id),
+        metadata={
+            "fresh_run_id": run_id,
+            "path_revision_id": context.path_revision_id,
+            "path_revision_no": context.path_revision_no,
+            "module_key": context.module_key,
+            "prompt_id": str(ppt_prompt.prompt_id),
+            "source": PPT_E2E_AUDIO_PROCESS_SOURCE,
+        },
+    )
+    summary.created += 3
+    return submission
+
+
+async def _create_fresh_e2e_ai_coach_session(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner: User,
+    learner: User,
+    run_id: str,
+) -> SalesTrainerAiCoachSession:
+    active = await SalesTrainerAssetRevisionService(db).active_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+    )
+    if active is None:
+        raise VerifyError("fresh e2e newcomer path active revision missing")
+    payload = payload_from_revision(active)
+    business_module = _business_module_from_payload(payload)
+    if business_module is None:
+        raise VerifyError("fresh e2e active path business_skills module missing")
+    module_snapshot = business_module.model_dump(mode="json")
+    ai_coach_snapshot = (
+        business_module.ai_coach.model_dump(mode="json")
+        if business_module.ai_coach
+        else {}
+    )
+    trace_id = f"newcomer_closed_loop_fresh_ai_coach:{run_id}"
+    session = SalesTrainerAiCoachSession(
+        session_id=_uuid(),
+        user_id=str(learner.user_id),
+        module_key=BUSINESS_SKILLS_MODULE_KEY,
+        trace_id=trace_id,
+        path_key=payload.path_key,
+        path_revision_id=str(active.revision_id),
+        path_revision_no=int(active.revision_no),
+        article_snapshot={
+            "learning_content_id": business_module.learning_content_id,
+            "title": LEARNING_CONTENT_TITLE,
+            "snapshot_type": "active_article_snapshot",
+            "fresh_run_id": run_id,
+        },
+        path_config_snapshot={
+            **module_snapshot,
+            "path_key": payload.path_key,
+            "path_revision_id": str(active.revision_id),
+            "path_revision_no": int(active.revision_no),
+            "module_key": BUSINESS_SKILLS_MODULE_KEY,
+            "legacy_snapshot_only": False,
+            "snapshot_type": "active_path_module_snapshot",
+            "fresh_run_id": run_id,
+        },
+        prompt_template_id=ai_coach_snapshot.get("prompt_template_id"),
+        prompt_revision_id=ai_coach_snapshot.get("prompt_revision_id"),
+        prompt_contract_hash=ai_coach_snapshot.get("prompt_contract_hash"),
+        config_snapshot={
+            **ai_coach_snapshot,
+            "snapshot_type": "ai_coach_config_snapshot",
+            "path_revision_id": str(active.revision_id),
+            "path_revision_no": int(active.revision_no),
+            "fresh_run_id": run_id,
+        },
+        coach_state={
+            "schema_version": "ai_coach_fresh_seed_state_v1",
+            "completed_turns": 3,
+            "mastery_threshold": 80,
+            "fresh_run_id": run_id,
+            "last_feedback": "fresh E2E 已完成拜访准备、开场礼仪和异议回应。",
+        },
+        status="completed",
+        mastery_state="mastered",
+        total_score=87,
+        max_score=100,
+    )
+    db.add(session)
+    await db.flush()
+    await _record_seed_log_once(
+        db,
+        actor=owner,
+        action="ai_coach_session.fresh_closed_loop",
+        target_type="sales_trainer_ai_coach_session",
+        target_id=str(session.session_id),
+        metadata={
+            "fresh_run_id": run_id,
+            "path_revision_id": str(active.revision_id),
+            "path_revision_no": int(active.revision_no),
+            "module_key": BUSINESS_SKILLS_MODULE_KEY,
+            "trace_id": trace_id,
+        },
+    )
+    summary.created += 1
+    return session
 
 
 async def _verify_ai_coach_seed_config(
@@ -1703,6 +2488,23 @@ async def _verify_ai_coach_seed_config(
         "总结一下",
     ]:
         raise VerifyError(f"{context} AI coach generation failure prompts mismatch")
+    if _ai_coach_model_config_seed_enabled():
+        generation_model = str(ai_coach.get("generation_model") or "").strip()
+        scoring_model = str(ai_coach.get("scoring_model") or "").strip()
+        if not generation_model:
+            raise VerifyError(f"{context} AI coach generation_model missing")
+        if scoring_model != generation_model:
+            raise VerifyError(f"{context} AI coach scoring_model mismatch")
+        model_config = await _first(
+            db,
+            select(ModelConfig).where(
+                ModelConfig.model_type == ModelType.LLM.value,
+                ModelConfig.model_name == generation_model,
+                ModelConfig.is_active.is_(True),
+            ),
+        )
+        if model_config is None:
+            raise VerifyError(f"{context} AI coach model config missing")
     if not ai_coach.get("prompt_template_id"):
         raise VerifyError(f"{context} AI coach prompt_template_id missing")
     prompt = await _first(
@@ -1884,6 +2686,254 @@ async def _verify_active_business_etiquette_training_pack(
         )
 
 
+async def _verify_e2e_closed_loop_records(
+    db: AsyncSession,
+    *,
+    learner: User,
+) -> None:
+    audio = await _first(
+        db,
+        select(SalesTrainerAudioSubmission).where(
+            SalesTrainerAudioSubmission.user_id == str(learner.user_id),
+            SalesTrainerAudioSubmission.original_filename == PPT_E2E_AUDIO_FILENAME,
+            SalesTrainerAudioSubmission.source_page == PPT_E2E_AUDIO_SOURCE_PAGE,
+        ),
+    )
+    if audio is None:
+        raise VerifyError("e2e audio scored submission missing")
+    audio_payload = await AudioSubmissionService(db).serialize_submission(audio)
+    if audio_payload.get("status") != "scored":
+        raise VerifyError("e2e audio submission must be scored")
+    if audio_payload.get("path_key") != PATH_KEY:
+        raise VerifyError("e2e audio submission path_key mismatch")
+    if not audio_payload.get("path_revision_id") or not audio_payload.get(
+        "path_revision_no"
+    ):
+        raise VerifyError("e2e audio submission active revision lineage missing")
+    if audio_payload.get("module_key") != "ppt_explanation":
+        raise VerifyError("e2e audio submission module_key mismatch")
+    if audio_payload.get("legacy_snapshot_only") is not False:
+        raise VerifyError("e2e audio submission must not be legacy snapshot only")
+    if not (audio_payload.get("material_snapshot") or {}).get("items"):
+        raise VerifyError("e2e audio submission material snapshot missing")
+    score_scheme = audio_payload.get("score_scheme_snapshot") or {}
+    prompt_snapshot = score_scheme.get("prompt_snapshot") or {}
+    if not prompt_snapshot:
+        raise VerifyError("e2e audio submission prompt snapshot missing")
+    snapshot_template = str(prompt_snapshot.get("scoring_template") or "")
+    if PPT_PROMPT_SNAPSHOT_MARKER not in snapshot_template:
+        raise VerifyError("e2e audio prompt frozen snapshot marker missing")
+    if PPT_PROMPT_DRIFT_MARKER in snapshot_template:
+        raise VerifyError("e2e audio prompt snapshot leaked current drift marker")
+    current_prompt = await _first(
+        db,
+        select(SalesTrainerAudioScorePrompt).where(
+            SalesTrainerAudioScorePrompt.prompt_id == score_scheme.get("prompt_id")
+        ),
+    )
+    if current_prompt is None:
+        raise VerifyError("e2e audio current scoring prompt missing")
+    if PPT_PROMPT_DRIFT_MARKER not in str(current_prompt.scoring_template or ""):
+        raise VerifyError("e2e audio current scoring prompt drift marker missing")
+    score = audio_payload.get("score_result") or {}
+    if score.get("passed") is not True:
+        raise VerifyError("e2e audio score must pass")
+    if score.get("legacy_snapshot_only") is not False:
+        raise VerifyError("e2e audio score lineage must not be legacy-only")
+    transcript = audio_payload.get("transcript") or {}
+    if transcript.get("provider") != PPT_E2E_AUDIO_TRANSCRIPT_PROVIDER:
+        raise VerifyError("e2e audio transcript provider must come from seed ASR service")
+    if transcript.get("transcript_text") != PPT_E2E_AUDIO_TRANSCRIPT_TEXT:
+        raise VerifyError("e2e audio transcript text mismatch")
+    transcript_raw = transcript.get("raw_payload") or {}
+    if transcript_raw.get("source") != PPT_E2E_AUDIO_PROCESS_SOURCE:
+        raise VerifyError("e2e audio transcript source must prove process_submission")
+    if not score.get("prompt_hash"):
+        raise VerifyError("e2e audio score prompt_hash missing")
+    if score.get("deucate_model") != PPT_E2E_AUDIO_SCORING_MODEL:
+        raise VerifyError("e2e audio score model mismatch")
+    if score.get("transcript_snapshot") != PPT_E2E_AUDIO_TRANSCRIPT_TEXT:
+        raise VerifyError("e2e audio score transcript snapshot mismatch")
+    score_raw = score.get("raw_response") or {}
+    if score_raw.get("schema_version") != PPT_E2E_AUDIO_SCORE_SCHEMA:
+        raise VerifyError("e2e audio score raw schema mismatch")
+    if score_raw.get("source") != PPT_E2E_AUDIO_PROCESS_SOURCE:
+        raise VerifyError("e2e audio score source must prove process_submission")
+    if score.get("error_code") is not None or score.get("error_message") is not None:
+        raise VerifyError("e2e audio score must not contain scoring errors")
+
+    records = TrainingRecordService(db)
+    audio_record = await records.get_record("audio_submission", str(audio.submission_id))
+    if audio_record is None:
+        raise VerifyError("e2e audio training record missing")
+    if audio_record.get("legacy_snapshot_only") is not False:
+        raise VerifyError("e2e audio training record must not be legacy-only")
+    if audio_record.get("passed") is not True:
+        raise VerifyError("e2e audio training record must pass")
+    record_snapshot = (
+        (audio_record.get("score_scheme_snapshot") or {})
+        .get("prompt_snapshot", {})
+    )
+    record_template = str(record_snapshot.get("scoring_template") or "")
+    if PPT_PROMPT_SNAPSHOT_MARKER not in record_template:
+        raise VerifyError("e2e audio training record frozen prompt marker missing")
+    if PPT_PROMPT_DRIFT_MARKER in json.dumps(record_snapshot, ensure_ascii=False):
+        raise VerifyError("e2e audio training record leaked current prompt drift marker")
+    operation_logs = audio_record.get("operation_logs") or []
+    if not operation_logs:
+        raise VerifyError("e2e audio training record operation log missing")
+    operation_actions = {str(log.get("action")) for log in operation_logs}
+    required_audio_actions = {
+        "audio_transcription_started",
+        "audio_transcription_succeeded",
+        "audio_scoring_started",
+        "audio_scoring_succeeded",
+        "audio_result.seed_closed_loop",
+    }
+    if not required_audio_actions.issubset(operation_actions):
+        raise VerifyError(
+            "e2e audio operation logs must prove transcription and scoring pipeline"
+        )
+
+    ai_session = await _first(
+        db,
+        select(SalesTrainerAiCoachSession).where(
+            SalesTrainerAiCoachSession.user_id == str(learner.user_id),
+            SalesTrainerAiCoachSession.trace_id == AI_COACH_E2E_TRACE_ID,
+        ),
+    )
+    if ai_session is None:
+        raise VerifyError("e2e AI coach session missing")
+    if ai_session.status != "completed" or ai_session.mastery_state != "mastered":
+        raise VerifyError("e2e AI coach session must be completed and mastered")
+    ai_record = await records.get_record("ai_coach_session", str(ai_session.session_id))
+    if ai_record is None:
+        raise VerifyError("e2e AI coach training record missing")
+    if ai_record.get("path_key") != PATH_KEY:
+        raise VerifyError("e2e AI coach training record path_key mismatch")
+    if ai_record.get("module_key") != BUSINESS_SKILLS_MODULE_KEY:
+        raise VerifyError("e2e AI coach training record module_key mismatch")
+    if ai_record.get("legacy_snapshot_only") is not False:
+        raise VerifyError("e2e AI coach training record must not be legacy-only")
+    if ai_record.get("passed") is not True:
+        raise VerifyError("e2e AI coach training record must pass")
+    if not ai_record.get("operation_logs"):
+        raise VerifyError("e2e AI coach training record operation log missing")
+
+    expected_audio_submission_id = str(audio.submission_id)
+    expected_ai_session_id = str(ai_session.session_id)
+    fresh_expected = await _fresh_e2e_expected_records(
+        db,
+        learner=learner,
+        run_id=_fresh_e2e_run_id(),
+    )
+    if fresh_expected is not None:
+        expected_audio_submission_id, expected_ai_session_id = fresh_expected
+
+    journey = await TrainingJourneyService(db).get_learner_journey(
+        str(learner.user_id),
+        viewer=learner,
+    )
+    modules = journey.get("modules") or []
+    audio_module = next(
+        (
+            module
+            for module in modules
+            if module.get("kind") == "audio_submission"
+            and module.get("module_key") == "ppt_explanation"
+        ),
+        None,
+    )
+    if audio_module is None:
+        raise VerifyError("e2e journey audio module missing")
+    if (
+        (audio_module.get("latest_outcome") or {}).get("source_record_id")
+        != expected_audio_submission_id
+    ):
+        raise VerifyError("e2e journey audio outcome mismatch")
+    if audio_module.get("passed") is not True:
+        raise VerifyError("e2e journey audio module must pass")
+
+    ai_module = next(
+        (
+            module
+            for module in modules
+            if module.get("kind") == "ai_coach"
+            and module.get("module_key") == BUSINESS_SKILLS_MODULE_KEY
+        ),
+        None,
+    )
+    if ai_module is None:
+        raise VerifyError("e2e journey AI coach module missing")
+    if (
+        (ai_module.get("latest_outcome") or {}).get("source_record_id")
+        != expected_ai_session_id
+    ):
+        raise VerifyError("e2e journey AI coach outcome mismatch")
+    if ai_module.get("passed") is not True:
+        raise VerifyError("e2e journey AI coach module must pass")
+
+
+async def _fresh_e2e_expected_records(
+    db: AsyncSession,
+    *,
+    learner: User,
+    run_id: str | None,
+) -> tuple[str, str] | None:
+    if run_id is None:
+        return None
+    fresh_audio = await _first(
+        db,
+        select(SalesTrainerAudioSubmission)
+        .where(
+            SalesTrainerAudioSubmission.user_id == str(learner.user_id),
+            SalesTrainerAudioSubmission.original_filename
+            == f"newcomer-ppt-explanation-fresh-{run_id}.wav",
+            SalesTrainerAudioSubmission.source_page
+            == f"newcomer_closed_loop_fresh_e2e:{run_id}",
+        )
+        .order_by(SalesTrainerAudioSubmission.created_at.desc()),
+    )
+    if fresh_audio is None:
+        raise VerifyError("fresh e2e audio scored submission missing")
+    if fresh_audio.status != "scored":
+        raise VerifyError("fresh e2e audio submission must be scored")
+    fresh_ai_session = await _fresh_ai_coach_session(
+        db,
+        learner=learner,
+        run_id=run_id,
+    )
+    if fresh_ai_session is None:
+        raise VerifyError("fresh e2e AI coach session missing")
+    return str(fresh_audio.submission_id), str(fresh_ai_session.session_id)
+
+
+async def _fresh_ai_coach_session(
+    db: AsyncSession,
+    *,
+    learner: User,
+    run_id: str,
+) -> SalesTrainerAiCoachSession | None:
+    fresh_ai_session = await _first(
+        db,
+        select(SalesTrainerAiCoachSession)
+        .where(
+            SalesTrainerAiCoachSession.user_id == str(learner.user_id),
+            SalesTrainerAiCoachSession.trace_id
+            == f"newcomer_closed_loop_fresh_ai_coach:{run_id}",
+        )
+        .order_by(SalesTrainerAiCoachSession.created_at.desc()),
+    )
+    if fresh_ai_session is None:
+        return None
+    if (
+        fresh_ai_session.status != "completed"
+        or fresh_ai_session.mastery_state != "mastered"
+    ):
+        raise VerifyError("fresh e2e AI coach session must be completed and mastered")
+    return fresh_ai_session
+
+
 async def seed(db: AsyncSession) -> SeedSummary:
     summary = SeedSummary()
     owner = await _upsert_user(
@@ -1893,12 +2943,19 @@ async def seed(db: AsyncSession) -> SeedSummary:
         name="新人训练路径种子管理员",
         role="admin",
     )
-    await _upsert_user(
+    learner = await _upsert_user(
         db,
         summary,
         email=LEARNER_EMAIL,
         name="新人训练路径演示学员",
         role="user",
+    )
+    await _upsert_user(
+        db,
+        summary,
+        email=MANAGER_EMAIL,
+        name="新人训练路径受限培训负责人",
+        role="training_manager",
     )
     await db.flush()
 
@@ -1947,9 +3004,12 @@ async def seed(db: AsyncSession) -> SeedSummary:
         owner_id=str(owner.user_id),
     )
     await db.flush()
+    ai_coach_llm_model = await _upsert_ai_coach_llm_model_config(db, summary)
     ai_coach_config = _ai_coach_seed_config(
         str(ai_coach_prompt.id),
         str(ai_coach_scoring_prompt.id),
+        generation_model=ai_coach_llm_model,
+        scoring_model=ai_coach_llm_model,
     )
     q1 = await _upsert_question(
         db,
@@ -2063,7 +3123,7 @@ async def seed(db: AsyncSession) -> SeedSummary:
         },
     )
     await db.flush()
-    await _upsert_unit(
+    ppt_unit = await _upsert_unit(
         db,
         summary,
         owner_id=str(owner.user_id),
@@ -2132,27 +3192,70 @@ async def seed(db: AsyncSession) -> SeedSummary:
                 "duration_options": list(ELEVATOR_DURATION_OPTIONS),
             },
         )
-    _ = await _upsert_unit(
-        db,
-        summary,
-        owner_id=str(owner.user_id),
-        name="实时对练占位",
-        description="当前版本仅展示占位，不允许启动实时对练。",
-        unit_type="quiz",
-        config={
-            "path": _path_config(
-                module_key="realtime_roleplay_placeholder",
-                module_type="realtime_placeholder",
-                order_index=4,
-                level_title="第4关：实时对练（占位）",
-                level_description="当前版本不开放。",
-                enabled=False,
-                completion_rule="submitted",
-                disabled_reason="模块 4 仅为占位，不支持实时对练。",
-            )
-        },
-        status="published",
-    )
+    realtime_template = await _realtime_practice_template_or_none(db)
+    if realtime_template is not None:
+        await _publish_realtime_provider_registry(
+            db,
+            summary,
+            owner_id=str(owner.user_id),
+        )
+        await _archive_realtime_placeholder_if_present(
+            db,
+            summary,
+            owner_id=str(owner.user_id),
+        )
+        await _upsert_unit(
+            db,
+            summary,
+            owner_id=str(owner.user_id),
+            name="实时对练",
+            description="通过新人训练路径启动实时销售对练，并将完成结果回流训练闭环。",
+            unit_type="quiz",
+            config={
+                "path": _path_config(
+                    module_key="realtime_roleplay",
+                    module_type="realtime_roleplay",
+                    order_index=4,
+                    level_title="第4关：实时对练",
+                    level_description="使用本地可控 StepFun provider seam 完成真实 WebSocket 对练闭环。",
+                    enabled=True,
+                    completion_rule="submitted",
+                    primary_action_label="开始实时对练",
+                    runtime_binding=_realtime_runtime_binding(realtime_template),
+                )
+            },
+            status="published",
+        )
+    else:
+        await _archive_realtime_unit_if_present(
+            db,
+            summary,
+            owner_id=str(owner.user_id),
+        )
+        await _upsert_unit(
+            db,
+            summary,
+            owner_id=str(owner.user_id),
+            name="实时对练占位",
+            description="当前版本仅展示占位，不允许启动实时对练。",
+            unit_type="quiz",
+            config={
+                "path": _path_config(
+                    module_key="realtime_roleplay_placeholder",
+                    module_type="realtime_placeholder",
+                    order_index=4,
+                    level_title="第4关：实时对练（占位）",
+                    level_description="当前版本不开放。",
+                    enabled=False,
+                    completion_rule="submitted",
+                    disabled_reason=(
+                        "模块 4 缺少 published PracticeTemplate，"
+                        "需先运行 smoke runtime bootstrap 后再启用实时对练。"
+                    ),
+                )
+            },
+            status="published",
+        )
 
     paper = await _upsert_paper(
         db,
@@ -2207,6 +3310,46 @@ async def seed(db: AsyncSession) -> SeedSummary:
         learning_content_id=str(content.learning_content_id),
         exam_paper_id=str(paper.paper_id),
     )
+    await _upsert_e2e_audio_result(
+        db,
+        summary,
+        owner=owner,
+        learner=learner,
+        ppt_unit=ppt_unit,
+        ppt_prompt=ppt_prompt,
+        ppt_material=ppt_material,
+    )
+    await _apply_e2e_audio_prompt_drift_after_snapshot(
+        db,
+        summary,
+        prompt=ppt_prompt,
+        owner_id=str(owner.user_id),
+    )
+    await _upsert_e2e_ai_coach_session(
+        db,
+        summary,
+        owner=owner,
+        learner=learner,
+    )
+    fresh_run_id = _fresh_e2e_run_id()
+    if fresh_run_id is not None:
+        await _create_fresh_e2e_audio_result(
+            db,
+            summary,
+            owner=owner,
+            learner=learner,
+            ppt_unit=ppt_unit,
+            ppt_prompt=ppt_prompt,
+            ppt_material=ppt_material,
+            run_id=fresh_run_id,
+        )
+        await _create_fresh_e2e_ai_coach_session(
+            db,
+            summary,
+            owner=owner,
+            learner=learner,
+            run_id=fresh_run_id,
+        )
     await db.commit()
     await db.refresh(content)
     summary.verified = False
@@ -2298,10 +3441,16 @@ async def verify(
     for item in await load_published_path_units(db):
         modules[item.module_key] = item.unit
 
-    expected_keys = set(CANONICAL_NEWCOMER_MODULE_KEYS)
-    if set(modules) != expected_keys:
+    module_keys = set(modules)
+    unknown_keys = module_keys - set(CANONICAL_NEWCOMER_MODULE_KEYS)
+    if unknown_keys:
         raise VerifyError(
-            f"module keys mismatch: {sorted(set(modules) ^ expected_keys)}"
+            f"unsupported module keys: {sorted(unknown_keys)}"
+        )
+    missing_required_keys = BASELINE_REQUIRED_MODULE_KEYS - module_keys
+    if missing_required_keys:
+        raise VerifyError(
+            f"baseline module keys missing: {sorted(missing_required_keys)}"
         )
 
     ppt_unit = modules["ppt_explanation"]
@@ -2377,11 +3526,38 @@ async def verify(
     await _verify_active_path_business_etiquette_article(db)
     await _verify_active_path_elevator_options(db)
     await _verify_active_business_etiquette_training_pack(db)
+    await _verify_e2e_closed_loop_records(db, learner=learner)
 
-    if ((modules["realtime_roleplay_placeholder"].config or {}).get("path") or {}).get(
-        "enabled"
-    ) is not False:
-        raise VerifyError("module 4 must remain disabled")
+    realtime_units = [
+        modules[module_key]
+        for module_key in sorted(BASELINE_REALTIME_MODULE_KEYS & module_keys)
+    ]
+    if not realtime_units:
+        raise VerifyError("realtime baseline module missing")
+    realtime_template = await _realtime_practice_template_or_none(db)
+    if realtime_template is not None:
+        realtime_unit = modules.get("realtime_roleplay")
+        if realtime_unit is None:
+            raise VerifyError("realtime_roleplay module missing despite ready template")
+        realtime_path = (realtime_unit.config or {}).get("path") or {}
+        if realtime_path.get("enabled") is not True:
+            raise VerifyError("realtime_roleplay module must be enabled with ready template")
+        if realtime_path.get("module_type") != "realtime_roleplay":
+            raise VerifyError("realtime_roleplay module_type mismatch")
+        binding = realtime_path.get("runtime_binding") or {}
+        if binding.get("binding_key") != REALTIME_E2E_BINDING_KEY:
+            raise VerifyError("realtime_roleplay binding_key mismatch")
+        if binding.get("practice_template_id") != str(realtime_template.template_id):
+            raise VerifyError("realtime_roleplay practice_template_id mismatch")
+        readiness = binding.get("provider_readiness_snapshot") or {}
+        if readiness.get("ready") is not True:
+            raise VerifyError("realtime_roleplay provider readiness must be ready")
+    else:
+        if any(
+            ((unit.config or {}).get("path") or {}).get("enabled") is not False
+            for unit in realtime_units
+        ):
+            raise VerifyError("module 4 must remain disabled without ready template")
     elevator_path = ((modules["elevator_pitch"].config or {}).get("path") or {})
     if elevator_path.get("enabled") is not False:
         raise VerifyError("elevator_pitch must remain disabled")

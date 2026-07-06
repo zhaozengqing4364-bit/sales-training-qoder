@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,6 +84,35 @@ async def test_should_edit_published_score_prompt_as_future_revision(
     assert republished.scoring_template == "请按最新版评分：{transcript}"
     assert republished.version == 2
     assert published_revision.revision_id == working_revision.revision_id
+
+
+def test_should_reject_malformed_audio_score_prompt_contract() -> None:
+    with pytest.raises(ValidationError) as rubric_error:
+        AudioScorePromptCreate(
+            name="PPT 讲解评分",
+            purpose="ppt_pitch",
+            system_prompt="你是新人训练路径评分员。",
+            scoring_template="请根据转写评分：{transcript}",
+            learner_rubric={
+                "criteria": [{"label": "结构", "weight": 40}],
+                "pass_threshold": 80,
+            },
+        )
+    assert "learner_rubric.criteria.0.key" in str(rubric_error.value)
+
+    with pytest.raises(ValidationError) as output_schema_error:
+        AudioScorePromptCreate(
+            name="PPT 讲解评分",
+            purpose="ppt_pitch",
+            system_prompt="你是新人训练路径评分员。",
+            scoring_template="请根据转写评分：{transcript}",
+            output_schema={
+                "type": "object",
+                "properties": {},
+                "required": ["total_score"],
+            },
+        )
+    assert "output_schema.required fields" in str(output_schema_error.value)
 
 
 async def _latest_prompt_revision(

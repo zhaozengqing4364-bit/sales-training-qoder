@@ -30,6 +30,39 @@ def test_secret_scan_detects_realistic_secret_and_ignores_placeholder():
     assert [finding.pattern_name for finding in findings] == ["openai-style-key"]
 
 
+def test_secret_scan_detects_stepfun_key_even_when_line_mentions_example():
+    module = _load_script_module()
+
+    findings = module.scan_text(
+        Path("fixture.env"),
+        "# example env copied from incident notes\n"
+        "STEPFUN_API_KEY=stpf_live_1234567890abcdef1234567890 # example only\n"
+        "STEPFUN_API_KEY=<STEPFUN_API_KEY>\n",
+    )
+
+    assert [finding.pattern_name for finding in findings] == [
+        "stepfun-api-key-assignment"
+    ]
+
+
+def test_secret_scan_detects_bearer_jwt_and_url_query_token():
+    module = _load_script_module()
+
+    findings = module.scan_text(
+        Path("fixture.md"),
+        "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9."
+        "eyJzdWIiOiIxMjM0NTY3ODkwIn0.signatureValue123\n"
+        "wss://api.example.com/v1/realtime?token=tok_live_1234567890abcdef\n"
+        "Authorization: Bearer <token>\n"
+        "wss://api.example.com/v1/realtime?token={jwt_token}\n",
+    )
+
+    pattern_names = {finding.pattern_name for finding in findings}
+    assert "bearer-token" in pattern_names
+    assert "jwt-token" in pattern_names
+    assert "url-query-token" in pattern_names
+
+
 def test_secret_scan_passes_current_release_facing_files():
     result = subprocess.run(
         [sys.executable, str(SCRIPT_PATH)],
@@ -43,13 +76,104 @@ def test_secret_scan_passes_current_release_facing_files():
     assert "Secret hygiene scan passed" in result.stdout
 
 
+def test_secret_scan_passes_stepfun_realtime_contract_and_migrations():
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            "docs/api-contract/sales-trainer.md",
+            "docs/api-contract/voice-runtime.md",
+            "docs/adr/2026-06-27-newcomer-training-closed-loop.md",
+            "docs/adr/2026-07-02-roleplay-observation-sidecar.md",
+            "backend/alembic/versions/"
+            "20260702_1100_088_stepfun_default_model_stepaudio25.py",
+            "backend/alembic/versions/"
+            "20260702_1530_089_sales_trainer_roleplay_observations.py",
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Secret hygiene scan passed" in result.stdout
+
+
+def test_secret_scan_default_paths_cover_runtime_evidence_and_skip_report():
+    module = _load_script_module()
+
+    assert ".sisyphus/evidence" in module.DEFAULT_PATHS
+    files = module.iter_files(REPO_ROOT, (".sisyphus/evidence",))
+    display_names = {path.name for path in files}
+
+    assert "newcomer-ai-coach-real-provider-gate.json" in display_names
+    assert "newcomer-real-provider-gate.json" in display_names
+    assert "secret-scan-report.json" not in display_names
+
+
+def test_secret_scan_skips_generated_report_names_to_prevent_recursive_pollution(
+    tmp_path,
+):
+    module = _load_script_module()
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    (evidence_dir / "sales_qoder_secret_scan_after.json").write_text(
+        "SECRET_KEY=synthetic-report-value-1234567890\n",
+        encoding="utf-8",
+    )
+    (evidence_dir / "release-note.txt").write_text(
+        "no secrets here\n",
+        encoding="utf-8",
+    )
+
+    files = module.iter_files(tmp_path, ("evidence",))
+
+    assert [path.name for path in files] == ["release-note.txt"]
+
+
+def test_secret_scan_excludes_explicit_report_path_from_scan(tmp_path):
+    report_path = tmp_path / "custom-report.json"
+    report_path.write_text(
+        "SECRET_KEY=synthetic-report-value-1234567890\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            "--report",
+            str(report_path),
+            str(tmp_path),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert result.returncode == 0, result.stderr
+    assert report["passed"] is True
+
+
 def test_secret_scan_writes_report_for_failure(tmp_path):
     report_path = tmp_path / "secret-report.json"
     fixture_path = tmp_path / "fixture.env"
-    fixture_path.write_text("SECRET_KEY=super-realistic-secret-value-123456\n", encoding="utf-8")
+    fixture_path.write_text(
+        "SECRET_KEY=super-realistic-secret-value-123456\n",
+        encoding="utf-8",
+    )
 
     result = subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), "--report", str(report_path), str(fixture_path)],
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            "--report",
+            str(report_path),
+            str(fixture_path),
+        ],
         cwd=REPO_ROOT,
         check=False,
         text=True,
@@ -60,3 +184,6 @@ def test_secret_scan_writes_report_for_failure(tmp_path):
     assert result.returncode == 1
     assert report["passed"] is False
     assert report["findings"][0]["pattern_name"] == "jwt-secret-assignment"
+    assert "super-realistic-secret-value-123456" not in result.stderr
+    assert "super-realistic-secret-value-123456" not in json.dumps(report)
+    assert "***" in report["findings"][0]["excerpt"]

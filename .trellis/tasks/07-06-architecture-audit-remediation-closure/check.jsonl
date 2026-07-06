@@ -1,0 +1,11 @@
+{"file":".trellis/spec/backend/index.md","reason":"Quality check must verify backend remediation against project backend rules."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Validate send_json/Redis failure semantics and user-visible recovery states."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Run/fix lint, tests, and forbidden pattern checks."}
+{"file":".trellis/spec/backend/realtime-roleplay-v1.md","reason":"Verify realtime runtime reliability and observability expectations."}
+{"file":".trellis/spec/backend/business-rule-configs.md","reason":"Verify governed policy handling for Redis startup and role vocabulary."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Review RBAC role schema and async persistence ADR/migration implications."}
+{"file":".trellis/spec/frontend/index.md","reason":"Quality check includes frontend auth/route role projection changes."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Check role/capability TypeScript typing and projections."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Run/fix frontend unit tests affected by auth route changes."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Cross-layer consistency review across backend, web, scripts, docs."}
+{"file":".trellis/tasks/07-06-architecture-audit-remediation-closure/research/implementation-scope.md","reason":"Quality check risk list and known validation targets."}

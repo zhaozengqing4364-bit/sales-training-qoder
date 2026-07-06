@@ -64,4 +64,54 @@ describe("SalesTrainerScorePromptForm", () => {
             learner_rubric: {},
         });
     });
+
+    it("rejects structurally invalid output schema and learner rubric before submit", () => {
+        const onSubmit = vi.fn();
+
+        render(
+            <SalesTrainerScorePromptForm
+                mode="create"
+                initialPurpose="ppt_pitch"
+                isSubmitting={false}
+                onSubmit={onSubmit}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText("评分标准名称"), {
+            target: { value: "PPT 讲解评分" },
+        });
+        fireEvent.change(screen.getByLabelText("评分说明"), {
+            target: { value: "请根据转写评分：{transcript}" },
+        });
+        fireEvent.change(screen.getByLabelText("output_schema（JSON）"), {
+            target: {
+                value: JSON.stringify({
+                    type: "object",
+                    properties: {},
+                    required: ["total_score"],
+                }),
+            },
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "创建评分标准" }));
+
+        expect(screen.getByText("output_schema.required 字段必须先在 properties 中声明。")).toBeTruthy();
+        expect(onSubmit).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByLabelText("output_schema（JSON）"), {
+            target: { value: "{}" },
+        });
+        fireEvent.change(screen.getByLabelText("学员可见评分标准（JSON）"), {
+            target: {
+                value: JSON.stringify({
+                    criteria: [{ label: "结构", weight: 40 }],
+                }),
+            },
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "创建评分标准" }));
+
+        expect(screen.getByText("learner_rubric.criteria 每一项必须包含 key。")).toBeTruthy();
+        expect(onSubmit).not.toHaveBeenCalled();
+    });
 });

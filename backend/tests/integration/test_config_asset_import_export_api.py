@@ -139,7 +139,6 @@ async def test_should_export_and_validate_against_schema(
                     "natural_key": "presales-cio-first-visit-kb",
                 }
             ],
-            "record_export_audit": True,
         },
     )
     assert response.status_code == 200
@@ -153,6 +152,46 @@ async def test_should_export_and_validate_against_schema(
     )
     assert not errors
     assert bundle["export_meta"]["export_audit_recorded"] is True
+    logs = (
+        await db_session.execute(
+            select(SystemLog).where(SystemLog.action == "config_asset_export")
+        )
+    ).scalars().all()
+    assert len(logs) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_should_ignore_false_record_export_audit_flag_and_still_audit_export(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    admin_headers: dict[str, str],
+) -> None:
+    await _seed_export_source(db_session)
+    response = await async_client.post(
+        "/api/v1/admin/export",
+        headers=admin_headers,
+        json={
+            "asset_refs": [
+                {
+                    "asset_type": "knowledge_base",
+                    "natural_key": "presales-cio-first-visit-kb",
+                }
+            ],
+            "record_export_audit": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["export_meta"]["export_audit_recorded"] is True
+    logs = (
+        await db_session.execute(
+            select(SystemLog).where(SystemLog.action == "config_asset_export")
+        )
+    ).scalars().all()
+    assert len(logs) == 1
 
 
 @pytest.mark.integration

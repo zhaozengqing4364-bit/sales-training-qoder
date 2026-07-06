@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.db.models import User
+from common.db.models import PromptTemplate, User
 from curriculum_practice.models import (
     LearningChapter,
     LearningContent,
@@ -17,7 +17,12 @@ from curriculum_practice.models import (
 from curriculum_practice.services.learning_progress_service import (
     LearningProgressService,
 )
-from sales_trainer.models import SalesTrainerAssetRevision, SalesTrainerQuizAttempt
+from prompt_templates.models import PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
+from sales_trainer.models import (
+    SalesTrainerAssetRevision,
+    SalesTrainerQuizAttempt,
+    SalesTrainerUnit,
+)
 from sales_trainer.schemas import (
     ExamPaperCreate,
     ExamPaperQuestionBinding,
@@ -124,6 +129,43 @@ def _typed_question(
         scoring_dimensions=["business_skills"],
         status="published",
         usage_scope="sales_trainer",
+    )
+
+
+def _ai_coach_config() -> dict[str, object]:
+    return {
+        "enabled": True,
+        "coach_mode": "mixed_drill",
+        "allowed_interaction_types": ["single_choice", "multiple_choice"],
+        "prompt_template_id": "11111111-1111-1111-1111-111111111111",
+        "prompt_revision_id": None,
+        "prompt_contract_hash": None,
+        "scoring_prompt_template_id": None,
+        "scoring_prompt_revision_id": None,
+        "scoring_contract_hash": None,
+        "min_turns": 3,
+        "max_turns": 10,
+        "mastery_threshold": 90,
+        "output_schema_version": "ai_coach_interaction_v1",
+        "generation_model": None,
+        "scoring_model": None,
+        "retry_policy": {"max_retries": 2, "retry_backoff": 1.0},
+        "failure_behavior": "skip_turn",
+    }
+
+
+def _ai_coach_prompt_template() -> PromptTemplate:
+    return PromptTemplate(
+        id="11111111-1111-1111-1111-111111111111",
+        name="商务技巧 AI 教练对话生成",
+        prompt_type="stage",
+        business_purpose=PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION,
+        category="sales_trainer_ai_coach",
+        template="请根据 {{ module_key }} 和 {{ coach_mode }} 生成教练回复。",
+        variables=["module_key", "coach_mode"],
+        is_active=True,
+        is_default=False,
+        is_system=False,
     )
 
 
@@ -295,7 +337,17 @@ async def test_should_require_article_completion_before_article_exam_attempt(
         created_by=str(admin.user_id),
         updated_by=str(admin.user_id),
     )
-    test_db.add_all([admin, learner, category, question, content, chapter])
+    test_db.add_all(
+        [
+            admin,
+            learner,
+            category,
+            question,
+            content,
+            chapter,
+            _ai_coach_prompt_template(),
+        ]
+    )
     await test_db.commit()
 
     service = ExamPaperService(test_db)
@@ -332,6 +384,7 @@ async def test_should_require_article_completion_before_article_exam_attempt(
                     learning_content_id=content.learning_content_id,
                     exam_paper_id=published.paper_id,
                     completion_rule="passed",
+                    ai_coach=_ai_coach_config(),
                 )
             ],
         ),
@@ -360,6 +413,94 @@ async def test_should_require_article_completion_before_article_exam_attempt(
 
     attempt = await service.submit_paper_attempt(attempt_payload, actor=learner)
     serialized = await service.serialize_attempt(attempt)
+    assert serialized["status"] == "scored"
+    assert serialized["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_should_ignore_legacy_unit_path_for_article_exam_prerequisite(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    category = QuestionCategory(
+        category_id="legacy-business-paper-reading-gate-category",
+        name="旧路径商务技巧阅读门禁",
+        order_index=1,
+        usage_scope="sales_trainer",
+    )
+    question = _question(
+        "legacy-business-read-gate-q1",
+        category_id=category.category_id,
+        title="旧路径客户拜访阅读门禁",
+    )
+    content = LearningContent(
+        learning_content_id="legacy-business-reading-gate-content",
+        title="旧路径见客户前商务礼仪",
+        summary="旧 unit.config 中的 path 只能作为迁移诊断，不得驱动 learner 执行。",
+        owner="新人训练路径",
+        source="unit_test",
+        status="published",
+        created_by=str(admin.user_id),
+        updated_by=str(admin.user_id),
+    )
+    chapter = LearningChapter(
+        chapter_id="legacy-business-reading-gate-chapter-1",
+        learning_content_id=content.learning_content_id,
+        title="旧路径拜访前准备",
+        content="这条阅读进度不能由旧 unit.config 强制要求。",
+        order_index=1,
+        created_by=str(admin.user_id),
+        updated_by=str(admin.user_id),
+    )
+    test_db.add_all([admin, learner, category, question, content, chapter])
+    await test_db.commit()
+
+    service = ExamPaperService(test_db)
+    paper = await service.create_paper(
+        ExamPaperCreate(
+            paper_key="legacy-business-reading-gate-paper",
+            title="旧路径商务技巧阅读门禁考卷",
+            module_key="business_skills",
+            pass_threshold=10,
+            questions=[
+                ExamPaperQuestionBinding(
+                    question_id=question.question_id,
+                    order_index=1,
+                    points=10,
+                )
+            ],
+        ),
+        actor=admin,
+    )
+    published = await service.publish_paper(paper.paper_id, actor=admin)
+    unit = await test_db.get(SalesTrainerUnit, published.unit_id)
+    assert unit is not None
+    unit.config = {
+        "path": {
+            "enabled": True,
+            "path_key": "newcomer_training_path_v1",
+            "path_title": "旧新人训练路径",
+            "module_key": "business_skills",
+            "module_type": "article_exam",
+            "order_index": 1,
+            "learning_content_id": content.learning_content_id,
+            "exam_paper_id": published.paper_id,
+        }
+    }
+    await test_db.commit()
+
+    attempt = await service.submit_paper_attempt(
+        PaperAttemptCreate(
+            paper_id=published.paper_id,
+            answers=[
+                QuizAnswerSubmit(question_id=question.question_id, answer_payload="A")
+            ],
+        ),
+        actor=learner,
+    )
+    serialized = await service.serialize_attempt(attempt)
+
     assert serialized["status"] == "scored"
     assert serialized["passed"] is True
 

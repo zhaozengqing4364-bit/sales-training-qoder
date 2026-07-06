@@ -15,18 +15,28 @@ from common.monitoring.logger import get_logger
 logger = get_logger(__name__)
 
 # Try to import python-pptx
+PptxPresentation: Any | None
 try:
-    from pptx import Presentation as PptxPresentation  # type: ignore[import-not-found]
+    from pptx import Presentation as _PptxPresentation  # type: ignore[import-not-found]
 
+    PptxPresentation = _PptxPresentation
     PPTX_AVAILABLE = True
 except ImportError:
     PPTX_AVAILABLE = False
     PptxPresentation = None
     logger.warning("python-pptx not installed. PPT parsing will be limited.")
 
+Image: Any | None
+ImageDraw: Any | None
+ImageFont: Any | None
 try:
-    from PIL import Image, ImageDraw, ImageFont  # type: ignore[import-not-found]
+    from PIL import Image as _Image  # type: ignore[import-not-found]
+    from PIL import ImageDraw as _ImageDraw
+    from PIL import ImageFont as _ImageFont
 
+    Image = _Image
+    ImageDraw = _ImageDraw
+    ImageFont = _ImageFont
     PILLOW_AVAILABLE = True
 except ImportError:
     PILLOW_AVAILABLE = False
@@ -171,6 +181,9 @@ class PPTParserService:
 
         image = Image.new("RGB", (1280, 720), "#f8fafc")
         draw = ImageDraw.Draw(image)
+        title_font: Any
+        body_font: Any
+        footer_font: Any
 
         try:
             title_font = ImageFont.truetype("Arial.ttf", 40)

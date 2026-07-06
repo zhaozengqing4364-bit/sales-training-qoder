@@ -802,6 +802,71 @@ class SalesTrainerAiCoachTurn(Base):
     )
 
 
+class SalesTrainerRoleplayObservation(Base):
+    __tablename__ = "sales_trainer_roleplay_observations"
+
+    observation_id = Column(String(36), primary_key=True, default=_uuid)
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_record_id = Column(String(36), nullable=False, index=True)
+    source = Column(String(30), nullable=False, index=True)
+    turn_index = Column(Integer, nullable=False, default=0)
+    evaluator_status = Column(String(20), nullable=False, default="completed", index=True)
+    dimensions_json = Column("dimensions", JSON, nullable=False, default=list)
+    signals_json = Column("signals", JSON, nullable=False, default=list)
+    error_json = Column("error", JSON, nullable=True)
+    payload_hash = Column(String(128), nullable=False)
+    trace_id = Column(String(100), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "source IN ('heuristic', 'llm_evaluator')",
+            name="ck_sales_trainer_roleplay_observation_source",
+        ),
+        CheckConstraint(
+            "evaluator_status IN ('pending', 'completed', 'failed', 'ignored')",
+            name="ck_sales_trainer_roleplay_observation_status",
+        ),
+        CheckConstraint(
+            "turn_index >= 0",
+            name="ck_sales_trainer_roleplay_observation_turn_index",
+        ),
+        UniqueConstraint(
+            "source_record_id",
+            "source",
+            "turn_index",
+            "payload_hash",
+            name="uq_sales_trainer_roleplay_observation_dedupe",
+        ),
+        Index(
+            "idx_sales_trainer_roleplay_observation_session_turn",
+            "session_id",
+            "turn_index",
+            "created_at",
+        ),
+        Index(
+            "idx_sales_trainer_roleplay_observation_session_source_status",
+            "session_id",
+            "source",
+            "evaluator_status",
+            "created_at",
+        ),
+    )
+
+
 class SalesTrainerOperationLog(Base):
     __tablename__ = "sales_trainer_operation_logs"
 

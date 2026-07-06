@@ -15,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from common.auth.roles import is_platform_admin_role
 from common.db.models import PracticeSession, SessionStatus, User
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
@@ -25,7 +26,7 @@ PROJECTION_SCORE_BASIS = "session_evidence_projection_evaluable_only"
 
 
 def _is_admin_user(user: User) -> bool:
-    return str(getattr(user, "role", "user")).lower() == "admin"
+    return is_platform_admin_role(getattr(user, "role", None))
 
 
 def _can_read_session(session: PracticeSession, user: User) -> bool:

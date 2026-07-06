@@ -14,6 +14,7 @@ from sales_trainer.models import (
     SalesTrainerBusinessEtiquetteQuestionDraft,
     SalesTrainerBusinessEtiquetteQuizAttempt,
     SalesTrainerOperationLog,
+    SalesTrainerUnit,
 )
 from sales_trainer.schemas import (
     BusinessEtiquetteReleasePublishRequest,
@@ -35,6 +36,7 @@ from sales_trainer.services.business_etiquette_import_service import (
 )
 from sales_trainer.services.business_etiquette_release_service import (
     BusinessEtiquetteReleaseService,
+    BusinessEtiquetteReleaseServiceError,
 )
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
@@ -55,7 +57,21 @@ def _user(role: str = "user", *, name: str | None = None) -> User:
     )
 
 
-async def _seed_path(test_db: AsyncSession, *, admin: User) -> None:
+async def _seed_path(
+    test_db: AsyncSession,
+    *,
+    admin: User,
+    learner_level_required: list[str] | None = None,
+) -> None:
+    unit = SalesTrainerUnit(
+        unit_id=f"be-release-{uuid.uuid4().hex[:8]}",
+        name="商务礼仪考试",
+        unit_type="quiz",
+        status="published",
+        config={},
+    )
+    test_db.add(unit)
+    await test_db.flush()
     payload = NewcomerPathConfigPayload(
         path_key=NEWCOMER_PATH_LOGICAL_ID,
         title="新人训练路径",
@@ -66,6 +82,8 @@ async def _seed_path(test_db: AsyncSession, *, admin: User) -> None:
                 enabled=True,
                 order_index=1,
                 title="商务礼仪",
+                target_unit_id=unit.unit_id,
+                learner_level_required=learner_level_required or [],
                 learning_units=[
                     BusinessEtiquetteTrainingUnitConfig(
                         unit_key="trust_foundation",
@@ -401,6 +419,7 @@ async def test_should_assign_retraining_by_creating_new_sessions(
     learner = _user("user")
     test_db.add_all([admin, learner])
     await test_db.commit()
+    await _seed_path(test_db, admin=admin)
     fake_chat = _FakeChatService()
 
     response = await BusinessEtiquetteReleaseService(
@@ -426,3 +445,67 @@ async def test_should_assign_retraining_by_creating_new_sessions(
     log = log_result.scalar_one()
     assert log.request_id == "trace-retraining"
     assert log.metadata_json["assigned_user_ids"] == [str(learner.user_id)]
+
+
+@pytest.mark.asyncio
+async def test_should_reject_retraining_for_inactive_or_non_learner_targets(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    inactive = _user("user")
+    inactive.is_active = False
+    target_admin = _user("admin")
+    test_db.add_all([admin, inactive, target_admin])
+    await test_db.commit()
+    await _seed_path(test_db, admin=admin)
+    fake_chat = _FakeChatService()
+    service = BusinessEtiquetteReleaseService(
+        test_db,
+        chat_service=fake_chat,  # type: ignore[arg-type]
+    )
+
+    for target in (inactive, target_admin):
+        with pytest.raises(BusinessEtiquetteReleaseServiceError) as exc_info:
+            await service.assign_retraining(
+                BusinessEtiquetteRetrainingAssignmentRequest(
+                    user_ids=[str(target.user_id)],
+                    reason="非法目标",
+                ),
+                actor=admin,
+                trace_id="trace-invalid-target",
+            )
+        assert getattr(exc_info.value, "code") == (
+            "[BUSINESS_ETIQUETTE_RETRAINING_TARGET_INVALID]"
+        )
+
+    assert fake_chat.calls == []
+
+
+@pytest.mark.asyncio
+async def test_should_reject_retraining_when_target_cannot_access_module(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    test_db.add_all([admin, learner])
+    await test_db.commit()
+    await _seed_path(test_db, admin=admin, learner_level_required=["ready"])
+    fake_chat = _FakeChatService()
+
+    with pytest.raises(BusinessEtiquetteReleaseServiceError) as exc_info:
+        await BusinessEtiquetteReleaseService(
+            test_db,
+            chat_service=fake_chat,  # type: ignore[arg-type]
+        ).assign_retraining(
+            BusinessEtiquetteRetrainingAssignmentRequest(
+                user_ids=[str(learner.user_id)],
+                reason="锁定模块不得重训",
+            ),
+            actor=admin,
+            trace_id="trace-locked-target",
+        )
+
+    assert getattr(exc_info.value, "code") == (
+        "[BUSINESS_ETIQUETTE_RETRAINING_TARGET_NOT_ALLOWED]"
+    )
+    assert fake_chat.calls == []

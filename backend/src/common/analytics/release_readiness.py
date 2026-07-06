@@ -7,7 +7,7 @@ import json
 import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 CANONICAL_OPENAPI_CONTRACT = Path(
     "specs/001-ai-practice-system/contracts/openapi.yaml"
@@ -65,6 +65,12 @@ def _is_wide_open_cors_regex(value: str) -> bool:
     return False
 
 
+def is_unsafe_production_secret(value: str | None) -> bool:
+    """Return True when a production signing secret is absent, weak, or default."""
+    secret = (value or "").strip()
+    return secret.lower() in DEFAULT_SECRET_KEYS or len(secret) < 32
+
+
 def validate_production_config(env: dict[str, str] | None = None) -> list[ReleaseReadinessFinding]:
     """Validate production-only hardening requirements from an explicit env map."""
 
@@ -75,6 +81,7 @@ def validate_production_config(env: dict[str, str] | None = None) -> list[Releas
 
     findings: list[ReleaseReadinessFinding] = []
     secret_key = env_map.get("SECRET_KEY", "").strip()
+    jwt_secret = env_map.get("JWT_SECRET", "").strip()
     cors_origins = [
         item.strip() for item in env_map.get("CORS_ORIGINS", "").split(",") if item.strip()
     ]
@@ -89,11 +96,18 @@ def validate_production_config(env: dict[str, str] | None = None) -> list[Releas
                 message="Production must reject DEV_LOGIN_ENABLED/AUTH_ENABLE_DEV_LOGIN.",
             )
         )
-    if secret_key.lower() in DEFAULT_SECRET_KEYS or len(secret_key) < 32:
+    if is_unsafe_production_secret(secret_key):
         findings.append(
             ReleaseReadinessFinding(
                 code="PROD_SECRET_KEY_UNSAFE",
                 message="Production SECRET_KEY must be explicit, non-default, and at least 32 characters.",
+            )
+        )
+    if is_unsafe_production_secret(jwt_secret):
+        findings.append(
+            ReleaseReadinessFinding(
+                code="PROD_JWT_SECRET_UNSAFE",
+                message="Production JWT_SECRET must be explicit, non-default, and at least 32 characters.",
             )
         )
     if _truthy(env_map.get("DEBUG")):
@@ -237,7 +251,7 @@ def verify_phase4_e2e_evidence(repo_root: Path) -> tuple[list[ReleaseReadinessFi
 def _normalize_openapi(spec: dict[str, Any]) -> dict[str, Any]:
     """Normalize generated metadata only; paths/components remain strict parity."""
 
-    normalized = json.loads(json.dumps(spec, sort_keys=True))
+    normalized = cast(dict[str, Any], json.loads(json.dumps(spec, sort_keys=True)))
     normalized.pop("servers", None)
     return normalized
 

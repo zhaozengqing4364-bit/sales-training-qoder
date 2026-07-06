@@ -102,7 +102,10 @@ class TranscriptionService:
         result = await ParaformerFileASRProvider().transcribe_url(file_url)
         if not result.is_success or result.value is None:
             raise RuntimeError(result.fallback or "[TRANSCRIPTION_FAILED]")
-        raw_payload = dict(result.value.get("raw_payload") or {})
+        raw_payload_value = result.value.get("raw_payload")
+        raw_payload = (
+            dict(raw_payload_value) if isinstance(raw_payload_value, dict) else {}
+        )
         if remote_storage_key:
             raw_payload["remote_storage_key"] = remote_storage_key
         return TranscriptionResult(
@@ -164,13 +167,17 @@ def _generate_remote_audio_url(storage_key: str) -> str:
     backend = _resolve_remote_storage_backend(storage_key)
     try:
         if backend == "cos":
-            return get_cos_signing_service().generate_get_url(
+            return str(
+                get_cos_signing_service().generate_get_url(
+                    object_key,
+                    expires=_resolve_remote_download_url_expires_seconds(),
+                )
+            )
+        return str(
+            get_oss_signing_service().generate_get_url(
                 object_key,
                 expires=_resolve_remote_download_url_expires_seconds(),
             )
-        return get_oss_signing_service().generate_get_url(
-            object_key,
-            expires=_resolve_remote_download_url_expires_seconds(),
         )
     except (CosConfigError, OssConfigError) as exc:
         raise RuntimeError("[OBJECT_STORAGE_NOT_CONFIGURED]") from exc

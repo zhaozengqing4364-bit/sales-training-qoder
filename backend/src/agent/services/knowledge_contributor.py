@@ -9,12 +9,17 @@ from common.knowledge.contributors import register_knowledge_reference_checker
 AGENT_KNOWLEDGE_REFERENCE_CHECKER = "agent.knowledge_reference_checker"
 
 
-def _orm_field(row: object, name: str):
+def _orm_field(row: object, name: str) -> object:
     return getattr(row, name)
 
 
 def _orm_str(row: object, name: str) -> str:
     return str(_orm_field(row, name))
+
+
+def _orm_str_list(row: object, name: str) -> list[str]:
+    value = _orm_field(row, name)
+    return list(value) if isinstance(value, list) else []
 
 
 async def check_agent_knowledge_references(
@@ -26,8 +31,7 @@ async def check_agent_knowledge_references(
     referencing_agents = [
         agent
         for agent in agents
-        if _orm_field(agent, "default_knowledge_base_ids")
-        and kb_id in _orm_field(agent, "default_knowledge_base_ids")
+        if kb_id in _orm_str_list(agent, "default_knowledge_base_ids")
     ]
     if referencing_agents:
         names = ", ".join(_orm_str(agent, "name") for agent in referencing_agents[:3])
@@ -38,8 +42,7 @@ async def check_agent_knowledge_references(
     referencing_personas = [
         persona
         for persona in personas
-        if _orm_field(persona, "knowledge_base_ids")
-        and kb_id in _orm_field(persona, "knowledge_base_ids")
+        if kb_id in _orm_str_list(persona, "knowledge_base_ids")
     ]
     if referencing_personas:
         names = ", ".join(

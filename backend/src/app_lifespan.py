@@ -22,20 +22,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Starting AI Practice System backend")
     initialize_otel(app)
 
+    from common.analytics.release_readiness import is_unsafe_production_secret
     from common.auth.service import JWT_SECRET
     from common.config import settings
 
     env = settings.ENVIRONMENT
-    if env != "development" and (not settings.SECRET_KEY or settings.SECRET_KEY == ""):
+    if env != "development" and is_unsafe_production_secret(settings.SECRET_KEY):
         raise RuntimeError(
-            "SECRET_KEY must be set in production via environment variable"
+            "SECRET_KEY must be explicit, non-default, and at least 32 characters in production"
         )
-    if (
-        env != "development"
-        and JWT_SECRET == "your-super-secret-key-change-in-production-min-32-chars"
-    ):
+    if env != "development" and is_unsafe_production_secret(JWT_SECRET):
         raise RuntimeError(
-            "JWT_SECRET must be set in production via environment variable"
+            "JWT_SECRET must be explicit, non-default, and at least 32 characters in production"
         )
 
     logger.info(
@@ -133,7 +131,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     await init_session_manager()
-    await init_session_state_service()
+    session_state_service = await init_session_state_service()
+    app.state.session_state_service_health = session_state_service.get_health()
+    if not session_state_service.snapshot_enabled:
+        logger.warning(
+            "Session state snapshots are not enabled for this process",
+            health=app.state.session_state_service_health,
+        )
     await init_audio_archival_scheduler(
         enabled=settings.AUDIO_ARCHIVAL_SCHEDULER_ENABLED,
         interval_seconds=settings.AUDIO_ARCHIVAL_INTERVAL_SECONDS,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -18,6 +19,7 @@ from sales_trainer.ai_coach_chat_schemas import (
     AiCoachChatResponseInternalV1,
     AiCoachChatSessionCreate,
     AiCoachChatSessionPublicV1,
+    AiCoachChatStreamStatusEventV1,
     AiCoachChatUiEventInternalV1,
     AiCoachExplanationCardPayloadV1,
     AiCoachQuizCardPayloadInternalV1,
@@ -106,6 +108,16 @@ class _FakeDb:
 
     async def refresh(self, _instance: object) -> None:
         return None
+
+
+def _sse_payload(chunk: str) -> dict[str, object]:
+    assert chunk.endswith("\n\n")
+    event_line, data_line = chunk.rstrip("\n").split("\n")
+    assert event_line.startswith("event: ")
+    assert data_line.startswith("data: ")
+    payload = json.loads(data_line.removeprefix("data: "))
+    assert payload["type"] == event_line.removeprefix("event: ")
+    return payload
 
 
 def _choice_interaction(
@@ -645,10 +657,33 @@ def test_next_action_generation_rejects_multiple_quiz_cards_for_chat_first_actio
     assert exc_info.value.code == "[AI_COACH_NEXT_ACTION_UI_EVENT_INVALID]"
 
 
-def test_next_action_generation_allows_chat_only_continue_drill() -> None:
+def test_next_action_generation_rejects_chat_only_continue_drill() -> None:
     response = AiCoachChatResponseInternalV1(
         assistant_text="你先把客户第一次来访的准备动作说一遍，我再决定是否给你一张练习卡。",
         ui_events=[],
+    )
+
+    with pytest.raises(AiCoachChatGenerationError) as exc_info:
+        AiCoachChatNextActionGenerator._validate_response_for_action(
+            response,
+            "continue_drill",
+        )
+
+    assert exc_info.value.code == "[AI_COACH_NEXT_ACTION_UI_EVENT_INVALID]"
+
+
+def test_next_action_generation_requires_quiz_card_for_continue_drill() -> None:
+    response = AiCoachChatResponseInternalV1(
+        assistant_text="我们直接做一道商务礼仪判断题。",
+        ui_events=[
+            AiCoachChatUiEventInternalV1(
+                type="quiz_card",
+                payload=AiCoachQuizCardPayloadInternalV1(
+                    interaction=_choice_interaction("客户首次来访前应该先确认什么？"),
+                    explanation="先确认到访安排，避免接待失误。",
+                ),
+            )
+        ],
     )
 
     AiCoachChatNextActionGenerator._validate_response_for_action(
@@ -776,7 +811,7 @@ def test_generate_chat_response_retries_when_model_output_breaks_contract(
         extra_config={"temperature": 0.2},
     )
 
-    def fake_resolve_model(model_name: str | None) -> object | None:
+    async def fake_resolve_model(_db: object, model_name: str | None) -> object | None:
         assert model_name == "coach-generation-model"
         return model_config
 
@@ -793,12 +828,12 @@ def test_generate_chat_response_retries_when_model_output_breaks_contract(
     monkeypatch.setattr(chat_generation_module, "LLMService", FakeLLMService)
     monkeypatch.setattr(
         chat_generation_prompt_module,
-        "resolve_ai_coach_llm_model_config",
+        "resolve_ai_coach_llm_model_config_from_db",
         fake_resolve_model,
     )
     monkeypatch.setattr(
         chat_generation_module,
-        "resolve_ai_coach_llm_model_config",
+        "resolve_ai_coach_llm_model_config_from_db",
         fake_resolve_model,
     )
     config = AiCoachConfig(
@@ -827,8 +862,17 @@ def test_generate_chat_response_retries_when_model_output_breaks_contract(
 
     assert parsed.assistant_text == "可以，我们先做一组商务礼仪情境卡。"
     assert len(parsed.ui_events) == 1
+    assert parsed.runtime_audit == {
+        "provider": "",
+        "model_name": "",
+        "base_url": "",
+        "base_url_configured": False,
+        "model_config_id": "model-config-1",
+        "source": "model_config",
+        "is_configured": False,
+    }
     assert session.prompt_contract_hash == "hash-chat-1"
-    assert captured_llm_configs == [model_config, model_config]
+    assert captured_llm_configs == [model_config]
     assert captured_compile_kwargs["model_config"] == {
         "provider": "openai",
         "base_url": "https://llm.example/v1",
@@ -1422,6 +1466,64 @@ def test_create_session_stores_ai_coach_config_snapshot_without_runtime_marker(
     )
 
 
+def test_create_session_rejects_missing_active_path_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_db = _FakeDb()
+
+    class FakePathConfigService:
+        def __init__(self, _db: object) -> None:
+            return None
+
+        async def get_config(self) -> dict[str, object]:
+            return {
+                "path": {"modules": []},
+                "active_revision_id": None,
+                "active_revision_no": None,
+            }
+
+    class FailingRuntime:
+        def module_ai_coach_config(self, *_args: object) -> object:
+            raise AssertionError("runtime must not receive a draft-only path")
+
+    class FakeLogs:
+        async def record(self, **_kwargs: object) -> None:
+            return None
+
+    class FakeStore:
+        async def messages(self, _session_id: str) -> list[object]:
+            return []
+
+        async def events(self, _session_id: str) -> list[object]:
+            return []
+
+    monkeypatch.setattr(
+        chat_session_creator_module,
+        "SalesTrainerPathConfigService",
+        FakePathConfigService,
+    )
+    creator = AiCoachChatSessionCreator(
+        fake_db,  # type: ignore[arg-type]
+        FailingRuntime(),  # type: ignore[arg-type]
+        FakeLogs(),  # type: ignore[arg-type]
+        FakeStore(),  # type: ignore[arg-type]
+        FakeStore(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(AiCoachChatServiceError) as exc_info:
+        asyncio.run(
+            creator.create_session_id(
+                user_id="user-1",
+                module_key="business_skills",
+                actor=None,
+            )
+        )
+
+    assert exc_info.value.code == "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]"
+    assert exc_info.value.status_code == 409
+    assert fake_db.added == []
+
+
 def test_create_session_can_resume_latest_in_progress_session() -> None:
     fake_db = _FakeDb()
     existing = SimpleNamespace(session_id="session-existing")
@@ -1766,6 +1868,15 @@ def test_send_message_adds_recovery_prompt_when_model_returns_no_events() -> Non
             return AiCoachChatResponseInternalV1(
                 assistant_text="好的，我们开始一道题目。",
                 ui_events=[],
+                runtime_audit={
+                    "provider": "openai",
+                    "model_name": "deepseek-chat",
+                    "base_url": "https://api.deepseek.com/v1",
+                    "base_url_configured": True,
+                    "model_config_id": "model-config-1",
+                    "source": "model_config",
+                    "is_configured": True,
+                },
             )
 
     class FakeEvents:
@@ -1777,9 +1888,11 @@ def test_send_message_adds_recovery_prompt_when_model_returns_no_events() -> Non
         ) -> None:
             persisted_events.extend(events)
 
+    recorded_logs: list[dict[str, object]] = []
+
     class FakeLogs:
-        async def record(self, **_kwargs: object) -> None:
-            return None
+        async def record(self, **kwargs: object) -> None:
+            recorded_logs.append(dict(kwargs))
 
     async def fake_public_session(session_id: str, _user_id: str) -> object:
         return SimpleNamespace(session_id=session_id)
@@ -1810,6 +1923,23 @@ def test_send_message_adds_recovery_prompt_when_model_returns_no_events() -> Non
         getattr(item, "content", "") == "好的，我们开始一道题目。"
         for item in fake_db.added
     )
+    message_log = next(
+        item
+        for item in recorded_logs
+        if item["action"] == "ai_coach_chat_message_sent_v1"
+    )
+    metadata = message_log["metadata"]
+    assert isinstance(metadata, dict)
+    assert metadata["llm_runtime"] == {
+        "provider": "openai",
+        "model_name": "deepseek-chat",
+        "base_url": "https://api.deepseek.com/v1",
+        "base_url_configured": True,
+        "model_config_id": "model-config-1",
+        "source": "model_config",
+        "is_configured": True,
+    }
+    assert "api_key" not in str(metadata)
 
 
 def test_stream_submit_answer_manual_pace_skips_next_generation_statuses() -> None:
@@ -2123,6 +2253,168 @@ def test_stream_submit_answer_timeout_records_recoverable_fallback_snapshot() ->
     assert calls == ["score", "advance", "rollback", "timeout_fallback"]
 
 
+def test_guarded_converts_service_error_to_sse_error_event() -> None:
+    async def events() -> AsyncIterator[AiCoachChatStreamStatusEventV1]:
+        yield AiCoachChatStreamStatusEventV1(
+            phase="resolving_session",
+            message="正在检查是否有可继续的训练局。",
+        )
+        raise AiCoachChatServiceError(
+            "[AI_COACH_CHAT_DISABLED]",
+            "AI 教练未启用。",
+            409,
+        )
+
+    async def collect_events() -> list[dict[str, object]]:
+        service = AiCoachChatStreamService(  # type: ignore[arg-type]
+            _FakeDb(),
+            service=SimpleNamespace(),
+        )
+        return [_sse_payload(chunk) async for chunk in service._guarded(events())]  # noqa: SLF001
+
+    payloads = asyncio.run(collect_events())
+
+    assert [payload["type"] for payload in payloads] == ["status", "error"]
+    assert payloads[-1] == {
+        "type": "error",
+        "phase": "failed",
+        "error_code": "[AI_COACH_CHAT_DISABLED]",
+        "message": "AI 教练未启用。",
+        "recoverable": True,
+    }
+
+
+def test_guarded_converts_timeout_to_sse_error_event() -> None:
+    async def events() -> AsyncIterator[AiCoachChatStreamStatusEventV1]:
+        yield AiCoachChatStreamStatusEventV1(
+            phase="generating_first_card",
+            message="正在生成本轮训练计划和第一张题卡。",
+            session_id="session-1",
+        )
+        raise TimeoutError
+
+    async def collect_events() -> list[dict[str, object]]:
+        service = AiCoachChatStreamService(  # type: ignore[arg-type]
+            _FakeDb(),
+            service=SimpleNamespace(),
+        )
+        return [_sse_payload(chunk) async for chunk in service._guarded(events())]  # noqa: SLF001
+
+    payloads = asyncio.run(collect_events())
+
+    assert [payload["type"] for payload in payloads] == ["status", "error"]
+    assert payloads[-1]["error_code"] == "[AI_COACH_STREAM_TIMEOUT]"
+    assert payloads[-1]["message"] == "AI 教练生成超时，已保留当前训练局。"
+    assert payloads[-1]["recoverable"] is True
+
+
+def test_stream_send_message_streaming_disabled_emits_sse_error_event() -> None:
+    class FakeRuntime:
+        def config_from_session(self, _session: object) -> object:
+            return SimpleNamespace(streaming_enabled=False)
+
+    class FakeService:
+        _runtime = FakeRuntime()
+
+        async def _require_owned_session(self, session_id: str, user_id: str) -> object:
+            assert session_id == "session-1"
+            assert user_id == "user-1"
+            return SimpleNamespace(config_snapshot={})
+
+    async def collect_events() -> list[dict[str, object]]:
+        service = AiCoachChatStreamService(  # type: ignore[arg-type]
+            _FakeDb(),
+            service=FakeService(),
+        )
+        return [
+            _sse_payload(chunk)
+            async for chunk in service.stream_send_message(
+                session_id="session-1",
+                payload=AiCoachChatMessageCreate.model_validate({"content": "继续训练"}),
+                actor=SimpleNamespace(user_id="user-1"),  # type: ignore[arg-type]
+            )
+        ]
+
+    payloads = asyncio.run(collect_events())
+
+    assert payloads == [
+        {
+            "type": "error",
+            "phase": "failed",
+            "error_code": "[AI_COACH_STREAMING_DISABLED]",
+            "message": "该模块未启用流式训练体验，请使用普通训练入口。",
+            "recoverable": True,
+        }
+    ]
+
+
+def test_stream_create_session_streaming_disabled_emits_sse_error_event() -> None:
+    session = AiCoachChatSessionPublicV1.model_validate(
+        {
+            "session_id": "session-1",
+            "module_key": "business_skills",
+            "status": "in_progress",
+            "created_at": "2026-06-12T00:00:00Z",
+            "updated_at": "2026-06-12T00:00:01Z",
+            "messages": [],
+            "ui_events": [],
+            "coach_state": None,
+        }
+    )
+
+    class FakeRuntime:
+        def config_from_session(self, _session: object) -> object:
+            return SimpleNamespace(streaming_enabled=False)
+
+    class FakeService:
+        _runtime = FakeRuntime()
+
+        async def create_session_shell(
+            self,
+            *,
+            user_id: str,
+            module_key: str,
+            resume_strategy: str | None,
+            actor: object,
+        ) -> AiCoachChatSessionPublicV1:
+            assert user_id == "user-1"
+            assert module_key == "business_skills"
+            assert resume_strategy is None
+            assert actor is not None
+            return session
+
+        async def _require_owned_session(self, session_id: str, user_id: str) -> object:
+            assert session_id == "session-1"
+            assert user_id == "user-1"
+            return SimpleNamespace(config_snapshot={})
+
+    async def collect_events() -> list[dict[str, object]]:
+        service = AiCoachChatStreamService(  # type: ignore[arg-type]
+            _FakeDb(),
+            service=FakeService(),
+        )
+        return [
+            _sse_payload(chunk)
+            async for chunk in service.stream_create_session(
+                payload=AiCoachChatSessionCreate.model_validate(
+                    {"module_key": "business_skills"}
+                ),
+                actor=SimpleNamespace(user_id="user-1"),  # type: ignore[arg-type]
+            )
+        ]
+
+    payloads = asyncio.run(collect_events())
+
+    assert [payload["type"] for payload in payloads] == [
+        "status",
+        "session_snapshot",
+        "error",
+    ]
+    assert payloads[-1]["error_code"] == "[AI_COACH_STREAMING_DISABLED]"
+    assert payloads[-1]["message"] == "该模块未启用流式训练体验，请使用普通训练入口。"
+    assert payloads[-1]["recoverable"] is True
+
+
 def test_summarize_command_uses_deterministic_summary_without_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2321,11 +2613,22 @@ def test_auto_advance_after_answer_appends_next_quiz_card(
                         ),
                     )
                 ],
+                runtime_audit={
+                    "provider": "openai",
+                    "model_name": "deepseek-chat",
+                    "base_url": "https://api.deepseek.com/v1",
+                    "base_url_configured": True,
+                    "model_config_id": "model-config-1",
+                    "source": "model_config",
+                    "is_configured": True,
+                },
             )
 
+    recorded_logs: list[dict[str, object]] = []
+
     class FakeLogs:
-        async def record(self, **_kwargs: object) -> None:
-            return None
+        async def record(self, **kwargs: object) -> None:
+            recorded_logs.append(dict(kwargs))
 
     progress_calls: list[str] = []
 
@@ -2399,6 +2702,23 @@ def test_auto_advance_after_answer_appends_next_quiz_card(
     assert session.coach_state["answered_card_count"] == 1
     assert progress_calls == ["updated"]
     assert fake_db.commit_count >= 2
+    generated_log = next(
+        item
+        for item in recorded_logs
+        if item["action"] == "ai_coach_chat_next_action_generated_v1"
+    )
+    metadata = generated_log["metadata"]
+    assert isinstance(metadata, dict)
+    assert metadata["llm_runtime"] == {
+        "provider": "openai",
+        "model_name": "deepseek-chat",
+        "base_url": "https://api.deepseek.com/v1",
+        "base_url_configured": True,
+        "model_config_id": "model-config-1",
+        "source": "model_config",
+        "is_configured": True,
+    }
+    assert "api_key" not in str(metadata)
 
 
 def test_auto_advance_records_failed_action_with_safe_followup(

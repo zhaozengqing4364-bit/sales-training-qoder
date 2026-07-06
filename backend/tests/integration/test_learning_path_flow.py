@@ -12,7 +12,12 @@ from common.db.models import (
     SessionStatus,
     SupervisorReview,
 )
-from curriculum_practice.models import LearningChapter, LearningContent, LearningProgress, PracticeTemplate
+from curriculum_practice.models import (
+    LearningChapter,
+    LearningContent,
+    LearningProgress,
+    PracticeTemplate,
+)
 from curriculum_practice.services.learning_path import LearningPathService
 
 

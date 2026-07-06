@@ -205,6 +205,7 @@ class ConfigBundleLifecycleService:
         reason: str | None,
     ) -> ConfigLifecycleResult:
         before = await self._active_version(bundle_key)
+        before_snapshot = self.version_snapshot(before)
         row = await BusinessRuleConfigService(self._db).disable(
             key=bundle_key,
             actor_id=actor_id,
@@ -215,7 +216,7 @@ class ConfigBundleLifecycleService:
             action="disable",
             bundle_key=bundle_key,
             actor_id=actor_id,
-            before_snapshot=self.version_snapshot(before),
+            before_snapshot=before_snapshot,
             after_snapshot=self.version_snapshot(version),
             reason=reason,
             version=version,
@@ -254,15 +255,23 @@ class ConfigBundleLifecycleService:
                 version_label=str(snapshot.get("version") or f"v{getattr(row, 'version')}"),
                 status=str(getattr(row, "status")),
                 snapshot_json=deepcopy(snapshot),
-                source_updated_at=getattr(row, "updated_at", None),
+                source_updated_at=_datetime_or_none(getattr(row, "updated_at", None)),
             )
             self._db.add(version)
         else:
-            version.version_number = int(getattr(row, "version"))
-            version.version_label = str(snapshot.get("version") or f"v{getattr(row, 'version')}")
-            version.status = str(getattr(row, "status"))
-            version.snapshot_json = deepcopy(snapshot)
-            version.source_updated_at = getattr(row, "updated_at", None)
+            setattr(version, "version_number", int(getattr(row, "version")))
+            setattr(
+                version,
+                "version_label",
+                str(snapshot.get("version") or f"v{getattr(row, 'version')}"),
+            )
+            setattr(version, "status", str(getattr(row, "status")))
+            setattr(version, "snapshot_json", deepcopy(snapshot))
+            setattr(
+                version,
+                "source_updated_at",
+                _datetime_or_none(getattr(row, "updated_at", None)),
+            )
         _ = bundle
         await self._db.flush()
         return version
@@ -398,3 +407,7 @@ class ConfigBundleLifecycleService:
         )
         self._db.add(audit)
         return audit
+
+
+def _datetime_or_none(value: object) -> datetime | None:
+    return value if isinstance(value, datetime) else None

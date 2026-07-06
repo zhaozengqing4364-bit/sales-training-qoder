@@ -14,7 +14,7 @@ class PathAudioBindingRefs:
 
 
 def audio_refs_from_unit(unit: SalesTrainerUnit) -> PathAudioBindingRefs:
-    config = unit.config or {}
+    config: dict[str, Any] = unit.config if isinstance(unit.config, dict) else {}
     if not isinstance(config, dict):
         return _empty_audio_refs()
     audio = config.get("audio")

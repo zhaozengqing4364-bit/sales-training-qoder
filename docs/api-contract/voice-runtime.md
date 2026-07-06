@@ -57,6 +57,39 @@ interface ToolPolicy {
   - 未绑定知识库 / 文档未就绪 / 检索失败 / 未命中都会触发阻断回复
 - `system_instruction_template` 已收敛到角色中心，不允许继续通过 Runtime Profile 写入。
 
+### StepFun Realtime upstream contract
+
+销售实时对练使用共享 `StepFunTransport` 连接 StepFun 上游，运行时契约如下：
+
+- URL：默认 `wss://api.stepfun.com/v1/realtime`，可通过 `STEPFUN_REALTIME_URL` 覆盖；如果使用 Step Plan 订阅凭证，应先在控制台或官方支持确认 Realtime 专用路径，再显式配置对应 `wss://api.stepfun.com/step_plan/v1/realtime` 形态的 URL。
+- 模型：作为 query 参数传递，形态为 `?model=<model_name>`；当前按本任务要求默认模型为 `stepaudio-2.5-realtime`。`StepFunTransport` 必须结构化追加或替换 `model` query，禁止用字符串拼接产生重复 `?` 或把 key 写入 URL。
+- 鉴权：只通过 WebSocket handshake header `Authorization: Bearer <STEPFUN_API_KEY>` 传递，不允许把 key 写入 URL、query、日志、trace 或前端 payload。
+- 密钥来源：`STEPFUN_API_KEY` 只允许来自环境变量/密钥管理，不属于 `VoiceRuntimeProfile`、`sales_trainer.realtime_provider.registry`、migration seed、审计日志或运行时 snapshot 字段。后台配置只能保存 `provider`、`model_name`、URL、readiness 和 masked/configured 状态；任何 API 响应和日志只能显示 `<configured>` / `<missing>` 或 hash/trace 元数据。
+- 上游 401：统一分类为 `[STEPFUN_UPSTREAM_REJECTED]`，operator-facing reason 是 `upstream_auth_rejected`，表示本地 learner auth、seed、path/start/WS 链路已经到达上游，但 StepFun 拒绝握手；处理动作是检查 `STEPFUN_API_KEY` 是否有效、是否开通 realtime 权限，以及是否授权对应 `model_name`。
+- 上游 402/403/429：同样属于真实 provider executed failure，不得降级为 local provider 通过；门禁 evidence 必须保留失败分类。
+
+### StepAudio 2.5 migration apply/rollback
+
+- Apply migration：`20260702_1100_088_stepfun_default_model_stepaudio25` 只把 `voice_runtime_profiles.model_name` 的服务端默认值切到 `stepaudio-2.5-realtime`，并仅更新 `is_default=true AND voice_mode='stepfun_realtime' AND model_name='step-audio-2.3'` 的默认 profile。它不得写入、复制或打印 `STEPFUN_API_KEY`。
+- Rollback migration：downgrade 只把同一条件下的默认 profile 从 `stepaudio-2.5-realtime` 回退到 `step-audio-2.3`，并恢复 server default；已经显式配置为其他模型的 profile 不应被覆盖。
+- Apply/rollback 前后都必须运行 `scripts/check_stepfun_realtime_prereqs.py --env-file backend/.env` 或等价环境预检；预检报告必须只包含 redacted key 状态和 `endpoint_without_secret`。
+- 如果 StepFun 控制台未授权 `stepaudio-2.5-realtime`，这是 provider readiness failure，返回 `[STEPFUN_UPSTREAM_REJECTED]` 或 registry readiness diagnostic；不得把模型自动降级为 legacy/local provider 作为成功。
+
+### StepFun Realtime roleplay observation sidecar
+
+`roleplay_observation_v1` 是 StepFun realtime 的后台复盘旁路，不是实时守门路径：
+
+- StepFun roleplay compliance 的全局运行模式固定为 `record_only`。`roleplay_observation_policy` 只能选择观测器、采样和后台评估方式，不能把当前 turn 改成阻断、重生成、修复或关闭连接模式。
+- `main_chain_effect="none"`，任何 capture sink、heuristic evaluator、可选 LLM evaluator、DB 写入或 admin 读取失败都不得改变 WebSocket 主链路状态。
+- current turn 的角色一致性检查只做 record-only 记录；不得在 learner 实时对练中弹窗、阻断、取消当前上游响应、关闭 WebSocket、同步重生成、repair/re-synthesize audio 或无限重试。
+- next-turn soft steering 只允许作为非阻断、可审计的下一轮提示建议：必须记录 `session_id`、`turn_index`、`source`、`signal_key`、建议内容摘要、`trace_id` 和是否被下一轮编译消费；生成、写库或消费失败都不得阻断当前或下一轮主链路。
+- 旧同步 `cancel_current_turn` / `regenerate_current_turn` / `repair_audio` 类动作正式退役；不得通过隐藏环境变量、未登记 feature flag 或 policy 私有字段重新开启。若未来要恢复任何阻断/中断/同步修复能力，必须新增 ADR 明确状态机、UX、错误码、审计、回滚和测试矩阵；当前 record-only 决策记录在 `docs/adr/2026-07-03-roleplay-realtime-record-only.md`。
+- observation policy 优先读取冻结的 `voice_policy_snapshot.roleplay_observation_policy`；缺失或非法时回退到 bundled default：同步 `heuristic.enabled=true`、后台 `llm.enabled=false`。
+- 若 policy 开启 `llm.enabled=true`，sink 仍先同步写 `source="heuristic"`，再后台执行 `evaluate_background()` 并写入独立 `source="llm_evaluator"` observation；LLM timeout/失败只允许写 `failed` observation / diagnostic，不得阻断 WS。
+- capture metadata 只能包含 `session_id`、`turn_index`、`source_event_type`、`response_id`、`turn_id`、`instruction_contract_hash`、安全 grounding 摘要和 `trace_id`；不得保存 thinking、secret、Authorization、Cookie、API key、JWT、LLM provider key、StepFun handshake headers 或完整上游 payload。
+- observation migration：`20260702_1530_089_sales_trainer_roleplay_observations` 只创建 append-only 观测表和索引；apply 不回填历史 turn，rollback 只删除该 sidecar 表，不得修改 `practice_sessions`、训练记录或 runtime snapshot。已写入 observation 行属于后台审计数据；非空表 downgrade 默认拒绝执行，只有在完成导出/审批并显式设置 `ALLOW_SALES_TRAINER_ROLEPLAY_OBSERVATION_DESTRUCTIVE_DOWNGRADE=1` 后才允许破坏性删除。业务回滚优先通过停止注入 sink/隐藏读取入口完成。
+- 读取入口在 `GET /api/v1/admin/sales-trainer/training-records/realtime-roleplay/{session_id}/observations`，权限和对象级范围由 sales trainer training records contract 约束。
+
 ### 接口
 
 - `GET /profiles`：获取运行时配置列表

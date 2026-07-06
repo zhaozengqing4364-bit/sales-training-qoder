@@ -1,17 +1,9 @@
 import type { SalesTrainerPath, SalesTrainerPathLevel, SalesTrainerUnit } from "@/lib/api/types";
 
-import { buildLegacyModuleViews } from "./module-path-legacy";
-
 export const NEW_SELLER_MODULES_PATH_KEY = "new_seller_modules_v1";
 export const NEWCOMER_TRAINING_PATH_KEY = "newcomer_training_path_v1";
-export const LEGACY_GOAL_PATH_KEY = "new_seller_goal_path";
-
 export const MODULE_SUGGESTED_ORDER_HINT =
     "建议顺序：PPT讲解录音 → 商务技巧。电梯演讲和实时对练暂不开放。";
-
-export function isLegacyPathEnabled(): boolean {
-    return process.env.NEXT_PUBLIC_SALES_TRAINER_LEGACY_PATH === "1";
-}
 
 export function filterPathsForHome(paths: SalesTrainerPath[]): SalesTrainerPath[] {
     const newcomerPath = paths.find((path) => path.path_key === NEWCOMER_TRAINING_PATH_KEY);
@@ -19,12 +11,8 @@ export function filterPathsForHome(paths: SalesTrainerPath[]): SalesTrainerPath[
         return [newcomerPath];
     }
     const modulePath = paths.find((path) => path.path_key === NEW_SELLER_MODULES_PATH_KEY);
-    if (modulePath && !isLegacyPathEnabled()) {
+    if (modulePath) {
         return [modulePath];
-    }
-    if (modulePath && isLegacyPathEnabled()) {
-        const legacy = paths.filter((path) => path.path_key === LEGACY_GOAL_PATH_KEY);
-        return [modulePath, ...legacy];
     }
     return paths;
 }
@@ -61,11 +49,7 @@ type EnrichedLevel = {
 };
 
 function moduleKeyFor(enriched: EnrichedLevel): string | null {
-    return enriched.level.module_key ?? enriched.unit?.config.path?.module_key ?? null;
-}
-
-function hasLevelModuleConfig(enriched: EnrichedLevel): boolean {
-    return Boolean(enriched.level.module_key);
+    return enriched.level.module_key ?? null;
 }
 
 function durationLabelFromLevel(level: SalesTrainerPathLevel): string {
@@ -82,29 +66,26 @@ function orderLabelFor(level: SalesTrainerPathLevel): string {
 }
 
 function isDisabled(enriched: EnrichedLevel, defaultValue: boolean): boolean {
-    if (hasLevelModuleConfig(enriched)) {
-        return defaultValue;
-    }
-    return defaultValue || enriched.unit?.config.path?.enabled === false;
+    return defaultValue || enriched.level.locked;
 }
 
 function disabledReasonFor(enriched: EnrichedLevel, fallback: string): string | null {
     if (!isDisabled(enriched, false)) {
         return null;
     }
-    return enriched.unit?.config.path?.disabled_reason ?? fallback;
+    return enriched.level.lock_reason ?? fallback;
 }
 
 function titleFor(enriched: EnrichedLevel, fallback: string): string {
-    return enriched.level.level_title ?? enriched.unit?.config.path?.level_title ?? fallback;
+    return enriched.level.level_title ?? enriched.unit?.name ?? fallback;
 }
 
 function descriptionFor(enriched: EnrichedLevel, fallback: string): string {
-    return enriched.level.level_description ?? enriched.unit?.config.path?.level_description ?? fallback;
+    return enriched.level.level_description ?? enriched.level.description ?? enriched.unit?.description ?? fallback;
 }
 
 function actionLabelFor(enriched: EnrichedLevel, fallback: string): string {
-    return enriched.level.primary_action_label ?? enriched.unit?.config.path?.primary_action_label ?? fallback;
+    return enriched.level.primary_action_label ?? fallback;
 }
 
 function businessSkillsHref(level: SalesTrainerPathLevel): string {
@@ -153,10 +134,6 @@ function buildPptView(enriched: EnrichedLevel): SalesTrainerModuleView {
 
 function buildBusinessSkillsView(enriched: EnrichedLevel): SalesTrainerModuleView {
     const disabled = isDisabled(enriched, false);
-    const availability = enriched.level.ai_coach_availability;
-    const coachHref = availability?.available && availability.coach_path
-        ? availability.coach_path
-        : null;
     return {
         key: "business_skills",
         title: titleFor(enriched, "商务技巧"),
@@ -166,7 +143,7 @@ function buildBusinessSkillsView(enriched: EnrichedLevel): SalesTrainerModuleVie
         pptUploadHref: null,
         learnHubHref: disabled ? null : "/sales-trainer/business-skills",
         learnHref: disabled ? null : businessSkillsHref(enriched.level),
-        coachHref: disabled ? null : coachHref,
+        coachHref: null,
         hubUnitId: enriched.level.unit_id,
         audioOptions: [],
         disabled,
@@ -182,7 +159,7 @@ function buildElevatorPitchView(enrichedLevels: EnrichedLevel[]): SalesTrainerMo
     const disabled = isDisabled(first, false);
     return {
         key: "elevator_pitch",
-        title: first.unit?.config.path?.level_title ?? first.unit?.name ?? "电梯演讲",
+        title: titleFor(first, "电梯演讲"),
         description: descriptionFor(first, "选择后台配置的时长上传 PPT 演讲录音，获取转写与评分反馈。"),
         orderLabel: orderLabelFor(first.level),
         primaryActionLabel: actionLabelFor(first, "选择演讲时长"),
@@ -203,9 +180,7 @@ function buildElevatorPitchView(enrichedLevels: EnrichedLevel[]): SalesTrainerMo
 }
 
 function buildRealtimePlaceholderView(enriched: EnrichedLevel): SalesTrainerModuleView {
-    const disabledReason = enriched.level.lock_reason
-        ?? enriched.unit?.config.path?.disabled_reason
-        ?? "暂不开放";
+    const disabledReason = enriched.level.lock_reason ?? "暂不开放";
     return {
         key: "realtime_practice",
         title: titleFor(enriched, "实时对练"),
@@ -270,8 +245,5 @@ export function buildModuleViews(
     if (hasConfiguredModules) {
         return buildConfiguredModuleViews(enrichedLevels);
     }
-    if (path.path_key === NEWCOMER_TRAINING_PATH_KEY) {
-        return [];
-    }
-    return buildLegacyModuleViews(path, unitsById);
+    return [];
 }

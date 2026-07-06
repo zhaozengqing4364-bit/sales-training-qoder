@@ -110,7 +110,8 @@ def _legacy_context(module_key: str | None) -> PathAttemptContext:
 
 
 def _legacy_unit_module_key(unit: SalesTrainerUnit) -> str | None:
-    config = path_config(unit.config or {})
+    raw_config = unit.config
+    config = path_config(raw_config) if isinstance(raw_config, dict) else None
     if config is not None and config.module_key:
         return config.module_key
     return str(unit.unit_id)

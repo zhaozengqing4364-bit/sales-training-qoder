@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Literal, cast
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,12 +34,22 @@ from curriculum_practice.services.content_asset_payloads import (
 from curriculum_practice.services.content_asset_references import (
     list_published_template_references,
 )
+from curriculum_practice.services.orm_payload_typing import set_orm_field
 from curriculum_practice.services.role_profile_asset_service import (
     RoleProfileAssetService,
 )
 from curriculum_practice.services.voice_clone import VoiceCloneResult, VoiceCloneService
 
-__all__ = ["ContentAssetAlreadyDraftError", "ContentAssetNotEditableError", "ContentAssetPublishError", "ContentAssetReferencedByTemplatesError", "ContentAssetService", "_copy_suffix", "case_item_content_hash", "role_profile_content_hash"]
+__all__ = [
+    "ContentAssetAlreadyDraftError",
+    "ContentAssetNotEditableError",
+    "ContentAssetPublishError",
+    "ContentAssetReferencedByTemplatesError",
+    "ContentAssetService",
+    "_copy_suffix",
+    "case_item_content_hash",
+    "role_profile_content_hash",
+]
 
 
 class ContentAssetService:
@@ -47,7 +57,9 @@ class ContentAssetService:
         self._db = db
         self._role_profiles = RoleProfileAssetService(db)
 
-    async def list_case_items(self, *, status: str | None = None, query: str | None = None) -> list[CaseItem]:
+    async def list_case_items(
+        self, *, status: str | None = None, query: str | None = None
+    ) -> list[CaseItem]:
         stmt = select(CaseItem)
         if status:
             stmt = stmt.where(CaseItem.status == status)
@@ -69,7 +81,9 @@ class ContentAssetService:
     async def create_case_item(
         self, payload: CaseItemCreate, *, actor_id: str | None
     ) -> CaseItem:
-        item = CaseItem(**payload.model_dump(), created_by=actor_id, updated_by=actor_id)
+        item = CaseItem(
+            **payload.model_dump(), created_by=actor_id, updated_by=actor_id
+        )
         self._db.add(item)
         await self._db.commit()
         await self._db.refresh(item)
@@ -91,7 +105,7 @@ class ContentAssetService:
             return item
         for field, value in payload.model_dump().items():
             setattr(item, field, value)
-        item.updated_by = actor_id
+        set_orm_field(item, "updated_by", actor_id)
         await self._db.commit()
         await self._db.refresh(item)
         return item
@@ -99,8 +113,8 @@ class ContentAssetService:
     async def archive_case_item(
         self, item: CaseItem, *, actor_id: str | None
     ) -> CaseItem:
-        item.status = "archived"
-        item.updated_by = actor_id
+        set_orm_field(item, "status", "archived")
+        set_orm_field(item, "updated_by", actor_id)
         await self._db.commit()
         await self._db.refresh(item)
         return item
@@ -172,13 +186,16 @@ class ContentAssetService:
                 "disclosure_policy_invalid",
                 "CaseItem allowed_disclosure_policy must contain at least one phase.",
             )
-        item.status = "published"
-        item.published_by = actor_id
-        item.published_at = datetime.now(UTC)
-        item.updated_by = actor_id
-        actor = await self._optional_actor(actor_id)
-        if actor is not None:
-            await revision_service.ensure_initial_published_revision(item, actor=actor)
+        set_orm_field(item, "status", "published")
+        set_orm_field(item, "published_by", actor_id)
+        set_orm_field(item, "published_at", datetime.now(UTC))
+        set_orm_field(item, "updated_by", actor_id)
+        initial_actor = await self._optional_actor(actor_id)
+        if initial_actor is not None:
+            await revision_service.ensure_initial_published_revision(
+                item,
+                actor=initial_actor,
+            )
         await self._db.commit()
         await self._db.refresh(item)
         return item
@@ -205,12 +222,15 @@ class ContentAssetService:
     async def unpublish_case_item(
         self, item: CaseItem, *, actor_id: str | None, acknowledge: bool = False
     ) -> CaseItem:
-        return await self._unpublish_content_asset(
-            item,
-            asset_type="case_item",
-            asset_id=str(item.case_item_id),
-            actor_id=actor_id,
-            acknowledge=acknowledge,
+        return cast(
+            CaseItem,
+            await self._unpublish_content_asset(
+                item,
+                asset_type="case_item",
+                asset_id=str(item.case_item_id),
+                actor_id=actor_id,
+                acknowledge=acknowledge,
+            ),
         )
 
     async def unpublish_role_profile(
@@ -228,7 +248,9 @@ class ContentAssetService:
         asset_type: Literal["case_item", "role_profile", "examiner_agent"],
         asset_id: str,
     ) -> list[dict[str, str]]:
-        return await list_published_template_references(self._db, asset_type=asset_type, asset_id=asset_id)
+        return await list_published_template_references(
+            self._db, asset_type=asset_type, asset_id=asset_id
+        )
 
     async def _unpublish_content_asset(
         self,
@@ -249,10 +271,10 @@ class ContentAssetService:
         )
         if references and not acknowledge:
             raise ContentAssetReferencedByTemplatesError(references)
-        item.status = "draft"
-        item.published_at = None
-        item.published_by = None
-        item.updated_by = actor_id
+        set_orm_field(item, "status", "draft")
+        set_orm_field(item, "published_at", None)
+        set_orm_field(item, "published_by", None)
+        set_orm_field(item, "updated_by", actor_id)
         await self._db.commit()
         await self._db.refresh(item)
         return item

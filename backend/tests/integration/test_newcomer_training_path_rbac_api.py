@@ -64,6 +64,18 @@ async def test_should_enforce_granular_sales_trainer_rbac(
     )
     assert training_records.status_code == 200
 
+    training_settings = await async_client.get(
+        "/api/v1/admin/sales-trainer/settings",
+        headers=_auth_headers(training_lead),
+    )
+    assert training_settings.status_code == 403
+
+    training_logs = await async_client.get(
+        "/api/v1/admin/sales-trainer/operation-logs",
+        headers=_auth_headers(training_lead),
+    )
+    assert training_logs.status_code == 403
+
     ops_settings = await async_client.get(
         "/api/v1/admin/sales-trainer/settings",
         headers=_auth_headers(ops_user),

@@ -26,6 +26,7 @@ from difflib import SequenceMatcher
 from hashlib import md5
 from typing import TYPE_CHECKING, Any, cast
 
+from chromadb.api.types import IncludeEnum
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -792,14 +793,18 @@ class KnowledgeService:
             return Result.fail("[KNOWLEDGE_DICTIONARY_ENTRY_NOT_FOUND]")
         update_data = data.model_dump(exclude_unset=True)
         if "canonical_term" in update_data and update_data["canonical_term"] is not None:
-            entry.canonical_term = str(update_data["canonical_term"]).strip()
+            self._set_orm_field(
+                entry, "canonical_term", str(update_data["canonical_term"]).strip()
+            )
         if "aliases" in update_data and update_data["aliases"] is not None:
             aliases = [
                 alias
                 for alias in data.aliases or []
                 if alias != str(entry.canonical_term)
             ]
-            entry.aliases_json = json.dumps(aliases, ensure_ascii=False)
+            self._set_orm_field(
+                entry, "aliases_json", json.dumps(aliases, ensure_ascii=False)
+            )
         for field_name in (
             "term_type",
             "status",
@@ -881,7 +886,7 @@ class KnowledgeService:
             KnowledgeDocument.knowledge_base_id == kb_id,
             KnowledgeDocument.status == DocumentStatus.READY.value,
         )
-        docs = (await self.db.execute(doc_stmt)).scalars().all()
+        docs = list((await self.db.execute(doc_stmt)).scalars().all())
         if not docs:
             return Result.ok(([], 0))
 
@@ -922,7 +927,7 @@ class KnowledgeService:
                 if duplicate and duplicate == canonical:
                     skipped += 1
                     continue
-                metadata = DictionaryExtractor.candidate_metadata(
+                candidate_metadata = DictionaryExtractor.candidate_metadata(
                     candidate,
                     provider=extractor.llm_service.provider,
                     model_name=extractor.llm_service.model_name,
@@ -935,7 +940,7 @@ class KnowledgeService:
                     term_type=candidate.term_type or "other",
                     status=KnowledgeDictionaryEntryStatus.DRAFT.value,
                     confidence=candidate.confidence,
-                    extraction_metadata=metadata,
+                    extraction_metadata=candidate_metadata,
                     notes="LLM 从知识库切片生成的词典草稿，需人工审核后发布。",
                 )
                 result = await self.create_dictionary_entry(
@@ -943,7 +948,7 @@ class KnowledgeService:
                     request,
                     source="llm_extract",
                     evidence_count=1 if candidate.evidence_snippet else 0,
-                    extraction_metadata=metadata,
+                    extraction_metadata=candidate_metadata,
                 )
                 if result.is_success and result.value is not None:
                     created.append(result.value)
@@ -2099,7 +2104,7 @@ class KnowledgeService:
                 bm25_manager.ensure_index(
                     collection_name=vector_collection,
                     get_all_chunks=lambda c=collection: c.get(
-                        include=["documents", "metadatas"]
+                        include=[IncludeEnum.documents, IncludeEnum.metadatas]
                     ),
                     get_chunk_count=lambda c=collection: c.count(),
                 )
@@ -2142,7 +2147,7 @@ class KnowledgeService:
                     # Get content from collection for the matched chunk
                     try:
                         chunk_data = collection.get(
-                            ids=[chunk_id], include=["documents"]
+                            ids=[chunk_id], include=[IncludeEnum.documents]
                         )
                         content = ""
                         if isinstance(chunk_data, dict):
@@ -2173,7 +2178,9 @@ class KnowledgeService:
                 continue
 
             try:
-                raw_chunks = collection.get(include=["documents", "metadatas"])
+                raw_chunks = collection.get(
+                    include=[IncludeEnum.documents, IncludeEnum.metadatas]
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "Keyword legacy scan failed after BM25 fallback",
@@ -2279,7 +2286,8 @@ class KnowledgeService:
         try:
             # Get all chunks for this document
             results = collection.get(
-                where={"document_id": doc_id}, include=["documents", "metadatas"]
+                where={"document_id": doc_id},
+                include=[IncludeEnum.documents, IncludeEnum.metadatas],
             )
 
             result_documents = results.get("documents") if isinstance(results, dict) else []

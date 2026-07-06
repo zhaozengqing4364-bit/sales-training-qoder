@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.auth.service import create_access_token
 from common.db.models import User
 from curriculum_practice.models import QuestionCategory, QuestionItem
+from sales_trainer.models import SalesTrainerUnit
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
@@ -32,17 +33,32 @@ def _auth_headers(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _user(role: str) -> User:
+def _user(role: str, *, department: str | None = None) -> User:
     return User(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"business-etiquette-quiz-api-{role}-{uuid.uuid4().hex[:8]}",
         name=f"Business Etiquette Quiz API {role}",
         email=f"business-etiquette-quiz-api-{role}-{uuid.uuid4().hex[:8]}@example.com",
         role=role,
+        department=department,
     )
 
 
-async def _seed_active_path(test_db: AsyncSession, *, admin: User) -> None:
+async def _seed_active_path(
+    test_db: AsyncSession,
+    *,
+    admin: User,
+    learner_level_required: list[str] | None = None,
+) -> None:
+    unit = SalesTrainerUnit(
+        unit_id=f"be-quiz-{uuid.uuid4().hex[:8]}",
+        name="商务礼仪考试",
+        unit_type="quiz",
+        status="published",
+        config={},
+    )
+    test_db.add(unit)
+    await test_db.flush()
     payload = {
         "path_key": NEWCOMER_PATH_LOGICAL_ID,
         "title": "新人训练路径",
@@ -57,8 +73,9 @@ async def _seed_active_path(test_db: AsyncSession, *, admin: User) -> None:
                 "order_index": 2,
                 "title": "商务礼仪",
                 "description": "按小单元完成商务礼仪训练。",
-                "target_unit_id": None,
+                "target_unit_id": unit.unit_id,
                 "learning_content_id": None,
+                "learner_level_required": learner_level_required or [],
                 "exam_paper_id": None,
                 "material_id": None,
                 "material_version_id": None,
@@ -271,14 +288,106 @@ async def test_should_reject_quiz_attempt_list_without_manager_permission(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
-    learner = _user("user")
-    test_db.add(learner)
+    content_admin = _user("content_admin")
+    test_db.add(content_admin)
     await test_db.commit()
 
     response = await async_client.get(
         "/api/v1/admin/newcomer-training/business-etiquette/quiz-attempts",
-        headers=_auth_headers(learner),
+        headers=_auth_headers(content_admin),
     )
 
     assert response.status_code == 403
     assert response.json()["error"] == "[ROLE_REQUIRED]"
+
+
+@pytest.mark.asyncio
+async def test_should_fail_closed_quiz_surfaces_when_journey_module_locked(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    test_db.add_all([admin, learner])
+    await test_db.commit()
+    await _seed_active_path(
+        test_db,
+        admin=admin,
+        learner_level_required=["ready"],
+    )
+
+    quiz_response = await async_client.get(
+        "/api/v1/newcomer-training/business-etiquette/"
+        "learning-units/trust_foundation/quiz",
+        headers=_auth_headers(learner),
+    )
+    submit_response = await async_client.post(
+        "/api/v1/newcomer-training/business-etiquette/"
+        "learning-units/trust_foundation/quiz-attempts",
+        headers=_auth_headers(learner),
+        json={"answers": []},
+    )
+    list_response = await async_client.get(
+        "/api/v1/newcomer-training/business-etiquette/"
+        "learning-units/trust_foundation/quiz-attempts?limit=10",
+        headers=_auth_headers(learner),
+    )
+
+    for response in (quiz_response, submit_response, list_response):
+        assert response.status_code == 404, response.text
+        assert response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+
+
+@pytest.mark.asyncio
+async def test_should_scope_business_etiquette_quiz_attempts_to_manager_department(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    manager = _user("training_manager", department="华东销售")
+    east_learner = _user("user", department="华东销售")
+    west_learner = _user("user", department="华北销售")
+    test_db.add_all([admin, manager, east_learner, west_learner])
+    await test_db.commit()
+    await _seed_active_path(test_db, admin=admin)
+    await _seed_active_training_pack(test_db, admin=admin)
+    question = await _seed_published_question(test_db, admin=admin)
+
+    for learner in (east_learner, west_learner):
+        response = await async_client.post(
+            "/api/v1/newcomer-training/business-etiquette/"
+            "learning-units/trust_foundation/quiz-attempts",
+            headers=_auth_headers(learner),
+            json={
+                "answers": [
+                    {
+                        "question_id": question.question_id,
+                        "answer_payload": "A",
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 200, response.text
+
+    manager_response = await async_client.get(
+        "/api/v1/admin/newcomer-training/business-etiquette/quiz-attempts"
+        "?learning_unit_key=trust_foundation",
+        headers=_auth_headers(manager),
+    )
+
+    assert manager_response.status_code == 200, manager_response.text
+    manager_payload = manager_response.json()["data"]
+    assert manager_payload["total"] == 1
+    assert manager_payload["items"][0]["user_id"] == str(east_learner.user_id)
+    assert manager_payload["items"][0]["user_department"] == "华东销售"
+
+    cross_department_response = await async_client.get(
+        "/api/v1/admin/newcomer-training/business-etiquette/quiz-attempts"
+        f"?user_id={west_learner.user_id}",
+        headers=_auth_headers(manager),
+    )
+
+    assert cross_department_response.status_code == 200, cross_department_response.text
+    cross_department_payload = cross_department_response.json()["data"]
+    assert cross_department_payload["total"] == 0
+    assert cross_department_payload["items"] == []

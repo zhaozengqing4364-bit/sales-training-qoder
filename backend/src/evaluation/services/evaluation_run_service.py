@@ -20,6 +20,14 @@ CURRICULUM_LINEAGE_KEYS = (
 )
 
 
+def _runtime_field(row: object, name: str) -> Any:
+    return getattr(row, name)
+
+
+def _set_runtime_field(row: object, name: str, value: object) -> None:
+    setattr(row, name, value)
+
+
 def extract_curriculum_lineage(
     curriculum_snapshot: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
@@ -107,10 +115,10 @@ class EvaluationRunService:
     async def mark_running(self, run_id: str) -> EvaluationRun:
         run = await self._get_run(run_id)
         now = datetime.now(UTC)
-        run.status = EvaluationRunStatus.RUNNING.value
-        if run.started_at is None:
-            run.started_at = now
-        run.updated_at = now
+        _set_runtime_field(run, "status", EvaluationRunStatus.RUNNING.value)
+        if _runtime_field(run, "started_at") is None:
+            _set_runtime_field(run, "started_at", now)
+        _set_runtime_field(run, "updated_at", now)
         await self.db.flush()
         return run
 
@@ -168,15 +176,15 @@ class EvaluationRunService:
     ) -> EvaluationRun:
         run = await self._get_run(run_id)
         now = datetime.now(UTC)
-        if run.started_at is None:
-            run.started_at = now
-        run.status = status.value
-        run.finished_at = now
-        run.result_payload = result_payload
-        run.result_summary = result_summary
-        run.error_message = error_message
-        run.error_trace = error_trace
-        run.updated_at = now
+        if _runtime_field(run, "started_at") is None:
+            _set_runtime_field(run, "started_at", now)
+        _set_runtime_field(run, "status", status.value)
+        _set_runtime_field(run, "finished_at", now)
+        _set_runtime_field(run, "result_payload", result_payload)
+        _set_runtime_field(run, "result_summary", result_summary)
+        _set_runtime_field(run, "error_message", error_message)
+        _set_runtime_field(run, "error_trace", error_trace)
+        _set_runtime_field(run, "updated_at", now)
         await self.db.flush()
         return run
 

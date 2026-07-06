@@ -68,10 +68,13 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = [
     "chromadb.*",
+    "dashscope",
+    "dashscope.*",
     "edge_tts.*",
     "funasr.*",
     "oss2.*",
     "passlib.*",
+    "qcloud_cos",
     "rank_bm25.*",
 ]
 ignore_missing_imports = true

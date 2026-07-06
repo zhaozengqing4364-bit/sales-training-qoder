@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.db.typing import json_dict_or_empty, orm_scalar
 from sales_trainer.models import (
     SalesTrainerAudioScorePrompt,
     SalesTrainerUnit,
@@ -77,7 +78,9 @@ class UnitService:
             stmt = stmt.where(SalesTrainerUnit.status != "archived")
             count_stmt = count_stmt.where(SalesTrainerUnit.status != "archived")
         result = await self._db.execute(
-            stmt.order_by(SalesTrainerUnit.updated_at.desc()).offset(offset).limit(limit)
+            stmt.order_by(SalesTrainerUnit.updated_at.desc())
+            .offset(offset)
+            .limit(limit)
         )
         total = await self._db.scalar(count_stmt)
         return list(result.scalars().all()), int(total or 0)
@@ -105,17 +108,21 @@ class UnitService:
         )
         self._db.add(unit)
         await self._db.flush()
-        await self._replace_questions(unit.unit_id, payload.questions)
+        unit_id = orm_scalar(unit.unit_id, str)
+        await self._replace_questions(unit_id, payload.questions)
         next_snapshot = unit_lifecycle_snapshot(
             unit,
-            await self.get_unit_questions(unit.unit_id),
+            await self.get_unit_questions(unit_id),
         )
         await self._logs.record(
             actor=actor,
             action="unit_created",
             target_type="sales_trainer_unit",
-            target_id=unit.unit_id,
-            metadata={"unit_type": unit.unit_type, "next": next_snapshot},
+            target_id=unit_id,
+            metadata={
+                "unit_type": orm_scalar(unit.unit_type, str),
+                "next": next_snapshot,
+            },
         )
         await self._db.commit()
         await self._db.refresh(unit)
@@ -134,13 +141,14 @@ class UnitService:
                 "已归档训练单元不能直接编辑，请通过历史版本回滚或重新启用流程处理。",
                 status_code=409,
             )
-        current_questions = await self.get_unit_questions(unit.unit_id)
+        unit_id = orm_scalar(unit.unit_id, str)
+        current_questions = await self.get_unit_questions(unit_id)
         previous_snapshot = unit_lifecycle_snapshot(
             unit,
             current_questions,
         )
         data = payload.model_dump(exclude_unset=True, exclude={"questions"})
-        next_config = data.get("config", unit.config)
+        next_config = data.get("config", json_dict_or_empty(unit.config))
         next_questions = (
             payload.questions if "questions" in payload.model_fields_set else None
         )
@@ -149,7 +157,7 @@ class UnitService:
             next_config,
             next_questions if next_questions is not None else None,
             actor=actor,
-            target_unit_id=str(unit.unit_id),
+            target_unit_id=unit_id,
         )
         if unit.status == "published":
             try:
@@ -168,19 +176,19 @@ class UnitService:
         for field in ("name", "description", "config"):
             if field in data:
                 setattr(unit, field, data[field])
-        unit.updated_by = str(actor.user_id)
+        setattr(unit, "updated_by", str(actor.user_id))
         if next_questions is not None:
-            await self._replace_questions(unit.unit_id, next_questions)
+            await self._replace_questions(unit_id, next_questions)
         await self._logs.record(
             actor=actor,
             action="unit_updated",
             target_type="sales_trainer_unit",
-            target_id=unit.unit_id,
+            target_id=unit_id,
             metadata=unit_lifecycle_metadata(
                 previous_snapshot,
                 unit_lifecycle_snapshot(
                     unit,
-                    await self.get_unit_questions(unit.unit_id),
+                    await self.get_unit_questions(unit_id),
                 ),
             ),
         )
@@ -191,10 +199,11 @@ class UnitService:
     async def publish_unit(
         self, unit: SalesTrainerUnit, *, actor: User
     ) -> SalesTrainerUnit:
+        unit_id = orm_scalar(unit.unit_id, str)
         if unit.status == "published":
             revision_service = UnitRevisionService(self._db)
             working_revision = await revision_service.latest_working_revision(
-                str(unit.unit_id),
+                unit_id,
             )
             if working_revision is None:
                 return unit
@@ -204,7 +213,7 @@ class UnitService:
                 payload_dict(working_payload.get("config")),
                 unit_question_bindings_from_payload(working_payload),
                 actor=actor,
-                target_unit_id=str(unit.unit_id),
+                target_unit_id=unit_id,
             )
             try:
                 return await revision_service.publish_working_revision(
@@ -219,10 +228,10 @@ class UnitService:
                     exc.status_code,
                 ) from exc
         await self._validate_publishable(unit, actor=actor)
-        questions = await self.get_unit_questions(unit.unit_id)
+        questions = await self.get_unit_questions(unit_id)
         previous_snapshot = unit_lifecycle_snapshot(unit, questions)
-        unit.status = "published"
-        unit.updated_by = str(actor.user_id)
+        setattr(unit, "status", "published")
+        setattr(unit, "updated_by", str(actor.user_id))
         try:
             await UnitRevisionService(self._db).create_initial_published_revision(
                 unit,
@@ -243,15 +252,16 @@ class UnitService:
     async def archive_unit(
         self, unit: SalesTrainerUnit, *, actor: User
     ) -> SalesTrainerUnit:
-        questions = await self.get_unit_questions(unit.unit_id)
+        unit_id = orm_scalar(unit.unit_id, str)
+        questions = await self.get_unit_questions(unit_id)
         previous_snapshot = unit_lifecycle_snapshot(unit, questions)
-        unit.status = "archived"
-        unit.updated_by = str(actor.user_id)
+        setattr(unit, "status", "archived")
+        setattr(unit, "updated_by", str(actor.user_id))
         await self._logs.record(
             actor=actor,
             action="unit_archived",
             target_type="sales_trainer_unit",
-            target_id=unit.unit_id,
+            target_id=unit_id,
             metadata=unit_lifecycle_metadata(
                 previous_snapshot,
                 unit_lifecycle_snapshot(unit, questions),
@@ -270,16 +280,16 @@ class UnitService:
         return list(result.scalars().all())
 
     async def serialize_unit(self, unit: SalesTrainerUnit) -> dict[str, Any]:
-        questions = await self.get_unit_questions(unit.unit_id)
+        questions = await self.get_unit_questions(orm_scalar(unit.unit_id, str))
         question_map = await self._question_adapter.get_questions(
             [str(item.question_id) for item in questions]
         )
         return {
-            "unit_id": unit.unit_id,
+            "unit_id": orm_scalar(unit.unit_id, str),
             "name": unit.name,
             "description": unit.description,
             "unit_type": unit.unit_type,
-            "config": unit.config or {},
+            "config": json_dict_or_empty(unit.config),
             "status": unit.status,
             "created_by": unit.created_by,
             "updated_by": unit.updated_by,
@@ -287,12 +297,12 @@ class UnitService:
             "updated_at": unit.updated_at,
             "questions": [
                 self._question_adapter.serialize_for_learner(
-                    question_map[item.question_id],
+                    question_map[orm_scalar(item.question_id, str)],
                     points=int(item.points),
                     order_index=int(item.order_index),
                 )
                 for item in questions
-                if item.question_id in question_map
+                if orm_scalar(item.question_id, str) in question_map
             ],
         }
 
@@ -516,10 +526,10 @@ class UnitService:
             )
         await self._validate_payload(
             str(unit.unit_type),
-            unit.config or {},
-            await self.get_unit_questions(unit.unit_id)
+            json_dict_or_empty(unit.config),
+            await self.get_unit_questions(orm_scalar(unit.unit_id, str))
             if unit.unit_type == "quiz"
             else None,
             actor=actor,
-            target_unit_id=str(unit.unit_id),
+            target_unit_id=orm_scalar(unit.unit_id, str),
         )

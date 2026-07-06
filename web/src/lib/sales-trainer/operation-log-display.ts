@@ -50,6 +50,7 @@ const TARGET_LABELS: Readonly<Record<string, string>> = {
     sales_trainer_audio_score_prompt: "录音评分标准",
     sales_trainer_question: "题目",
     sales_trainer_quiz_attempt: "考试记录",
+    business_etiquette_unit_quiz_attempt: "商务礼仪小测记录",
     sales_trainer_audio_submission: "录音记录",
     newcomer_training_path_config: "新人训练路径配置",
     newcomer_path_config: "新人训练路径配置",
@@ -189,7 +190,41 @@ function pushIfPresent(lines: string[], line: string | null): void {
     }
 }
 
-function buildSummaryLines(metadata: Record<string, unknown>): string[] {
+function levelLabel(value: unknown): string | null {
+    if (!isRecord(value)) {
+        return null;
+    }
+    return stringValue(value.label) ?? stringValue(value.level_key);
+}
+
+function buildTrainingContextLines(
+    context: SalesTrainerOperationLog["training_context"],
+): string[] {
+    if (!context) {
+        return [];
+    }
+    const lines: string[] = [];
+    if (context.path_revision_no !== null && context.path_revision_no !== undefined) {
+        lines.push(`路径版本：v${context.path_revision_no}`);
+    }
+    if (context.training_stage) {
+        lines.push(`训练阶段：${context.training_stage}`);
+    }
+    const learnerLevel = levelLabel(context.learner_level);
+    if (learnerLevel) {
+        lines.push(`学员等级：${learnerLevel}`);
+    }
+    const roleLevel = levelLabel(context.role_level);
+    if (roleLevel) {
+        lines.push(`角色等级：${roleLevel}`);
+    }
+    return lines;
+}
+
+function buildSummaryLines(
+    metadata: Record<string, unknown>,
+    trainingContext: SalesTrainerOperationLog["training_context"],
+): string[] {
     const previous = isRecord(metadata.previous) ? metadata.previous : null;
     const next = isRecord(metadata.next) ? metadata.next : null;
     const lines: string[] = [];
@@ -232,6 +267,7 @@ function buildSummaryLines(metadata: Record<string, unknown>): string[] {
     if (versionLabel) {
         lines.push(`版本：${versionLabel}`);
     }
+    lines.push(...buildTrainingContextLines(trainingContext));
     return lines.length ? lines : ["已记录关键操作，可展开查看原始诊断数据。"];
 }
 
@@ -240,12 +276,13 @@ export function buildOperationLogDisplay(item: SalesTrainerOperationLog): Operat
         actionLabel: ACTION_LABELS[item.action] ?? "关键操作",
         actorLabel: formatActor(item.actor_role, item.actor_id),
         targetLabel: TARGET_LABELS[item.target_type] ?? "业务对象",
-        summaryLines: buildSummaryLines(item.metadata),
+        summaryLines: buildSummaryLines(item.metadata, item.training_context ?? null),
         rawJson: JSON.stringify({
             action: item.action,
             target_type: item.target_type,
             target_id: item.target_id,
             metadata: item.metadata,
+            training_context: item.training_context ?? null,
         }, null, 2),
     };
 }

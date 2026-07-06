@@ -19,8 +19,11 @@ def test_should_classify_frozen_template_when_published_asset_refs_present() -> 
             "version": "v1",
             "content_hash": "sha256:pack",
             "snapshot_label": "published",
+            "source_bundle_key": "roleplay.situation_packs.ruleset",
             "source_config_version_id": "cfg-1",
+            "source_config_id": "cfg-source-1",
             "snapshot_selector": "packs[code=first_visit]",
+            "source_snapshot_hash": "sha256:bundle-snapshot",
             "resolved_at": "2026-05-27T10:00:00+00:00",
         }
     }

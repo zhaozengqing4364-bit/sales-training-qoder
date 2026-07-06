@@ -31,6 +31,9 @@ export function OperationalDiagnosticsPanel({
                         <Link href="/admin/sales-trainer/paths">打开配置中心</Link>
                     </Button>
                     <Button asChild variant="outline" className="rounded-full">
+                        <Link href="/support/runtime">查看运行时健康</Link>
+                    </Button>
+                    <Button asChild variant="outline" className="rounded-full">
                         <Link href="/admin/sales-trainer/operation-logs">查看操作日志</Link>
                     </Button>
                 </div>

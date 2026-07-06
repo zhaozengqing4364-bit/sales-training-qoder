@@ -80,6 +80,71 @@ Use `ConfigDict(from_attributes=True)` (Pydantic v2), not `orm_mode = True`.
 
 Migration naming example: `alembic/versions/20260516_1000_064_learner_profile_runtime_bindings.py`.
 
+## Scenario: RBAC Role Vocabulary Schema Width
+
+### 1. Scope / Trigger
+
+- Trigger: adding or centralizing persisted RBAC roles.
+- Scope: `common.db.models.User.role`, role check constraints, Alembic migrations, and tests that validate the canonical role vocabulary.
+
+### 2. Signatures
+
+```python
+class User(Base):
+    role: Mapped[str] = mapped_column(String(32), default="user")
+```
+
+Migration shape:
+
+```python
+def upgrade() -> None: ...
+def downgrade() -> None: ...
+```
+
+### 3. Contracts
+
+- The DB column width must fit every value in the canonical role enum/set.
+- `newcomer_content_admin` is a persisted role and therefore requires at least 22 characters.
+- Downgrades that would shrink role width must first check for over-length role values and refuse destructive truncation.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected behavior |
+|---|---|
+| New role value length exceeds column width | Add a migration before exposing the role |
+| Role is not in the check constraint | Update the constraint/migration or map the product concept to an existing persisted role |
+| Downgrade finds a role longer than target width | Raise and keep data intact |
+| Empty or unknown role from API input | Reject in validation / permission layer |
+
+### 5. Good/Base/Bad Cases
+
+- Good: centralized role constants include a max-length test and schema migration widens the column before role writes.
+- Base: frontend route visibility consumes backend capabilities and does not invent new persisted roles.
+- Bad: a role string is added to permission code but the DB column remains `String(20)`.
+
+### 6. Tests Required
+
+- Unit test asserting all canonical role values fit `User.role.type.length`.
+- RBAC matrix tests for admin/content/ops/auditor roles.
+- Alembic head check and targeted upgrade validation for the new migration.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+CONTENT_ADMIN_ROLES = {"content_admin", "newcomer_content_admin"}
+# User.role stays String(20)
+```
+
+#### Correct
+
+```python
+assert max(len(role) for role in CANONICAL_USER_ROLES) <= USER_ROLE_COLUMN_LENGTH
+```
+
+The schema and role authority evolve together.
+
 ---
 
 ## Test Database

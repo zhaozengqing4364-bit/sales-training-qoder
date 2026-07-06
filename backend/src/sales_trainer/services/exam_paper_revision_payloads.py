@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from curriculum_practice.models import QuestionItem
 from sales_trainer.models import SalesTrainerUnitQuestion
 from sales_trainer.schemas import UnitQuestionBinding
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
+)
+from sales_trainer.services.curriculum_practice_adapter import (
+    QuestionItem as QuestionItemContract,
+)
+from sales_trainer.services.curriculum_practice_adapter import (
+    get_question_item,
+    project_question_item,
 )
 from sales_trainer.services.question_bank import (
     QUESTION_RESOURCE_TYPE,
@@ -104,8 +110,8 @@ async def _freeze_question_binding(
             question_payload_hash=str(active_revision.payload_hash),
             legacy_snapshot_only=False,
         )
-    question = await db.get(QuestionItem, question_id)
-    snapshot = question_lifecycle_snapshot(question) if question is not None else {}
+    question = await get_question_item(db, question_id)
+    snapshot = _legacy_question_snapshot(question) if question is not None else {}
     return _binding_with_snapshot(
         item,
         question_snapshot=snapshot,
@@ -192,9 +198,18 @@ def _points(value: object) -> int:
     return 0
 
 
-def _legacy_question_payload_hash(question: QuestionItem | None) -> str | None:
+def _legacy_question_payload_hash(question: QuestionItemContract | None) -> str | None:
     if question is None:
         return None
     if question.content_hash is not None:
         return str(question.content_hash)
-    return question_payload_hash(question_lifecycle_snapshot(question))
+    return question_payload_hash(_legacy_question_snapshot(question))
+
+
+def _legacy_question_snapshot(question: QuestionItemContract) -> dict[str, Any]:
+    return question_lifecycle_snapshot(
+        cast(
+            QuestionItemContract,
+            project_question_item(cast(QuestionItemContract, question)),
+        )
+    )

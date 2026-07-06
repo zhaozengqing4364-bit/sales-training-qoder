@@ -4,7 +4,7 @@ from collections.abc import Callable
 from hashlib import sha256
 from inspect import isawaitable
 from json import dumps
-from typing import Any
+from typing import Any, cast
 
 from curriculum_practice.schemas import CurriculumVersionRef, ReferenceReader
 from curriculum_practice.services.asset_reference_reader import (
@@ -50,7 +50,7 @@ class RuntimeSnapshotAssetResolver:
     async def read_reference(self, asset_type: str, asset_id: str) -> object | None:
         reference = self._reference_reader(asset_type, asset_id)
         if isawaitable(reference):
-            return await reference
+            return cast(object | None, await reference)
         return reference
 
     async def version_ref(
@@ -80,12 +80,16 @@ class RuntimeSnapshotAssetResolver:
         return CurriculumVersionRef(
             asset_type=asset_type,
             asset_id=asset_id,
-            version=expected_version if expected_version is not None else _version(reference),
+            version=expected_version
+            if expected_version is not None
+            else _version(reference),
             hash=expected_hash or current_hash,
             snapshot_label=snapshot_label or _snapshot_label(asset_type),
         )
 
-    async def stage_asset_ref(self, template_ref_data: dict[str, Any]) -> CurriculumVersionRef:
+    async def stage_asset_ref(
+        self, template_ref_data: dict[str, Any]
+    ) -> CurriculumVersionRef:
         return await self.version_ref(
             str(template_ref_data["asset_type"]),
             str(template_ref_data["asset_id"]),
@@ -232,7 +236,7 @@ def _reference_hash(asset_type: str, reference: dict[str, Any]) -> str:
 
 
 def _version(reference: dict[str, Any]) -> int | str:
-    return reference.get("version", 1)
+    return cast(int | str, reference.get("version", 1))
 
 
 def _snapshot_label(asset_type: str) -> str:

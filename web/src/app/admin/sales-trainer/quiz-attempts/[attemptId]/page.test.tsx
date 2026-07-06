@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerQuizAttemptDetailPage from "./page";
 
-const { getQuizAttemptMock, previewQuizAttemptRegradeMock, runQuizAttemptRegradeMock } = vi.hoisted(() => ({
+const {
+    getCapabilitiesMock,
+    getQuizAttemptMock,
+    previewQuizAttemptRegradeMock,
+    runQuizAttemptRegradeMock,
+} = vi.hoisted(() => ({
+    getCapabilitiesMock: vi.fn(),
     getQuizAttemptMock: vi.fn(),
     previewQuizAttemptRegradeMock: vi.fn(),
     runQuizAttemptRegradeMock: vi.fn(),
@@ -24,6 +30,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getCapabilities: getCapabilitiesMock,
                     getQuizAttempt: getQuizAttemptMock,
                     previewQuizAttemptRegrade: previewQuizAttemptRegradeMock,
                     runQuizAttemptRegrade: runQuizAttemptRegradeMock,
@@ -35,9 +42,27 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("SalesTrainerQuizAttemptDetailPage", () => {
     beforeEach(() => {
+        getCapabilitiesMock.mockReset();
         getQuizAttemptMock.mockReset();
         previewQuizAttemptRegradeMock.mockReset();
         runQuizAttemptRegradeMock.mockReset();
+        getCapabilitiesMock.mockResolvedValue({
+            role: "ops",
+            role_label: "运维人员",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: false,
+                view_records: true,
+                view_global_records: true,
+                retry_jobs: true,
+                regrade_history: true,
+                view_settings: true,
+                view_logs: true,
+            },
+        });
         getQuizAttemptMock.mockResolvedValue({
             attempt_id: "attempt-1",
             unit_id: "unit-1",
@@ -147,8 +172,8 @@ describe("SalesTrainerQuizAttemptDetailPage", () => {
         render(<SalesTrainerQuizAttemptDetailPage />);
 
         expect(await screen.findByText("做题结果详情")).toBeTruthy();
+        expect(await screen.findByText("张三 · 销售一部")).toBeTruthy();
         expect(getQuizAttemptMock).toHaveBeenCalledWith("attempt-1");
-        expect(screen.getByText("张三 · 销售一部")).toBeTruthy();
         expect(screen.getByText("已评分")).toBeTruthy();
         expect(screen.getByText("训练任务")).toBeTruthy();
         expect(screen.getByText("编号：unit-1")).toBeTruthy();
@@ -192,5 +217,121 @@ describe("SalesTrainerQuizAttemptDetailPage", () => {
             });
         });
         expect(await screen.findByText(/已生成重评记录，追踪号 trace-regrade-1/)).toBeTruthy();
+    });
+
+    it("hides historical regrade mutations without regrade capability", async () => {
+        getCapabilitiesMock.mockResolvedValue({
+            role: "training_manager",
+            role_label: "培训负责人",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: true,
+                view_records: true,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
+
+        render(<SalesTrainerQuizAttemptDetailPage />);
+
+        expect(await screen.findByText("张三 · 销售一部")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "预览重评影响" })).toBeNull();
+        expect(screen.getByText("当前账号没有历史重评权限，不能预览或追加重评记录。")).toBeTruthy();
+        expect(previewQuizAttemptRegradeMock).not.toHaveBeenCalled();
+        expect(runQuizAttemptRegradeMock).not.toHaveBeenCalled();
+    });
+
+    it("does not request quiz attempt detail before record capability is confirmed", async () => {
+        getCapabilitiesMock.mockReturnValue(new Promise(() => {}));
+
+        render(<SalesTrainerQuizAttemptDetailPage />);
+
+        expect(await screen.findByText("正在校验做题结果权限...")).toBeTruthy();
+        expect(getQuizAttemptMock).not.toHaveBeenCalled();
+        expect(screen.queryByText("张三 · 销售一部")).toBeNull();
+    });
+
+    it("does not request quiz attempt detail when record capability is denied", async () => {
+        getCapabilitiesMock.mockResolvedValue({
+            role: "training_manager",
+            role_label: "培训负责人",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_modules: false,
+                manage_prompts: false,
+                manage_questions: true,
+                view_records: false,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_settings: false,
+                view_logs: false,
+            },
+        });
+
+        render(<SalesTrainerQuizAttemptDetailPage />);
+
+        expect(await screen.findByText("做题结果权限不足")).toBeTruthy();
+        expect(getQuizAttemptMock).not.toHaveBeenCalled();
+        expect(screen.queryByText("张三 · 销售一部")).toBeNull();
+    });
+
+    it("shows a recoverable load error instead of a missing result state", async () => {
+        getQuizAttemptMock
+            .mockRejectedValueOnce(new Error("attempt forbidden"))
+            .mockResolvedValueOnce({
+                attempt_id: "attempt-1",
+                unit_id: "unit-1",
+                user_id: "user-1",
+                user_name: "张三",
+                user_email: "zhangsan@example.com",
+                user_department: "销售一部",
+                total_score: 18,
+                max_score: 20,
+                passed: true,
+                status: "scored",
+                submitted_at: "2026-05-28T00:00:00Z",
+                answers: [
+                    {
+                        answer_id: "answer-1",
+                        question_id: "question-1",
+                        question_type: "single_choice",
+                        answer_payload: "A",
+                        question_title: "产品定位",
+                        question_stem: "石犀核心定位是什么？",
+                        options: [],
+                        correct_answer: "A",
+                        reference_answer: "A. 数据流动治理",
+                        explanation: null,
+                        scoring_feedback: null,
+                        scoring_reason: null,
+                        normalized_score: null,
+                        is_correct: true,
+                        score: 18,
+                        created_at: "2026-05-28T00:00:00Z",
+                    },
+                ],
+            });
+
+        render(<SalesTrainerQuizAttemptDetailPage />);
+
+        expect(await screen.findByText("做题结果加载失败")).toBeTruthy();
+        expect(screen.getByText("attempt forbidden")).toBeTruthy();
+        expect(screen.queryByText("未找到做题结果。")).toBeNull();
+
+        const callsBeforeRetry = getQuizAttemptMock.mock.calls.length;
+        fireEvent.click(screen.getByRole("button", { name: "重新加载做题结果" }));
+
+        expect(await screen.findByText("张三 · 销售一部")).toBeTruthy();
+        await waitFor(() => {
+            expect(getQuizAttemptMock.mock.calls.length).toBeGreaterThan(callsBeforeRetry);
+        });
     });
 });

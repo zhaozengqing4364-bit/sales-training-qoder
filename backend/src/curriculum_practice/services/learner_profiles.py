@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.error_handling.result import Result
 from curriculum_practice.models import LearnerProfile
+from curriculum_practice.services.orm_payload_typing import set_orm_field
 
 DEFAULT_LEARNER_LEVEL = "conservative"
 
@@ -30,10 +31,10 @@ class LearnerProfileService:
         if not result.is_success or result.value is None:
             return result
         profile = result.value
-        profile.self_assessed_level = level
-        profile.self_assessed_at = datetime.now(UTC)
+        set_orm_field(profile, "self_assessed_level", level)
+        set_orm_field(profile, "self_assessed_at", datetime.now(UTC))
         if profile.admin_overridden_level is None:
-            profile.effective_level = level
+            set_orm_field(profile, "effective_level", level)
         await self._db.commit()
         await self._db.refresh(profile)
         return Result.ok(profile)
@@ -45,10 +46,10 @@ class LearnerProfileService:
         if not result.is_success or result.value is None:
             return result
         profile = result.value
-        profile.admin_overridden_level = level
-        profile.effective_level = level
-        profile.overridden_by = actor_id
-        profile.overridden_at = datetime.now(UTC)
+        set_orm_field(profile, "admin_overridden_level", level)
+        set_orm_field(profile, "effective_level", level)
+        set_orm_field(profile, "overridden_by", actor_id)
+        set_orm_field(profile, "overridden_at", datetime.now(UTC))
         await self._db.commit()
         await self._db.refresh(profile)
         return Result.ok(profile)

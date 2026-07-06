@@ -118,6 +118,7 @@ From `backend/AGENTS.md` and `.kiro/steering/backend-principles.md`:
 - Running pytest from repo root instead of `backend/` — loses `pyproject.toml` config.
 - Adding integration test dependencies to unit tests — slows CI and flakes on network.
 - Changing response shape without updating `tests/contract/` and `docs/api-contract/`.
+- Mutating singleton collaborators such as `get_connection_manager().send_json` or `.connect` in a test without restoring them. If a test must replace a singleton method, use `monkeypatch` or add an autouse fixture in the affected suite that restores `ConnectionManager.<method>.__get__(manager, ConnectionManager)` and clears `active_connections` before and after each test.
 
 ---
 

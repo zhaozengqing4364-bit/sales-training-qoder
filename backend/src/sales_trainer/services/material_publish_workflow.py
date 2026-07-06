@@ -31,7 +31,9 @@ async def publish_material_version(
     trace_id: str | None = None,
 ) -> SalesTrainerMaterialVersion:
     resolved_trace_id = trace_id or get_trace_id()
-    material = await db.get(SalesTrainerMaterial, version.material_id)
+    material_id = str(version.material_id)
+    version_id = str(version.version_id)
+    material = await db.get(SalesTrainerMaterial, material_id)
     if material is None:
         raise MaterialPublishWorkflowError(
             "[SALES_TRAINER_MATERIAL_NOT_FOUND]",
@@ -47,32 +49,32 @@ async def publish_material_version(
     previous_current_version_id = _optional_str(material.current_version_id)
     previous = await db.execute(
         select(SalesTrainerMaterialVersion).where(
-            SalesTrainerMaterialVersion.material_id == version.material_id,
+            SalesTrainerMaterialVersion.material_id == material_id,
             SalesTrainerMaterialVersion.status == "published",
-            SalesTrainerMaterialVersion.version_id != version.version_id,
+            SalesTrainerMaterialVersion.version_id != version_id,
         )
     )
     archived_version_ids: list[str] = []
     for item in previous.scalars().all():
-        item.status = "archived"
+        setattr(item, "status", "archived")
         archived_version_ids.append(str(item.version_id))
-    version.status = "published"
-    version.published_at = datetime.now(UTC)
-    version.published_by = str(actor.user_id)
-    material.status = "published"
-    material.current_version_id = version.version_id
-    material.updated_by = str(actor.user_id)
+    setattr(version, "status", "published")
+    setattr(version, "published_at", datetime.now(UTC))
+    setattr(version, "published_by", str(actor.user_id))
+    setattr(material, "status", "published")
+    setattr(material, "current_version_id", version_id)
+    setattr(material, "updated_by", str(actor.user_id))
     await logs.record(
         actor=actor,
         action="material_version_published",
         target_type="sales_trainer_material_version",
-        target_id=version.version_id,
+        target_id=version_id,
         request_id=resolved_trace_id,
         metadata={
-            "material_id": material.material_id,
-            "version_label": version.version_label,
+            "material_id": str(material.material_id),
+            "version_label": str(version.version_label),
             "before_version_id": previous_current_version_id,
-            "after_version_id": version.version_id,
+            "after_version_id": version_id,
             "archived_version_ids": archived_version_ids,
             "trace_id": resolved_trace_id,
             "impact_scope": "future_submissions_only",

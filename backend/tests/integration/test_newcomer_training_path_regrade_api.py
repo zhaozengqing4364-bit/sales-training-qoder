@@ -11,6 +11,10 @@ from common.auth.service import create_access_token
 from common.db.models import User
 from curriculum_practice.models import QuestionCategory, QuestionItem
 from sales_trainer.models import SalesTrainerAssetRevision, SalesTrainerOperationLog
+from sales_trainer.services.regrade_service import (
+    SalesTrainerRegradeService,
+    SalesTrainerRegradeServiceError,
+)
 
 
 def _auth_headers(user: User) -> dict[str, str]:
@@ -18,13 +22,14 @@ def _auth_headers(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _user(role: str) -> User:
+def _user(role: str, *, department: str | None = None) -> User:
     return User(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"newcomer-regrade-{role}-{uuid.uuid4().hex[:8]}",
         name=f"Newcomer Regrade {role}",
         email=f"newcomer-regrade-{role}-{uuid.uuid4().hex[:8]}@example.com",
         role=role,
+        department=department,
     )
 
 
@@ -52,11 +57,14 @@ def _question(question_id: str, *, category_id: str) -> QuestionItem:
 @pytest.mark.asyncio
 async def test_should_regrade_quiz_attempt_as_explicit_high_risk_append_only_action(
     async_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
     test_db: AsyncSession,
 ) -> None:
     admin = _user("admin")
     content_admin = _user("content_admin")
-    learner = _user("user")
+    learner = _user("user", department="华东销售")
+    manager = _user("training_manager", department="华东销售")
+    outside_manager = _user("training_manager", department="华南销售")
     category = QuestionCategory(
         category_id="newcomer-regrade-category",
         name="商务技巧重评",
@@ -64,7 +72,7 @@ async def test_should_regrade_quiz_attempt_as_explicit_high_risk_append_only_act
         usage_scope="sales_trainer",
     )
     question = _question("newcomer-regrade-question", category_id=category.category_id)
-    test_db.add_all([admin, content_admin, learner, category, question])
+    test_db.add_all([admin, content_admin, learner, manager, outside_manager, category, question])
     await test_db.commit()
 
     create_response = await async_client.post(
@@ -142,6 +150,46 @@ async def test_should_regrade_quiz_attempt_as_explicit_high_risk_append_only_act
     assert second_publish.status_code == 200
     second_revision = await _latest_paper_revision(test_db, paper_id)
     assert second_revision.revision_id != first_revision.revision_id
+
+    service = SalesTrainerRegradeService(test_db)
+    same_scope_preview = await service.preview_quiz_attempt(
+        attempt["attempt_id"],
+        target_revision_id=second_revision.revision_id,
+        viewer=manager,
+        team_department=manager.department,
+    )
+    assert same_scope_preview.target_id == attempt["attempt_id"]
+    with pytest.raises(SalesTrainerRegradeServiceError) as denied:
+        await service.preview_quiz_attempt(
+            attempt["attempt_id"],
+            target_revision_id=second_revision.revision_id,
+            viewer=outside_manager,
+            team_department=outside_manager.department,
+        )
+    assert denied.value.code == "[REGRADING_TARGET_NOT_FOUND]"
+    monkeypatch.setattr(
+        "sales_trainer.regrade_api.can_regrade_sales_trainer_history",
+        lambda user: user.role in {"admin", "ops", "training_manager"},
+    )
+    manager_preview = await async_client.post(
+        "/api/v1/admin/newcomer-training/regrades/"
+        f"quiz-attempts/{attempt['attempt_id']}/preview",
+        headers=_auth_headers(manager),
+        json={"target_revision_id": second_revision.revision_id},
+    )
+    assert manager_preview.status_code == 200
+    cross_department_run = await async_client.post(
+        "/api/v1/admin/newcomer-training/regrades/"
+        f"quiz-attempts/{attempt['attempt_id']}/run",
+        headers=_auth_headers(outside_manager),
+        json={
+            "target_revision_id": second_revision.revision_id,
+            "reason": "跨部门负责人不应能重评历史考试记录。",
+        },
+    )
+    assert cross_department_run.status_code == 404
+    assert cross_department_run.json()["error"] == "[REGRADING_TARGET_NOT_FOUND]"
+    assert await test_db.scalar(text("select count(*) from sales_trainer_regrade_runs")) == 0
 
     forbidden_preview = await async_client.post(
         "/api/v1/admin/newcomer-training/regrades/"

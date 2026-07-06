@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.cos.signing import CosConfigError, get_cos_signing_service
 from common.db.models import User
+from common.db.typing import orm_scalar
 from sales_trainer.models import SalesTrainerMaterial, SalesTrainerMaterialVersion
 from sales_trainer.schemas import SalesTrainerMaterialVersionCreate
 from sales_trainer.services.material_service import (
@@ -70,7 +71,10 @@ class SalesTrainerMaterialUploadService:
         release_notes: str | None,
         actor: User,
     ) -> SalesTrainerMaterialVersion:
-        stored_file = await self._store_upload(file, material_id=material.material_id)
+        stored_file = await self._store_upload(
+            file,
+            material_id=orm_scalar(material.material_id, str),
+        )
         version = await self._materials.create_version(
             material,
             SalesTrainerMaterialVersionCreate(
@@ -89,7 +93,7 @@ class SalesTrainerMaterialUploadService:
             actor=actor,
             action="material_version_uploaded",
             target_type="sales_trainer_material_version",
-            target_id=version.version_id,
+            target_id=orm_scalar(version.version_id, str),
             metadata={
                 "material_id": material.material_id,
                 "version_label": version.version_label,

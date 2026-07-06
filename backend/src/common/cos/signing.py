@@ -6,6 +6,7 @@ import os
 import posixpath
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import quote
 
 from common.monitoring.logger import get_logger
@@ -136,7 +137,7 @@ class CosSigningService:
                 return int(response[key])
         raise RuntimeError("COS head_object response did not include content length.")
 
-    def _require_client(self):
+    def _require_client(self) -> Any:
         if self._client is not None:
             return self._client
         missing = [key for key in _REQUIRED_ENV_VARS if not os.getenv(key)]

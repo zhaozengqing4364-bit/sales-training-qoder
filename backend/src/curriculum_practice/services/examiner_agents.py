@@ -37,6 +37,11 @@ from curriculum_practice.services.examiner_agent_publish_gates import (
 from curriculum_practice.services.examiner_agent_revision_service import (
     ExaminerAgentRevisionService,
 )
+from curriculum_practice.services.orm_payload_typing import (
+    orm_dict,
+    orm_list,
+    set_orm_field,
+)
 
 SERVER_ERROR = "[EXAMINER_AGENT_SERVICE_FAILED]"
 ExaminerAgentUnpublishResult = ExaminerAgent | list[dict[str, str]]
@@ -46,12 +51,16 @@ class ExaminerAgentService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
-    async def list_agents(self, *, status: str | None = None) -> Result[list[ExaminerAgent]]:
+    async def list_agents(
+        self, *, status: str | None = None
+    ) -> Result[list[ExaminerAgent]]:
         stmt = select(ExaminerAgent)
         if status:
             stmt = stmt.where(ExaminerAgent.status == status)
         try:
-            result = await self._db.execute(stmt.order_by(ExaminerAgent.updated_at.desc()))
+            result = await self._db.execute(
+                stmt.order_by(ExaminerAgent.updated_at.desc())
+            )
         except SQLAlchemyError:
             return Result.fail(SERVER_ERROR)
         return Result.ok(list(result.scalars().all()))
@@ -85,7 +94,9 @@ class ExaminerAgentService:
         if agent.status == "published":
             actor_result = await self._actor_result(actor_id)
             if not actor_result.is_success or actor_result.value is None:
-                return Result.fail(actor_result.fallback or "[EXAMINER_AGENT_ACTOR_REQUIRED]")
+                return Result.fail(
+                    actor_result.fallback or "[EXAMINER_AGENT_ACTOR_REQUIRED]"
+                )
             await ExaminerAgentRevisionService(self._db).stage_future_revision(
                 agent,
                 payload,
@@ -96,7 +107,7 @@ class ExaminerAgentService:
             if hasattr(value, "model_dump"):
                 value = value.model_dump(mode="json")
             setattr(agent, field, value)
-        agent.updated_by = actor_id
+        set_orm_field(agent, "updated_by", actor_id)
         return await self._commit_agent(agent)
 
     async def publish_agent(
@@ -106,10 +117,15 @@ class ExaminerAgentService:
             return Result.fail("[EXAMINER_AGENT_NOT_EDITABLE]")
         actor_result = await self._actor_result(actor_id)
         if not actor_result.is_success or actor_result.value is None:
-            return Result.fail(actor_result.fallback or "[EXAMINER_AGENT_ACTOR_REQUIRED]")
+            return Result.fail(
+                actor_result.fallback or "[EXAMINER_AGENT_ACTOR_REQUIRED]"
+            )
         revision_service = ExaminerAgentRevisionService(self._db)
         if agent.status == "published":
-            staged, staged_decision = await revision_service.stage_publish_working_revision(
+            (
+                staged,
+                staged_decision,
+            ) = await revision_service.stage_publish_working_revision(
                 agent,
                 actor=actor_result.value,
             )
@@ -120,7 +136,7 @@ class ExaminerAgentService:
                     is_success=False,
                 )
             if staged:
-                return await self._commit_agent(agent)
+                return await self._commit_publish_agent(agent)
         decision = await self.validate_publish(agent)
         if not decision.can_publish:
             return Result(
@@ -128,22 +144,22 @@ class ExaminerAgentService:
                 fallback="[EXAMINER_AGENT_PUBLISH_GATE_FAILED]",
                 is_success=False,
             )
-        agent.status = "published"
-        agent.published_by = actor_id
-        agent.published_at = datetime.now(UTC)
-        agent.content_hash = examiner_agent_content_hash(agent)
-        agent.updated_by = actor_id
+        set_orm_field(agent, "status", "published")
+        set_orm_field(agent, "published_by", actor_id)
+        set_orm_field(agent, "published_at", datetime.now(UTC))
+        set_orm_field(agent, "content_hash", examiner_agent_content_hash(agent))
+        set_orm_field(agent, "updated_by", actor_id)
         await revision_service.stage_initial_published_revision(
             agent,
             actor=actor_result.value,
         )
-        return await self._commit_agent(agent)
+        return await self._commit_publish_agent(agent)
 
     async def archive_agent(
         self, agent: ExaminerAgent, *, actor_id: str | None
     ) -> Result[ExaminerAgent]:
-        agent.status = "archived"
-        agent.updated_by = actor_id
+        set_orm_field(agent, "status", "archived")
+        set_orm_field(agent, "updated_by", actor_id)
         return await self._commit_agent(agent)
 
     async def duplicate_agent(
@@ -171,10 +187,10 @@ class ExaminerAgentService:
                 fallback="[EXAMINER_AGENT_REFERENCED_BY_PUBLISHED_TEMPLATES]",
                 is_success=False,
             )
-        agent.status = "draft"
-        agent.published_at = None
-        agent.published_by = None
-        agent.updated_by = actor_id
+        set_orm_field(agent, "status", "draft")
+        set_orm_field(agent, "published_at", None)
+        set_orm_field(agent, "published_by", None)
+        set_orm_field(agent, "updated_by", actor_id)
         commit_result = await self._commit_agent(agent)
         if not commit_result.is_success:
             return Result.fail(commit_result.fallback or SERVER_ERROR)
@@ -195,7 +211,7 @@ class ExaminerAgentService:
 
     async def simulate_agent(
         self, agent: ExaminerAgent, payload: ExaminerAgentSimulationRequest
-    ) -> Result[ExaminerAgentSimulationResponse]:
+    ) -> Result[ExaminerAgentSimulationResponse | PublishGateDecision]:
         decision = await self.validate_publish(agent)
         if not decision.can_publish:
             return Result(
@@ -203,27 +219,33 @@ class ExaminerAgentService:
                 fallback="[EXAMINER_AGENT_SIMULATION_GATE_FAILED]",
                 is_success=False,
             )
-        question_ids = [str(item) for item in agent.question_source_ids or []]
+        question_ids = [str(item) for item in orm_list(agent.question_source_ids)]
         selected_question_id = payload.question_id or question_ids[0]
         if selected_question_id not in question_ids:
             return Result.fail("[EXAMINER_SIMULATION_QUESTION_NOT_BOUND]")
         question = await self._db.get(QuestionItem, selected_question_id)
-        if question is None or question.status != "published" or question.safety_flagged:
+        if (
+            question is None
+            or question.status != "published"
+            or question.safety_flagged
+        ):
             return Result.fail("[EXAMINER_SIMULATION_QUESTION_UNAVAILABLE]")
         learner_level = resolve_examiner_learner_level(
             payload.learner_level,
-            agent.learner_level_strategy,
+            orm_dict(agent.learner_level_strategy),
         )
         if learner_level is None:
             return Result.fail("[EXAMINER_LEARNER_LEVEL_NOT_ALLOWED]")
-        answer_length = sum(1 for char in payload.sample_answer.strip() if char.isalnum())
+        answer_length = sum(
+            1 for char in payload.sample_answer.strip() if char.isalnum()
+        )
         score = min(100, max(0, answer_length))
         response = ExaminerAgentSimulationResponse(
             examiner_agent_id=str(agent.examiner_agent_id),
             selected_question_id=selected_question_id,
             learner_level=learner_level,
             scoring_policy_id=str(agent.scoring_policy_id),
-            timeout_seconds=examiner_timeout_seconds(agent.timeout_config),
+            timeout_seconds=examiner_timeout_seconds(orm_dict(agent.timeout_config)),
             result={
                 "passed": score >= 10,
                 "score": score,
@@ -232,6 +254,15 @@ class ExaminerAgentService:
             },
         )
         return Result.ok(response)
+
+    async def _commit_publish_agent(
+        self,
+        agent: ExaminerAgent,
+    ) -> Result[ExaminerAgent | PublishGateDecision]:
+        result = await self._commit_agent(agent)
+        if not result.is_success or result.value is None:
+            return Result.fail(result.fallback or SERVER_ERROR)
+        return Result(value=result.value, is_success=True)
 
     async def validate_publish(self, agent: ExaminerAgent) -> PublishGateDecision:
         return await validate_examiner_agent_publish(

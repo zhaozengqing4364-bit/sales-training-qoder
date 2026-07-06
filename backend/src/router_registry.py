@@ -84,6 +84,7 @@ def _build_knowledge_bases_alias_router() -> APIRouter:
             alias_path,
             route.endpoint,
             methods=route.methods,
+            response_model=route.response_model,
             status_code=route.status_code,
         )
 

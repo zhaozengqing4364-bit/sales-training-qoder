@@ -108,24 +108,28 @@ class AiCoachChatProjection:
         events: list[SalesTrainerAiCoachUiEvent],
     ) -> AiCoachChatSessionPublicV1:
         public_events = [self.project_event(event) for event in events]
-        return AiCoachChatSessionPublicV1(
-            session_id=str(session.session_id),
-            module_key=str(session.module_key),
-            status=session.status,
-            created_at=session.created_at,
-            updated_at=session.updated_at,
-            messages=[
-                AiCoachChatMessagePublicV1(
-                    message_id=str(message.message_id),
-                    role=message.role,
-                    content=message.content,
-                    order_index=int(message.order_index),
-                    created_at=message.created_at,
-                )
-                for message in messages
-            ],
-            ui_events=public_events,
-            coach_state=self.project_coach_state(session, public_events),
+        return AiCoachChatSessionPublicV1.model_validate(
+            {
+                "session_id": str(session.session_id),
+                "module_key": str(session.module_key),
+                "status": str(session.status),
+                "created_at": session.created_at,
+                "updated_at": session.updated_at,
+                "messages": [
+                    AiCoachChatMessagePublicV1.model_validate(
+                        {
+                            "message_id": str(message.message_id),
+                            "role": str(message.role),
+                            "content": message.content,
+                            "order_index": int(message.order_index),
+                            "created_at": message.created_at,
+                        }
+                    )
+                    for message in messages
+                ],
+                "ui_events": public_events,
+                "coach_state": self.project_coach_state(session, public_events),
+            }
         )
 
     def project_coach_state(
@@ -142,7 +146,7 @@ class AiCoachChatProjection:
         )
         return AiCoachCoachStatePublicV1(
             session_phase=self._session_phase(
-                status=session.status,
+                status=str(session.status),
                 active_event_id=active_event_id,
                 last_action=state.last_action,
                 events=events or [],
@@ -202,16 +206,21 @@ class AiCoachChatProjection:
             answer_payload = AiCoachAnswerPayloadV1.model_validate(event.answer_payload)
         if event.score_result:
             score_result = AiCoachScoreResultV1.model_validate(event.score_result)
-        return AiCoachUiEventPublicV1(
-            event_id=str(event.event_id),
-            message_id=str(event.message_id),
-            type=event.event_type,
-            status=event.status,
-            payload=self.public_payload_for_event(event.event_type, event.payload_json),
-            answer_payload=answer_payload,
-            score_result=score_result,
-            order_index=int(event.order_index),
-            created_at=event.created_at,
+        return AiCoachUiEventPublicV1.model_validate(
+            {
+                "event_id": str(event.event_id),
+                "message_id": str(event.message_id),
+                "type": str(event.event_type),
+                "status": str(event.status),
+                "payload": self.public_payload_for_event(
+                    str(event.event_type),
+                    _payload_dict(event.payload_json),
+                ),
+                "answer_payload": answer_payload,
+                "score_result": score_result,
+                "order_index": int(event.order_index),
+                "created_at": event.created_at,
+            }
         )
 
     def internal_interaction_from_event(
@@ -265,3 +274,7 @@ class AiCoachChatProjection:
             capability_keys=list(internal.capability_keys),
             source_chapter_orders=list(internal.source_chapter_orders),
         )
+
+
+def _payload_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}

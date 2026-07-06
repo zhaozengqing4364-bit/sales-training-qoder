@@ -3,17 +3,13 @@ import { describe, expect, it } from "vitest";
 import type { SalesTrainerPath, SalesTrainerUnit } from "@/lib/api/types";
 
 import {
-    collectPathUnitIds,
     findFocusLevel,
     getAudioPassThreshold,
     getLearnerChapterHint,
     getLearnerChapterLink,
     getSubmissionStatusLabel,
     getUnitTypeLabel,
-    isLikelyInternalUnit,
-    partitionUnits,
     resolvePrimaryAction,
-    sortExtraUnits,
 } from "./learner-presenter";
 
 const baseUnit = (overrides: Partial<SalesTrainerUnit>): SalesTrainerUnit => ({
@@ -95,32 +91,8 @@ describe("learner-presenter", () => {
         expect(getSubmissionStatusLabel("scored")).toBe("评分完成");
     });
 
-    it("collects path unit ids and partitions orphan units", () => {
-        const paths = [basePath()];
-        const pathUnitIds = collectPathUnitIds(paths);
-        const units = [
-            baseUnit({ unit_id: "quiz-unit" }),
-            baseUnit({ unit_id: "audio-unit", unit_type: "audio_scoring" }),
-            baseUnit({ unit_id: "extra-unit", name: "额外练习" }),
-        ];
-
-        const { extraUnits } = partitionUnits(units, pathUnitIds);
-        expect(extraUnits.map((unit) => unit.unit_id)).toEqual(["extra-unit"]);
-    });
-
-    it("detects likely internal units and sorts them after regular units", () => {
-        expect(isLikelyInternalUnit(baseUnit({ name: "E2E 冒烟" }))).toBe(true);
-        expect(isLikelyInternalUnit(baseUnit({ name: "正式销售话术" }))).toBe(false);
-
-        const sorted = sortExtraUnits([
-            baseUnit({ unit_id: "internal", name: "Goal验收脚本" }),
-            baseUnit({ unit_id: "regular", name: "客户异议" }),
-        ]);
-        expect(sorted.map((unit) => unit.unit_id)).toEqual(["regular", "internal"]);
-    });
-
-    it("reads audio pass threshold with default fallback", () => {
-        expect(getAudioPassThreshold(baseUnit({ config: {} }))).toBe(70);
+    it("does not invent an audio pass threshold when configuration is missing", () => {
+        expect(getAudioPassThreshold(baseUnit({ config: {} }))).toBeNull();
         expect(getAudioPassThreshold(baseUnit({
             unit_type: "audio_scoring",
             config: { audio: { pass_threshold: 80 } },

@@ -302,6 +302,10 @@ def _practice_template_id_for_session(task: TrainingTask) -> UUID | None:
         ) from exc
 
 
+def _set_orm_field(row: object, name: str, value: object) -> None:
+    setattr(row, name, value)
+
+
 async def start_training_task_session(
     db: AsyncSession,
     task: TrainingTask,
@@ -328,10 +332,15 @@ async def start_training_task_session(
         current_user=current_user,
     )
     session = create_result.session
-    snapshot = deepcopy(session.voice_policy_snapshot) if isinstance(session.voice_policy_snapshot, dict) else {}
+    voice_policy_snapshot = getattr(session, "voice_policy_snapshot", None)
+    snapshot: dict[str, Any] = (
+        deepcopy(voice_policy_snapshot)
+        if isinstance(voice_policy_snapshot, dict)
+        else {}
+    )
     snapshot["training_task_context"] = _training_task_context(task)
-    session.voice_policy_snapshot = snapshot
-    task.status = "in_progress"
+    _set_orm_field(session, "voice_policy_snapshot", snapshot)
+    _set_orm_field(task, "status", "in_progress")
     await db.commit()
     await db.refresh(task)
     await db.refresh(session)
@@ -349,7 +358,10 @@ def _build_before_after_summary(
     task: TrainingTask,
     session: PracticeSession,
 ) -> dict[str, Any]:
-    snapshot = session.effectiveness_snapshot if isinstance(session.effectiveness_snapshot, dict) else {}
+    effectiveness_snapshot = getattr(session, "effectiveness_snapshot", None)
+    snapshot: dict[str, Any] = (
+        effectiveness_snapshot if isinstance(effectiveness_snapshot, dict) else {}
+    )
     return {
         "before": {
             "goal": str(task.goal),
@@ -383,9 +395,9 @@ async def complete_training_task(
     if str(session.status) not in {"completed", "scoring"}:
         raise ValueError("[SESSION_NOT_TERMINAL]")
 
-    task.resulting_session_id = str(session.session_id)
-    task.before_after_summary = _build_before_after_summary(task, session)
-    task.status = "completed"
+    _set_orm_field(task, "resulting_session_id", str(session.session_id))
+    _set_orm_field(task, "before_after_summary", _build_before_after_summary(task, session))
+    _set_orm_field(task, "status", "completed")
     await db.commit()
     await db.refresh(task)
     return task
@@ -401,7 +413,7 @@ async def mark_training_task_terminal(
         raise ValueError("[INVALID_TRAINING_TASK_TRANSITION]")
     if status not in {"cancelled", "expired"}:
         raise ValueError("[INVALID_TRAINING_TASK_TRANSITION]")
-    task.status = status
+    _set_orm_field(task, "status", status)
     await db.commit()
     await db.refresh(task)
     return task

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sales_trainer.services.learner_public_projection import (
     strip_learner_internal_fields,
@@ -8,7 +8,7 @@ from sales_trainer.services.learner_public_projection import (
 
 
 def learner_safe_unit_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    safe_payload = strip_learner_internal_fields(payload)
+    safe_payload = cast(dict[str, Any], strip_learner_internal_fields(payload))
     config = safe_payload.get("config")
     if not isinstance(config, dict):
         return safe_payload

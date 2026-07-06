@@ -785,7 +785,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             "response": {"modalities": ["audio", "text"]},
         }
         grounding_context = self._pending_grounding_context.strip()
-        roleplay_repair_instruction = str(
+        roleplay_soft_correction_hint = str(
             getattr(self, "_roleplay_repair_instruction", "") or ""
         ).strip()
         roleplay_turn_context = self._roleplay_turn_instruction_context()
@@ -819,11 +819,13 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 roleplay_turn_instruction=roleplay_turn_instruction,
                 role_anchor_text=role_anchor_text,
             )
-        if roleplay_repair_instruction:
+        if roleplay_soft_correction_hint:
             turn_instructions = (
-                f"{turn_instructions}\n\n【角色合同修复指令】\n{roleplay_repair_instruction}"
+                f"{turn_instructions}\n\n【下一轮角色合同软纠偏提示】\n"
+                f"{roleplay_soft_correction_hint}"
                 if turn_instructions
-                else f"【角色合同修复指令】\n{roleplay_repair_instruction}"
+                else f"【下一轮角色合同软纠偏提示】\n"
+                f"{roleplay_soft_correction_hint}"
             )
         turn_instruction_hash = build_turn_instruction_hash(turn_instructions)
         if turn_instructions:
@@ -845,8 +847,8 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             grounding_debug_payload["roleplay_visible_keys_count"] = len(
                 roleplay_turn_context.get("visible_keys", [])
             )
-        if roleplay_repair_instruction:
-            grounding_debug_payload["roleplay_repair"] = True
+        if roleplay_soft_correction_hint:
+            grounding_debug_payload["roleplay_soft_correction_hint"] = True
         await self._record_roleplay_instruction_hash_metric(grounding_debug_payload)
         self._log_grounding_debug("response_create", **grounding_debug_payload)
 
@@ -1433,7 +1435,10 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             if isinstance(self._latest_knowledge_answer_diagnostics, dict)
             else None,
         )
-        response_text = await self._apply_roleplay_output_guard(response_text)
+        response_text = await self._apply_roleplay_output_guard(
+            response_text,
+            existing_decision=response_state.roleplay_violation_decision,
+        )
 
         if response_text:
             await self._persist_message(
@@ -1517,7 +1522,12 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         await self._send_status("listening")
         return True
 
-    async def _apply_roleplay_output_guard(self, response_text: str) -> str:
+    async def _apply_roleplay_output_guard(
+        self,
+        response_text: str,
+        *,
+        existing_decision: dict[str, Any] | None = None,
+    ) -> str:
         if not response_text:
             return response_text
         contract = self._roleplay_contract()
@@ -1530,20 +1540,27 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         )
         if not isinstance(decision, dict) or decision.get("severity") in (None, "none"):
             return response_text
-        await self._record_roleplay_compliance_decision(
+        duplicate_decision = self._roleplay_decisions_match(
+            existing_decision,
             decision,
-            response_id=None,
-            action_override=None,
         )
+        if not duplicate_decision:
+            self._roleplay_repair_instruction = (
+                self._build_roleplay_soft_correction_hint(decision)
+            )
+            await self._record_roleplay_compliance_decision(
+                decision,
+                response_id=None,
+                action_override="observe_only",
+            )
         self._log_grounding_debug(
             "roleplay_output_guard_decision",
             violation_code=decision.get("violation_code"),
             severity=decision.get("severity"),
             action=decision.get("action"),
             matched_pattern=decision.get("matched_pattern"),
+            observe_only=True,
         )
-        if decision.get("severity") == "blocking":
-            return self._roleplay_repair_message(contract, decision)
         return response_text
 
     async def _apply_roleplay_stream_guard(self) -> None:
@@ -1566,45 +1583,29 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             or decision.get("severity") != "blocking"
         ):
             return
-        response_state.roleplay_suppressed = True
+        if self._roleplay_decisions_match(
+            response_state.roleplay_violation_decision,
+            decision,
+        ):
+            return
         response_state.roleplay_violation_decision = decision
-        action = "cancel_stream"
-        if not response_state.roleplay_cancel_sent:
-            response_state.roleplay_cancel_sent = True
-            await self._send_upstream({"type": "response.cancel"})
+        self._roleplay_repair_instruction = self._build_roleplay_soft_correction_hint(
+            decision
+        )
         await self._record_roleplay_compliance_decision(
             decision,
             response_id=response_state.response_id,
-            action_override=action,
+            action_override="observe_only",
             count_violation=True,
         )
         self._log_grounding_debug(
-            "roleplay_stream_guard_cancelled",
+            "roleplay_stream_guard_observed_only",
             request_id=response_state.request_id,
             response_id=response_state.response_id,
             violation_code=decision.get("violation_code"),
             matched_pattern=decision.get("matched_pattern"),
             audio_forwarded=response_state.roleplay_audio_forwarded,
         )
-        if (
-            not self._roleplay_regenerate_attempted_for_turn
-            and not response_state.roleplay_regenerate_attempted
-        ):
-            response_state.roleplay_regenerate_attempted = True
-            self._roleplay_regenerate_attempted_for_turn = True
-            self._roleplay_repair_instruction = self._build_roleplay_repair_instruction(
-                decision
-            )
-            await self._record_roleplay_compliance_decision(
-                decision,
-                response_id=response_state.response_id,
-                action_override="regenerate_once",
-                count_violation=False,
-            )
-            self._active_response = None
-            await self._create_response()
-            return
-        await self._send_roleplay_repair_audio(response_state)
 
     async def _record_roleplay_compliance_decision(
         self,
@@ -1642,7 +1643,10 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             roleplay_metrics["cancel_stream_count"] = int(
                 roleplay_metrics.get("cancel_stream_count") or 0
             ) + 1
-        if decision.get("violation_code") == "ROLEPLAY_HIDDEN_INFORMATION_LEAK":
+        if (
+            action != "observe_only"
+            and decision.get("violation_code") == "ROLEPLAY_HIDDEN_INFORMATION_LEAK"
+        ):
             roleplay_metrics["hidden_leak_prevented_count"] = int(
                 roleplay_metrics.get("hidden_leak_prevented_count") or 0
             ) + 1
@@ -1704,14 +1708,27 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         )
 
     @staticmethod
-    def _build_roleplay_repair_instruction(decision: dict[str, Any]) -> str:
-        code = str(decision.get("violation_code") or "")
-        pattern = str(decision.get("matched_pattern") or "")
+    def _build_roleplay_soft_correction_hint(decision: dict[str, Any]) -> str:
+        code = str(decision.get("violation_code") or "unknown")
         return (
-            "上一条输出触发了角色合同违规，必须重写本轮回答。"
-            f"违规码={code or 'unknown'}；命中={pattern or 'none'}。"
-            "新回答必须保持客户角色，不声称未发生的关系史，不披露未在当前可见字段中的隐藏信息，"
-            "不要解释系统规则。"
+            f"上一轮角色口径疑似偏离（{code}）。下一轮自然纠正：只使用当前可见信息，"
+            "保持首次正式沟通口径，不解释系统规则。"
+        )
+
+    @staticmethod
+    def _roleplay_decisions_match(
+        existing_decision: dict[str, Any] | None,
+        decision: dict[str, Any],
+    ) -> bool:
+        if not isinstance(existing_decision, dict):
+            return False
+        return (
+            str(existing_decision.get("severity") or "")
+            == str(decision.get("severity") or "")
+            and str(existing_decision.get("violation_code") or "")
+            == str(decision.get("violation_code") or "")
+            and str(existing_decision.get("matched_pattern") or "")
+            == str(decision.get("matched_pattern") or "")
         )
 
     def _roleplay_contract(self) -> dict[str, Any] | None:

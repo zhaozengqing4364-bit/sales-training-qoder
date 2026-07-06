@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.ai.llm_service import create_llm_service, get_llm_service
 from common.ai.models import ModelConfig, ModelType
 from common.db.models import User
-from curriculum_practice.models import LearningChapter
+from common.db.typing import json_dict_or_empty
 from prompt_templates.models import (
     PROMPT_BUSINESS_PURPOSE_BUSINESS_ETIQUETTE_QUESTION,
 )
@@ -49,6 +49,10 @@ from sales_trainer.services.business_etiquette_capability_service import (
 from sales_trainer.services.business_etiquette_import_service import (
     BUSINESS_ETIQUETTE_RESOURCE_TYPE,
     DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
+)
+from sales_trainer.services.curriculum_practice_adapter import (
+    LearningChapterSummary,
+    get_learning_chapter_by_order,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.question_bank.service import (
@@ -126,7 +130,7 @@ class BusinessEtiquetteQuestionDraftServiceError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class _ChapterSource:
-    chapter: LearningChapter
+    chapter: LearningChapterSummary
     title: str
     content: str
 
@@ -199,9 +203,10 @@ class BusinessEtiquetteQuestionDraftService:
             chapter_order=payload.chapter_order,
         )
         template = await self._require_prompt_template(payload.prompt_template_id)
-        runtime_model_config, selected_model_config = await self._resolve_llm_model_config(
-            payload.llm_model_config
-        )
+        (
+            runtime_model_config,
+            selected_model_config,
+        ) = await self._resolve_llm_model_config(payload.llm_model_config)
         variables = _generation_variables(
             payload=payload,
             logical_id=logical_id,
@@ -337,7 +342,9 @@ class BusinessEtiquetteQuestionDraftService:
                 == question_type
             )
         if status is not None:
-            stmt = stmt.where(SalesTrainerBusinessEtiquetteQuestionDraft.status == status)
+            stmt = stmt.where(
+                SalesTrainerBusinessEtiquetteQuestionDraft.status == status
+            )
         if batch_id is not None:
             stmt = stmt.where(
                 SalesTrainerBusinessEtiquetteQuestionDraft.batch_id == batch_id
@@ -351,9 +358,7 @@ class BusinessEtiquetteQuestionDraftService:
         rows = list(result.scalars().all())
         if capability_key is not None:
             rows = [
-                row
-                for row in rows
-                if capability_key in list(row.capability_keys or [])
+                row for row in rows if capability_key in list(row.capability_keys or [])
             ]
         total = len(rows)
         page = rows[offset : offset + limit]
@@ -376,7 +381,7 @@ class BusinessEtiquetteQuestionDraftService:
         for field, value in updates.items():
             setattr(draft, field, _dump_options(value) if field == "options" else value)
         _validate_draft_shape(draft)
-        draft.updated_by = str(actor.user_id)
+        setattr(draft, "updated_by", str(actor.user_id))
         await self._logs.record(
             actor=actor,
             action="business_etiquette_question_draft.updated",
@@ -403,11 +408,11 @@ class BusinessEtiquetteQuestionDraftService:
     ) -> BusinessEtiquetteQuestionDraftResponse:
         draft = await self._require_draft(draft_id)
         _require_pending_review(draft)
-        draft.status = "rejected"
-        draft.review_notes = payload.review_notes
-        draft.reviewed_by = str(actor.user_id)
-        draft.reviewed_at = datetime.now(UTC)
-        draft.updated_by = str(actor.user_id)
+        setattr(draft, "status", "rejected")
+        setattr(draft, "review_notes", payload.review_notes)
+        setattr(draft, "reviewed_by", str(actor.user_id))
+        setattr(draft, "reviewed_at", datetime.now(UTC))
+        setattr(draft, "updated_by", str(actor.user_id))
         await self._logs.record(
             actor=actor,
             action="business_etiquette_question_draft.rejected",
@@ -451,12 +456,12 @@ class BusinessEtiquetteQuestionDraftService:
                 exc.status_code,
             ) from exc
 
-        draft.status = "converted"
-        draft.question_id = str(question.question_id)
-        draft.review_notes = payload.review_notes
-        draft.reviewed_by = str(actor.user_id)
-        draft.reviewed_at = datetime.now(UTC)
-        draft.updated_by = str(actor.user_id)
+        setattr(draft, "status", "converted")
+        setattr(draft, "question_id", str(question.question_id))
+        setattr(draft, "review_notes", payload.review_notes)
+        setattr(draft, "reviewed_by", str(actor.user_id))
+        setattr(draft, "reviewed_at", datetime.now(UTC))
+        setattr(draft, "updated_by", str(actor.user_id))
         await self._logs.record(
             actor=actor,
             action="business_etiquette_question_draft.approved",
@@ -500,9 +505,9 @@ class BusinessEtiquetteQuestionDraftService:
 
     async def _capability_snapshot(self, logical_id: str) -> Any:
         try:
-            snapshot = await BusinessEtiquetteCapabilityService(
-                self._db
-            ).get_snapshot(training_pack_key=logical_id)
+            snapshot = await BusinessEtiquetteCapabilityService(self._db).get_snapshot(
+                training_pack_key=logical_id
+            )
         except BusinessEtiquetteCapabilityServiceError as exc:
             raise BusinessEtiquetteQuestionDraftServiceError(
                 exc.code,
@@ -523,7 +528,7 @@ class BusinessEtiquetteQuestionDraftService:
         *,
         chapter_order: int,
     ) -> _ChapterSource:
-        payload = revision.payload_json or {}
+        payload: dict[str, Any] = json_dict_or_empty(revision.payload_json)
         learning_content_id = payload.get("learning_content_id")
         if not isinstance(learning_content_id, str) or not learning_content_id:
             raise BusinessEtiquetteQuestionDraftServiceError(
@@ -531,15 +536,11 @@ class BusinessEtiquetteQuestionDraftService:
                 "商务礼仪训练包缺少文章内容绑定，无法生成题目草稿。",
                 409,
             )
-        result = await self._db.execute(
-            select(LearningChapter)
-            .where(
-                LearningChapter.learning_content_id == learning_content_id,
-                LearningChapter.order_index == chapter_order,
-            )
-            .limit(1)
+        chapter = await get_learning_chapter_by_order(
+            self._db,
+            learning_content_id,
+            chapter_order,
         )
-        chapter = result.scalar_one_or_none()
         if chapter is None:
             raise BusinessEtiquetteQuestionDraftServiceError(
                 "[BUSINESS_ETIQUETTE_TRAINING_PACK_CHAPTER_MISSING]",
@@ -635,7 +636,7 @@ class BusinessEtiquetteQuestionDraftService:
                 409,
             )
 
-        extra_config = selected.extra_config or {}
+        extra_config: dict[str, Any] = json_dict_or_empty(selected.extra_config)
         requested_extra_config = runtime_config.get("extra_config")
         if isinstance(requested_extra_config, dict):
             extra_config = {**extra_config, **requested_extra_config}
@@ -770,11 +771,12 @@ def _generation_variables(
     capabilities_payload = [
         capability.model_dump(mode="json") for capability in capabilities
     ]
+    revision_payload = json_dict_or_empty(revision.payload_json)
     return {
         "training_pack_key": logical_id,
         "training_pack_revision_id": str(revision.revision_id),
         "training_pack_revision_no": revision.revision_no,
-        "book_title": str((revision.payload_json or {}).get("book_title") or ""),
+        "book_title": str(revision_payload.get("book_title") or ""),
         "chapter_id": str(chapter_source.chapter.chapter_id),
         "chapter_order": payload.chapter_order,
         "chapter_title": chapter_source.title,
@@ -814,7 +816,9 @@ def _extract_json_payload(raw_text: str) -> dict[str, Any] | list[Any] | None:
             return payload
     except json.JSONDecodeError:
         pass
-    start_candidates = [index for index in (text.find("{"), text.find("[")) if index >= 0]
+    start_candidates = [
+        index for index in (text.find("{"), text.find("[")) if index >= 0
+    ]
     if not start_candidates:
         return None
     start = min(start_candidates)
@@ -893,7 +897,9 @@ def _normalize_generated_item(
     fallback_source_excerpt: str,
 ) -> dict[str, Any]:
     question_type = str(raw_item.get("question_type") or raw_item.get("type") or "")
-    options = _normalize_options(raw_item.get("options") or raw_item.get("choices") or [])
+    options = _normalize_options(
+        raw_item.get("options") or raw_item.get("choices") or []
+    )
     correct_answers = raw_item.get("correct_answers") or raw_item.get("answers") or []
     if isinstance(correct_answers, str):
         correct_answers = [correct_answers]
@@ -957,7 +963,7 @@ def _draft_from_generated_item(
     model_config: dict[str, Any],
     actor: User,
 ) -> SalesTrainerBusinessEtiquetteQuestionDraft:
-    payload = revision.payload_json or {}
+    payload: dict[str, Any] = json_dict_or_empty(revision.payload_json)
     return SalesTrainerBusinessEtiquetteQuestionDraft(
         batch_id=batch_id,
         training_pack_key=logical_id,
@@ -1115,14 +1121,17 @@ def _question_tags(
 
 def _dump_options(value: Any) -> Any:
     if isinstance(value, list):
-        return [item.model_dump() if hasattr(item, "model_dump") else item for item in value]
+        return [
+            item.model_dump() if hasattr(item, "model_dump") else item for item in value
+        ]
     return value
 
 
 def _is_question_generation_prompt_template(template: Any) -> bool:
     raw_business_purpose = getattr(template, "business_purpose", None)
-    if hasattr(raw_business_purpose, "value"):
-        raw_business_purpose = raw_business_purpose.value
+    raw_business_purpose_value = getattr(raw_business_purpose, "value", None)
+    if raw_business_purpose_value is not None:
+        raw_business_purpose = raw_business_purpose_value
     business_purpose = str(raw_business_purpose or "").strip()
     if business_purpose:
         return business_purpose == PROMPT_BUSINESS_PURPOSE_BUSINESS_ETIQUETTE_QUESTION
@@ -1135,8 +1144,7 @@ def _is_question_generation_prompt_template(template: Any) -> bool:
         for field in ("name", "prompt_type", "category", "template")
     ).lower()
     has_question_intent = any(
-        keyword.lower() in searchable_text
-        for keyword in QUESTION_DRAFT_PROMPT_KEYWORDS
+        keyword.lower() in searchable_text for keyword in QUESTION_DRAFT_PROMPT_KEYWORDS
     )
     has_excluded_intent = any(
         keyword.lower() in searchable_text
