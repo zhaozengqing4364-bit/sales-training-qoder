@@ -38,3 +38,38 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: 管理者团队学习看板（3-PR 完成）
+
+**Date**: 2026-07-07
+**Task**: 管理者团队学习看板（3-PR 完成）
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+为 training_manager 打造专属团队学习看板，让其只关注带教不碰 admin 配置。PR1 后端权限测试补强(team_department 不被绕过)+前端 journey admin client 方法；PR2 看板页 /team + sidebar 入口 + 登录分流，trellis-check 修了 risk_reasons 工程 key 泄露 + 回退了 dashboard 主页范围蔓延重构；PR3 下钻详情页 /team/[learnerId] + 待辅导标记(复用后端 risk_learners + 中文映射)。9 条 AC 全部验收通过，全量回归 31 前端测试 + 3 后端测试 passed。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e8dd4a6a` | (see git log) |
+| `a3728804` | (see git log) |
+| `3c578913` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
