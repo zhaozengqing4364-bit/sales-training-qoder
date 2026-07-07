@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "重设计 ModuleCard 为关卡区块组件，需复用 GlassCard/Badge/图标，遵循 props 约定与 cn() 样式模式"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "详情页属 admin console 性质（intent-based surfaces、bento box），需避免空泛卡片、突出主操作（下一步该做什么）"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "module ViewModel 类型需穷举状态枚举、无 any、DTO→ViewModel 映射规范"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用现有 view-models.ts（getStageLabel/detectJourneyRiskModules/formatRiskReasons）与 ProgressCard，不重复实现"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "详情页测试需覆盖关卡分组渲染、同关多部分归组、各状态图标/颜色、不泄露工程字段"}
