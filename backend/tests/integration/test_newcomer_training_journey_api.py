@@ -735,3 +735,118 @@ async def test_should_return_typed_risk_reasons_for_admin_journey_analytics(
     assert risk_learners[0]["risk_module_count"] == 1
     assert risk_learners[0]["risk_module_keys"] == ["business_skills"]
     assert risk_learners[0]["risk_reasons"] == ["business_skills:not_passed"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_training_manager_sees_only_same_department_journeys(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    """training_manager 角色应通过 team_department 过滤只看到本部门学员。
+
+    覆盖 PRD AC5：training_manager 只能看本部门学员，传其他 department 被后端拒。
+    team_department 由后端 _team_scope(current_user) 自动注入，前端传 department
+    不能越权查看其他部门。
+    """
+    admin = await _create_user(test_db, role="admin", department="总部")
+    manager = await _create_user(
+        test_db, role="training_manager", department="销售一部"
+    )
+    same_team_learner = await _create_user(
+        test_db, role="user", department="销售一部"
+    )
+    other_team_learner = await _create_user(
+        test_db, role="user", department="销售二部"
+    )
+    await _publish_minimal_path(test_db, actor=admin)
+
+    list_response = await async_client.get(
+        "/api/v1/admin/sales-trainer/journeys",
+        headers=_auth_headers(manager),
+    )
+    cross_department_response = await async_client.get(
+        "/api/v1/admin/sales-trainer/journeys?department=销售二部",
+        headers=_auth_headers(manager),
+    )
+
+    assert list_response.status_code == 200
+    payload = list_response.json()["data"]
+    assert payload["total"] == 1
+    assert payload["items"][0]["learner_id"] == str(same_team_learner.user_id)
+    assert str(other_team_learner.user_id) not in {
+        item["learner_id"] for item in payload["items"]
+    }
+    # 前端试图传其他 department 绕过 team_scope：后端应忽略并只返回本部门数据
+    assert cross_department_response.status_code == 200
+    assert cross_department_response.json()["data"]["total"] == 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_training_manager_cannot_view_other_department_journey_detail(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    """training_manager 查看其他部门学员的 journey 详情应被拒（404）。
+
+    覆盖 PRD AC5：get_admin_journey 通过 team_department 过滤，跨部门访问返回
+    [TRAINING_RECORD_NOT_FOUND]，避免泄露其他部门学员是否存在。
+    """
+    admin = await _create_user(test_db, role="admin", department="总部")
+    manager = await _create_user(
+        test_db, role="training_manager", department="销售一部"
+    )
+    same_team_learner = await _create_user(
+        test_db, role="user", department="销售一部"
+    )
+    other_team_learner = await _create_user(
+        test_db, role="user", department="销售二部"
+    )
+    await _publish_minimal_path(test_db, actor=admin)
+
+    same_team = await async_client.get(
+        f"/api/v1/admin/sales-trainer/journeys/{same_team_learner.user_id}",
+        headers=_auth_headers(manager),
+    )
+    other_team = await async_client.get(
+        f"/api/v1/admin/sales-trainer/journeys/{other_team_learner.user_id}",
+        headers=_auth_headers(manager),
+    )
+
+    assert same_team.status_code == 200
+    assert same_team.json()["data"]["learner_id"] == str(same_team_learner.user_id)
+    assert other_team.status_code == 404
+    assert other_team.json()["error"] == "[TRAINING_RECORD_NOT_FOUND]"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_learner_rejected_from_admin_journey_endpoints(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    """普通 learner 角色无权调 admin journey 接口（403）。
+
+    覆盖 PRD AC9：普通 learner 调 /admin/journeys 和 /admin/journeys/{id} 应被拒。
+    """
+    admin = await _create_user(test_db, role="admin", department="总部")
+    learner = await _create_user(test_db, role="user", department="销售一部")
+    other_learner = await _create_user(
+        test_db, role="user", department="销售一部"
+    )
+    await _publish_minimal_path(test_db, actor=admin)
+
+    list_response = await async_client.get(
+        "/api/v1/admin/sales-trainer/journeys",
+        headers=_auth_headers(learner),
+    )
+    detail_response = await async_client.get(
+        f"/api/v1/admin/sales-trainer/journeys/{other_learner.user_id}",
+        headers=_auth_headers(learner),
+    )
+
+    assert list_response.status_code == 403
+    assert list_response.json()["error"] == "[ROLE_REQUIRED]"
+    assert detail_response.status_code == 403
+    assert detail_response.json()["error"] == "[ROLE_REQUIRED]"

@@ -55,6 +55,8 @@ import type {
     RealtimeRoleplayStartResponse,
     TrainingJourneyAnalyticsQuery,
     TrainingJourneyAnalyticsResponse,
+    TrainingJourneyListQuery,
+    TrainingJourneyListResponse,
     TrainingJourneyResponse,
 } from "../types";
 import type { ApiRequest, ApiUpload } from "./shared";
@@ -695,6 +697,27 @@ export function createAdminSalesTrainerDomain({
             });
             return request<TrainingJourneyAnalyticsResponse>(
                 `/admin/sales-trainer/journeys/analytics${query}`,
+            );
+        },
+
+        listAdminJourneys: async (params?: TrainingJourneyListQuery) => {
+            const query = buildQueryString({
+                department: params?.department,
+                training_stage: params?.training_stage,
+                module_key: params?.module_key,
+                learner_level: params?.learner_level,
+                role_level: params?.role_level,
+                limit: params?.limit,
+                offset: params?.offset,
+            });
+            return request<TrainingJourneyListResponse>(
+                `/admin/sales-trainer/journeys${query}`,
+            );
+        },
+
+        getAdminJourney: async (learnerId: string) => {
+            return request<TrainingJourneyResponse>(
+                `/admin/sales-trainer/journeys/${encodeURIComponent(learnerId)}`,
             );
         },
 

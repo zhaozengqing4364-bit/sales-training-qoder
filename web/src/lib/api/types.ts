@@ -5360,6 +5360,23 @@ export interface RealtimeRoleplayStartResponse {
     external_binding: RealtimeRoleplayExternalBindingSnapshot;
 }
 
+export interface TrainingJourneyListQuery {
+    department?: string;
+    training_stage?: TrainingJourneyStage;
+    module_key?: string;
+    learner_level?: string;
+    role_level?: string;
+    limit?: number;
+    offset?: number;
+}
+
+export interface TrainingJourneyListResponse {
+    items: TrainingJourneyResponse[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
 export interface TrainingJourneyAnalyticsQuery {
     department?: string;
     training_stage?: TrainingJourneyStage;

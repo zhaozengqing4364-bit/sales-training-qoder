@@ -603,6 +603,124 @@ describe("api.salesTrainer facade", () => {
         );
     });
 
+    it("lists admin journeys with team filters through the central facade", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    items: [
+                        {
+                            journey_id: "journey-1",
+                            learner_id: "learner-1",
+                            learner_name: "张三",
+                            department: "销售一部",
+                            path_key: "newcomer_training_path_v1",
+                            path_revision_id: "rev-1",
+                            path_revision_no: 1,
+                            source: "active_revision",
+                            legacy_snapshot_only: false,
+                            role_capabilities: [],
+                            learner_level: {
+                                level_key: "unassigned",
+                                label: "未分配",
+                                source: "user_profile",
+                                rank: 0,
+                            },
+                            role_level: {
+                                level_key: "learner",
+                                label: "学员",
+                                source: "user_profile",
+                                rank: 0,
+                            },
+                            training_stage: "in_progress",
+                            modules: [],
+                            overall_progress: {
+                                total_modules: 3,
+                                completed_modules: 1,
+                                passed_modules: 1,
+                                needs_remediation_modules: 0,
+                            },
+                            retraining_requests: [],
+                            diagnostics: [],
+                            generated_at: "2026-07-07T00:00:00Z",
+                        },
+                    ],
+                    total: 1,
+                    limit: 50,
+                    offset: 0,
+                },
+            }),
+        });
+
+        const result = await api.admin.salesTrainer.listAdminJourneys({
+            training_stage: "in_progress",
+            limit: 50,
+            offset: 0,
+        });
+
+        expect(result.items[0].learner_id).toBe("learner-1");
+        expect(result.total).toBe(1);
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining(
+                "/admin/sales-trainer/journeys?training_stage=in_progress&limit=50&offset=0",
+            ),
+            expect.any(Object),
+        );
+    });
+
+    it("loads a single admin journey detail through the central facade", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    journey_id: "journey-1",
+                    learner_id: "learner-1",
+                    learner_name: "张三",
+                    department: "销售一部",
+                    path_key: "newcomer_training_path_v1",
+                    path_revision_id: "rev-1",
+                    path_revision_no: 1,
+                    source: "active_revision",
+                    legacy_snapshot_only: false,
+                    role_capabilities: [],
+                    learner_level: {
+                        level_key: "unassigned",
+                        label: "未分配",
+                        source: "user_profile",
+                        rank: 0,
+                    },
+                    role_level: {
+                        level_key: "learner",
+                        label: "学员",
+                        source: "user_profile",
+                        rank: 0,
+                    },
+                    training_stage: "not_started",
+                    modules: [],
+                    overall_progress: {
+                        total_modules: 3,
+                        completed_modules: 0,
+                        passed_modules: 0,
+                        needs_remediation_modules: 0,
+                    },
+                    retraining_requests: [],
+                    diagnostics: [],
+                    generated_at: "2026-07-07T00:00:00Z",
+                },
+            }),
+        });
+
+        const result = await api.admin.salesTrainer.getAdminJourney("learner-1");
+
+        expect(result.learner_id).toBe("learner-1");
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining("/admin/sales-trainer/journeys/learner-1"),
+            expect.any(Object),
+        );
+    });
+
     it("loads realtime roleplay observations through the admin facade", async () => {
         fetchMock.mockResolvedValue({
             ok: true,
