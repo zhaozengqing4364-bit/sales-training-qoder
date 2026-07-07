@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "检查看板是否符合 intent-based surfaces、bento box 布局、无 anti-pattern（模板 dashboard、空泛卡片、多主操作抢焦点）"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "检查看板/详情页测试覆盖（loading/empty/error/无权限各状态）、不泄露工程字段/内部术语"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查类型穷举、无 any、DTO→ViewModel 映射规范"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "检查新建 hook 的状态覆盖与测试模式合规"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查跨层数据流契约清晰、无隐式格式假设、权限边界后端强制"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "检查是否复用现有 journey API/sidebar/状态组件，无重复实现"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查权限越权返回 403、Result 模式、无吞异常"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查后端权限测试覆盖 team_department 不被绕过、training_manager 只看本部门"}

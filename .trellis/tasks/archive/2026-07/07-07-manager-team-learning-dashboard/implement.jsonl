@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "管理者看板属 admin console 性质（intent-based surfaces、bento box 布局、route tree、sidebar 分类），需遵循其五条硬规则与反模式，避免做成模板 dashboard"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "新建看板页与详情页需复用现有组件库（GlassCard/Button/Badge/StatusIndicator），遵循 props 约定与 cn() 样式模式"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "看板数据来自 admin/journeys API，需按 React Query 现有用法（query modules、server→client hydration）组织数据获取，不引入新状态方案"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "看板需新建数据获取 hook（如 use-team-journeys），须遵循现有 hook 规范（loading/error/empty 状态、测试模式）"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "journey 数据有严格类型（SalesTrainerJourneyResponse），需穷举状态枚举、避免 any，前端 DTO→Domain→ViewModel 映射"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "看板跨前后端（API DTO→ViewModel→UI），需按三步骤映射数据流、识别边界、定义契约，避免隐式格式假设"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "后端复用 list_admin_journeys/get_admin_journey，前端复用现有 sidebar/状态组件，须先搜索现有实现禁止重复造轮子"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "PR1 后端权限测试 + 可能的 summary 接口需遵循 Result[T] 模式与 HTTP 错误码约定，training_manager 越权返回 403 而非抛异常"}
