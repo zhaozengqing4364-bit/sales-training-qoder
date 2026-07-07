@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量底线：状态完整、不泄露工程字段、无吞异常"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端权限校验、对象级权限、错误可定位、审计留痕的检查依据"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "核对 API DTO→Domain→ViewModel 映射，无 any、无工程字段泄露"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对跨部门 404、学员 list 端点错误结构统一"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "核对是否复用既有组件/端点，有无重复实现"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核对管理者下钻跨层权限一致性、学员 list 前后端契约"}

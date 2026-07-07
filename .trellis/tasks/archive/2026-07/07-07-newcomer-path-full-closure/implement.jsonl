@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "页面内 audio 回放、材料下载区块、录音历史区都要按组件化与状态规范实现"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "学员侧录音列表需新建 hook + query module，遵循现有 use-sales-trainer-submission-poll 模式"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "录音历史/材料/管理者下钻走 React Query，需按 queryKeys + queryOptions 模式组织"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "SalesTrainerAudioSubmission/Material/ScoreResult 类型映射 API DTO，禁止 any"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新增页面区块/hook/query module 要落在既有目录约定下"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "学员侧 list 端点 + 跨部门 404 要按 Result/API 错误结构统一"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "学员录音列表查询按 current_user 过滤，需遵守查询/分页/索引约定"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端新增端点需权限校验+对象级权限+不泄露工程字段"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "材料下载区块复用 audio/[unitId] 同款组件，管理者详情复用学员结果页，避免重复实现"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "R4 管理者下钻跨 admin/学员端点，R5 跨前后端 list 端点，需跨层一致性"}
