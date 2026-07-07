@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import { generateClientToken } from "@/lib/sales-trainer/idempotency";
@@ -152,12 +153,12 @@ export default function BusinessSkillsExamPage() {
         try {
             const result = await api.newcomerTraining.submitPaperAttempt({
                 paper_id: paper.paper_id,
-                // 幂等键：同一提交流程内生成一次，重复提交返回已存在 attempt。
-                client_token: generateClientToken(),
                 answers: paper.questions.map((question) => ({
                     question_id: question.question_id,
                     answer_payload: answerPayload(question, answers),
                 })),
+                // 幂等键：同一提交流程内生成一次，重复提交返回已存在 attempt。
+                client_token: generateClientToken(),
             });
             router.push(`/sales-trainer/quiz/result/${result.attempt_id}`);
         } catch (submitError) {
@@ -168,6 +169,7 @@ export default function BusinessSkillsExamPage() {
 
     const showLearningGate = learningRequired || learningMismatch;
     const canSubmitPaper = paper?.questions.every((question) => isQuestionAnswered(question, answers)) ?? false;
+    const answeredCount = paper?.questions.filter((question) => isQuestionAnswered(question, answers)).length ?? 0;
     const gateCopy = learningMismatch
         ? {
             title: BUSINESS_SKILLS_EXAM_COPY.learningMismatchTitle,
@@ -222,7 +224,7 @@ export default function BusinessSkillsExamPage() {
                                     {gateCopy.description}
                                 </p>
                             </div>
-                            <Button asChild className="rounded-full bg-slate-900 text-white">
+                            <Button asChild variant="primary">
                                 <Link href={learningHref}>
                                     {gateCopy.actionLabel}
                                 </Link>
@@ -230,13 +232,18 @@ export default function BusinessSkillsExamPage() {
                         </div>
                     ) : paper ? (
                         <>
-                            <div>
-                                <h2 className="text-xl font-black text-slate-900">{paper.title}</h2>
-                                <p className="mt-1 text-xs text-slate-500">共 {paper.questions.length} 道题</p>
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <h2 className="text-xl font-black text-slate-900">{paper.title}</h2>
+                                    <p className="mt-1 text-xs text-slate-500">共 {paper.questions.length} 道题</p>
+                                </div>
+                                <Badge variant={answeredCount === paper.questions.length ? "green" : "blue"}>
+                                    已答 {answeredCount} / {paper.questions.length}
+                                </Badge>
                             </div>
                             <div className="space-y-5">
                                 {paper.questions.map((question) => (
-                                    <div key={question.question_id} className="space-y-3 rounded-2xl border border-slate-100 p-4">
+                                    <div key={question.question_id} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                                         <p className="text-sm font-semibold text-slate-900">{question.order_index}. {question.stem}</p>
                                         <QuestionField
                                             question={question}
@@ -247,7 +254,8 @@ export default function BusinessSkillsExamPage() {
                                 ))}
                             </div>
                             <Button
-                                className="w-full rounded-full bg-slate-900 text-white"
+                                variant="primary"
+                                className="w-full"
                                 onClick={() => void submitPaper()}
                                 disabled={isSubmitting || !canSubmitPaper}
                             >

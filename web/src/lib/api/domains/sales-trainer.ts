@@ -259,6 +259,19 @@ export function createSalesTrainerDomain({
             );
         },
 
+        listMyAudioSubmissions: async (params?: {
+            limit?: number;
+            offset?: number;
+        }) => {
+            const query = buildQueryString({
+                limit: params?.limit,
+                offset: params?.offset,
+            });
+            return request<SalesTrainerAudioSubmissionListResponse>(
+                `/sales-trainer/audio-submissions${query}`,
+            );
+        },
+
         getAudioSubmissionFileUrl: (submissionId: string) => {
             return `${resolveApiBaseUrl()}/sales-trainer/audio-submissions/${encodeURIComponent(submissionId)}/file`;
         },

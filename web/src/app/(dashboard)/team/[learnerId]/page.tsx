@@ -13,6 +13,7 @@ import {
     User,
     Circle,
     Loader2,
+    Headphones,
 } from "lucide-react";
 
 import { GlassCard } from "@/components/ui/glass-card";
@@ -76,6 +77,8 @@ interface PartViewModel {
     score_label: string;
     next_action_label: string;
     is_risk: boolean;
+    /** 学员录音详情入口（仅 audio_submission 且已有提交记录时存在） */
+    audio_detail_href?: string;
 }
 
 interface StageGroupViewModel {
@@ -190,6 +193,16 @@ function mapModuleToPartViewModel(journeyModule: TrainingJourneyModuleProgress):
     // locked 不展示成绩
     const scoreLabel = status === "locked" ? "—" : formatScore(journeyModule.score, journeyModule.max_score);
 
+    // 管理者下钻学员录音详情：仅 audio_submission 且已有提交记录时提供入口。
+    // latest_outcome.source_record_id 即 submission_id（record_type === "audio_submission"）。
+    const audioOutcome = journeyModule.latest_outcome;
+    const audioDetailHref =
+        kind === "audio_submission"
+            && audioOutcome?.record_type === "audio_submission"
+            && audioOutcome.source_record_id
+            ? `/sales-trainer/audio/result/${audioOutcome.source_record_id}?from=admin`
+            : undefined;
+
     return {
         // 同关内 kind 唯一，跨关用 order_index 区分 → 全局唯一
         react_key: `${journeyModule.order_index ?? 0}-${kind}`,
@@ -198,6 +211,7 @@ function mapModuleToPartViewModel(journeyModule: TrainingJourneyModuleProgress):
         score_label: scoreLabel,
         next_action_label: nextActionLabel,
         is_risk: isPartAtRisk(journeyModule),
+        audio_detail_href: audioDetailHref,
     };
 }
 
@@ -533,6 +547,15 @@ function PartRow({ part }: { part: PartViewModel }) {
                     ) : null}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">下一步：{part.next_action_label}</p>
+                {part.audio_detail_href ? (
+                    <Link
+                        href={part.audio_detail_href}
+                        className="inline-flex items-center gap-1 mt-1 text-xs font-medium text-emerald-700 hover:text-emerald-900"
+                    >
+                        <Headphones className="w-3 h-3" />
+                        听录音
+                    </Link>
+                ) : null}
             </div>
             <div className="shrink-0 text-right">
                 <span className="text-xs text-slate-400 block">成绩</span>

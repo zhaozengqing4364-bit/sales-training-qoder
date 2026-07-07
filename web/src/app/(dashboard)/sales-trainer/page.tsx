@@ -3,11 +3,23 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowLeft, RefreshCw } from "lucide-react";
+import {
+    AlertTriangle,
+    ArrowLeft,
+    ArrowRight,
+    CheckCircle2,
+    Layers,
+    Play,
+    RefreshCw,
+    Trophy,
+    XCircle,
+    Headphones,
+} from "lucide-react";
 
 import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useMyAudioSubmissions } from "@/hooks/use-my-audio-submissions";
 import { ApiRequestError, api, getApiErrorMessage } from "@/lib/api/client";
 import type {
     TrainingJourneyModuleProgress,
@@ -17,6 +29,13 @@ import type {
     TrainingJourneyResponse,
     TrainingJourneyStage,
 } from "@/lib/api/types";
+import { cn } from "@/lib/utils";
+import {
+    getJourneyStageBadgeVariant,
+    getJourneyStageCardAccent,
+    getModuleIcon,
+    getScoreTextColorClass,
+} from "@/lib/sales-trainer/journey-presentation";
 
 const JOURNEY_STAGE_LABELS: Record<TrainingJourneyStage, string> = {
     not_started: "未开始",
@@ -64,19 +83,6 @@ const JOURNEY_FAILURE_TYPE_LABELS: Record<
 
 function getJourneyStageLabel(stage: TrainingJourneyStage): string {
     return JOURNEY_STAGE_LABELS[stage] ?? stage;
-}
-
-function getJourneyStageBadgeClass(stage: TrainingJourneyStage): string {
-    if (stage === "passed" || stage === "scored") {
-        return "bg-emerald-100 text-emerald-700";
-    }
-    if (stage === "failed" || stage === "error_terminal" || stage === "manual_review") {
-        return "bg-red-100 text-red-700";
-    }
-    if (stage === "needs_remediation" || stage === "error_transient") {
-        return "bg-amber-100 text-amber-700";
-    }
-    return "bg-blue-100 text-blue-700";
 }
 
 function getModuleTypeLabel(moduleType: TrainingJourneyModuleType): string {
@@ -216,27 +222,63 @@ interface EndpointIssueCardProps {
     onRetry: () => void;
 }
 
+interface StatTileProps {
+    icon: React.ReactNode;
+    iconBg: string;
+    label: string;
+    value: number;
+    valueClass?: string;
+}
+
+function StatTile({ icon, iconBg, label, value, valueClass }: StatTileProps) {
+    return (
+        <div className="rounded-2xl border border-stone-200/70 bg-white p-4 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_4px_12px_-2px_rgba(28,25,23,0.05)]">
+            <div
+                className={cn(
+                    "mb-3 flex h-10 w-10 items-center justify-center rounded-xl",
+                    iconBg,
+                )}
+            >
+                {icon}
+            </div>
+            <p className="text-xs font-medium text-stone-500">{label}</p>
+            <p
+                className={cn(
+                    "mt-1 text-2xl font-black tabular-nums text-slate-900",
+                    valueClass,
+                )}
+            >
+                {value}
+            </p>
+        </div>
+    );
+}
+
 function EndpointIssueCard({ title, description, error, tone, onRetry }: EndpointIssueCardProps) {
     const message = getLearnerIssueMessage(error);
-    const containerClass =
+    const accentClass =
         tone === "error"
-            ? "border border-red-100 bg-red-50"
-            : "border border-amber-100 bg-amber-50";
-    const titleClass = tone === "error" ? "text-red-950" : "text-amber-950";
-    const textClass = tone === "error" ? "text-red-800" : "text-amber-800";
-    const iconClass = tone === "error" ? "text-red-700" : "text-amber-700";
+            ? "bg-rose-50/60"
+            : "bg-amber-50/60";
+    const titleClass = tone === "error" ? "text-rose-950" : "text-amber-950";
+    const textClass = tone === "error" ? "text-rose-800" : "text-amber-800";
+    const iconClass = tone === "error" ? "text-rose-600" : "text-amber-600";
 
     return (
-        <GlassCard className={`space-y-4 p-5 ${containerClass}`}>
+        <GlassCard className={cn("space-y-4 p-5", accentClass)}>
             <div className="flex items-start gap-3">
-                <AlertTriangle className={`mt-0.5 h-5 w-5 ${iconClass}`} aria-hidden />
+                <AlertTriangle className={cn("mt-0.5 h-5 w-5 shrink-0", iconClass)} aria-hidden />
                 <div className="space-y-2">
-                    <h2 className={`text-lg font-black ${titleClass}`}>{title}</h2>
-                    <p className={`text-sm leading-6 ${textClass}`}>{description}</p>
-                    <p className={`text-sm font-medium ${textClass}`}>{message}</p>
+                    <h2 className={cn("text-lg font-black", titleClass)}>{title}</h2>
+                    <p className={cn("text-sm leading-6", textClass)}>{description}</p>
+                    <p className={cn("text-sm font-medium", textClass)}>{message}</p>
                 </div>
             </div>
-            <Button variant="outline" className="rounded-full" onClick={onRetry}>
+            <Button
+                variant={tone === "error" ? "danger" : "outline"}
+                onClick={onRetry}
+            >
+                <RefreshCw className="mr-2 h-4 w-4" />
                 重试
             </Button>
         </GlassCard>
@@ -306,6 +348,9 @@ export default function SalesTrainerPage() {
     );
     const retrainingRequests = journey?.retraining_requests ?? [];
 
+    // 学员"我的录音"区：只在 journey 加载成功后加载，避免无路径时多余请求。
+    const myAudio = useMyAudioSubmissions({ enabled: Boolean(journey) });
+
     return (
         <div className="space-y-6 pb-20">
             <div className="space-y-4">
@@ -327,7 +372,6 @@ export default function SalesTrainerPage() {
                     </div>
                     <Button
                         variant="outline"
-                        className="rounded-full"
                         onClick={() => void loadPage()}
                         disabled={isLoading}
                     >
@@ -361,7 +405,7 @@ export default function SalesTrainerPage() {
                     <GlassCard className="space-y-5 p-6">
                         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                             <div className="space-y-3">
-                                <Badge className="bg-slate-100 text-slate-700">当前训练</Badge>
+                                <Badge variant="gray">当前训练</Badge>
                                 <div>
                                     <h2 className="text-2xl font-black text-slate-900">
                                         当前训练状态
@@ -375,47 +419,48 @@ export default function SalesTrainerPage() {
                                     <span>角色等级：{journey.role_level.label}</span>
                                 </div>
                             </div>
-                            <div className="space-y-2 rounded-2xl bg-slate-50 px-4 py-3 text-right">
-                                <p className="text-xs font-medium text-slate-500">当前阶段</p>
-                                <Badge
-                                    className={getJourneyStageBadgeClass(journey.training_stage)}
-                                >
+                            <div className="space-y-2 rounded-2xl border border-stone-200/70 bg-stone-50/60 px-4 py-3 text-right">
+                                <p className="text-xs font-medium text-stone-500">当前阶段</p>
+                                <Badge variant={getJourneyStageBadgeVariant(journey.training_stage)}>
                                     {getJourneyStageLabel(journey.training_stage)}
                                 </Badge>
                             </div>
                         </div>
 
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                            <div className="rounded-2xl bg-slate-50 p-4">
-                                <p className="text-xs text-slate-500">模块总数</p>
-                                <p className="mt-2 text-2xl font-black text-slate-900">
-                                    {journey.overall_progress.total_modules}
-                                </p>
-                            </div>
-                            <div className="rounded-2xl bg-slate-50 p-4">
-                                <p className="text-xs text-slate-500">已完成</p>
-                                <p className="mt-2 text-2xl font-black text-slate-900">
-                                    {journey.overall_progress.completed_modules}
-                                </p>
-                            </div>
-                            <div className="rounded-2xl bg-slate-50 p-4">
-                                <p className="text-xs text-slate-500">通过模块</p>
-                                <p className="mt-2 text-2xl font-black text-emerald-700">
-                                    {journey.overall_progress.passed_modules}
-                                </p>
-                            </div>
-                            <div className="rounded-2xl bg-slate-50 p-4">
-                                <p className="text-xs text-slate-500">未通过模块</p>
-                                <p className="mt-2 text-2xl font-black text-red-700">
-                                    {journey.overall_progress.failed_modules}
-                                </p>
-                            </div>
-                            <div className="rounded-2xl bg-slate-50 p-4">
-                                <p className="text-xs text-slate-500">待补救模块</p>
-                                <p className="mt-2 text-2xl font-black text-amber-700">
-                                    {journey.overall_progress.needs_remediation_modules}
-                                </p>
-                            </div>
+                            <StatTile
+                                icon={<Layers className="h-5 w-5 text-stone-500" />}
+                                iconBg="bg-stone-100"
+                                label="模块总数"
+                                value={journey.overall_progress.total_modules}
+                            />
+                            <StatTile
+                                icon={<CheckCircle2 className="h-5 w-5 text-stone-600" />}
+                                iconBg="bg-stone-100"
+                                label="已完成"
+                                value={journey.overall_progress.completed_modules}
+                            />
+                            <StatTile
+                                icon={<Trophy className="h-5 w-5 text-emerald-700" />}
+                                iconBg="bg-emerald-50"
+                                label="通过模块"
+                                value={journey.overall_progress.passed_modules}
+                                valueClass="text-emerald-700"
+                            />
+                            <StatTile
+                                icon={<XCircle className="h-5 w-5 text-rose-700" />}
+                                iconBg="bg-rose-50"
+                                label="未通过模块"
+                                value={journey.overall_progress.failed_modules}
+                                valueClass="text-rose-700"
+                            />
+                            <StatTile
+                                icon={<AlertTriangle className="h-5 w-5 text-amber-700" />}
+                                iconBg="bg-amber-50"
+                                label="待补救模块"
+                                value={journey.overall_progress.needs_remediation_modules}
+                                valueClass="text-amber-700"
+                            />
                         </div>
 
                         {journey.diagnostics.length > 0 ? (
@@ -427,9 +472,9 @@ export default function SalesTrainerPage() {
                                     {journey.diagnostics.map((diagnostic) => (
                                         <div
                                             key={`${diagnostic.code}-${diagnostic.message}`}
-                                            className="rounded-2xl bg-slate-50 p-3"
+                                            className="rounded-xl border border-stone-200/70 bg-stone-50/60 p-3"
                                         >
-                                            <p className="text-sm text-slate-600">
+                                            <p className="text-sm text-stone-700">
                                                 {getLearnerDiagnosticMessage(diagnostic.message)}
                                             </p>
                                         </div>
@@ -453,44 +498,38 @@ export default function SalesTrainerPage() {
                                 {retrainingRequests.map((request) => (
                                     <GlassCard
                                         key={request.request_id}
-                                        className="space-y-4 border border-amber-100 bg-amber-50 p-5"
+                                        className="space-y-4 p-5"
                                     >
                                         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                                             <div className="space-y-2">
-                                                <Badge className="bg-amber-100 text-amber-800">
-                                                    待重练
-                                                </Badge>
-                                                <h3 className="text-lg font-black text-amber-950">
+                                                <div className="flex items-center gap-2">
+                                                    <RefreshCw className="h-4 w-4 text-amber-600" />
+                                                    <Badge variant="orange">待重练</Badge>
+                                                </div>
+                                                <h3 className="text-lg font-black text-slate-900">
                                                     {getRetrainingCapabilityLine(request)}
                                                 </h3>
                                                 {request.reason ? (
-                                                    <p className="text-sm leading-6 text-amber-900">
+                                                    <p className="text-sm leading-6 text-slate-600">
                                                         {request.reason}
                                                     </p>
                                                 ) : null}
                                                 {request.source_evidence_count > 0 ? (
-                                                    <p className="text-sm text-amber-800">
+                                                    <p className="text-sm text-slate-500">
                                                         关联了 {request.source_evidence_count}{" "}
                                                         份你提交过的训练结果。
                                                     </p>
                                                 ) : null}
                                             </div>
                                             {request.primary_target_path ? (
-                                                <Button
-                                                    asChild
-                                                    variant="outline"
-                                                    className="rounded-full border-amber-200 bg-white text-amber-900"
-                                                >
+                                                <Button asChild variant="primary">
                                                     <Link href={request.primary_target_path}>
+                                                        <ArrowRight className="mr-2 h-4 w-4" />
                                                         {getRetrainingActionLabel(request)}
                                                     </Link>
                                                 </Button>
                                             ) : (
-                                                <Button
-                                                    variant="outline"
-                                                    className="rounded-full"
-                                                    disabled
-                                                >
+                                                <Button variant="outline" disabled>
                                                     等待补练入口
                                                 </Button>
                                             )}
@@ -500,14 +539,14 @@ export default function SalesTrainerPage() {
                                                 {request.target_modules.map((module) => (
                                                     <Badge
                                                         key={`${request.request_id}-${module.kind}-${module.module_key}`}
-                                                        className="bg-white text-amber-800"
+                                                        variant="outline"
                                                     >
                                                         {module.title || "训练模块"}
                                                     </Badge>
                                                 ))}
                                             </div>
                                         ) : (
-                                            <p className="text-sm text-amber-800">
+                                            <p className="text-sm text-slate-500">
                                                 当前暂时无法定位到具体模块，请联系培训负责人确认补练入口。
                                             </p>
                                         )}
@@ -543,6 +582,22 @@ export default function SalesTrainerPage() {
                             <div className="grid gap-4 xl:grid-cols-2">
                                 {sortedJourneyModules.map((module) => {
                                     const latestVerdict = getOutcomeVerdict(module.latest_outcome);
+                                    const accent = getJourneyStageCardAccent(module.stage);
+                                    const ModuleIcon = getModuleIcon(module.module_type);
+                                    const latestOutcome = module.latest_outcome;
+                                    const latestPassed = latestOutcome?.passed;
+                                    const recentResultBg =
+                                        latestPassed === true
+                                            ? "bg-emerald-50"
+                                            : latestPassed === false
+                                              ? "bg-rose-50"
+                                              : "bg-amber-50";
+                                    const recentResultText =
+                                        latestPassed === true
+                                            ? "text-emerald-700"
+                                            : latestPassed === false
+                                              ? "text-rose-700"
+                                              : "text-amber-700";
                                     return (
                                         <GlassCard
                                             key={`${module.kind}-${module.module_key}`}
@@ -551,18 +606,31 @@ export default function SalesTrainerPage() {
                                             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                                                 <div className="space-y-2">
                                                     <div className="flex flex-wrap items-center gap-2">
-                                                        <Badge className="bg-slate-100 text-slate-700">
+                                                        <div
+                                                            className={cn(
+                                                                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                                                                accent.iconBg,
+                                                            )}
+                                                        >
+                                                            <ModuleIcon
+                                                                className={cn(
+                                                                    "h-5 w-5",
+                                                                    accent.iconColor,
+                                                                )}
+                                                            />
+                                                        </div>
+                                                        <Badge variant="gray">
                                                             模块 {module.order_index}
                                                         </Badge>
                                                         <Badge
-                                                            className={getJourneyStageBadgeClass(
+                                                            variant={getJourneyStageBadgeVariant(
                                                                 module.stage,
                                                             )}
                                                         >
                                                             {getJourneyStageLabel(module.stage)}
                                                         </Badge>
                                                         {!module.enabled ? (
-                                                            <Badge className="bg-slate-200 text-slate-700">
+                                                            <Badge variant="secondary">
                                                                 已停用
                                                             </Badge>
                                                         ) : null}
@@ -576,13 +644,39 @@ export default function SalesTrainerPage() {
                                                     </p>
                                                 </div>
                                                 {latestVerdict ? (
-                                                    <div className="rounded-2xl bg-slate-50 px-4 py-3 text-right">
+                                                    <div
+                                                        className={cn(
+                                                            "rounded-2xl px-4 py-3 text-right",
+                                                            recentResultBg,
+                                                        )}
+                                                    >
                                                         <p className="text-xs text-slate-500">
                                                             最近结果
                                                         </p>
-                                                        <p className="mt-1 text-sm font-semibold text-slate-900">
+                                                        <p
+                                                            className={cn(
+                                                                "mt-1 text-sm font-semibold",
+                                                                recentResultText,
+                                                            )}
+                                                        >
                                                             {latestVerdict}
                                                         </p>
+                                                        {typeof latestOutcome?.score === "number" ? (
+                                                            <p
+                                                                className={cn(
+                                                                    "mt-1 text-lg font-black tabular-nums",
+                                                                    getScoreTextColorClass(
+                                                                        latestOutcome.score,
+                                                                    ),
+                                                                )}
+                                                            >
+                                                                {latestOutcome.score}
+                                                                {typeof latestOutcome.max_score ===
+                                                                    "number"
+                                                                    ? ` / ${latestOutcome.max_score}`
+                                                                    : ""}
+                                                            </p>
+                                                        ) : null}
                                                     </div>
                                                 ) : null}
                                             </div>
@@ -611,11 +705,12 @@ export default function SalesTrainerPage() {
                                             </div>
 
                                             {module.unmet_reasons.length > 0 ? (
-                                                <div className="space-y-2 rounded-2xl bg-amber-50 p-3">
-                                                    <p className="text-sm font-semibold text-amber-900">
+                                                <div className="space-y-2 rounded-xl bg-amber-50/50 p-3">
+                                                    <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+                                                        <AlertTriangle className="h-4 w-4 text-amber-600" />
                                                         模块诊断
                                                     </p>
-                                                    <ul className="space-y-2 text-sm text-amber-800">
+                                                    <ul className="space-y-2 text-sm text-stone-700">
                                                         {module.unmet_reasons.map((reason) => (
                                                             <li
                                                                 key={`${module.module_key}-${reason.code}`}
@@ -635,9 +730,8 @@ export default function SalesTrainerPage() {
                                                         "start_realtime_roleplay" &&
                                                     !module.next_action.disabled ? (
                                                         <Button
-                                                            variant="outline"
-                                                            className="rounded-full"
-                                                            disabled={
+                                                            variant="primary"
+                                                            isLoading={
                                                                 startingRealtimeModuleKey ===
                                                                 module.module_key
                                                             }
@@ -645,6 +739,7 @@ export default function SalesTrainerPage() {
                                                                 void startRealtimeRoleplay(module)
                                                             }
                                                         >
+                                                            <Play className="mr-2 h-4 w-4" />
                                                             {startingRealtimeModuleKey ===
                                                             module.module_key
                                                                 ? "启动中"
@@ -652,25 +747,18 @@ export default function SalesTrainerPage() {
                                                         </Button>
                                                     ) : module.next_action.target_path &&
                                                       !module.next_action.disabled ? (
-                                                        <Button
-                                                            asChild
-                                                            variant="outline"
-                                                            className="rounded-full"
-                                                        >
+                                                        <Button asChild variant="primary">
                                                             <Link
                                                                 href={
                                                                     module.next_action.target_path
                                                                 }
                                                             >
+                                                                <ArrowRight className="mr-2 h-4 w-4" />
                                                                 {module.next_action.label}
                                                             </Link>
                                                         </Button>
                                                     ) : (
-                                                        <Button
-                                                            variant="outline"
-                                                            className="rounded-full"
-                                                            disabled
-                                                        >
+                                                        <Button variant="outline" disabled>
                                                             {module.next_action.label}
                                                         </Button>
                                                     )}
@@ -683,6 +771,88 @@ export default function SalesTrainerPage() {
                                                     ) : null}
                                                 </div>
                                             ) : null}
+                                        </GlassCard>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </section>
+
+                    <section className="space-y-4">
+                        <div>
+                            <h2 className="text-xl font-black text-slate-900">我的录音</h2>
+                            <p className="mt-1 text-sm text-slate-500">
+                                按上传时间倒序列出你提交过的语音作业，可回看分数与反馈。
+                            </p>
+                        </div>
+                        {myAudio.isLoading ? (
+                            <GlassCard className="p-5">
+                                <p className="text-sm text-slate-500">正在加载录音记录...</p>
+                            </GlassCard>
+                        ) : myAudio.isError ? (
+                            <GlassCard className="space-y-3 p-5">
+                                <p className="text-sm text-rose-700">录音记录加载失败：{getApiErrorMessage(myAudio.error)}</p>
+                                <Button variant="outline" onClick={() => void myAudio.refetch()}>
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    重试
+                                </Button>
+                            </GlassCard>
+                        ) : myAudio.submissions.length === 0 ? (
+                            <GlassCard className="p-5">
+                                <p className="text-sm text-slate-500">
+                                    还没有录音，完成语音作业后这里会显示。
+                                </p>
+                            </GlassCard>
+                        ) : (
+                            <div className="space-y-3">
+                                {myAudio.submissions.map((submission) => {
+                                    const score = submission.score_result?.total_score;
+                                    const passed = submission.score_result?.passed;
+                                    const resultHref = `/sales-trainer/audio/result/${submission.submission_id}`;
+                                    return (
+                                        <GlassCard key={submission.submission_id} className="p-4">
+                                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate font-semibold text-slate-900">
+                                                        {submission.original_filename}
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-slate-500">
+                                                        {new Date(submission.created_at).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    {typeof score === "number" ? (
+                                                        <div className="text-right">
+                                                            <p className="text-xs text-slate-400">分数</p>
+                                                            <p
+                                                                className={cn(
+                                                                    "text-lg font-black tabular-nums",
+                                                                    passed === true
+                                                                        ? "text-emerald-600"
+                                                                        : passed === false
+                                                                          ? "text-rose-600"
+                                                                          : "text-slate-900",
+                                                                )}
+                                                            >
+                                                                {score}
+                                                            </p>
+                                                        </div>
+                                                    ) : (
+                                                        <Badge variant="gray">未评分</Badge>
+                                                    )}
+                                                    {passed === true ? (
+                                                        <Badge variant="green">通过</Badge>
+                                                    ) : passed === false ? (
+                                                        <Badge variant="red">未通过</Badge>
+                                                    ) : null}
+                                                    <Button asChild variant="outline" size="sm">
+                                                        <Link href={resultHref}>
+                                                            <Headphones className="mr-2 h-4 w-4" />
+                                                            回看
+                                                        </Link>
+                                                    </Button>
+                                                </div>
+                                            </div>
                                         </GlassCard>
                                     );
                                 })}

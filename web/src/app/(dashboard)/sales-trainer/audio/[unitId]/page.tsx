@@ -3,11 +3,21 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Download, Eye, Upload } from "lucide-react";
+import {
+    ArrowLeft,
+    BookOpen,
+    Download,
+    Eye,
+    FileText,
+    Target,
+    Upload,
+    UploadCloud,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { GlassCard } from "@/components/ui/glass-card";
 import { markdownComponents } from "@/components/sales-trainer/coo-markdown-components";
 import { api, getApiErrorMessage } from "@/lib/api/client";
@@ -17,6 +27,7 @@ import type {
     SalesTrainerUnit,
     SalesTrainerUnitBrief,
 } from "@/lib/api/types";
+import { cn } from "@/lib/utils";
 import {
     formatPassThresholdLine,
     getAudioPassThreshold,
@@ -228,14 +239,19 @@ export default function SalesTrainerAudioUploadPage() {
     }
 
     if (isLoading) {
-        return <div className="py-12 text-center text-sm text-slate-500">正在加载语音作业...</div>;
+        return (
+            <div className="space-y-6 pb-20">
+                <div className="h-40 animate-pulse rounded-3xl border border-white/60 bg-white/60" />
+                <div className="h-64 animate-pulse rounded-3xl border border-white/60 bg-white/60" />
+            </div>
+        );
     }
 
     if (!unit || unit.unit_type !== "audio_scoring") {
         return (
             <GlassCard className="space-y-4 p-6">
                 <p className="text-sm text-red-700">{error || "该训练单元不存在，或不是语音作业单元。"}</p>
-                <Button asChild className="rounded-full">
+                <Button asChild variant="primary">
                     <Link href="/sales-trainer">返回新人训练路径</Link>
                 </Button>
             </GlassCard>
@@ -259,7 +275,12 @@ export default function SalesTrainerAudioUploadPage() {
             </div>
 
             <GlassCard className="space-y-3 p-6">
-                <h2 className="text-lg font-bold text-slate-900">任务简报</h2>
+                <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
+                        <FileText className="h-4 w-4 text-blue-700" />
+                    </div>
+                    <h2 className="text-lg font-bold text-slate-900">任务简报</h2>
+                </div>
                 {brief?.task_brief.scenario ? (
                     <p className="text-sm leading-6 text-slate-600">{brief.task_brief.scenario}</p>
                 ) : null}
@@ -276,7 +297,12 @@ export default function SalesTrainerAudioUploadPage() {
             </GlassCard>
 
             <GlassCard className="space-y-3 p-6">
-                <h2 className="text-lg font-bold text-slate-900">评分标准</h2>
+                <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100">
+                        <Target className="h-4 w-4 text-amber-700" />
+                    </div>
+                    <h2 className="text-lg font-bold text-slate-900">评分标准</h2>
+                </div>
                 {passThreshold !== null ? (
                     <p className="text-sm leading-6 text-slate-600">{formatPassThresholdLine(passThreshold)}</p>
                 ) : (
@@ -318,9 +344,14 @@ export default function SalesTrainerAudioUploadPage() {
 
             {materials.length ? (
                 <GlassCard className="space-y-4 p-6">
-                    <div>
-                        <h2 className="text-lg font-bold text-slate-900">训练材料</h2>
-                        <p className="mt-1 text-sm text-slate-500">请使用当前版本完成录音；提交时会冻结你确认的材料版本。</p>
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100">
+                                <BookOpen className="h-4 w-4 text-violet-700" />
+                            </div>
+                            <h2 className="text-lg font-bold text-slate-900">训练材料</h2>
+                        </div>
+                        <p className="text-sm text-slate-500">请使用当前版本完成录音；提交时会冻结你确认的材料版本。</p>
                     </div>
                     <div className="space-y-3">
                         {materials.map((material) => {
@@ -349,7 +380,6 @@ export default function SalesTrainerAudioUploadPage() {
                                             {canPreviewInline(version) ? (
                                                 <Button
                                                     variant="outline"
-                                                    className="rounded-full"
                                                     onClick={() => setActiveMaterialVersionId(
                                                         isActivePreview ? null : version.version_id,
                                                     )}
@@ -359,14 +389,14 @@ export default function SalesTrainerAudioUploadPage() {
                                                 </Button>
                                             ) : (
                                                 <a href={inlineFileUrl} target="_blank" rel="noreferrer">
-                                                    <Button variant="outline" className="rounded-full">
+                                                    <Button variant="outline">
                                                         <Eye className="mr-2 h-4 w-4" />
                                                         新窗口打开
                                                     </Button>
                                                 </a>
                                             )}
                                             <a href={fileUrl} target="_blank" rel="noreferrer" download>
-                                                <Button variant="outline" className="rounded-full">
+                                                <Button variant="outline">
                                                     <Download className="mr-2 h-4 w-4" />
                                                     下载材料
                                                 </Button>
@@ -413,12 +443,16 @@ export default function SalesTrainerAudioUploadPage() {
                                         </div>
                                     ) : null}
                                     {material.confirmation_required ? (
-                                        <label className="mt-4 flex items-start gap-2 text-sm text-slate-700">
-                                            <input
-                                                type="checkbox"
+                                        <label className="mt-4 flex items-start gap-3 text-sm text-slate-700">
+                                            <Checkbox
                                                 checked={confirmedMaterialVersionId === version.version_id}
-                                                onChange={(event) => setConfirmedMaterialVersionId(event.target.checked ? version.version_id : null)}
+                                                onCheckedChange={(checked) =>
+                                                    setConfirmedMaterialVersionId(
+                                                        checked ? version.version_id : null,
+                                                    )
+                                                }
                                                 disabled={isUploading}
+                                                className="mt-0.5"
                                             />
                                             <span>我已下载并确认使用 {version.version_label} 版本进行本次录音。</span>
                                         </label>
@@ -431,21 +465,57 @@ export default function SalesTrainerAudioUploadPage() {
             ) : null}
 
             <GlassCard className="space-y-4 p-6">
-                <div className="space-y-2">
-                    <h2 className="text-lg font-bold text-slate-900">选择音频文件</h2>
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100">
+                            <UploadCloud className="h-4 w-4 text-emerald-700" />
+                        </div>
+                        <h2 className="text-lg font-bold text-slate-900">选择音频文件</h2>
+                    </div>
                     <p className="text-sm text-slate-500">
                         不做固定时长限制。若格式或大小不符合后端配置，页面会直接展示后端错误。
                     </p>
                 </div>
 
-                <input
-                    aria-label="选择音频文件"
-                    type="file"
-                    accept="audio/*"
-                    onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                    className="block w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                    disabled={isUploading}
-                />
+                <label
+                    className={cn(
+                        "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-colors",
+                        selectedFile
+                            ? "border-emerald-300 bg-emerald-50/40"
+                            : "border-slate-300 bg-slate-50/50 hover:border-slate-400 hover:bg-slate-50",
+                        isUploading && "pointer-events-none opacity-60",
+                    )}
+                    onDragOver={(event) => {
+                        event.preventDefault();
+                    }}
+                    onDrop={(event) => {
+                        event.preventDefault();
+                        const file = event.dataTransfer.files?.[0];
+                        if (file) {
+                            setSelectedFile(file);
+                        }
+                    }}
+                >
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                        <UploadCloud className="h-7 w-7" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                            点击或拖拽音频文件到此处
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                            支持常见音频格式，提交后系统会自动转写并评分
+                        </p>
+                    </div>
+                    <input
+                        aria-label="选择音频文件"
+                        type="file"
+                        accept="audio/*"
+                        onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                        className="sr-only"
+                        disabled={isUploading}
+                    />
+                </label>
 
                 {selectedFile ? (
                     <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -470,9 +540,10 @@ export default function SalesTrainerAudioUploadPage() {
 
                 <div className="flex justify-end">
                     <Button
-                        className="rounded-full bg-slate-900 text-white"
+                        variant="primary"
                         onClick={() => void handleUpload()}
                         disabled={!canUpload}
+                        isLoading={isUploading}
                     >
                         <Upload className="mr-2 h-4 w-4" />
                         {isUploading ? "上传中..." : "上传并开始评分"}

@@ -12,6 +12,7 @@ const { getAudioSubmissionMock, getJourneyMock, getUnitMock, listPathsMock } = v
 
 vi.mock("next/navigation", () => ({
     useParams: () => ({ submissionId: "submission-1" }),
+    useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -160,13 +161,13 @@ describe("SalesTrainerAudioResultPage", () => {
         getAudioSubmissionMock.mockResolvedValue(scoredSubmission);
     });
 
-    it("renders authorized playback and download links instead of exposing storage keys", async () => {
+    it("renders inline audio playback and download link instead of exposing storage keys", async () => {
         render(<SalesTrainerAudioResultPage />);
 
-        const playbackLink = await screen.findByRole("link", { name: /授权播放/ });
+        const audio = await screen.findByTestId("audio-playback");
         const downloadLink = screen.getByRole("link", { name: /下载语音/ });
 
-        expect(playbackLink.getAttribute("href")).toContain("/sales-trainer/audio-submissions/submission-1/file");
+        expect(audio.getAttribute("src")).toContain("/sales-trainer/audio-submissions/submission-1/file");
         expect(downloadLink.getAttribute("href")).toContain("/sales-trainer/audio-submissions/submission-1/file");
         expect(screen.queryByText("private/audio/pitch.wav")).toBeNull();
         expect(screen.queryByText(/storage_key/)).toBeNull();
@@ -305,7 +306,7 @@ describe("SalesTrainerAudioResultPage", () => {
         expect(screen.queryByText("语音作业结果加载失败")).toBeNull();
     });
 
-    it("shows improvement suggestions when the submission did not pass", async () => {
+    it("shows improvement suggestions when improvements exist regardless of passed", async () => {
         getAudioSubmissionMock.mockResolvedValue({
             ...scoredSubmission,
             score_result: {
@@ -321,6 +322,42 @@ describe("SalesTrainerAudioResultPage", () => {
         expect(await screen.findByText("改进建议")).toBeTruthy();
         expect(screen.getByText("先讲客户痛点")).toBeTruthy();
         expect(screen.getByText("补充产品价值")).toBeTruthy();
+    });
+
+    it("shows strengths section for passed submissions", async () => {
+        getAudioSubmissionMock.mockResolvedValue({
+            ...scoredSubmission,
+            score_result: {
+                ...scoredSubmission.score_result,
+                total_score: 88,
+                passed: true,
+                strengths: ["结构清晰", "重点突出"],
+                improvements: [],
+            },
+        });
+
+        render(<SalesTrainerAudioResultPage />);
+
+        expect(await screen.findByText("优点")).toBeTruthy();
+        expect(screen.getByText("结构清晰")).toBeTruthy();
+        expect(screen.getByText("重点突出")).toBeTruthy();
+    });
+
+    it("shows improvements even when the submission passed", async () => {
+        getAudioSubmissionMock.mockResolvedValue({
+            ...scoredSubmission,
+            score_result: {
+                ...scoredSubmission.score_result,
+                total_score: 88,
+                passed: true,
+                improvements: ["可以更精炼"],
+            },
+        });
+
+        render(<SalesTrainerAudioResultPage />);
+
+        expect(await screen.findByText("改进建议")).toBeTruthy();
+        expect(screen.getByText("可以更精炼")).toBeTruthy();
     });
 
     it("renders PPT dimension scores from the frozen scoring snapshot", async () => {

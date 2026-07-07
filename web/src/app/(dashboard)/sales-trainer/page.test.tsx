@@ -7,13 +7,14 @@ import type { TrainingJourneyRetrainingRequest } from "@/lib/api/types";
 
 import SalesTrainerPage from "./page";
 
-const { getJourneyMock, listPathsMock, listUnitsMock, routerPushMock, startRealtimeRoleplayMock } =
+const { getJourneyMock, listPathsMock, listUnitsMock, routerPushMock, startRealtimeRoleplayMock, useMyAudioSubmissionsMock } =
     vi.hoisted(() => ({
         getJourneyMock: vi.fn(),
         listUnitsMock: vi.fn(),
         listPathsMock: vi.fn(),
         routerPushMock: vi.fn(),
         startRealtimeRoleplayMock: vi.fn(),
+        useMyAudioSubmissionsMock: vi.fn(),
     }));
 
 vi.mock("next/link", () => ({
@@ -68,6 +69,10 @@ vi.mock("./path-level-timeline", () => ({
     PathLevelTimeline: ({ path }: { path: { path_key: string } }) => (
         <div>{`legacy-path-timeline:${path.path_key}`}</div>
     ),
+}));
+
+vi.mock("@/hooks/use-my-audio-submissions", () => ({
+    useMyAudioSubmissions: useMyAudioSubmissionsMock,
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -366,6 +371,14 @@ describe("SalesTrainerPage", () => {
             items: createUnitsFixture(),
             total: 1,
         });
+        useMyAudioSubmissionsMock.mockReturnValue({
+            submissions: [],
+            total: 0,
+            isLoading: false,
+            isError: false,
+            error: null,
+            refetch: vi.fn(),
+        });
     });
 
     it("优先渲染训练状态，并不再读取 /paths 兼容入口卡片", async () => {
@@ -583,5 +596,111 @@ describe("SalesTrainerPage", () => {
             expect(listUnitsMock).not.toHaveBeenCalled();
             expect(listPathsMock).not.toHaveBeenCalled();
         });
+    });
+
+    it("renders my audio submissions section with score and review link", async () => {
+        useMyAudioSubmissionsMock.mockReturnValue({
+            submissions: [
+                {
+                    submission_id: "submission-1",
+                    unit_id: "module-1",
+                    user_id: "learner-1",
+                    user_name: null,
+                    user_email: null,
+                    user_department: null,
+                    purpose: "ppt_pitch",
+                    original_filename: "pitch-1.wav",
+                    content_type: "audio/wav",
+                    size_bytes: 1024,
+                    storage_key: "private/audio/pitch-1.wav",
+                    file_hash: null,
+                    duration_seconds: null,
+                    source_page: null,
+                    confirmed_material_version_id: null,
+                    confirmed_material_at: null,
+                    material_snapshot: null,
+                    score_scheme_snapshot: null,
+                    task_brief_snapshot: null,
+                    path_key: null,
+                    path_revision_id: null,
+                    path_revision_no: null,
+                    module_key: null,
+                    legacy_snapshot_only: false,
+                    status: "scored",
+                    error_code: null,
+                    error_message: null,
+                    created_at: "2026-07-01T00:00:00Z",
+                    updated_at: "2026-07-01T00:05:00Z",
+                    transcript: null,
+                    score_result: {
+                        score_id: "score-1",
+                        submission_id: "submission-1",
+                        prompt_id: "prompt-1",
+                        prompt_version: 1,
+                        prompt_hash: "hash",
+                        deucate_model: "model",
+                        transcript_snapshot: null,
+                        total_score: 88,
+                        passed: true,
+                        summary: "表达清楚",
+                        strengths: [],
+                        improvements: [],
+                        dimension_scores: {},
+                        raw_response: null,
+                        error_code: null,
+                        error_message: null,
+                        latency_ms: null,
+                        path_key: null,
+                        path_revision_id: null,
+                        path_revision_no: null,
+                        module_key: null,
+                        legacy_snapshot_only: false,
+                        created_at: "2026-07-01T00:05:00Z",
+                    },
+                },
+            ],
+            total: 1,
+            isLoading: false,
+            isError: false,
+            error: null,
+            refetch: vi.fn(),
+        });
+
+        render(<SalesTrainerPage />);
+
+        expect(await screen.findByText("我的录音")).toBeTruthy();
+        expect(screen.getByText("pitch-1.wav")).toBeTruthy();
+        expect(screen.getByText("88")).toBeTruthy();
+        expect(screen.getByText("通过")).toBeTruthy();
+        const reviewLink = screen.getByRole("link", { name: /回看/ });
+        expect(reviewLink.getAttribute("href")).toBe("/sales-trainer/audio/result/submission-1");
+    });
+
+    it("shows empty hint when no audio submissions exist", async () => {
+        render(<SalesTrainerPage />);
+
+        expect(await screen.findByText("我的录音")).toBeTruthy();
+        expect(screen.getByText("还没有录音，完成语音作业后这里会显示。")).toBeTruthy();
+    });
+
+    it("does not render my audio section when journey fails to load", async () => {
+        getJourneyMock.mockRejectedValue(
+            buildJourneyError(
+                "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
+                "训练路径未发布",
+                "trace-1",
+            ),
+        );
+
+        render(<SalesTrainerPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText("训练路径暂不可用")).toBeTruthy();
+        });
+        expect(screen.queryByText("我的录音")).toBeNull();
+        // hook 仍被调用，但 enabled=false（journey 为空），不会发起请求
+        expect(useMyAudioSubmissionsMock).toHaveBeenCalledWith(
+            expect.objectContaining({ enabled: false }),
+        );
     });
 });

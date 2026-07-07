@@ -822,4 +822,92 @@ describe("TeamLearnerDetailPage", () => {
         const businessSkillsStages = screen.getAllByText(/第\d+关 · 商务技巧/);
         expect(businessSkillsStages.length).toBe(1);
     });
+
+    it("shows 听录音 drill-down link for audio submissions with a latest outcome", async () => {
+        useCurrentUserMock.mockReturnValue({ data: trainingManagerUser });
+        getAdminJourneyMock.mockResolvedValue(
+            buildJourneyPayload({
+                modules: [
+                    {
+                        module_key: "elevator_pitch",
+                        title: "电梯演讲",
+                        display_name: "电梯演讲",
+                        module_type: "audio_scoring_group",
+                        kind: "audio_submission",
+                        order_index: 1,
+                        enabled: true,
+                        status: "scored",
+                        stage: "scored",
+                        passed: false,
+                        score: 55,
+                        max_score: 100,
+                        completion_rule: "passed",
+                        unmet_reasons: [],
+                        outcome_history: [],
+                        latest_outcome: {
+                            outcome_id: "outcome-1",
+                            record_type: "audio_submission",
+                            source_record_id: "submission-abc",
+                            module_key: "elevator_pitch",
+                            module_type: "audio_scoring_group",
+                            status: "failed",
+                            score: 55,
+                            max_score: 100,
+                            passed: false,
+                            submitted_at: "2026-07-01T00:00:00Z",
+                            completed_at: "2026-07-01T00:05:00Z",
+                            path_revision_id: "rev-1",
+                            path_revision_no: 1,
+                            snapshot_ref: {
+                                source_type: "regrade_snapshot",
+                                legacy_snapshot_only: false,
+                            },
+                        },
+                        next_action: { action_key: "retry", label: "重新提交", disabled: false },
+                    },
+                ],
+            }),
+        );
+
+        renderPage(<TeamLearnerDetailPage />);
+
+        const audioLink = await screen.findByRole("link", { name: /听录音/ });
+        expect(audioLink.getAttribute("href")).toBe(
+            "/sales-trainer/audio/result/submission-abc?from=admin",
+        );
+    });
+
+    it("does not show 听录音 link for audio submissions without a latest outcome", async () => {
+        useCurrentUserMock.mockReturnValue({ data: trainingManagerUser });
+        getAdminJourneyMock.mockResolvedValue(
+            buildJourneyPayload({
+                modules: [
+                    {
+                        module_key: "elevator_pitch",
+                        title: "电梯演讲",
+                        display_name: "电梯演讲",
+                        module_type: "audio_scoring_group",
+                        kind: "audio_submission",
+                        order_index: 1,
+                        enabled: true,
+                        status: "not_started",
+                        stage: "not_started",
+                        passed: null,
+                        completion_rule: "passed",
+                        unmet_reasons: [],
+                        outcome_history: [],
+                        latest_outcome: null,
+                        next_action: { action_key: "start", label: "去录音", disabled: false },
+                    },
+                ],
+            }),
+        );
+
+        renderPage(<TeamLearnerDetailPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(/电梯演讲/)).toBeTruthy();
+        });
+        expect(screen.queryByText(/听录音/)).toBeNull();
+    });
 });

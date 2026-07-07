@@ -1024,3 +1024,60 @@ async def test_should_serve_audio_file_to_owner_and_admin_only(
     assert admin_response.content == b"fake wav bytes"
     assert other_response.status_code == 403
     assert other_response.json()["error"] == "[ACCESS_DENIED]"
+
+
+@pytest.mark.asyncio
+async def test_should_list_only_own_audio_submissions_for_learner(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    """学员侧 GET /sales-trainer/audio-submissions 只返回自己的录音。
+
+    覆盖 PRD R5：学员在路径首页看"我的录音"区，后端按 current_user 过滤。
+    """
+    learner = _user("user", department="华东销售")
+    other_learner = _user("user", department="华东销售")
+    admin = _user("admin")
+
+    own_submission = SalesTrainerAudioSubmission(
+        submission_id=str(uuid.uuid4()),
+        user_id=learner.user_id,
+        purpose="ppt_pitch",
+        original_filename="own.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/own.wav",
+        status="scored",
+    )
+    other_submission = SalesTrainerAudioSubmission(
+        submission_id=str(uuid.uuid4()),
+        user_id=other_learner.user_id,
+        purpose="ppt_pitch",
+        original_filename="other.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/other.wav",
+        status="scored",
+    )
+    test_db.add_all([learner, other_learner, admin, own_submission, other_submission])
+    await test_db.commit()
+
+    # 学员只看到自己的录音
+    learner_response = await async_client.get(
+        "/api/v1/sales-trainer/audio-submissions",
+        headers=_auth_headers(learner),
+    )
+    assert learner_response.status_code == 200
+    learner_payload = learner_response.json()["data"]
+    assert learner_payload["total"] == 1
+    assert learner_payload["items"][0]["submission_id"] == str(own_submission.submission_id)
+    assert learner_payload["items"][0]["user_id"] == str(learner.user_id)
+
+    # admin 端 list 不受学员端端点影响（走 admin_router，可看到全部）
+    admin_response = await async_client.get(
+        "/api/v1/admin/sales-trainer/audio-submissions",
+        headers=_auth_headers(admin),
+    )
+    assert admin_response.status_code == 200
+    admin_payload = admin_response.json()["data"]
+    assert admin_payload["total"] == 2

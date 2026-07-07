@@ -735,6 +735,34 @@ async def register_audio_submission(
     )
 
 
+@router.get("/audio-submissions", response_model=None)
+async def list_my_audio_submissions(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    """学员查看自己的语音作业列表（按 created_at 倒序）。
+
+    权限：任何登录学员可查自己的录音；按 current_user.user_id 过滤，
+    学员无法看到他人录音。admin 端 list 不受影响。
+    """
+    service = AudioSubmissionService(db)
+    submissions, total = await service.list_submissions(
+        user_id=str(current_user.user_id),
+        team_department=None,
+        limit=limit,
+        offset=offset,
+    )
+    payload = [
+        AudioSubmissionResponse.model_validate(
+            await service.serialize_submission(submission)
+        ).model_dump()
+        for submission in submissions
+    ]
+    return success_response(AudioSubmissionListResponse(items=payload, total=total))
+
+
 @router.get("/audio-submissions/{submission_id}", response_model=None)
 async def get_my_audio_submission(
     submission_id: str,

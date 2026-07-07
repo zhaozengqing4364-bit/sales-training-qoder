@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
-import { ArrowLeft, Download, Play, RefreshCw } from "lucide-react";
+import { useParams, useSearchParams } from "next/navigation";
+import { ArrowLeft, Download, Lightbulb, Play, RefreshCw, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,12 @@ import { StatusIndicator } from "@/components/ui/status-indicator";
 import { useSalesTrainerSubmissionPoll } from "@/hooks/use-sales-trainer-submission-poll";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { SalesTrainerAudioSubmission } from "@/lib/api/types";
+import { cn } from "@/lib/utils";
+import {
+    getScoreFillClass,
+    getScoreStrokeClass,
+    getScoreTextColorClass,
+} from "@/lib/sales-trainer/journey-presentation";
 import {
     formatPassThresholdLine,
     getAudioPassThreshold,
@@ -230,8 +236,54 @@ function formatDimensionScore(item: DimensionDisplayItem): string {
     return `${score} / ${maxScore}`;
 }
 
+function ScoreRing({ score, size = 120 }: { score: number; size?: number }) {
+    const clamped = Math.max(0, Math.min(100, score));
+    const strokeWidth = 8;
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (clamped / 100) * circumference;
+    return (
+        <div className="relative shrink-0" style={{ width: size, height: size }}>
+            <svg className="h-full w-full -rotate-90" viewBox={`0 0 ${size} ${size}`}>
+                <circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    fill="none"
+                    strokeWidth={strokeWidth}
+                    className="stroke-slate-200"
+                />
+                <circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    fill="none"
+                    strokeWidth={strokeWidth}
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={offset}
+                    className={cn("transition-all duration-700", getScoreStrokeClass(clamped))}
+                />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span
+                    className={cn(
+                        "text-3xl font-black tabular-nums",
+                        getScoreTextColorClass(clamped),
+                    )}
+                >
+                    {score}
+                </span>
+                <span className="text-xs font-medium text-slate-500">总分</span>
+            </div>
+        </div>
+    );
+}
+
 export default function SalesTrainerAudioResultPage() {
     const params = useParams<{ submissionId: string }>();
+    const searchParams = useSearchParams();
+    const isAdminContext = searchParams.get("from") === "admin";
     const {
         submission,
         isLoading,
@@ -239,9 +291,12 @@ export default function SalesTrainerAudioResultPage() {
         error,
         timedOut,
         refresh,
-    } = useSalesTrainerSubmissionPoll(params.submissionId);
+    } = useSalesTrainerSubmissionPoll(params.submissionId, {
+        isAdminContext,
+    });
     const [passThreshold, setPassThreshold] = useState<number | null>(null);
     const [passThresholdError, setPassThresholdError] = useState<string | null>(null);
+    const [showAllImprovements, setShowAllImprovements] = useState(false);
 
     useEffect(() => {
         let isMounted = true;
@@ -282,12 +337,19 @@ export default function SalesTrainerAudioResultPage() {
     }, [submission?.unit_id]);
 
     const fileUrl = useMemo(
-        () => api.salesTrainer.getAudioSubmissionFileUrl(params.submissionId),
-        [params.submissionId],
+        () => isAdminContext
+            ? api.admin.salesTrainer.getAudioSubmissionFileUrl(params.submissionId)
+            : api.salesTrainer.getAudioSubmissionFileUrl(params.submissionId),
+        [params.submissionId, isAdminContext],
     );
 
     if (isLoading) {
-        return <div className="py-12 text-center text-sm text-slate-500">正在加载语音作业反馈...</div>;
+        return (
+            <div className="space-y-6 pb-20">
+                <div className="h-40 animate-pulse rounded-3xl border border-white/60 bg-white/60" />
+                <div className="h-64 animate-pulse rounded-3xl border border-white/60 bg-white/60" />
+            </div>
+        );
     }
 
     if (error && !submission) {
@@ -298,11 +360,11 @@ export default function SalesTrainerAudioResultPage() {
                     <p className="mt-2 text-sm text-red-700">{error}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button type="button" className="rounded-full" onClick={() => void refresh()}>
+                    <Button type="button" variant="primary" onClick={() => void refresh()}>
                         <RefreshCw className="mr-2 h-4 w-4" />
                         重新加载结果
                     </Button>
-                    <Button asChild variant="outline" className="rounded-full">
+                    <Button asChild variant="outline">
                         <Link href="/sales-trainer">返回新人训练路径</Link>
                     </Button>
                 </div>
@@ -314,7 +376,7 @@ export default function SalesTrainerAudioResultPage() {
         return (
             <GlassCard className="space-y-4 p-6">
                 <p className="text-sm text-red-700">语音作业结果不存在。</p>
-                <Button asChild className="rounded-full">
+                <Button asChild variant="primary">
                     <Link href="/sales-trainer">返回新人训练路径</Link>
                 </Button>
             </GlassCard>
@@ -329,7 +391,13 @@ export default function SalesTrainerAudioResultPage() {
             ?.filter(Boolean)
             .map(formatFeedbackItem) ?? []
     );
-    const showImprovements = submission.score_result?.passed === false && improvements.length > 0;
+    const strengths = (
+        submission.score_result?.strengths
+            ?.filter(Boolean)
+            .map(formatFeedbackItem) ?? []
+    );
+    const showImprovements = improvements.length > 0;
+    const showStrengths = strengths.length > 0;
     const dimensionItems = buildDimensionItems(submission);
 
     return (
@@ -348,11 +416,11 @@ export default function SalesTrainerAudioResultPage() {
                         <p className="mt-1 text-sm text-slate-500">{submission.original_filename}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        <Badge className="bg-slate-100 text-slate-700">
+                        <Badge variant="gray">
                             <span className="sr-only">{submission.status}</span>
                             {statusLabel}
                         </Badge>
-                        <Button variant="outline" className="rounded-full" onClick={() => void refresh()}>
+                        <Button variant="outline" onClick={() => void refresh()}>
                             <RefreshCw className="mr-2 h-4 w-4" />
                             刷新
                         </Button>
@@ -370,12 +438,14 @@ export default function SalesTrainerAudioResultPage() {
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                     <p className="font-semibold text-amber-900">评分耗时较长</p>
                     <p className="mt-1">
-                        评分已超过预期时间仍未完成，请稍后刷新结果；如仍未恢复，请联系管理员在后台“学员录音”中重试评分。
+                        已等待较久仍未完成，可能是评分队列繁忙。请稍后点击刷新重试；如长时间未恢复，请联系管理员查看后台处理记录。
                     </p>
-                    <Button variant="outline" className="mt-3" onClick={() => void refresh()}>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        刷新结果
-                    </Button>
+                    <div className="mt-2">
+                        <Button variant="outline" onClick={() => void refresh()}>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            刷新
+                        </Button>
+                    </div>
                 </div>
             ) : null}
 
@@ -463,15 +533,23 @@ export default function SalesTrainerAudioResultPage() {
             ) : null}
 
             <GlassCard className="space-y-4 p-6">
+                <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100">
+                        <Play className="h-4 w-4 text-emerald-700" />
+                    </div>
+                    <h2 className="text-lg font-bold text-slate-900">录音回放</h2>
+                </div>
+                <audio
+                    controls
+                    src={fileUrl}
+                    data-testid="audio-playback"
+                    className="w-full"
+                >
+                    您的浏览器不支持音频播放。
+                </audio>
                 <div className="flex flex-wrap gap-3">
-                    <a href={fileUrl} target="_blank" rel="noreferrer">
-                        <Button className="rounded-full bg-slate-900 text-white">
-                            <Play className="mr-2 h-4 w-4" />
-                            授权播放
-                        </Button>
-                    </a>
                     <a href={fileUrl} target="_blank" rel="noreferrer" download>
-                        <Button variant="outline" className="rounded-full">
+                        <Button variant="outline">
                             <Download className="mr-2 h-4 w-4" />
                             下载语音
                         </Button>
@@ -492,55 +570,137 @@ export default function SalesTrainerAudioResultPage() {
             <GlassCard className="space-y-4 p-6">
                 <h2 className="text-lg font-bold text-slate-900">评分结果</h2>
                 {submission.score_result ? (
-                    <div className="space-y-3">
-                        <div className="grid gap-4 md:grid-cols-3">
-                            <div>
-                                <p className="text-xs text-slate-500">总分</p>
-                                <p className="mt-1 text-2xl font-black text-slate-900">{submission.score_result.total_score ?? "--"}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-slate-500">通过</p>
-                                <p className="mt-1 text-2xl font-black text-slate-900">{formatPassedLabel(submission)}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-slate-500">模型</p>
-                                <p className="mt-1 text-lg font-bold text-slate-900">{submission.score_result.deucate_model || "--"}</p>
+                    <div className="space-y-4">
+                        <div className="flex flex-col items-center gap-4 md:flex-row md:items-center md:gap-6">
+                            {typeof submission.score_result.total_score === "number" ? (
+                                <ScoreRing score={submission.score_result.total_score} />
+                            ) : (
+                                <div className="flex h-[120px] w-[120px] shrink-0 flex-col items-center justify-center rounded-full border-2 border-slate-200">
+                                    <span className="text-3xl font-black tabular-nums text-slate-400">--</span>
+                                    <span className="text-xs font-medium text-slate-500">总分</span>
+                                </div>
+                            )}
+                            <div className="flex-1 space-y-3">
+                                <div className="flex flex-wrap gap-6">
+                                    <div>
+                                        <p className="text-xs text-slate-500">通过</p>
+                                        <p
+                                            className={cn(
+                                                "mt-1 text-lg font-bold",
+                                                submission.score_result.passed === true
+                                                    ? "text-emerald-600"
+                                                    : submission.score_result.passed === false
+                                                      ? "text-rose-600"
+                                                      : "text-slate-900",
+                                            )}
+                                        >
+                                            {formatPassedLabel(submission)}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500">评分模型</p>
+                                        <p className="mt-1 text-sm font-bold text-slate-900">
+                                            {submission.score_result.deucate_model || "--"}
+                                        </p>
+                                    </div>
+                                </div>
+                                <p className="text-sm leading-6 text-slate-600">
+                                    {submission.score_result.summary || "暂无评分总结。"}
+                                </p>
                             </div>
                         </div>
-                        <p className="text-sm text-slate-600">{submission.score_result.summary || "暂无评分总结。"}</p>
                         {dimensionItems.length ? (
                             <div className="space-y-3">
                                 <p className="text-sm font-semibold text-slate-900">分项评分</p>
                                 <div className="grid gap-3 md:grid-cols-2">
-                                    {dimensionItems.map((item) => (
-                                        <div key={item.key} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div>
-                                                    <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-                                                    {item.description ? (
-                                                        <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
-                                                    ) : null}
+                                    {dimensionItems.map((item) => {
+                                        const scorePercent =
+                                            item.score !== null && item.maxScore !== null && item.maxScore > 0
+                                                ? (item.score / item.maxScore) * 100
+                                                : null;
+                                        return (
+                                            <div key={item.key} className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                                                        {item.description ? (
+                                                            <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
+                                                        ) : null}
+                                                    </div>
+                                                    <span
+                                                        className={cn(
+                                                            "shrink-0 rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold tabular-nums",
+                                                            scorePercent !== null
+                                                                ? getScoreTextColorClass(scorePercent)
+                                                                : "text-slate-600",
+                                                        )}
+                                                    >
+                                                        {formatDimensionScore(item)}
+                                                    </span>
                                                 </div>
-                                                <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                                                    {formatDimensionScore(item)}
-                                                </span>
+                                                {scorePercent !== null ? (
+                                                    <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                                                        <div
+                                                            className={cn(
+                                                                "h-full rounded-full transition-all duration-500",
+                                                                getScoreFillClass(scorePercent),
+                                                            )}
+                                                            style={{ width: `${Math.min(100, Math.max(0, scorePercent))}%` }}
+                                                        />
+                                                    </div>
+                                                ) : null}
+                                                {item.comment ? (
+                                                    <p className="mt-2 text-sm leading-6 text-slate-600">{item.comment}</p>
+                                                ) : null}
                                             </div>
-                                            {item.comment ? (
-                                                <p className="mt-2 text-sm leading-6 text-slate-600">{item.comment}</p>
-                                            ) : null}
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ) : null}
-                        {showImprovements ? (
-                            <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
-                                <p className="text-sm font-semibold text-amber-900">改进建议</p>
-                                <ul className="mt-2 space-y-1 text-sm text-amber-800">
-                                    {improvements.slice(0, 2).map((item) => (
-                                        <li key={item}>{item}</li>
+                        {showStrengths ? (
+                            <div className="rounded-2xl bg-emerald-50/50 px-4 py-3">
+                                <p className="flex items-center gap-2 text-sm font-semibold text-emerald-900">
+                                    <Sparkles className="h-4 w-4 text-emerald-600" />
+                                    优点
+                                </p>
+                                <ul className="mt-2 space-y-1.5 text-sm text-slate-600">
+                                    {strengths.map((item, index) => (
+                                        <li key={`${index}-${item}`} className="flex items-start gap-2">
+                                            <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-500" />
+                                            <span>{item}</span>
+                                        </li>
                                     ))}
                                 </ul>
+                            </div>
+                        ) : null}
+                        {showImprovements ? (
+                            <div className="rounded-2xl bg-amber-50/50 px-4 py-3">
+                                <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+                                    <Lightbulb className="h-4 w-4 text-amber-600" />
+                                    改进建议
+                                </p>
+                                <ul className="mt-2 space-y-1.5 text-sm text-slate-600">
+                                    {improvements
+                                        .slice(0, showAllImprovements ? undefined : 2)
+                                        .map((item) => (
+                                            <li key={item} className="flex items-start gap-2">
+                                                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-amber-500" />
+                                                <span>{item}</span>
+                                            </li>
+                                        ))}
+                                </ul>
+                                {improvements.length > 2 ? (
+                                    <button
+                                        type="button"
+                                        className="mt-2 text-xs font-medium text-amber-700 hover:text-amber-900"
+                                        onClick={() => setShowAllImprovements((current) => !current)}
+                                    >
+                                        {showAllImprovements
+                                            ? "收起"
+                                            : `查看全部 ${improvements.length} 条`}
+                                    </button>
+                                ) : null}
                             </div>
                         ) : null}
                     </div>

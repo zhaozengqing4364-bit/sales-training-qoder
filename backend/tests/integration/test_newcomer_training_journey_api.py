@@ -364,8 +364,13 @@ async def test_should_reject_non_learner_roles_from_learner_ai_coach_routes(
     async_client,
     test_db: AsyncSession,
 ) -> None:
-    admin = await _create_user(test_db, role="admin", department="总部")
-    headers = _auth_headers(admin)
+    # Platform admins (admin/super_admin) are admitted to the learner path for
+    # dev/acceptance (see permissions.can_enter_sales_trainer_learning_path).
+    # Use content_admin to verify a non-learner role is still rejected at the
+    # router-level role guard ([ROLE_REQUIRED]); user-role learners proceed to
+    # the module access check.
+    content_admin = await _create_user(test_db, role="content_admin", department="总部")
+    headers = _auth_headers(content_admin)
 
     chat_response = await async_client.post(
         "/api/v1/newcomer-training/ai-coach/chat/sessions",
@@ -373,7 +378,9 @@ async def test_should_reject_non_learner_roles_from_learner_ai_coach_routes(
         json={"module_key": "business_skills"},
     )
     assert chat_response.status_code == 403
-    assert chat_response.json()["error"] == "[NEWCOMER_LEARNER_ROLE_REQUIRED]"
+    # ai-coach routes use router-level require_role which raises HTTPException;
+    # the global handler surfaces the code under detail.error.
+    assert chat_response.json()["detail"]["error"] == "[ROLE_REQUIRED]"
 
     chat_stream_response = await async_client.post(
         "/api/v1/newcomer-training/ai-coach/chat/sessions/stream",
@@ -381,7 +388,7 @@ async def test_should_reject_non_learner_roles_from_learner_ai_coach_routes(
         json={"module_key": "business_skills"},
     )
     assert chat_stream_response.status_code == 403
-    assert chat_stream_response.json()["error"] == "[NEWCOMER_LEARNER_ROLE_REQUIRED]"
+    assert chat_stream_response.json()["detail"]["error"] == "[ROLE_REQUIRED]"
 
     v1_response = await async_client.post(
         "/api/v1/newcomer-training/ai-coach/sessions",
@@ -389,7 +396,7 @@ async def test_should_reject_non_learner_roles_from_learner_ai_coach_routes(
         json={"module_key": "business_skills"},
     )
     assert v1_response.status_code == 403
-    assert v1_response.json()["error"] == "[NEWCOMER_LEARNER_ROLE_REQUIRED]"
+    assert v1_response.json()["detail"]["error"] == "[ROLE_REQUIRED]"
 
 
 @pytest.mark.integration
@@ -850,3 +857,68 @@ async def test_learner_rejected_from_admin_journey_endpoints(
     assert list_response.json()["error"] == "[ROLE_REQUIRED]"
     assert detail_response.status_code == 403
     assert detail_response.json()["error"] == "[ROLE_REQUIRED]"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_manager_can_only_view_audio_submission_within_own_department(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    """training_manager 只能查看本部门学员录音详情，跨部门返回 403。
+
+    覆盖 PRD AC3：管理者从 /team/[learnerId] 下钻学员录音详情，
+    跨部门学员录音应返回 403/无权限。后端 admin_get_audio_submission
+    通过 _team_scope 部门隔离已就绪，本测试验证该隔离生效。
+    """
+    from sales_trainer.models import SalesTrainerAudioSubmission
+
+    same_dept_learner = await _create_user(
+        test_db, role="user", department="华东销售"
+    )
+    other_dept_learner = await _create_user(
+        test_db, role="user", department="华北销售"
+    )
+    manager = await _create_user(
+        test_db, role="support", department="华东销售"
+    )
+
+    same_submission = SalesTrainerAudioSubmission(
+        submission_id=str(uuid.uuid4()),
+        user_id=same_dept_learner.user_id,
+        purpose="ppt_pitch",
+        original_filename="same.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/same.wav",
+        status="scored",
+    )
+    other_submission = SalesTrainerAudioSubmission(
+        submission_id=str(uuid.uuid4()),
+        user_id=other_dept_learner.user_id,
+        purpose="ppt_pitch",
+        original_filename="other.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/other.wav",
+        status="scored",
+    )
+    test_db.add_all([same_submission, other_submission])
+    await test_db.commit()
+
+    same_detail = await async_client.get(
+        f"/api/v1/admin/sales-trainer/audio-submissions/{same_submission.submission_id}",
+        headers=_auth_headers(manager),
+    )
+    other_detail = await async_client.get(
+        f"/api/v1/admin/sales-trainer/audio-submissions/{other_submission.submission_id}",
+        headers=_auth_headers(manager),
+    )
+
+    assert same_detail.status_code == 200
+    assert same_detail.json()["data"]["submission_id"] == str(
+        same_submission.submission_id
+    )
+    # 跨部门学员录音：后端 _team_scope 部门隔离 → 403 [ACCESS_DENIED]
+    assert other_detail.status_code == 403
+    assert other_detail.json()["error"] == "[ACCESS_DENIED]"

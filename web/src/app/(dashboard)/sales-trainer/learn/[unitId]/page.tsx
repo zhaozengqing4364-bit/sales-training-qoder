@@ -8,10 +8,16 @@ import {
     CooChapterReader,
     CooChapterReaderTerminal,
 } from "@/components/sales-trainer/coo-chapter-reader";
+import { TrainingMaterialsSection } from "@/components/sales-trainer/training-materials-section";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { LearnerStudyContent, LearnerStudyProgress, SalesTrainerUnit } from "@/lib/api/types";
+import type {
+    LearnerStudyContent,
+    LearnerStudyProgress,
+    SalesTrainerUnit,
+    SalesTrainerUnitBriefMaterial,
+} from "@/lib/api/types";
 import {
     decodeReturnTo,
     persistLearnReturn,
@@ -28,6 +34,7 @@ export default function SalesTrainerLearnPage() {
     const [unit, setUnit] = useState<SalesTrainerUnit | null>(null);
     const [content, setContent] = useState<LearnerStudyContent | null>(null);
     const [progress, setProgress] = useState<LearnerStudyProgress | null>(null);
+    const [materials, setMaterials] = useState<SalesTrainerUnitBriefMaterial[]>([]);
     const [accessError, setAccessError] = useState<string | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -38,6 +45,7 @@ export default function SalesTrainerLearnPage() {
         setAccessError(null);
         setContent(null);
         setProgress(null);
+        setMaterials([]);
 
         try {
             const unitResult = await api.salesTrainer.getUnit(params.unitId);
@@ -66,13 +74,22 @@ export default function SalesTrainerLearnPage() {
             setContent(studyContent);
             setProgress(studyContent.progress);
             persistLearnReturn(returnTo);
+
+            // 拉取本关训练材料（PPT 模板等），在章节阅读页底部展示下载/预览入口。
+            try {
+                const brief = await api.salesTrainer.getUnitBrief(params.unitId);
+                setMaterials(brief.materials ?? []);
+            } catch {
+                // 材料加载失败不阻塞章节阅读，仅隐藏材料区块。
+                setMaterials([]);
+            }
         } catch (err) {
             setUnit(null);
             setLoadError(getApiErrorMessage(err));
         } finally {
             setIsLoading(false);
         }
-    }, [params.unitId, returnTo, searchParams]);
+    }, [params.unitId, returnTo]);
 
     useEffect(() => {
         void loadPage();
@@ -138,22 +155,29 @@ export default function SalesTrainerLearnPage() {
     }
 
     return (
-        <CooChapterReader
-            contentId={content.learning_content_id}
-            contentTitle={content.title}
-            contentSummary={content.summary}
-            chapter={resolvedChapter}
-            progress={progress}
-            pathTitle={hubMode ? "商务技巧" : "新人训练"}
-            levelTitle={`第 ${chapterOrderIndex} 章`}
-            chapterIndex={chapterIndex}
-            totalChapters={sortedChapters.length}
-            unitId={unit.unit_id}
-            returnTo={returnTo}
-            prevUnitId={null}
-            nextUnitId={null}
-            hubNavigation={hubMode}
-            onProgressUpdated={setProgress}
-        />
+        <div className="space-y-6">
+            <CooChapterReader
+                contentId={content.learning_content_id}
+                contentTitle={content.title}
+                contentSummary={content.summary}
+                chapter={resolvedChapter}
+                progress={progress}
+                pathTitle={hubMode ? "商务技巧" : "新人训练"}
+                levelTitle={`第 ${chapterOrderIndex} 章`}
+                chapterIndex={chapterIndex}
+                totalChapters={sortedChapters.length}
+                unitId={unit.unit_id}
+                returnTo={returnTo}
+                prevUnitId={null}
+                nextUnitId={null}
+                hubNavigation={hubMode}
+                onProgressUpdated={setProgress}
+            />
+            <TrainingMaterialsSection
+                materials={materials}
+                title="本关训练材料"
+                emptyHint="本关暂无训练材料"
+            />
+        </div>
     );
 }

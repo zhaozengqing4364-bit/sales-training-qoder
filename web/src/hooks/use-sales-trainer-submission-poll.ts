@@ -16,6 +16,8 @@ interface UseSalesTrainerSubmissionPollOptions {
     enabled?: boolean;
     /** 轮询总超时（毫秒），超时后停止并提示。默认 10 分钟。 */
     totalTimeoutMs?: number;
+    /** 管理者上下文：走 admin 端点读取他人录音详情。 */
+    isAdminContext?: boolean;
 }
 
 interface UseSalesTrainerSubmissionPollResult {
@@ -32,7 +34,7 @@ export function useSalesTrainerSubmissionPoll(
     submissionId: string,
     options: UseSalesTrainerSubmissionPollOptions = {},
 ): UseSalesTrainerSubmissionPollResult {
-    const { enabled = true, totalTimeoutMs = DEFAULT_TOTAL_TIMEOUT_MS } = options;
+    const { enabled = true, totalTimeoutMs = DEFAULT_TOTAL_TIMEOUT_MS, isAdminContext = false } = options;
     const [submission, setSubmission] = useState<SalesTrainerAudioSubmission | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isPolling, setIsPolling] = useState(false);
@@ -79,7 +81,9 @@ export function useSalesTrainerSubmissionPoll(
         setError(null);
 
         try {
-            const result = await api.salesTrainer.getAudioSubmission(submissionId);
+            const result = isAdminContext
+                ? await api.admin.salesTrainer.getAudioSubmission(submissionId)
+                : await api.salesTrainer.getAudioSubmission(submissionId);
             if (!isMountedRef.current) {
                 return;
             }
@@ -124,7 +128,7 @@ export function useSalesTrainerSubmissionPoll(
             setIsPolling(false);
             clearScheduledPoll();
         }
-    }, [clearScheduledPoll, enabled, submissionId, totalTimeoutMs]);
+    }, [clearScheduledPoll, enabled, submissionId, totalTimeoutMs, isAdminContext]);
 
     useEffect(() => {
         fetchSubmissionRef.current = fetchSubmission;

@@ -69,6 +69,14 @@ vi.mock("@/lib/api/client", async () => {
     };
 });
 
+vi.mock("@/hooks/use-my-audio-submissions", () => ({
+    useMyAudioSubmissions: () => ({
+        submissions: [],
+        isLoading: false,
+        error: null,
+    }),
+}));
+
 const baseTimestamp = "2026-05-28T00:00:00Z";
 
 function unitFixture(overrides: {

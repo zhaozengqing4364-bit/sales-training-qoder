@@ -1,18 +1,20 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LearnerStudyContent, SalesTrainerUnit } from "@/lib/api/types";
+import type { LearnerStudyContent, SalesTrainerUnit, SalesTrainerUnitBrief } from "@/lib/api/types";
 
 import SalesTrainerLearnPage from "./page";
 
 const {
     getContentMock,
     getUnitMock,
+    getUnitBriefMock,
     listPathsMock,
     listUnitsMock,
 } = vi.hoisted(() => ({
     getContentMock: vi.fn(),
     getUnitMock: vi.fn(),
+    getUnitBriefMock: vi.fn(),
     listPathsMock: vi.fn(),
     listUnitsMock: vi.fn(),
 }));
@@ -49,6 +51,38 @@ vi.mock("@/components/sales-trainer/coo-chapter-reader", () => ({
     ),
 }));
 
+vi.mock("@/components/sales-trainer/training-materials-section", () => ({
+    TrainingMaterialsSection: ({ materials, title, emptyHint }: {
+        materials: Array<{
+            material_id: string;
+            name: string;
+            learner_note: string | null;
+            current_version: { version_id: string };
+        }>;
+        title: string;
+        emptyHint: string;
+    }) => (
+        <div data-testid="training-materials-section">
+            <h2>{title}</h2>
+            {materials.length === 0 ? (
+                <p>{emptyHint}</p>
+            ) : (
+                <ul>
+                    {materials.map((m) => (
+                        <li key={m.material_id} data-testid="material-item">
+                            {m.name}
+                            {m.learner_note ? <p>{m.learner_note}</p> : null}
+                            <a href={`/sales-trainer/materials/versions/${m.current_version.version_id}/file`}>
+                                下载材料
+                            </a>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    ),
+}));
+
 vi.mock("@/lib/api/client", async () => {
     const actual = await vi.importActual<typeof import("@/lib/api/client")>(
         "@/lib/api/client",
@@ -64,6 +98,7 @@ vi.mock("@/lib/api/client", async () => {
             salesTrainer: {
                 ...actual.api.salesTrainer,
                 getUnit: getUnitMock,
+                getUnitBrief: getUnitBriefMock,
                 listPaths: listPathsMock,
                 listUnits: listUnitsMock,
             },
@@ -131,11 +166,31 @@ function content(): LearnerStudyContent {
     } as LearnerStudyContent;
 }
 
+function brief(overrides?: { materials?: unknown[] }): SalesTrainerUnitBrief {
+    return {
+        unit: unit(),
+        task_brief: {
+            enabled: true,
+            title: "任务",
+            purpose: "学习",
+            scenario: null,
+            instructions: [],
+            success_criteria: [],
+            common_mistakes: [],
+            upload_guidance: null,
+            submission_context: null,
+        },
+        materials: overrides?.materials ?? [],
+        score_scheme: null,
+    } as unknown as SalesTrainerUnitBrief;
+}
+
 describe("SalesTrainerLearnPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         getUnitMock.mockResolvedValue(unit());
         getContentMock.mockResolvedValue(content());
+        getUnitBriefMock.mockResolvedValue(brief());
         listPathsMock.mockRejectedValue(new Error("legacy paths unavailable"));
         listUnitsMock.mockRejectedValue(new Error("legacy units unavailable"));
     });
@@ -166,5 +221,57 @@ describe("SalesTrainerLearnPage", () => {
         expect(getContentMock).not.toHaveBeenCalled();
         expect(listPathsMock).not.toHaveBeenCalled();
         expect(listUnitsMock).not.toHaveBeenCalled();
+    });
+
+    it("renders training materials section with download links from the unit brief", async () => {
+        getUnitBriefMock.mockResolvedValue(
+            brief({
+                materials: [
+                    {
+                        material_id: "mat-1",
+                        material_key: "ppt_deck",
+                        name: "产品 PPT 模板",
+                        material_type: "ppt_deck",
+                        description: null,
+                        purpose: "ppt_pitch",
+                        required: false,
+                        confirmation_required: false,
+                        learner_note: "参考此模板完成录音",
+                        display_order: 0,
+                        current_version: {
+                            version_id: "ver-1",
+                            material_id: "mat-1",
+                            version_label: "v1.0",
+                            title: "标准模板",
+                            file_name: "ppt.pptx",
+                            content_type: "application/vnd.ms-powerpoint",
+                            file_size_bytes: 2048,
+                            file_hash: null,
+                            release_notes: null,
+                            status: "published",
+                            published_at: "2026-06-01T00:00:00Z",
+                        },
+                    },
+                ],
+            }),
+        );
+
+        render(<SalesTrainerLearnPage />);
+
+        expect(await screen.findByText("本关训练材料")).toBeTruthy();
+        expect(screen.getByText("产品 PPT 模板")).toBeTruthy();
+        expect(screen.getByText("参考此模板完成录音")).toBeTruthy();
+        const downloadLink = screen.getByRole("link", { name: /下载材料/ });
+        expect(downloadLink.getAttribute("href")).toContain("/sales-trainer/materials/versions/ver-1/file");
+    });
+
+    it("shows empty hint when the unit brief has no materials", async () => {
+        getUnitBriefMock.mockResolvedValue(brief({ materials: [] }));
+
+        render(<SalesTrainerLearnPage />);
+
+        expect(await screen.findByText("本关训练材料")).toBeTruthy();
+        expect(screen.getByText("本关暂无训练材料")).toBeTruthy();
+        expect(screen.queryByRole("link", { name: /下载材料/ })).toBeNull();
     });
 });
