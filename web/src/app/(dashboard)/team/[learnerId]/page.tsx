@@ -11,6 +11,8 @@ import {
     XCircle,
     Lock,
     User,
+    Circle,
+    Loader2,
 } from "lucide-react";
 
 import { GlassCard } from "@/components/ui/glass-card";
@@ -22,48 +24,148 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useTeamJourneyDetail } from "@/hooks/use-team-journey-detail";
 import { getApiErrorMessage } from "@/lib/api/client";
 import type {
+    TrainingJourneyModuleKind,
     TrainingJourneyModuleProgress,
     TrainingJourneyResponse,
 } from "@/lib/api/types";
 import {
     getStageLabel,
-    getStageToneClass,
     formatRiskReasons,
     buildModuleKeyToTitleMapFromJourney,
     detectJourneyRiskModules,
 } from "@/lib/team-journey/view-models";
 import { cn } from "@/lib/utils";
 
-interface ModuleViewModel {
-    module_key: string;
-    display_title: string;
-    stage_label: string;
-    stage_tone: string;
-    passed_label: string;
-    passed_tone: "green" | "red" | "gray";
+/**
+ * 单个 part 的展示状态（DTO → ViewModel 映射）。
+ * 不直接暴露后端 stage/status 原始枚举，只保留 5 种用户可理解的状态。
+ *
+ * 判定优先级（与关卡整体状态判定一致）：
+ *   locked > failed > in_progress > not_started > passed
+ *   其中 passed 是兜底：passed=true 视为已通过；passed=null + 非失败/进行中 视为未开始。
+ */
+type PartStatus = "passed" | "failed" | "in_progress" | "not_started" | "locked";
+
+/**
+ * 关卡整体状态：取该关所有 part 里最需关注的状态。
+ * 优先级：failed > in_progress > not_started > passed（locked 归入 not_started 一起算"未开始"）。
+ */
+type StageStatus = "passed" | "failed" | "in_progress" | "not_started";
+
+const PART_STATUS_LABEL: Record<PartStatus, string> = {
+    passed: "已通过",
+    failed: "未通过",
+    in_progress: "进行中",
+    not_started: "未开始",
+    locked: "未解锁",
+};
+
+const STAGE_STATUS_LABEL: Record<StageStatus, string> = {
+    passed: "已通过",
+    failed: "需关注",
+    in_progress: "进行中",
+    not_started: "未开始",
+};
+
+interface PartViewModel {
+    /** 唯一 React key：同关内 kind 唯一，跨关用 order_index 区分 */
+    react_key: string;
+    /** part 标题：文章做题 / AI 教练 / 音频提交 / 实时对练 */
+    part_title: string;
+    status: PartStatus;
     score_label: string;
     next_action_label: string;
     is_risk: boolean;
 }
 
-function getPassedLabel(passed: boolean | null | undefined): string {
-    if (passed === true) {
-        return "已通过";
-    }
-    if (passed === false) {
-        return "未通过";
-    }
-    return "待判分";
+interface StageGroupViewModel {
+    /** 唯一 React key：order_index 在 journey 内唯一 */
+    react_key: string;
+    /** 第 N 关：order_index + 1（0-based → 1-based，兜底用 1） */
+    stage_number: number;
+    /** 关卡标题：取该关第一个 part 的 title/display_name（同关共享标题） */
+    stage_title: string;
+    /** 关卡整体状态 */
+    status: StageStatus;
+    /** 关卡下一步：取该关最靠前未完成 part 的 next_action.label */
+    next_action_label: string;
+    /** 关卡内所有 part */
+    parts: PartViewModel[];
 }
 
-function getPassedTone(passed: boolean | null | undefined): "green" | "red" | "gray" {
-    if (passed === true) {
-        return "green";
+/**
+ * 后端 kind 工程 key → part 中文标签（不进 UI 文本前先兜底）。
+ * 优先用 module.title/display_name（受治理的运营文案），kind 只在 title 缺失时兜底。
+ *
+ * 注意：同关的两个 part 共享 title（如"第2关：商务技巧"），所以 part 标题用 kind 区分
+ * 做题/AI 教练，而不是重复显示关卡标题。
+ */
+function getPartTitleFromKind(kind: TrainingJourneyModuleKind | string | undefined): string {
+    switch (kind) {
+        case "quiz_attempt":
+            return "文章做题";
+        case "ai_coach":
+            return "AI 教练";
+        case "audio_submission":
+            return "音频提交";
+        case "realtime_roleplay":
+            return "实时对练";
+        default:
+            return "训练模块";
     }
-    if (passed === false) {
-        return "red";
+}
+
+/**
+ * 从原始 module 判定单个 part 的展示状态。
+ *
+ * 判定规则（与后端 stage 语义对齐，但映射到 5 种用户状态）：
+ * - locked === true → locked（未解锁，不显示成绩）
+ * - passed === true → passed
+ * - passed === false → failed（含 needs_remediation/manual_review/error_terminal 等风险态）
+ * - passed === null/undefined：
+ *   - stage ∈ {in_progress, processing, waiting_upload} → in_progress
+ *   - stage === not_started → not_started
+ *   - stage ∈ {scored} → passed（已评分但 passed 未回填，视为已通过兜底）
+ *   - 其他 → not_started（兜底，不泄露工程态）
+ */
+function determinePartStatus(journeyModule: TrainingJourneyModuleProgress): PartStatus {
+    if (journeyModule.locked === true) {
+        return "locked";
     }
-    return "gray";
+    if (journeyModule.passed === true) {
+        return "passed";
+    }
+    if (journeyModule.passed === false) {
+        return "failed";
+    }
+    // passed === null/undefined：按 stage 推断
+    const stage = journeyModule.stage ?? journeyModule.status;
+    if (stage === "in_progress" || stage === "processing" || stage === "waiting_upload") {
+        return "in_progress";
+    }
+    if (stage === "scored" || stage === "passed") {
+        return "passed";
+    }
+    return "not_started";
+}
+
+/**
+ * 判定单个 part 是否为待辅导（与 view-models.ts 的 detectJourneyRiskModules 语义一致，
+ * 但按 part 独立判定，避免 module_key 重复时误标同关其他 part）。
+ */
+function isPartAtRisk(journeyModule: TrainingJourneyModuleProgress): boolean {
+    if (journeyModule.passed === false) {
+        return true;
+    }
+    const status = journeyModule.status;
+    const RISK_STATUSES: ReadonlySet<string> = new Set([
+        "failed",
+        "needs_remediation",
+        "manual_review",
+        "error_terminal",
+        "error_transient",
+    ]);
+    return typeof status === "string" && RISK_STATUSES.has(status);
 }
 
 function formatScore(score: number | null | undefined, maxScore: number | null | undefined): string {
@@ -76,22 +178,141 @@ function formatScore(score: number | null | undefined, maxScore: number | null |
     return "暂无成绩";
 }
 
-function mapModuleToViewModel(
-    module: TrainingJourneyModuleProgress,
-    riskModuleKeys: Set<string>,
-): ModuleViewModel {
-    const title = module.display_name?.trim() || module.title?.trim() || "未命名模块";
+/**
+ * 把单条原始 module 映射为 part ViewModel。
+ * 不携带任何工程字段（module_key/kind/order_index 不进 UI 文本）。
+ */
+function mapModuleToPartViewModel(journeyModule: TrainingJourneyModuleProgress): PartViewModel {
+    const kind = journeyModule.kind ?? journeyModule.module_type;
+    const partTitle = getPartTitleFromKind(kind);
+    const status = determinePartStatus(journeyModule);
+    const nextActionLabel = journeyModule.next_action?.label?.trim() || "无待办";
+    // locked 不展示成绩
+    const scoreLabel = status === "locked" ? "—" : formatScore(journeyModule.score, journeyModule.max_score);
+
     return {
-        module_key: module.module_key,
-        display_title: title,
-        stage_label: getStageLabel(module.stage ?? module.status),
-        stage_tone: getStageToneClass(module.stage ?? module.status),
-        passed_label: getPassedLabel(module.passed),
-        passed_tone: getPassedTone(module.passed),
-        score_label: formatScore(module.score, module.max_score),
-        next_action_label: module.next_action?.label?.trim() || "无待办",
-        is_risk: riskModuleKeys.has(module.module_key),
+        // 同关内 kind 唯一，跨关用 order_index 区分 → 全局唯一
+        react_key: `${journeyModule.order_index ?? 0}-${kind}`,
+        part_title: partTitle,
+        status,
+        score_label: scoreLabel,
+        next_action_label: nextActionLabel,
+        is_risk: isPartAtRisk(journeyModule),
     };
+}
+
+const PART_STATUS_PRIORITY: Record<PartStatus, number> = {
+    failed: 0,
+    in_progress: 1,
+    locked: 2,
+    not_started: 2,
+    passed: 3,
+};
+
+const STAGE_STATUS_PRIORITY: Record<StageStatus, number> = {
+    failed: 0,
+    in_progress: 1,
+    not_started: 2,
+    passed: 3,
+};
+
+/**
+ * 从该关所有 part 的状态推导关卡整体状态。
+ * 取最需关注的（priority 最小）。
+ */
+function determineStageStatus(partStatuses: PartStatus[]): StageStatus {
+    if (partStatuses.length === 0) {
+        return "not_started";
+    }
+    let minPriority = Infinity;
+    let result: StageStatus = "passed";
+    for (const ps of partStatuses) {
+        // locked 归入 not_started 一起算关卡"未开始"
+        const stageStatus: StageStatus = ps === "locked" ? "not_started" : ps === "passed" ? "passed" : ps;
+        const priority = STAGE_STATUS_PRIORITY[stageStatus];
+        if (priority < minPriority) {
+            minPriority = priority;
+            result = stageStatus;
+        }
+    }
+    return result;
+}
+
+/**
+ * 取该关下一步：优先级 failed > in_progress > not_started/locked > passed。
+ * 取最靠前未完成 part 的 next_action.label；若全部已通过，取第一个 part 的（通常是"查看详情"）。
+ */
+function pickStageNextActionLabel(parts: PartViewModel[]): string {
+    if (parts.length === 0) {
+        return "无待办";
+    }
+    const sorted = parts.slice().sort(
+        (a, b) => PART_STATUS_PRIORITY[a.status] - PART_STATUS_PRIORITY[b.status],
+    );
+    return sorted[0].next_action_label || "无待办";
+}
+
+/**
+ * 把 journey.modules 按 order_index 分组为关卡列表。
+ *
+ * 分组规则：
+ * - 同 order_index 的 module 归到同一关（如 order=2 下 quiz_attempt + ai_coach 共享第2关）
+ * - 关卡标题取该关第一个 module 的 title/display_name（同关共享标题）
+ * - 关卡编号 = order_index + 1（0-based → 1-based）
+ *
+ * 输入已按 order_index 升序排列的 modules。
+ */
+function groupModulesByStage(modules: TrainingJourneyModuleProgress[]): StageGroupViewModel[] {
+    const groups: StageGroupViewModel[] = [];
+    const groupMap = new Map<number, TrainingJourneyModuleProgress[]>();
+
+    for (const journeyModule of modules) {
+        const order = journeyModule.order_index ?? 0;
+        const arr = groupMap.get(order);
+        if (arr) {
+            arr.push(journeyModule);
+        } else {
+            groupMap.set(order, [journeyModule]);
+        }
+    }
+
+    // order_index 升序
+    const sortedOrders = Array.from(groupMap.keys()).sort((a, b) => a - b);
+
+    for (const order of sortedOrders) {
+        const stageModules = groupMap.get(order) ?? [];
+        const parts = stageModules
+            .slice()
+            .sort((a, b) => {
+                // 同关内按 kind 字母序稳定排序，避免随机
+                const ka = a.kind ?? a.module_type ?? "";
+                const kb = b.kind ?? b.module_type ?? "";
+                return ka.localeCompare(kb);
+            })
+            .map(mapModuleToPartViewModel);
+
+        const partStatuses = parts.map((p) => p.status);
+        const stageStatus = determineStageStatus(partStatuses);
+        const nextAction = pickStageNextActionLabel(parts);
+
+        // 关卡标题：同关共享，取第一个 module 的 title/display_name
+        const firstModule = stageModules[0];
+        const stageTitle =
+            firstModule.display_name?.trim()
+            || firstModule.title?.trim()
+            || "未命名关卡";
+
+        groups.push({
+            react_key: `stage-${order}`,
+            stage_number: order + 1,
+            stage_title: stageTitle,
+            status: stageStatus,
+            next_action_label: nextAction,
+            parts,
+        });
+    }
+
+    return groups;
 }
 
 function DetailLoadingSkeleton() {
@@ -198,34 +419,160 @@ function ProgressCard({ journey }: { journey: TrainingJourneyResponse }) {
     );
 }
 
-function ModuleCard({ module }: { module: ModuleViewModel }) {
+/** part 状态 → 图标 + 颜色 class */
+function getPartStatusIcon(status: PartStatus): {
+    icon: React.ReactNode;
+    iconColor: string;
+    borderColor: string;
+} {
+    switch (status) {
+        case "passed":
+            return {
+                icon: <CheckCircle2 className="w-5 h-5" />,
+                iconColor: "text-emerald-500",
+                borderColor: "border-l-emerald-400",
+            };
+        case "failed":
+            return {
+                icon: <XCircle className="w-5 h-5" />,
+                iconColor: "text-red-500",
+                borderColor: "border-l-red-400",
+            };
+        case "in_progress":
+            return {
+                icon: <Loader2 className="w-5 h-5 animate-spin" />,
+                iconColor: "text-blue-500",
+                borderColor: "border-l-blue-400",
+            };
+        case "locked":
+            return {
+                icon: <Lock className="w-5 h-5" />,
+                iconColor: "text-slate-400",
+                borderColor: "border-l-slate-300",
+            };
+        case "not_started":
+        default:
+            return {
+                icon: <Circle className="w-5 h-5" />,
+                iconColor: "text-slate-400",
+                borderColor: "border-l-slate-300",
+            };
+    }
+}
+
+/** 关卡整体状态 → 图标 + 颜色 class */
+function getStageStatusIcon(status: StageStatus): {
+    icon: React.ReactNode;
+    iconColor: string;
+    badgeVariant: "green" | "red" | "blue" | "gray";
+    cardAccent: string;
+} {
+    switch (status) {
+        case "passed":
+            return {
+                icon: <CheckCircle2 className="w-5 h-5" />,
+                iconColor: "text-emerald-500",
+                badgeVariant: "green",
+                cardAccent: "border-white/60",
+            };
+        case "failed":
+            return {
+                icon: <AlertTriangle className="w-5 h-5" />,
+                iconColor: "text-red-500",
+                badgeVariant: "red",
+                cardAccent: "border-red-200/80 bg-red-50/30",
+            };
+        case "in_progress":
+            return {
+                icon: <Loader2 className="w-5 h-5 animate-spin" />,
+                iconColor: "text-blue-500",
+                badgeVariant: "blue",
+                cardAccent: "border-blue-200/80 bg-blue-50/30",
+            };
+        case "not_started":
+        default:
+            return {
+                icon: <Circle className="w-5 h-5" />,
+                iconColor: "text-slate-400",
+                badgeVariant: "gray",
+                cardAccent: "border-white/60",
+            };
+    }
+}
+
+function PartRow({ part }: { part: PartViewModel }) {
+    const { icon, iconColor, borderColor } = getPartStatusIcon(part.status);
     return (
-        <GlassCard className="p-5 border border-white/60">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-slate-900 truncate">{module.display_title}</h3>
-                        {module.is_risk ? (
-                            <Badge variant="red" className="shrink-0">
-                                <AlertTriangle className="w-3 h-3 mr-1" />
-                                需关注
-                            </Badge>
-                        ) : null}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-1">下一步：{module.next_action_label}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <span className={cn("inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border", module.stage_tone)}>
-                        {module.stage_label}
+        <div
+            data-testid="part-row"
+            data-part-status={part.status}
+            className={cn("flex items-center gap-3 rounded-xl border border-l-4 bg-white/50 px-4 py-3", borderColor)}
+        >
+            <span className={cn("shrink-0", iconColor)} aria-hidden="true">
+                {icon}
+            </span>
+            <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-slate-900 truncate">{part.part_title}</span>
+                    <span
+                        className={cn(
+                            "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+                            part.status === "passed" && "bg-emerald-50 text-emerald-700",
+                            part.status === "failed" && "bg-red-50 text-red-700",
+                            part.status === "in_progress" && "bg-blue-50 text-blue-700",
+                            (part.status === "not_started" || part.status === "locked") && "bg-slate-100 text-slate-500",
+                        )}
+                    >
+                        {PART_STATUS_LABEL[part.status]}
                     </span>
-                    <Badge variant={module.passed_tone} className="shrink-0">
-                        {module.passed_label}
-                    </Badge>
+                    {part.is_risk && part.status === "failed" ? (
+                        <Badge variant="red" className="shrink-0">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            需关注
+                        </Badge>
+                    ) : null}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">下一步：{part.next_action_label}</p>
+            </div>
+            <div className="shrink-0 text-right">
+                <span className="text-xs text-slate-400 block">成绩</span>
+                <span className="font-bold text-slate-900 text-sm">{part.score_label}</span>
+            </div>
+        </div>
+    );
+}
+
+function StageGroupCard({ group }: { group: StageGroupViewModel }) {
+    const { icon, iconColor, badgeVariant, cardAccent } = getStageStatusIcon(group.status);
+    return (
+        <GlassCard
+            data-testid="stage-group"
+            data-stage-status={group.status}
+            data-stage-number={group.stage_number}
+            className={cn("p-5 border", cardAccent)}
+        >
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <span className={cn("shrink-0", iconColor)} aria-hidden="true">
+                        {icon}
+                    </span>
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-bold text-slate-900 truncate">
+                                第{group.stage_number}关 · {group.stage_title}
+                            </h3>
+                            <Badge variant={badgeVariant} className="shrink-0">
+                                {STAGE_STATUS_LABEL[group.status]}
+                            </Badge>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">下一步：{group.next_action_label}</p>
+                    </div>
                 </div>
             </div>
-            <div className="mt-3 flex items-center gap-4 text-sm">
-                <span className="text-slate-500">成绩</span>
-                <span className="font-bold text-slate-900">{module.score_label}</span>
+            <div className="mt-4 space-y-2">
+                {group.parts.map((part) => (
+                    <PartRow key={part.react_key} part={part} />
+                ))}
             </div>
         </GlassCard>
     );
@@ -243,17 +590,15 @@ export default function TeamLearnerDetailPage() {
         && role !== "admin"
         && role !== "super_admin";
 
-    const viewModels = useMemo<ModuleViewModel[]>(() => {
+    const stageGroups = useMemo<StageGroupViewModel[]>(() => {
         const journey = detail.journey;
         if (!journey) {
             return [];
         }
-        const riskIndicators = detectJourneyRiskModules(journey);
-        const riskKeys = new Set(riskIndicators.map((i) => i.module_key));
-        return (journey.modules ?? [])
+        const modules = (journey.modules ?? [])
             .slice()
-            .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
-            .map((m) => mapModuleToViewModel(m, riskKeys));
+            .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+        return groupModulesByStage(modules);
     }, [detail.journey]);
 
     const riskReasonLabels = useMemo<string[]>(() => {
@@ -294,10 +639,12 @@ export default function TeamLearnerDetailPage() {
     // 后端 404 [TRAINING_RECORD_NOT_FOUND]：跨部门/不存在均返回此码，不泄露学员是否存在。
     const isNotFound = Boolean(
         detail.error
-            && typeof detail.error === "object"
-            && "message" in detail.error
-            && String((detail.error as { message?: string }).message ?? "").includes("[TRAINING_RECORD_NOT_FOUND]"),
+        && typeof detail.error === "object"
+        && "message" in detail.error
+        && String((detail.error as { message?: string }).message ?? "").includes("[TRAINING_RECORD_NOT_FOUND]"),
     );
+
+    const totalParts = stageGroups.reduce((sum, g) => sum + g.parts.length, 0);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
@@ -356,20 +703,20 @@ export default function TeamLearnerDetailPage() {
                         <div className="flex items-center justify-between mb-4 px-2">
                             <h2 className="text-xl font-bold text-slate-900">模块进度</h2>
                             <span className="text-xs text-slate-400">
-                                共 {viewModels.length} 个模块
+                                共 {stageGroups.length} 个关卡 · {totalParts} 个训练项
                             </span>
                         </div>
 
-                        {viewModels.length === 0 ? (
+                        {stageGroups.length === 0 ? (
                             <EmptyState
                                 title="暂无模块记录"
                                 description="该学员的训练路径尚未配置模块，或模块数据仍在生成中。"
                                 icon={<Lock className="w-10 h-10 text-slate-300" />}
                             />
                         ) : (
-                            <div className="space-y-3">
-                                {viewModels.map((module) => (
-                                    <ModuleCard key={module.module_key} module={module} />
+                            <div className="space-y-4">
+                                {stageGroups.map((group) => (
+                                    <StageGroupCard key={group.react_key} group={group} />
                                 ))}
                             </div>
                         )}
