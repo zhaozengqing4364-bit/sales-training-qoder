@@ -1694,6 +1694,8 @@ class QuizAttemptCreate(BaseModel):
 
     unit_id: str = Field(..., min_length=1, max_length=36)
     answers: list[QuizAnswerSubmit] = Field(..., min_length=1)
+    # 幂等键：前端生成的 uuid，重复提交同一 token 返回已存在 attempt，避免重复判分。
+    client_token: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class QuizAnswerResponse(BaseModel):
@@ -1843,6 +1845,8 @@ class PaperAttemptCreate(BaseModel):
 
     paper_id: str = Field(..., min_length=1, max_length=36)
     answers: list[QuizAnswerSubmit] = Field(..., min_length=1)
+    # 幂等键：前端生成的 uuid，重复提交同一 token 返回已存在 attempt，避免重复判分。
+    client_token: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class PaperRollbackRequest(BaseModel):

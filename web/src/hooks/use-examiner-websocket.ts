@@ -76,7 +76,8 @@ export type ExamPhase =
   | "answering"
   | "feedback"
   | "finalizing"
-  | "completed";
+  | "completed"
+  | "error";
 export type FeatureFlagStatus = "loading" | "enabled" | "disabled";
 
 export interface ExamState {
@@ -84,6 +85,8 @@ export interface ExamState {
   examPhase: ExamPhase;
   featureFlag: FeatureFlagStatus;
   error: string | null;
+  /** 后端 exam.error 事件码（空题库/判分失败等），用于前端区分提示。 */
+  errorCode: string | null;
   sessionId: string | null;
   currentQuestion: ExamQuestionData | null;
   questionIndex: number;
@@ -108,6 +111,7 @@ const INITIAL_STATE: ExamState = {
   // The page's useEffect fetches real feature flags and enables if allowed.
   featureFlag: "disabled" as FeatureFlagStatus,
   error: null,
+  errorCode: null,
   sessionId: null,
   currentQuestion: null,
   questionIndex: -1,
@@ -300,6 +304,20 @@ export function useExaminerWebSocket(
               completionReason: data.reason,
               reportPath: data.report_path ?? null,
               error: null,
+            }));
+            break;
+          }
+
+          case "exam.error": {
+            // R4/R6: 空题库、判分结果保存失败等不应伪装为 completed。
+            // 置错误状态，前端展示可重试提示，不进入 completed 相位。
+            const data = (msg.data ?? {}) as { code?: string; message?: string };
+            clearTimer();
+            setState((prev) => ({
+              ...prev,
+              examPhase: "error",
+              error: data.message ?? "考核出现错误，请重试或联系管理员。",
+              errorCode: data.code ?? null,
             }));
             break;
           }

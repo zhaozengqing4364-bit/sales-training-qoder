@@ -18,6 +18,7 @@ from common.cos.signing import (
     get_cos_signing_service,
 )
 from common.db.models import User
+from common.monitoring.logger import get_logger
 from common.oss.signing import (
     OssConfigError,
     get_oss_signing_service,
@@ -55,6 +56,8 @@ from sales_trainer.services.path_attempt_context_service import (
     PathRuntimeContextPayload,
 )
 from sales_trainer.services.transcription_service import TranscriptionService
+
+logger = get_logger(__name__)
 
 DEFAULT_ALLOWED_MIME_TYPES = {
     "audio/mpeg",
@@ -348,6 +351,54 @@ class AudioSubmissionService:
         await self._db.commit()
         await self._db.refresh(submission)
         return submission
+
+    async def mark_unexpected_failure(
+        self,
+        submission_id: str,
+        *,
+        actor: User | None,
+        error: BaseException,
+    ) -> None:
+        """兜底：后台任务抛未预期异常时把 submission 推到 scoring_failed 终态。
+
+        只在状态非终态时写，避免覆盖已 succeeded 的 submission。事务内写 + 审计；
+        调用方负责 rollback/commit。写失败时仅 log，绝不静默吞掉原异常。
+        """
+
+        submission = await self._db.get(SalesTrainerAudioSubmission, submission_id)
+        if submission is None:
+            logger.error(
+                "sales_trainer_audio_mark_failure_no_submission",
+                submission_id=submission_id,
+                error_type=type(error).__name__,
+            )
+            return
+        if str(submission.status) in {
+            "scored",
+            "transcription_failed",
+            "scoring_failed",
+        }:
+            logger.warning(
+                "sales_trainer_audio_mark_failure_skipped_terminal",
+                submission_id=submission_id,
+                status=submission.status,
+                error_type=type(error).__name__,
+            )
+            return
+        error_code = "[AUDIO_SUBMISSION_UNEXPECTED_ERROR]"
+        _set_orm_fields(
+            submission,
+            status="scoring_failed",
+            error_code=error_code,
+            error_message=f"{type(error).__name__}: {error}",
+        )
+        await self._logs.record(
+            actor=actor,
+            action="audio_scoring_failed",
+            target_type="sales_trainer_audio_submission",
+            target_id=str(submission.submission_id),
+            metadata={"error_code": error_code, "error_type": type(error).__name__},
+        )
 
     async def retry_transcription(
         self, submission_id: str, *, actor: User
@@ -749,6 +800,11 @@ class AudioSubmissionService:
         actor: User | None,
     ) -> None:
         if submission.status != "transcribed":
+            logger.warning(
+                "sales_trainer_audio_score_skipped_non_transcribed",
+                submission_id=str(submission.submission_id),
+                status=submission.status,
+            )
             return
         submission_id = str(submission.submission_id)
         transcript = await self._get_transcript(submission_id)

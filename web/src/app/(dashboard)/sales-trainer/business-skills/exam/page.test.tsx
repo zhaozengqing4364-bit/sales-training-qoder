@@ -241,13 +241,15 @@ describe("BusinessSkillsExamPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "提交考卷" }));
 
         await waitFor(() => {
-            expect(submitAttemptMock).toHaveBeenCalledWith({
-                paper_id: "paper-1",
-                answers: [
-                    { question_id: "q1", answer_payload: "A" },
-                    { question_id: "q2", answer_payload: "false" },
-                ],
-            });
+            expect(submitAttemptMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    paper_id: "paper-1",
+                    answers: [
+                        { question_id: "q1", answer_payload: "A" },
+                        { question_id: "q2", answer_payload: "false" },
+                    ],
+                }),
+            );
         });
         await waitFor(() => {
             expect(pushMock).toHaveBeenCalledWith("/sales-trainer/quiz/result/attempt-1");

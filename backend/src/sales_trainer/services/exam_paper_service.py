@@ -192,6 +192,7 @@ class ExamPaperService:
                     attempt_context=path_context.with_paper_revision(
                         str(revision.revision_id)
                     ),
+                    client_token=payload.client_token,
                 )
             except PaperSnapshotAttemptError as exc:
                 raise ExamPaperServiceError(
@@ -201,7 +202,11 @@ class ExamPaperService:
                 ) from exc
         try:
             attempt = await QuizService(self._db).submit_attempt(
-                QuizAttemptCreate(unit_id=paper.unit_id, answers=payload.answers),
+                QuizAttemptCreate(
+                    unit_id=paper.unit_id,
+                    answers=payload.answers,
+                    client_token=payload.client_token,
+                ),
                 actor=actor,
             )
         except QuizServiceError as exc:

@@ -8,6 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { generateClientToken } from "@/lib/sales-trainer/idempotency";
 import type { NewcomerExamPaper } from "@/lib/api/types";
 
 import {
@@ -151,6 +152,8 @@ export default function BusinessSkillsExamPage() {
         try {
             const result = await api.newcomerTraining.submitPaperAttempt({
                 paper_id: paper.paper_id,
+                // 幂等键：同一提交流程内生成一次，重复提交返回已存在 attempt。
+                client_token: generateClientToken(),
                 answers: paper.questions.map((question) => ({
                     question_id: question.question_id,
                     answer_payload: answerPayload(question, answers),

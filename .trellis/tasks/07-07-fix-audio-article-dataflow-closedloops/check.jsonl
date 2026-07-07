@@ -1,0 +1,8 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required verification, targeted tests, forbidden silent swallow / fake success."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify failures land in defined terminal states; no new status enum introduced."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify migration reversible, nullable back-compat, unique constraint on client_token."}
+{"file": ".trellis/spec/backend/realtime-roleplay-v1.md", "reason": "Verify examiner WS fail-closed: empty bank error, answer persistence, no fake completed."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify vitest coverage for poll timeout + error event display."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify status type union exhaustive over terminal states after changes."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify end-to-end closed loop: regrade visible, reconnect restore, idempotent submit."}

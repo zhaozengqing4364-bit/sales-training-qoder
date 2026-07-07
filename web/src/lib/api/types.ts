@@ -6293,6 +6293,8 @@ export interface NewcomerExamPaperUpdateRequest {
 export interface NewcomerPaperAttemptCreateRequest {
     paper_id: string;
     answers: SalesTrainerQuizAnswerSubmitRequest[];
+    /** 幂等键：重复提交同一 token 返回已存在 attempt，避免重复判分。 */
+    client_token?: string;
 }
 
 export interface NewcomerPaperRollbackRequest {
@@ -6319,6 +6321,8 @@ export interface SalesTrainerQuizAnswerSubmitRequest {
 export interface SalesTrainerQuizAttemptCreateRequest {
     unit_id: string;
     answers: SalesTrainerQuizAnswerSubmitRequest[];
+    /** 幂等键：重复提交同一 token 返回已存在 attempt，避免重复判分。 */
+    client_token?: string;
 }
 
 export interface SalesTrainerQuizAnswer {

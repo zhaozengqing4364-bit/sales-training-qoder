@@ -1,0 +1,12 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend scope: async task contract, state machine, regrade write-back, examiner WS persistence."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Failure must be visible: no silent swallow, no fake success; scoring_failed terminal state for background task except path."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "client_token migration must be reversible, nullable for back-compat, unique constraint."}
+{"file": ".trellis/spec/backend/realtime-roleplay-v1.md", "reason": "Examiner WS runtime reliability, session state restore, fail-closed behavior."}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "Runtime config for poll timeout, regrade write-back policy."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend scope: poll hook timeout, result page error state, examiner error event."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Poll hook state machine: terminal + timeout transitions."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Submission status type union must stay exhaustive over terminal states."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Task spans storage/service/API/UI/WS; verify end-to-end closed loop."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse roleplay_observation client_token pattern for quiz attempt idempotency."}
+{"file": ".trellis/tasks/07-07-fix-audio-article-dataflow-closedloops/prd.md", "reason": "Current task PRD: closed-loop fixes for audio + article dataflows."}

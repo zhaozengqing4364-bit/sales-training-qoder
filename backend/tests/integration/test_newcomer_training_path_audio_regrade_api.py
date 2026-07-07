@@ -267,6 +267,32 @@ async def test_should_regrade_audio_submission_as_explicit_append_only_action(
     assert log.metadata_json["history_overwrite"] is False
     assert log.metadata_json["impact_scope"]["record_count"] == 1
 
+    # R1: regrade 必须把新分回写业务表 + 更新 submission 状态，学员结果页才能看到重判结果。
+    # 追加新 score_result 行（保留原行），submission 置 scored 终态。
+    await test_db.refresh(submission)
+    assert submission.status == "scored"
+    assert submission.error_code is None
+
+    score_results = (
+        await test_db.execute(
+            select(SalesTrainerAudioScoreResult)
+            .where(SalesTrainerAudioScoreResult.submission_id == submission.submission_id)
+            .order_by(SalesTrainerAudioScoreResult.created_at)
+        )
+    ).scalars().all()
+    # 原行 + 重判新行
+    assert len(score_results) == 2
+    assert score_results[0].score_id == original_score.score_id
+    assert float(score_results[0].total_score) == 88
+    # 新行应为重判后的分
+    regraded = score_results[-1]
+    assert regraded.score_id != original_score.score_id
+    assert regraded.prompt_hash == "target-prompt-hash"
+    assert float(regraded.total_score) == 42
+    assert regraded.passed is False
+    assert regraded.dimension_scores == {"structure": 42}
+
+
 
 async def _latest_prompt_revision(
     test_db: AsyncSession,

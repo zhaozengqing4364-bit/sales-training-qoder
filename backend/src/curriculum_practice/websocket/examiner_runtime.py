@@ -202,9 +202,14 @@ class ExaminerRuntime:
 
     async def connect(self) -> list[dict[str, Any]]:
         if not self._questions:
+            # 空题库不应伪完成（completed）。返回错误事件，让用户看到"无题可答"
+            # 而非"已考核完成"。不标记 _completed，避免误导。
             return [
                 self._session_init_message(),
-                await self._completed_message("empty_question_bank"),
+                self._error_message(
+                    code="empty_question_bank",
+                    message="该考核暂无可作答题目，请联系管理员。",
+                ),
             ]
         if self._completed:
             return [
@@ -257,7 +262,20 @@ class ExaminerRuntime:
         except (TypeError, ValueError):
             return []
         if question_index < 0 or question_index >= len(self._questions):
-            return []
+            # R8.2: 越界答案不能再静默 return []——返回错误反馈让用户知道题目不存在，
+            # 否则客户端误以为提交已接受，结果悬挂。同时记日志便于定位。
+            logger.warning(
+                "Examiner answer index out of range",
+                session_id=self._session_id,
+                question_index=question_index,
+                total_questions=len(self._questions),
+            )
+            return [
+                self._error_message(
+                    code="answer_index_out_of_range",
+                    message="题目序号超出范围，请刷新后重试。",
+                )
+            ]
 
         question = self._questions[question_index]
         self._upsert_answer(
@@ -472,10 +490,23 @@ class ExaminerRuntime:
             },
         }
 
+    def _error_message(self, *, code: str, message: str) -> dict[str, Any]:
+        """构造错误事件。用于空题库、判分失败等不应伪装为 completed 的场景。"""
+
+        return {
+            "type": "exam.error",
+            "data": {
+                "session_id": self._session_id,
+                "code": code,
+                "message": message,
+            },
+        }
+
     async def _completed_message(self, reason: str) -> dict[str, Any]:
         self._completed = True
         if self._completed_reason is None:
             self._completed_reason = reason
+        report_write_failed = False
         if self._report_path is None and self._completion_writer is not None:
             try:
                 self._report_path = await self._completion_writer(
@@ -484,12 +515,20 @@ class ExaminerRuntime:
                     reason=self._completed_reason,
                 )
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Examiner completion report marker write failed",
+                # R6: report 落库失败不能伪装成 completed，否则用户看到"已完成"
+                # 但 report 缺失——结果悬挂。改为发 exam.failed，让用户重试。
+                report_write_failed = True
+                logger.error(
+                    "Examiner completion report write failed",
                     session_id=self._session_id,
                     reason="COMPLETION_REPORT_WRITE_EXCEPTION",
                     error_type=type(exc).__name__,
                 )
+        if report_write_failed:
+            return self._error_message(
+                code="completion_report_failed",
+                message="判分结果保存失败，请重试或联系管理员。",
+            )
         data: dict[str, Any] = {
             "session_id": self._session_id,
             "status": "completed",
@@ -526,6 +565,10 @@ class ExaminerWebSocketHandler(BaseWebSocketHandler):
     async def handle_message(self, message: dict[str, Any]) -> None:
         for response in await self._runtime.handle_client_message(message):
             await self.send_message(response)
+        # R5: 每答一题即落快照，确保连接中途断开（未走完整 disconnect）时
+        # 已答题目也能从快照恢复。快照 disabled 时 save 自身跳过，无副作用。
+        if isinstance(message, dict) and message.get("type") == "exam.answer":
+            await self._save_session_state()
         for response in await self._runtime.complete_if_timed_out():
             await self.send_message(response)
 

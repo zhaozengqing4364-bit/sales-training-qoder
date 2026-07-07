@@ -260,17 +260,18 @@ async def test_should_fail_gracefully_when_question_bank_is_empty() -> None:
 
     messages = await runtime.connect()
 
+    # R4: 空题库不应伪完成（completed）。发 exam.error 让用户看到"无题可答"。
     assert [message["type"] for message in messages] == [
         "session.init",
-        "exam.completed",
+        "exam.error",
     ]
     assert messages[1]["data"] == {
         "session_id": "session-1",
-        "status": "completed",
-        "answered_count": 0,
-        "total_questions": 0,
-        "reason": "empty_question_bank",
+        "code": "empty_question_bank",
+        "message": "该考核暂无可作答题目，请联系管理员。",
     }
+    # 不应标记为 completed，避免误导前端展示"已考核完成"
+    assert runtime._completed is False
 
 
 @pytest.mark.asyncio
@@ -532,3 +533,68 @@ async def test_should_preserve_completion_writer_when_handler_restores_mid_exam(
     )
     assert len(report_writes) == 1
     assert report_writes[0]["reason"] == "all_questions_answered"
+
+
+@pytest.mark.asyncio
+async def test_should_emit_error_when_completion_writer_raises() -> None:
+    """R6: completion_writer 抛异常时不能伪装成 exam.completed（结果悬挂），
+    应发 exam.error 让用户看到判分失败并可重试。"""
+
+    async def scorer(*, question: FrozenExamQuestion, answer_text: str) -> dict[str, object]:
+        return {"score": 80, "feedback": "ok"}
+
+    async def failing_writer(
+        *,
+        session_id: str,
+        answers: list[dict[str, object]],
+        reason: str,
+    ) -> str:
+        raise RuntimeError("report store down")
+
+    runtime = ExaminerRuntime(
+        session_id="session-1",
+        examiner_agent_id="examiner-1",
+        timeout_seconds=600,
+        questions=[_question()],
+        scorer=scorer,
+        completion_writer=failing_writer,
+    )
+    await runtime.connect()
+
+    messages = await runtime.handle_client_message(
+        {"type": "exam.answer", "data": {"question_index": 0, "answer_text": "回答"}}
+    )
+
+    # 最后一条应是错误事件，而非伪 completed
+    assert messages[-1]["type"] == "exam.error"
+    assert messages[-1]["data"]["code"] == "completion_report_failed"
+    assert "report_path" not in (messages[-1].get("data") or {})
+
+
+@pytest.mark.asyncio
+async def test_should_emit_error_when_answer_index_out_of_range() -> None:
+    """R8.2: 答案索引越界不能再静默 return []。必须返回 exam.error 让用户知道
+    题目不存在，否则客户端误以为提交已接受，结果悬挂。"""
+
+    async def scorer(*, question: FrozenExamQuestion, answer_text: str) -> dict[str, object]:
+        return {"score": 80, "feedback": "ok"}
+
+    runtime = ExaminerRuntime(
+        session_id="session-1",
+        examiner_agent_id="examiner-1",
+        timeout_seconds=600,
+        questions=[_question()],
+        scorer=scorer,
+    )
+    await runtime.connect()
+
+    # 越界索引（只有 1 题，索引 5 不存在）
+    messages = await runtime.handle_client_message(
+        {"type": "exam.answer", "data": {"question_index": 5, "answer_text": "回答"}}
+    )
+
+    # 不应静默返回空列表——必须发 exam.error
+    assert len(messages) >= 1
+    assert messages[-1]["type"] == "exam.error"
+    assert messages[-1]["data"]["code"] == "answer_index_out_of_range"
+    assert "题目" in messages[-1]["data"]["message"]

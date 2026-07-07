@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 
 import sales_trainer.ai_coach_chat_models  # noqa: F401
@@ -400,6 +401,9 @@ class SalesTrainerQuizAttempt(Base):
     submitted_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
+    # 幂等键：前端 submit 时生成的 uuid，重复提交同一 token 返回已存在 attempt。
+    # nullable 以兼容旧数据与无 token 提交；部分唯一索引仅对非空值强制唯一。
+    client_token = Column(String(100), nullable=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -415,6 +419,12 @@ class SalesTrainerQuizAttempt(Base):
             "idx_sales_trainer_quiz_attempt_submitted_id",
             "submitted_at",
             "attempt_id",
+        ),
+        Index(
+            "uq_sales_trainer_quiz_attempt_client_token",
+            "client_token",
+            unique=True,
+            postgresql_where=text("client_token IS NOT NULL"),
         ),
     )
 

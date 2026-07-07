@@ -38,6 +38,28 @@ class QuizServiceError(Exception):
         super().__init__(message)
 
 
+async def find_attempt_by_client_token(
+    db: AsyncSession,
+    *,
+    client_token: str | None,
+    user_id: str,
+) -> SalesTrainerQuizAttempt | None:
+    """幂等查重：按 client_token 查找已存在的 attempt。
+
+    无 token 或未命中时返回 None，调用方正常新建。命中时调用方直接返回已存在
+    attempt，避免重复判分。仅查本人提交，防止越权命中他人 attempt。
+    """
+
+    if not client_token:
+        return None
+    stmt = select(SalesTrainerQuizAttempt).where(
+        SalesTrainerQuizAttempt.client_token == client_token,
+        SalesTrainerQuizAttempt.user_id == user_id,
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 class QuizService:
     def __init__(
         self,
@@ -108,10 +130,20 @@ class QuizService:
                 status_code=422,
             )
 
+        # 幂等：同一 client_token 重复提交直接返回已存在 attempt，避免重复判分。
+        existing_attempt = await find_attempt_by_client_token(
+            self._db,
+            client_token=payload.client_token,
+            user_id=str(actor.user_id),
+        )
+        if existing_attempt is not None:
+            return existing_attempt
+
         attempt = SalesTrainerQuizAttempt(
             unit_id=unit.unit_id,
             user_id=str(actor.user_id),
             status="submitted",
+            client_token=payload.client_token,
         )
         self._db.add(attempt)
         await self._db.flush()

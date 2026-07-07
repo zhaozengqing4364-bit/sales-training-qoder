@@ -729,6 +729,26 @@ export default function ExamPage() {
               </GlassCard>
             )}
 
+            {/* R4/R6: 空题库、判分结果保存失败等不应伪装为 completed。
+                 展示错误提示 + 重试，避免结果悬挂。 */}
+            {examPhase === "error" && (
+              <GlassCard className="p-8 text-center">
+                <AlertCircle className="w-16 h-16 mx-auto mb-4 text-amber-500" />
+                <h2 className="text-2xl font-bold text-slate-900">考核出现错误</h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  {error ?? "考核出现错误，请重试或联系管理员。"}
+                </p>
+                <Button
+                  size="lg"
+                  onClick={() => window.location.reload()}
+                  className="mt-6 rounded-full"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  重新加载
+                </Button>
+              </GlassCard>
+            )}
+
             {/* Question display */}
             {examPhase === "finalizing" && currentQuestion && (
               <GlassCard className="p-6">

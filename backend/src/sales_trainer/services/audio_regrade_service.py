@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
 from common.db.typing import orm_scalar
-from common.monitoring.logger import get_trace_id
+from common.monitoring.logger import get_logger, get_trace_id
 from sales_trainer.models import (
     SalesTrainerAssetRevision,
     SalesTrainerAudioScoreResult,
@@ -25,6 +25,8 @@ from sales_trainer.services.deucate_scoring_service import DeucateScoringService
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.prompt_revision_payloads import PROMPT_RESOURCE_TYPE
 from sales_trainer.services.training_record_service import TrainingRecordService
+
+logger = get_logger(__name__)
 
 
 class SalesTrainerAudioRegradeService:
@@ -98,6 +100,16 @@ class SalesTrainerAudioRegradeService:
         )
         self._db.add(run)
         await self._db.flush()
+        # R1: regrade 不能只写审计行——必须把新分回写业务表 + 更新 submission 状态，
+        # 否则学员结果页轮询 submission 永远看不到重判结果。追加新的 score_result
+        # 行（保留历史评分轨迹），并把 submission 推到 scored 终态。
+        await self._apply_regrade_to_score_result(
+            submission_id=preview.target_id,
+            after_snapshot=preview.after_snapshot,
+            actor=actor,
+            regrade_run_id=str(run.run_id),
+            trace_id=trace_id,
+        )
         await self._logs.record(
             actor=actor,
             action="historical_regrade.completed",
@@ -121,6 +133,105 @@ class SalesTrainerAudioRegradeService:
         await self._db.commit()
         await self._db.refresh(run)
         return run
+
+    async def _apply_regrade_to_score_result(
+        self,
+        *,
+        submission_id: str,
+        after_snapshot: dict[str, object],
+        actor: User,
+        regrade_run_id: str,
+        trace_id: str,
+    ) -> None:
+        """把重判后的新分追加为新的 SalesTrainerAudioScoreResult 行，并把 submission
+        置 scored 终态。
+
+        追加而非覆盖原行：保留历史评分轨迹，符合"审计 + 业务可见"双重要求。
+        学员结果页 list_score_results 已支持多条历史，最新一行即为重判后的分。
+        事务由调用方 commit；失败抛出，整体 rollback 不污染原分。
+        """
+
+        submission = await self._db.get(SalesTrainerAudioSubmission, submission_id)
+        if submission is None:
+            logger.error(
+                "sales_trainer_audio_regrade_apply_no_submission",
+                submission_id=submission_id,
+                regrade_run_id=regrade_run_id,
+                trace_id=trace_id,
+            )
+            return
+
+        def _str(value: object) -> str | None:
+            return str(value) if value is not None else None
+
+        def _int(value: object) -> int | None:
+            if value is None:
+                return None
+            return int(str(value))
+
+        prompt_id_raw = after_snapshot.get("prompt_id")
+        if prompt_id_raw is None:
+            logger.error(
+                "sales_trainer_audio_regrade_apply_no_prompt",
+                submission_id=submission_id,
+                regrade_run_id=regrade_run_id,
+                trace_id=trace_id,
+            )
+            return
+
+        prompt_version_value = _int(after_snapshot.get("prompt_version"))
+        if prompt_version_value is None:
+            logger.error(
+                "sales_trainer_audio_regrade_apply_no_prompt_version",
+                submission_id=submission_id,
+                regrade_run_id=regrade_run_id,
+                trace_id=trace_id,
+            )
+            return
+
+        new_score = SalesTrainerAudioScoreResult(
+            submission_id=submission_id,
+            prompt_id=str(prompt_id_raw),
+            prompt_version=prompt_version_value,
+            prompt_hash=str(after_snapshot.get("prompt_hash") or ""),
+            deucate_model=_str(after_snapshot.get("deucate_model")),
+            transcript_snapshot=_str(after_snapshot.get("transcript_snapshot")),
+            total_score=after_snapshot.get("total_score"),  # type: ignore[arg-type]
+            passed=after_snapshot.get("passed"),  # type: ignore[arg-type]
+            summary=_str(after_snapshot.get("summary")),
+            strengths=after_snapshot.get("strengths") or [],
+            improvements=after_snapshot.get("improvements") or [],
+            dimension_scores=after_snapshot.get("dimension_scores") or {},
+            raw_response=after_snapshot.get("raw_response"),
+            error_code=_str(after_snapshot.get("error_code")),
+            error_message=_str(after_snapshot.get("error_message")),
+            latency_ms=_int(after_snapshot.get("latency_ms")),
+        )
+        self._db.add(new_score)
+
+        # 重判成功（无 error_code）才置 scored；判分失败置 scoring_failed，不卡中间态。
+        error_code = after_snapshot.get("error_code")
+        if error_code:
+            setattr(submission, "status", "scoring_failed")
+            setattr(submission, "error_code", str(error_code))
+            setattr(submission, "error_message", _str(after_snapshot.get("error_message")))
+        else:
+            setattr(submission, "status", "scored")
+            setattr(submission, "error_code", None)
+            setattr(submission, "error_message", None)
+        await self._db.flush()
+        await self._logs.record(
+            actor=actor,
+            action="audio_regrade_applied",
+            target_type="sales_trainer_audio_submission",
+            target_id=submission_id,
+            request_id=trace_id,
+            metadata={
+                "regrade_run_id": regrade_run_id,
+                "new_status": submission.status,
+                "trace_id": trace_id,
+            },
+        )
 
     async def _require_submission_for_viewer(
         self,

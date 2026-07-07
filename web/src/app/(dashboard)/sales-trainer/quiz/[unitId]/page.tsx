@@ -8,6 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { generateClientToken } from "@/lib/sales-trainer/idempotency";
 import type {
     SalesTrainerQuestionOption,
     SalesTrainerQuizAttemptCreateRequest,
@@ -91,6 +92,8 @@ export default function SalesTrainerQuizPage() {
                     question_id: question.question_id,
                     answer_payload: answers[question.question_id] ?? getDefaultAnswer(question.question_type),
                 })),
+                // 幂等键：同一提交流程内生成一次，重复提交返回已存在 attempt。
+                client_token: generateClientToken(),
             };
             const result = await api.salesTrainer.submitQuizAttempt(payload);
             router.push(`/sales-trainer/quiz/result/${result.attempt_id}`);

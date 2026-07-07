@@ -25,6 +25,7 @@ from sales_trainer.services.paper_snapshot_scoring import (
 from sales_trainer.services.path_attempt_context_service import (
     PathAttemptContextPayload,
 )
+from sales_trainer.services.quiz_service import find_attempt_by_client_token
 from sales_trainer.services.short_answer_scoring_service import (
     ShortAnswerScoringService,
 )
@@ -51,6 +52,7 @@ class PaperSnapshotAttemptService:
         answers: list[QuizAnswerSubmit],
         actor: User,
         attempt_context: PathAttemptContextPayload | None = None,
+        client_token: str | None = None,
     ) -> SalesTrainerQuizAttempt:
         revision_payload = _revision_payload(revision)
         questions = _revision_questions(revision_payload)
@@ -68,11 +70,20 @@ class PaperSnapshotAttemptService:
                 "请完成全部题目后再提交。",
                 422,
             )
+        # 幂等：同一 client_token 重复提交直接返回已存在 attempt，避免重复判分。
+        existing_attempt = await find_attempt_by_client_token(
+            self._db,
+            client_token=client_token,
+            user_id=str(actor.user_id),
+        )
+        if existing_attempt is not None:
+            return existing_attempt
         attempt = SalesTrainerQuizAttempt(
             unit_id=paper.unit_id,
             user_id=str(actor.user_id),
             paper_revision_id=revision.revision_id,
             status="submitted",
+            client_token=client_token,
         )
         self._db.add(attempt)
         await self._db.flush()

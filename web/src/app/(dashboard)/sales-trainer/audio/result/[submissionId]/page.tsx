@@ -237,6 +237,7 @@ export default function SalesTrainerAudioResultPage() {
         isLoading,
         isPolling,
         error,
+        timedOut,
         refresh,
     } = useSalesTrainerSubmissionPoll(params.submissionId);
     const [passThreshold, setPassThreshold] = useState<number | null>(null);
@@ -362,6 +363,19 @@ export default function SalesTrainerAudioResultPage() {
             {isProcessing ? (
                 <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
                     转写与评分通常需要 1–3 分钟，页面会自动更新{isPolling ? "中" : ""}。
+                </div>
+            ) : null}
+
+            {timedOut ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <p className="font-semibold text-amber-900">评分耗时较长</p>
+                    <p className="mt-1">
+                        评分已超过预期时间仍未完成，请稍后刷新结果；如仍未恢复，请联系管理员在后台“学员录音”中重试评分。
+                    </p>
+                    <Button variant="outline" className="mt-3" onClick={() => void refresh()}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        刷新结果
+                    </Button>
                 </div>
             ) : null}
 
