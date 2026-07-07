@@ -73,3 +73,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: 新人训练路径全闭环 4 PR
+
+**Date**: 2026-07-07
+**Task**: 新人训练路径全闭环 4 PR
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+新人训练路径全闭环：PR1 录音详情页页面内 audio 回放+strengths；PR2 管理者下钻听学员录音（复用 admin 端点+部门隔离）；PR3 章节阅读页内联训练材料；PR4 路径首页我的录音区+后端学员侧 list 端点。trellis-check 修 2 个回归（Checkbox label/aria-label）。后端 46 passed，前端 1308 passed，仅 2 基线既有失败。46 个 dirty 留属其他任务。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `99a4744d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
