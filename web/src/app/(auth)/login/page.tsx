@@ -10,6 +10,7 @@ import { REMEMBER_EMAIL_STORAGE_KEY } from "@/lib/auth/clear-client-auth-state";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 
 type ProviderStatus = {
     enabled: boolean;
@@ -82,6 +83,7 @@ function getAuthErrorMessageFromLocation(): string {
 
 export default function LoginPage() {
     const router = useRouter();
+    const toast = useToast();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -149,15 +151,20 @@ export default function LoginPage() {
         setError("");
 
         try {
-            await api.auth.login({ email, password });
+            const response = await api.auth.login({ email, password });
             if (rememberEmail && normalizedEmail) {
                 window.localStorage.setItem(REMEMBER_EMAIL_STORAGE_KEY, normalizedEmail);
             } else {
                 window.localStorage.removeItem(REMEMBER_EMAIL_STORAGE_KEY);
             }
-            router.push("/");
+            const role = response?.user?.role?.trim().toLowerCase();
+            router.push(role === "training_manager" ? "/team" : "/");
         } catch (err: unknown) {
-            setError(getApiErrorMessage(err));
+            const message = getApiErrorMessage(err);
+            setError(message);
+            if (message.includes("超时")) {
+                toast.error("登录超时，请重试");
+            }
         } finally {
             setIsPasswordLoginLoading(false);
         }
@@ -178,10 +185,15 @@ export default function LoginPage() {
         setIsDevLoginLoading(true);
         setError("");
         try {
-            await api.auth.devLogin();
-            router.push("/");
+            const response = await api.auth.devLogin();
+            const role = response?.user?.role?.trim().toLowerCase();
+            router.push(role === "training_manager" ? "/team" : "/");
         } catch (err) {
-            setError(getApiErrorMessage(err));
+            const message = getApiErrorMessage(err);
+            setError(message);
+            if (message.includes("超时")) {
+                toast.error("登录超时，请重试");
+            }
         } finally {
             setIsDevLoginLoading(false);
         }

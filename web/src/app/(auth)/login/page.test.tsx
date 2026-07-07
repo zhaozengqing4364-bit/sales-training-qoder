@@ -3,16 +3,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import LoginPage from "./page";
 
-const { pushMock, loginMock, getProvidersMock, devLoginMock } = vi.hoisted(() => ({
+const { pushMock, loginMock, getProvidersMock, devLoginMock, toastErrorMock } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     loginMock: vi.fn(),
     getProvidersMock: vi.fn(),
     devLoginMock: vi.fn(),
+    toastErrorMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({
         push: pushMock,
+    }),
+}));
+
+vi.mock("@/components/ui/toast", () => ({
+    useToast: () => ({
+        error: toastErrorMock,
+        success: vi.fn(),
+        showToast: vi.fn(),
     }),
 }));
 
@@ -60,6 +69,7 @@ describe("LoginPage", () => {
         loginMock.mockReset();
         getProvidersMock.mockReset();
         devLoginMock.mockReset();
+        toastErrorMock.mockReset();
         vi.restoreAllMocks();
         vi.unstubAllGlobals();
 
@@ -158,6 +168,27 @@ describe("LoginPage", () => {
         expect(setItemSpy).not.toHaveBeenCalledWith("user", expect.any(String));
     });
 
+    it("shows inline error, toast, and restores button after password login timeout", async () => {
+        loginMock.mockRejectedValue(new Error("登录超时，请重试。"));
+
+        render(<LoginPage />);
+
+        fireEvent.change(screen.getByLabelText("邮箱地址"), {
+            target: { value: "admin@test.com" },
+        });
+        fireEvent.change(screen.getByLabelText("密码"), {
+            target: { value: "password" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /^登录/ }));
+
+        expect((await screen.findByRole("alert")).textContent).toContain("登录超时，请重试。");
+        expect(toastErrorMock).toHaveBeenCalledWith("登录超时，请重试");
+
+        await waitFor(() => {
+            expect((screen.getByRole("button", { name: /^登录/ }) as HTMLButtonElement).disabled).toBe(false);
+        });
+    });
+
     it("uses the explicit dev-login fallback and redirects home", async () => {
         render(<LoginPage />);
 
@@ -168,6 +199,53 @@ describe("LoginPage", () => {
         });
 
         expect(devLoginMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("redirects training_manager to /team after password login", async () => {
+        loginMock.mockResolvedValue({
+            token: "mgr-token",
+            user: {
+                id: "mgr-1",
+                name: "王经理",
+                email: "manager@test.com",
+                role: "training_manager",
+            },
+        });
+
+        render(<LoginPage />);
+
+        fireEvent.change(screen.getByLabelText("邮箱地址"), {
+            target: { value: "manager@test.com" },
+        });
+        fireEvent.change(screen.getByLabelText("密码"), {
+            target: { value: "password" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /^登录/ }));
+
+        await waitFor(() => {
+            expect(pushMock).toHaveBeenCalledWith("/team");
+        });
+    });
+
+    it("redirects training_manager to /team after dev login", async () => {
+        devLoginMock.mockResolvedValue({
+            access_token: "dev-mgr-token",
+            token_type: "bearer",
+            user: {
+                user_id: "mgr-dev",
+                email: "dev-mgr@example.com",
+                name: "开发经理",
+                role: "training_manager",
+            },
+        });
+
+        render(<LoginPage />);
+
+        fireEvent.click(await screen.findByRole("button", { name: /开发者快速登录/i }));
+
+        await waitFor(() => {
+            expect(pushMock).toHaveBeenCalledWith("/team");
+        });
     });
 
     it("loads provider state through the shared auth API client", async () => {

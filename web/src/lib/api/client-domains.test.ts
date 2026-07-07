@@ -35,6 +35,8 @@ describe("client domain factories", () => {
             method: "POST",
             body: JSON.stringify({ email: "admin@test.com", password: "secret" }),
             skipSessionExpiredHandling: true,
+            timeoutMs: 8000,
+            timeoutMessage: "登录超时，请重试。",
         });
     });
 
@@ -48,6 +50,8 @@ describe("client domain factories", () => {
             method: "GET",
             cache: "no-store",
             skipSessionExpiredHandling: true,
+            timeoutMs: 8000,
+            timeoutMessage: "登录配置加载超时，请刷新页面后重试。",
         });
     });
 

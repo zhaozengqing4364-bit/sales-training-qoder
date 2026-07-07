@@ -15,6 +15,7 @@ import {
     LayoutGrid,
     LogOut,
     History,
+    Users,
     type LucideIcon,
 } from "lucide-react";
 
@@ -114,7 +115,12 @@ export function SidebarContent({
     const pathname = usePathname();
     const isAdmin = currentUser?.role === "admin";
     const isSupport = currentUser?.role === "support";
+    const isTrainingManager = currentUser?.role === "training_manager";
     const canViewRuntime = isAdmin || isSupport;
+
+    const teamNavItems = isTrainingManager
+        ? [{ label: "我的团队", icon: Users, href: "/team" }]
+        : [];
 
     return (
         <div className="flex flex-col h-full w-full overflow-hidden">
@@ -153,6 +159,31 @@ export function SidebarContent({
                             </li>
                         ))}
                     </ul>
+
+                    {teamNavItems.length > 0 ? (
+                        <>
+                            <div className="my-6 px-3 shrink-0">
+                                <div className="h-px w-full bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
+                            </div>
+
+                            {!isCollapsed ? (
+                                <div className="px-4 mb-3 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap transition-opacity duration-300 shrink-0">
+                                    团队
+                                </div>
+                            ) : null}
+                            <ul role="menubar" className="space-y-2 px-1">
+                                {teamNavItems.map((item) => (
+                                    <li key={item.href} role="none">
+                                        <NavLink
+                                            item={item}
+                                            pathname={pathname}
+                                            isCollapsed={isCollapsed}
+                                        />
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    ) : null}
 
                     {canViewRuntime ? (
                         <>

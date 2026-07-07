@@ -79,6 +79,15 @@ const learnerUser = {
     department: "销售部",
 };
 
+const trainingManagerUser = {
+    id: "mgr-1",
+    name: "王经理",
+    display_name: "王经理",
+    email: "manager@example.com",
+    role: "training_manager",
+    department: "销售部",
+};
+
 describe("SidebarContent learner seams", () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -139,5 +148,33 @@ describe("SidebarContent learner seams", () => {
         expect(screen.getByRole("button", { name: "打开帮助与反馈" })).toBeTruthy();
         expect(screen.getByText("/practice/session-123")).toBeTruthy();
         expect(screen.getByText("session-123")).toBeTruthy();
+    });
+});
+
+describe("SidebarContent training_manager team entry", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        logoutMock.mockResolvedValue(undefined);
+        usePathnameMock.mockReturnValue("/team");
+        useParamsMock.mockReturnValue({});
+    });
+
+    it("shows the team entry only for training_manager role", () => {
+        render(<SidebarContent currentUser={trainingManagerUser} />);
+
+        const teamLink = screen.getByRole("menuitem", { name: "我的团队" }) as HTMLAnchorElement;
+        expect(teamLink.getAttribute("href")).toBe("/team");
+    });
+
+    it("does not show the team entry for learner role", () => {
+        render(<SidebarContent currentUser={learnerUser} />);
+
+        expect(screen.queryByRole("menuitem", { name: "我的团队" })).toBeNull();
+    });
+
+    it("does not show the team entry when currentUser is missing", () => {
+        render(<SidebarContent currentUser={null} />);
+
+        expect(screen.queryByRole("menuitem", { name: "我的团队" })).toBeNull();
     });
 });
