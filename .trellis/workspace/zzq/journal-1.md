@@ -286,3 +286,39 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: 新人训练路径 Route Manifest 补齐
+
+**Date**: 2026-07-08
+**Task**: 新人训练路径 Route Manifest 补齐
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+补齐新人训练专项 Playwright route manifest：每个前台、后台和旧兼容 URL 都标注页面类型、角色、主操作、seed 依赖、旧路由兼容和 smoke/完整闭环审计方式。
+
+### Main Changes
+
+- 更新归档文件 `.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit-route-manifest.md`。
+- 更新 `implementation-notes.md`，说明 route manifest 文档承担治理字段，代码清单继续作为可执行 URL/断言来源。
+- `git diff --check` 已通过；本次仅文档补齐，无需重新运行前端构建。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b794e5fc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
