@@ -106,3 +106,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: 新人训练学习专题独立治理收口
+
+**Date**: 2026-07-08
+**Task**: 新人训练学习专题独立治理收口
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+实现新人训练学习专题独立治理并归档 Trellis 任务：新增 newcomer_learning_topics 版本化配置、前后台 projection、商务礼仪专题治理页、非阻塞 Journey/Readiness/AI Coach 契约与验证。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5e1428ea` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
