@@ -139,3 +139,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: 新人训练后台录音评测场景治理
+
+**Date**: 2026-07-08
+**Task**: 新人训练后台录音评测场景治理
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+完成新人训练后台治理：新增录音评测场景 registry、公司产品 Demo 场景、训练任务管理入口、场景化材料门禁、学习专题命名和相关契约/测试。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0e4f5ad0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
