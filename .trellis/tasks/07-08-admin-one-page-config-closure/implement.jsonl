@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development checklist and verification commands"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "Admin intent and page-splitting guidance; this task deliberately applies the in-flow completion exception inside module workbenches"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Reusable UI composition, modal/dialog conventions, accessibility"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Admin data loading and local state pattern"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "API DTO and UI ViewModel typing rules"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Test, lint, type-check expectations"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Avoid duplicate quick-create and form logic"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Keep existing API, audit, snapshot semantics intact"}

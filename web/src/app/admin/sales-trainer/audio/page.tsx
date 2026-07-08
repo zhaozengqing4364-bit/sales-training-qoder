@@ -13,13 +13,13 @@ import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-r
 
 const AUDIO_MANAGEMENT_SECTIONS = [
     {
-        title: "材料",
-        description: "管理 PPT、脚本、附件等录音任务材料；任务只绑定已发布版本。",
+        title: "查看全部材料",
+        description: "批量检索和维护 PPT、脚本、附件等材料；日常配置优先在具体录音任务内就地完成。",
         href: "/admin/sales-trainer/audio/materials",
     },
     {
-        title: "评分标准",
-        description: "管理 AI 评分 prompt、学员可见 rubric 和发布版本。",
+        title: "高级管理评分标准",
+        description: "批量维护 AI 评分标准和发布版本；日常新建优先在具体录音任务内完成并自动绑定。",
         href: "/admin/sales-trainer/audio/score-standards",
     },
     {
@@ -43,7 +43,7 @@ export default function SalesTrainerAudioManagementPage() {
             header={(
                 <AdminPageHeader
                     title="录音管理"
-                    description="按前台录音任务组织后台配置。PPT 讲解、公司产品 Demo、金字塔演讲复用同一套上传、转写和 AI 评分能力。"
+                    description="按前台录音任务组织后台配置。进入任一任务后，可在同一页选择已有资源、缺失时就地新建，并保存发布。"
                     icon={<ClipboardList className="h-7 w-7 text-slate-800" />}
                     secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={routeAccess.capabilities} />}
                 />
@@ -71,7 +71,7 @@ export default function SalesTrainerAudioManagementPage() {
                         <div>
                             <h2 className="text-base font-bold text-slate-900">录音任务</h2>
                             <p className="text-sm text-slate-500">
-                                每个任务都在同一处管理单元、材料、评分标准和发布状态。
+                                每个任务都在同一处管理单元、材料、评分标准和发布状态，主流程不再要求跨页面补配置。
                             </p>
                         </div>
                         <div className="grid gap-4 md:grid-cols-3">
@@ -97,9 +97,9 @@ export default function SalesTrainerAudioManagementPage() {
 
                     <section className="space-y-3">
                         <div>
-                            <h2 className="text-base font-bold text-slate-900">配套管理</h2>
+                            <h2 className="text-base font-bold text-slate-900">高级管理与查看全部</h2>
                             <p className="text-sm text-slate-500">
-                                和录音任务配套的材料、评分标准、提交记录和评分结果统一放在录音管理内。
+                                这些入口保留给批量治理、历史检索和旧书签兼容；配置单个录音任务时优先回到任务页就地完成。
                             </p>
                         </div>
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend quality check index"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "Admin UX compliance and intentional in-page configuration exception"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "UI and accessibility checks"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Data loading consistency checks"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Type/API boundary checks"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Vitest/ESLint/TypeScript checklist"}
+{"file": "web/src/app/admin/sales-trainer/audio/[scenarioSlug]/page.test.tsx", "reason": "Audio one-page quick create and auto binding regression coverage"}
+{"file": "web/src/app/admin/sales-trainer/articles/business-etiquette/page.test.tsx", "reason": "Learning topic in-page article/chapter/paper governance regression coverage"}
+{"file": "docs/api-contract/sales-trainer.md", "reason": "One-page admin governance contract and legacy route compatibility documented"}

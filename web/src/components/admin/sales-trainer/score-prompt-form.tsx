@@ -44,6 +44,38 @@ function getDefaultRubric(prompt?: SalesTrainerAudioScorePrompt | null): string 
     );
 }
 
+function getDefaultPassThreshold(prompt?: SalesTrainerAudioScorePrompt | null): string {
+    const threshold = prompt?.learner_rubric?.pass_threshold;
+    if (typeof threshold === "number" && Number.isFinite(threshold)) {
+        return String(threshold);
+    }
+    return prompt ? "" : "70";
+}
+
+function getDefaultRubricCriteria(prompt?: SalesTrainerAudioScorePrompt | null): string {
+    const criteria = prompt?.learner_rubric?.criteria;
+    if (!Array.isArray(criteria) || criteria.length === 0) {
+        if (prompt) {
+            return "";
+        }
+        return [
+            "内容准确性 | 30 | 关键信息完整、事实准确",
+            "表达结构 | 30 | 讲解有开场、主体和结论",
+            "客户价值 | 25 | 能把材料内容转化为客户收益",
+            "行动建议 | 15 | 能给出明确下一步",
+        ].join("\n");
+    }
+    return criteria.map((criterion) => [
+        criterion.label,
+        typeof criterion.weight === "number" ? criterion.weight : "",
+        criterion.description ?? "",
+    ].filter((item) => String(item).trim()).join(" | ")).join("\n");
+}
+
+function getDefaultCommonMistakes(prompt?: SalesTrainerAudioScorePrompt | null): string {
+    return (prompt?.learner_rubric?.common_mistakes ?? []).join("\n");
+}
+
 function getDefaultSystemPrompt(prompt?: SalesTrainerAudioScorePrompt | null): string {
     return prompt?.system_prompt ?? "你是销售训练录音评分专家，请依据评分说明对学员录音转写文本给出客观评分。";
 }
@@ -125,6 +157,77 @@ function normalizeLearnerRubric(value: Record<string, unknown>): SalesTrainerLea
     return value as SalesTrainerLearnerRubric;
 }
 
+function textToList(text: string): string[] {
+    return text
+        .split(/\n/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+function slugKey(text: string, index: number): string {
+    const normalized = text
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    return normalized || `criterion_${index + 1}`;
+}
+
+function parseOptionalNumber(value: string, label: string): number | null {
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+        throw new Error(`${label}必须是数字。`);
+    }
+    if (parsed < 0 || parsed > 100) {
+        throw new Error(`${label}必须在 0 到 100 之间。`);
+    }
+    return parsed;
+}
+
+function buildLearnerRubric({
+    commonMistakesText,
+    criteriaText,
+    learnerRubricJsonText,
+    passThreshold,
+    initialRubric,
+    visibleToLearner,
+}: {
+    readonly commonMistakesText: string;
+    readonly criteriaText: string;
+    readonly initialRubric?: SalesTrainerLearnerRubric | null;
+    readonly learnerRubricJsonText: string;
+    readonly passThreshold: string;
+    readonly visibleToLearner: boolean;
+}): SalesTrainerLearnerRubric {
+    if (learnerRubricJsonText.trim()) {
+        return normalizeLearnerRubric(
+            parseJsonObject(learnerRubricJsonText, "学员可见评分标准 JSON"),
+        );
+    }
+    if (!criteriaText.trim() && !commonMistakesText.trim() && !passThreshold.trim()) {
+        return initialRubric ?? {};
+    }
+    return {
+        visible_to_learner: visibleToLearner,
+        pass_threshold: parseOptionalNumber(passThreshold, "通过分"),
+        criteria: textToList(criteriaText).map((line, index) => {
+            const [rawLabel, rawWeight, ...descriptionParts] = line.split("|").map((part) => part.trim());
+            const label = rawLabel || `评分维度 ${index + 1}`;
+            return {
+                key: slugKey(label, index),
+                label,
+                weight: rawWeight ? parseOptionalNumber(rawWeight, "维度权重") : null,
+                description: descriptionParts.join(" | ") || null,
+            };
+        }),
+        common_mistakes: textToList(commonMistakesText),
+    };
+}
+
 function PublishedRevisionGuidance() {
     return (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
@@ -157,7 +260,11 @@ export function SalesTrainerScorePromptForm({
     const [systemPrompt, setSystemPrompt] = useState(getDefaultSystemPrompt(initialPrompt));
     const [scoringTemplate, setScoringTemplate] = useState(getDefaultScoringTemplate(initialPrompt));
     const [outputSchemaText, setOutputSchemaText] = useState(getDefaultSchema(initialPrompt));
-    const [learnerRubricText, setLearnerRubricText] = useState(getDefaultRubric(initialPrompt));
+    const [passThreshold, setPassThreshold] = useState(getDefaultPassThreshold(initialPrompt));
+    const [criteriaText, setCriteriaText] = useState(getDefaultRubricCriteria(initialPrompt));
+    const [commonMistakesText, setCommonMistakesText] = useState(getDefaultCommonMistakes(initialPrompt));
+    const [visibleToLearner, setVisibleToLearner] = useState(initialPrompt?.learner_rubric?.visible_to_learner !== false);
+    const [learnerRubricJsonText, setLearnerRubricJsonText] = useState("");
     const [error, setError] = useState<string | null>(null);
     const canEdit = !initialPrompt || initialPrompt.status !== "archived";
     const isPublished = initialPrompt?.status === "published";
@@ -194,9 +301,14 @@ export function SalesTrainerScorePromptForm({
             return;
         }
         try {
-            learnerRubric = normalizeLearnerRubric(
-                parseJsonObject(learnerRubricText, "学员可见评分标准"),
-            );
+            learnerRubric = buildLearnerRubric({
+                commonMistakesText,
+                criteriaText,
+                initialRubric: initialPrompt?.learner_rubric,
+                learnerRubricJsonText,
+                passThreshold,
+                visibleToLearner,
+            });
         } catch (parseError) {
             setError(parseError instanceof Error ? parseError.message : "学员可见评分标准必须是合法 JSON 对象。");
             return;
@@ -248,6 +360,20 @@ export function SalesTrainerScorePromptForm({
                     </div>
                 </div>
                 <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-score-pass-threshold">
+                        通过分
+                    </label>
+                    <Input
+                        id="sales-trainer-score-pass-threshold"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={passThreshold}
+                        onChange={(event) => setPassThreshold(event.target.value)}
+                        disabled={isSubmitting || !canEdit}
+                    />
+                </div>
+                <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-score-template">
                         评分说明
                     </label>
@@ -261,17 +387,43 @@ export function SalesTrainerScorePromptForm({
                     />
                 </div>
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-learner-rubric">
-                        学员可见评分标准（JSON）
+                    <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-learner-rubric-criteria">
+                        评分维度
                     </label>
                     <textarea
-                        id="sales-trainer-learner-rubric"
-                        value={learnerRubricText}
-                        onChange={(event) => setLearnerRubricText(event.target.value)}
+                        id="sales-trainer-learner-rubric-criteria"
+                        value={criteriaText}
+                        onChange={(event) => setCriteriaText(event.target.value)}
                         disabled={isSubmitting || !canEdit}
-                        rows={10}
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 font-mono text-sm"
+                        rows={6}
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                        placeholder="每行一个维度，可写成：维度名称 | 权重 | 学员可见说明"
                     />
+                </div>
+                <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-learner-common-mistakes">
+                            常见问题
+                        </label>
+                        <textarea
+                            id="sales-trainer-learner-common-mistakes"
+                            value={commonMistakesText}
+                            onChange={(event) => setCommonMistakesText(event.target.value)}
+                            disabled={isSubmitting || !canEdit}
+                            rows={4}
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                            placeholder="每行一个常见问题"
+                        />
+                    </div>
+                    <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                        <input
+                            type="checkbox"
+                            checked={visibleToLearner}
+                            onChange={(event) => setVisibleToLearner(event.target.checked)}
+                            disabled={isSubmitting || !canEdit}
+                        />
+                        学员可见
+                    </label>
                 </div>
                 <details className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                     <summary className="cursor-pointer text-sm font-medium text-slate-700">高级模式</summary>
@@ -299,6 +451,20 @@ export function SalesTrainerScorePromptForm({
                                 onChange={(event) => setOutputSchemaText(event.target.value)}
                                 disabled={isSubmitting || !canEdit}
                                 rows={8}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 font-mono text-sm"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-learner-rubric-json">
+                                学员评分标准 JSON（可选覆盖）
+                            </label>
+                            <textarea
+                                id="sales-trainer-learner-rubric-json"
+                                value={learnerRubricJsonText}
+                                onChange={(event) => setLearnerRubricJsonText(event.target.value)}
+                                disabled={isSubmitting || !canEdit}
+                                rows={6}
+                                placeholder={getDefaultRubric(initialPrompt)}
                                 className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 font-mono text-sm"
                             />
                         </div>

@@ -2,62 +2,40 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
     ArrowLeft,
     BookOpen,
-    ClipboardList,
-    FileText,
     Plus,
     RefreshCcw,
     RotateCcw,
     ShieldCheck,
-    Tags,
-    UploadCloud,
 } from "lucide-react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { NEWCOMER_QUESTION_TAG } from "@/lib/sales-trainer/question-scope";
+import {
+    BUSINESS_SKILLS_MODULE_KEY,
+    buildBusinessSkillsPaperKey,
+    buildPaperQuestionBindings,
+} from "../../papers/paper-form-model";
 import type {
     LearningContent,
+    NewcomerExamPaper,
     NewcomerLearningTopicConfig,
     NewcomerLearningTopicsConfigResponse,
     NewcomerLearningTopicRevisionSummary,
     NewcomerLearningTopicsPreviewResponse,
+    NewcomerPathConfigResponse,
+    SalesTrainerQuestion,
 } from "@/lib/api/types";
 
 const BUSINESS_ETIQUETTE_SOURCE = "sales_trainer_business_etiquette";
 const LEGACY_BUSINESS_SKILLS_SOURCE = "sales_trainer_business_skills";
-
-const TOPIC_SUPPORT_LINKS = [
-    {
-        title: "资料导入",
-        description: "导入商务礼仪资料草稿，生成章节和训练包版本。",
-        href: "/admin/sales-trainer/learning-topics/import",
-        icon: UploadCloud,
-    },
-    {
-        title: "能力点",
-        description: "维护小单元能力点、章节绑定和达标规则。",
-        href: "/admin/sales-trainer/learning-topics/capabilities",
-        icon: Tags,
-    },
-    {
-        title: "题目",
-        description: "管理正式题库、AI 出题审核和小测预览。",
-        href: "/admin/sales-trainer/learning-topics/questions",
-        icon: FileText,
-    },
-    {
-        title: "小测/考卷",
-        description: "管理专题使用的考卷、题目组合、发布和回滚。",
-        href: "/admin/sales-trainer/learning-topics/papers",
-        icon: ClipboardList,
-    },
-] as const;
 
 function statusLabel(status: string): string {
     if (status === "published") return "已发布";
@@ -88,16 +66,26 @@ function topicFromConfig(config: NewcomerLearningTopicsConfigResponse | null): N
 }
 
 export default function BusinessEtiquetteLearningTopicPage() {
-    const router = useRouter();
     const toast = useToast();
     const [contents, setContents] = useState<LearningContent[]>([]);
     const [config, setConfig] = useState<NewcomerLearningTopicsConfigResponse | null>(null);
+    const [pathConfig, setPathConfig] = useState<NewcomerPathConfigResponse | null>(null);
+    const [papers, setPapers] = useState<NewcomerExamPaper[]>([]);
+    const [questions, setQuestions] = useState<SalesTrainerQuestion[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [preview, setPreview] = useState<NewcomerLearningTopicsPreviewResponse | null>(null);
     const [revisions, setRevisions] = useState<NewcomerLearningTopicRevisionSummary[]>([]);
     const [error, setError] = useState<string | null>(null);
+    const [articleTitle, setArticleTitle] = useState("商务礼仪规范");
+    const [articleSummary, setArticleSummary] = useState("新人训练路径商务礼仪规范学习文章。");
+    const [chapterTitle, setChapterTitle] = useState("");
+    const [chapterContent, setChapterContent] = useState("");
+    const [paperTitle, setPaperTitle] = useState("商务礼仪规范小测");
+    const [paperPoints, setPaperPoints] = useState("10");
+    const [selectedPaperId, setSelectedPaperId] = useState("");
+    const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
 
     const topic = useMemo(() => topicFromConfig(config), [config]);
     const boundContentId = topic?.learning_content_id ?? null;
@@ -114,17 +102,29 @@ export default function BusinessEtiquetteLearningTopicPage() {
         setIsLoading(true);
         setError(null);
         try {
-            const [contentResponse, topicConfig] = await Promise.all([
+            const [contentResponse, topicConfig, pathConfigResponse, paperResponse, questionResponse] = await Promise.all([
                 api.learningContents.list(),
                 api.admin.newcomerTraining.getLearningTopicsConfig(),
+                api.admin.newcomerTraining.getPathConfig(),
+                api.admin.newcomerTraining.listPapers({ include_archived: true, limit: 100 }),
+                api.admin.salesTrainer.listQuestions({ status: "published", tag: NEWCOMER_QUESTION_TAG }),
             ]);
             setContents(contentResponse.items);
             setConfig(topicConfig);
+            setPathConfig(pathConfigResponse);
+            setSelectedPaperId(
+                pathConfigResponse.path.modules.find((item) => item.module_key === BUSINESS_SKILLS_MODULE_KEY)?.exam_paper_id ?? "",
+            );
+            setPapers([...paperResponse.items]);
+            setQuestions(questionResponse.items);
             const revisionResponse = await api.admin.newcomerTraining.listLearningTopicsRevisions();
             setRevisions([...revisionResponse.items]);
         } catch (loadError) {
             setContents([]);
             setConfig(null);
+            setPathConfig(null);
+            setPapers([]);
+            setQuestions([]);
             setRevisions([]);
             setError(getApiErrorMessage(loadError));
         } finally {
@@ -136,12 +136,67 @@ export default function BusinessEtiquetteLearningTopicPage() {
         void load();
     }, [load]);
 
+    async function saveTopicContentBinding(content: LearningContent) {
+        if (!config || !topic) return;
+        const response = await api.admin.newcomerTraining.saveLearningTopicsConfig({
+            schema_version: config.payload.schema_version,
+            topics: config.payload.topics.map((item) => (
+                item.topic_key === "business_etiquette"
+                    ? {
+                        ...item,
+                        learning_content_id: content.learning_content_id,
+                    }
+                    : item
+            )),
+            reason: "更新商务礼仪规范学习文章绑定",
+        });
+        setConfig(response);
+        setPreview(null);
+    }
+
+    async function persistPaperBinding(paperId: string) {
+        if (!pathConfig) {
+            throw new Error("路径配置尚未加载完成。");
+        }
+        if (!pathConfig.path.modules.some((item) => item.module_key === BUSINESS_SKILLS_MODULE_KEY)) {
+            throw new Error("路径配置缺少学习专题模块，无法绑定小测。");
+        }
+        const response = await api.admin.newcomerTraining.savePathConfig({
+            ...pathConfig.path,
+            modules: pathConfig.path.modules.map((item) => (
+                item.module_key === BUSINESS_SKILLS_MODULE_KEY
+                    ? { ...item, exam_paper_id: paperId }
+                    : item
+            )),
+            reason: "更新商务礼仪规范小测绑定",
+        });
+        setPathConfig(response);
+        setSelectedPaperId(paperId);
+    }
+
     async function createArticle() {
+        const normalizedChapterContent = chapterContent.trim();
+        if (!normalizedChapterContent) {
+            toast.error("首章节正文不能为空。");
+            return;
+        }
         setIsCreating(true);
         try {
-            const created = await api.learningContents.create(createBusinessEtiquetteArticlePayload());
-            toast.success("已创建商务礼仪规范文章草稿");
-            router.push(`/admin/learning-contents/${created.learning_content_id}`);
+            const created = await api.learningContents.create({
+                ...createBusinessEtiquetteArticlePayload(),
+                title: articleTitle.trim() || "商务礼仪规范",
+                summary: articleSummary.trim() || null,
+            });
+            await api.learningContents.addChapter(created.learning_content_id, {
+                title: chapterTitle.trim() || "导读",
+                content: normalizedChapterContent,
+            });
+            const published = await api.learningContents.publish(created.learning_content_id);
+            await saveTopicContentBinding(published);
+            setChapterTitle("");
+            setChapterContent("");
+            await load();
+            toast.success("已创建、发布并绑定学习文章");
         } catch (createError) {
             toast.error(getApiErrorMessage(createError));
         } finally {
@@ -157,23 +212,110 @@ export default function BusinessEtiquetteLearningTopicPage() {
         }
         setIsSubmitting(true);
         try {
-            const response = await api.admin.newcomerTraining.saveLearningTopicsConfig({
-                schema_version: config.payload.schema_version,
-                topics: config.payload.topics.map((item) => (
-                    item.topic_key === "business_etiquette"
-                        ? {
-                            ...item,
-                            learning_content_id: content.learning_content_id,
-                        }
-                        : item
-                )),
-                reason: "更新商务礼仪规范学习文章绑定",
-            });
-            setConfig(response);
-            setPreview(null);
+            await saveTopicContentBinding(content);
             toast.success("已保存为学习专题待发布草稿");
         } catch (bindError) {
             toast.error(getApiErrorMessage(bindError));
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    async function addChapterToBoundContent() {
+        if (!boundContent) {
+            toast.error("请先创建或绑定学习文章。");
+            return;
+        }
+        if (!chapterTitle.trim() || !chapterContent.trim()) {
+            toast.error("章节标题和正文不能为空。");
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            await api.learningContents.addChapter(boundContent.learning_content_id, {
+                title: chapterTitle.trim(),
+                content: chapterContent.trim(),
+            });
+            setChapterTitle("");
+            setChapterContent("");
+            await load();
+            toast.success("章节已在当前专题页内保存");
+        } catch (chapterError) {
+            toast.error(getApiErrorMessage(chapterError));
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    async function publishBoundContent() {
+        if (!boundContent) {
+            toast.error("请先创建或绑定学习文章。");
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            const published = await api.learningContents.publish(boundContent.learning_content_id);
+            await saveTopicContentBinding(published);
+            await load();
+            toast.success("学习文章已发布并保持当前专题绑定");
+        } catch (publishError) {
+            toast.error(getApiErrorMessage(publishError));
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    function toggleQuestion(questionId: string) {
+        setSelectedQuestionIds((current) =>
+            current.includes(questionId)
+                ? current.filter((item) => item !== questionId)
+                : [...current, questionId],
+        );
+    }
+
+    async function createPaperInTopic() {
+        if (selectedQuestionIds.length === 0) {
+            toast.error("请先选择至少一道已发布题目。");
+            return;
+        }
+        const parsedPoints = Number(paperPoints);
+        if (!Number.isFinite(parsedPoints) || parsedPoints <= 0) {
+            toast.error("每题分值必须大于 0。");
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            const paper = await api.admin.newcomerTraining.createPaper({
+                paper_key: buildBusinessSkillsPaperKey(Date.now()),
+                title: paperTitle.trim() || "商务礼仪规范小测",
+                description: "在学习专题详情页内快速组卷。",
+                module_key: BUSINESS_SKILLS_MODULE_KEY,
+                questions: buildPaperQuestionBindings(selectedQuestionIds, parsedPoints),
+            });
+            await api.admin.newcomerTraining.publishPaper(paper.paper_id);
+            await persistPaperBinding(paper.paper_id);
+            setSelectedQuestionIds([]);
+            await load();
+            toast.success("小测/考卷已创建、发布并保存为当前专题待发布配置");
+        } catch (paperError) {
+            toast.error(getApiErrorMessage(paperError));
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    async function saveSelectedPaperBinding() {
+        if (!selectedPaperId) {
+            toast.error("请先选择已发布小测/考卷。");
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            await persistPaperBinding(selectedPaperId);
+            await load();
+            toast.success("已保存为当前专题待发布配置");
+        } catch (paperError) {
+            toast.error(getApiErrorMessage(paperError));
         } finally {
             setIsSubmitting(false);
         }
@@ -256,6 +398,11 @@ export default function BusinessEtiquetteLearningTopicPage() {
             setIsSubmitting(false);
         }
     }
+
+    const publishedPapers = papers.filter((paper) => paper.status === "published");
+    const boundPaperId = pathConfig?.path.modules.find((item) => item.module_key === BUSINESS_SKILLS_MODULE_KEY)?.exam_paper_id ?? "";
+    const boundPaper = publishedPapers.find((paper) => paper.paper_id === boundPaperId) ?? null;
+    const selectedQuestions = questions.filter((question) => selectedQuestionIds.includes(question.question_id));
 
     return (
         <AdminIndexShell
@@ -364,24 +511,81 @@ export default function BusinessEtiquetteLearningTopicPage() {
                         </div>
                     </GlassCard>
 
-                    <GlassCard className="space-y-3 p-5">
-                        <h2 className="text-lg font-black text-slate-900">配套治理</h2>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            {TOPIC_SUPPORT_LINKS.map((item) => {
-                                const Icon = item.icon;
-                                return (
-                                    <Link key={item.href} href={item.href}>
-                                        <div className="h-full rounded-xl border border-slate-100 bg-slate-50 p-3 transition hover:border-slate-300 hover:bg-white">
-                                            <div className="flex items-center gap-2">
-                                                <Icon className="h-4 w-4 text-slate-500" aria-hidden />
-                                                <p className="font-bold text-slate-900">{item.title}</p>
-                                            </div>
-                                            <p className="mt-2 text-xs leading-5 text-slate-500">{item.description}</p>
-                                        </div>
-                                    </Link>
-                                );
-                            })}
+                    <GlassCard className="space-y-4 p-5">
+                        <div>
+                            <h2 className="text-lg font-black text-slate-900">文章与章节</h2>
+                            <p className="mt-1 text-sm text-slate-500">
+                                优先选择已发布学习文章；没有文章时可在当前专题内快速创建、发布并绑定。
+                            </p>
                         </div>
+                        {!boundContent ? (
+                            <div className="space-y-3">
+                                <Input value={articleTitle} onChange={(event) => setArticleTitle(event.target.value)} disabled={isCreating} aria-label="学习文章标题" />
+                                <textarea
+                                    value={articleSummary}
+                                    onChange={(event) => setArticleSummary(event.target.value)}
+                                    disabled={isCreating}
+                                    rows={3}
+                                    aria-label="学习文章摘要"
+                                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                />
+                                <Input
+                                    value={chapterTitle}
+                                    onChange={(event) => setChapterTitle(event.target.value)}
+                                    disabled={isCreating}
+                                    aria-label="首章节标题"
+                                    placeholder="首章节标题，默认导读"
+                                />
+                                <textarea
+                                    value={chapterContent}
+                                    onChange={(event) => setChapterContent(event.target.value)}
+                                    disabled={isCreating}
+                                    rows={5}
+                                    aria-label="首章节正文"
+                                    placeholder="填写首章节正文；发布前至少需要一个非空章节。"
+                                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                />
+                                <Button onClick={() => void createArticle()} disabled={isCreating}>
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    创建、发布并绑定
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                                    已绑定：{boundContent.title}（{statusLabel(boundContent.status)}） · {boundContent.chapters.length} 节
+                                </div>
+                                <Input
+                                    value={chapterTitle}
+                                    onChange={(event) => setChapterTitle(event.target.value)}
+                                    disabled={isSubmitting}
+                                    aria-label="新章节标题"
+                                    placeholder="新章节标题"
+                                />
+                                <textarea
+                                    value={chapterContent}
+                                    onChange={(event) => setChapterContent(event.target.value)}
+                                    disabled={isSubmitting}
+                                    rows={4}
+                                    aria-label="新章节正文"
+                                    placeholder="新章节正文"
+                                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                />
+                                <div className="flex flex-wrap gap-2">
+                                    <Button variant="outline" onClick={() => void addChapterToBoundContent()} disabled={isSubmitting}>
+                                        添加章节
+                                    </Button>
+                                    <Button variant="outline" onClick={() => void publishBoundContent()} disabled={isSubmitting}>
+                                        发布文章修订
+                                    </Button>
+                                    <Button asChild variant="outline">
+                                        <Link href={`/admin/learning-contents/${boundContent.learning_content_id}`}>
+                                            高级编辑
+                                        </Link>
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
                     </GlassCard>
 
                     <GlassCard className="space-y-3 p-5">
@@ -395,6 +599,106 @@ export default function BusinessEtiquetteLearningTopicPage() {
                                     </p>
                                 </div>
                             ))}
+                        </div>
+                    </GlassCard>
+
+                    <GlassCard className="space-y-4 p-5 xl:col-span-2">
+                        <div>
+                            <h2 className="text-lg font-black text-slate-900">小测/考卷</h2>
+                            <p className="mt-1 text-sm text-slate-500">
+                                在专题内从已发布题库选择题目快速组卷；资源页继续作为查看全部和高级管理。
+                            </p>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-3">
+                            <div className="rounded-xl bg-slate-50 p-3">
+                                <p className="text-xs text-slate-500">当前小测</p>
+                                <p className="mt-1 text-sm font-bold text-slate-900">{boundPaper?.title ?? "未绑定"}</p>
+                            </div>
+                            <div className="rounded-xl bg-slate-50 p-3">
+                                <p className="text-xs text-slate-500">可选题目</p>
+                                <p className="mt-1 text-xl font-black text-slate-900">{questions.length}</p>
+                            </div>
+                            <div className="rounded-xl bg-slate-50 p-3">
+                                <p className="text-xs text-slate-500">已选题目</p>
+                                <p className="mt-1 text-xl font-black text-slate-900">{selectedQuestions.length}</p>
+                            </div>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                            <select
+                                value={selectedPaperId}
+                                onChange={(event) => setSelectedPaperId(event.target.value)}
+                                disabled={isSubmitting || publishedPapers.length === 0}
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm"
+                                aria-label="当前专题小测"
+                            >
+                                <option value="">请选择已发布小测/考卷</option>
+                                {publishedPapers.map((paper) => (
+                                    <option key={paper.paper_id} value={paper.paper_id}>{paper.title}</option>
+                                ))}
+                            </select>
+                            <Button variant="outline" onClick={() => void saveSelectedPaperBinding()} disabled={isSubmitting || !selectedPaperId}>
+                                保存小测绑定
+                            </Button>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-[1fr_8rem]">
+                            <Input value={paperTitle} onChange={(event) => setPaperTitle(event.target.value)} disabled={isSubmitting} aria-label="小测标题" />
+                            <Input value={paperPoints} onChange={(event) => setPaperPoints(event.target.value)} disabled={isSubmitting} aria-label="每题分值" type="number" min={1} />
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-2">
+                            {questions.slice(0, 8).map((question) => (
+                                <label key={question.question_id} className="flex items-start gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedQuestionIds.includes(question.question_id)}
+                                        onChange={() => toggleQuestion(question.question_id)}
+                                        disabled={isSubmitting}
+                                        className="mt-1"
+                                    />
+                                    <span>
+                                        <span className="font-semibold text-slate-900">{question.title}</span>
+                                        <span className="mt-1 block text-xs text-slate-500">{question.difficulty} · {question.question_type}</span>
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Button onClick={() => void createPaperInTopic()} disabled={isSubmitting || selectedQuestionIds.length === 0}>
+                                创建并发布小测
+                            </Button>
+                            <Button asChild variant="outline">
+                                <Link href="/admin/sales-trainer/learning-topics/papers">高级管理考卷</Link>
+                            </Button>
+                            <Button asChild variant="outline">
+                                <Link href="/admin/sales-trainer/learning-topics/questions">查看全部题目</Link>
+                            </Button>
+                        </div>
+                    </GlassCard>
+
+                    <GlassCard className="space-y-3 p-5 xl:col-span-2">
+                        <h2 className="text-lg font-black text-slate-900">AI 教练与得分展示</h2>
+                        <div className="grid gap-3 md:grid-cols-3">
+                            <div className="rounded-xl bg-slate-50 p-3">
+                                <p className="text-xs text-slate-500">AI 教练</p>
+                                <p className="mt-1 text-sm font-bold text-slate-900">
+                                    {topic.ai_coach ? "已绑定专题配置" : "未配置"}
+                                </p>
+                            </div>
+                            <div className="rounded-xl bg-slate-50 p-3">
+                                <p className="text-xs text-slate-500">得分展示</p>
+                                <p className="mt-1 text-sm font-bold text-slate-900">展示小测得分</p>
+                            </div>
+                            <div className="rounded-xl bg-slate-50 p-3">
+                                <p className="text-xs text-slate-500">是否阻塞</p>
+                                <p className="mt-1 text-sm font-bold text-slate-900">不阻塞后续关卡</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Button asChild variant="outline">
+                                <Link href="/admin/sales-trainer/ai-coach">打开 AI 教练高级配置</Link>
+                            </Button>
+                            <Button asChild variant="outline">
+                                <Link href="/admin/sales-trainer/learning-topics/capabilities">高级管理能力点</Link>
+                            </Button>
                         </div>
                     </GlassCard>
 

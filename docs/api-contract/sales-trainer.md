@@ -69,6 +69,32 @@ interface SalesTrainerAdminCapabilities {
 - workbench dashboard API 失败时必须展示可重试错误态，不得把失败吞成空指标、空风险学员或“暂无数据”。
 - sidebar、workbench card、module nav、按钮和直链页必须消费同一 capability projection；前端隐藏只能作为体验层，不能替代后端 API 权限校验。
 
+### 管理后台一页式配置原则
+
+自 2026-07-08 起，新人训练路径后台主流程按“前台模块”组织，而不是按底层资源表组织。管理员进入录音管理或学习专题详情后，必须优先在当前页面完成选择、快速新建、发布和绑定；独立资源页仅作为“查看全部 / 高级管理 / 旧链接兼容”保留。
+
+录音管理主流程:
+
+- `/admin/sales-trainer/audio/[scenarioSlug]` 是录音任务配置工作台；`ppt-explanation`、`company-product-demo`、`elevator-pitch` 都必须在任务页内呈现单元、材料、评分标准和路径修订状态。
+- 训练单元、材料、评分标准默认先选择已发布资源；缺资源时通过当前页弹窗或抽屉快速新建。
+- 快速新建训练单元必须调用既有单元创建/发布 API，成功后刷新候选项，并把 `target_unit_id` 写回当前 path working revision 的前端 ViewModel。
+- 快速新建材料必须创建材料主档、上传并发布材料版本，成功后绑定 `material_id` 和发布后的 `material_version_id`。历史录音继续使用提交时冻结的材料版本快照。
+- 快速新建评分标准必须使用结构化普通表单收集名称、用途、维度、权重、通过分、学员可见说明和常见问题；`system_prompt`、`output_schema`、原始 `learner_rubric` 只能在高级模式折叠区展示。创建发布后绑定 `scoring_prompt_id`。历史评分继续使用提交时冻结的评分标准快照。
+- 保存/发布/回滚仍走 path config revision 语义；前端当前页绑定只是 working revision 的编辑入口，不能绕过后端权限、发布门禁、审计或版本快照。
+
+学习专题主流程:
+
+- `/admin/sales-trainer/learning-topics/business-etiquette` 是“商务礼仪规范”专题配置工作台；后续新增“销售技巧”“客户常见质疑”等专题时沿用同一专题详情模型，不得恢复“商务技巧文章”作为顶层资源概念。
+- 专题详情页应在当前页完成文章选择/快速新建、首章节创建、章节追加、题目选择、快速组卷、专题发布预览、发布和回滚。
+- 快速新建文章必须至少创建一个非空章节后才能发布并绑定，避免触发学习内容发布门禁失败。
+- 快速组卷必须只使用已发布题目，创建考卷后发布；第一版 `newcomer_learning_topics_v1` 尚无专题内考卷绑定字段，因此后台专题页通过现有 path config `business_skills.exam_paper_id` 保存为待发布路径修订。前端必须明确这是“专题小测绑定”的兼容持久化，不得臆造新的阻塞关系。
+- 学习专题的得分只做展示，不阻塞后续关卡；`blocks_next=false` 是前后端展示和验收口径。
+
+旧路由兼容:
+
+- `/admin/sales-trainer/materials`、`/admin/sales-trainer/score-standards`、`/admin/sales-trainer/questions`、`/admin/sales-trainer/papers` 等旧入口不得直接 404；新导航可指向 `/admin/sales-trainer/audio/materials`、`/admin/sales-trainer/audio/score-standards`、`/admin/sales-trainer/learning-topics/questions`、`/admin/sales-trainer/learning-topics/papers`。
+- 兼容页只承担查看全部、高级编辑、审计排查和批量治理；普通配置闭环不得要求管理员先离开当前模块去补资源再回来。
+
 ## 联调对齐说明
 
 - 本文按本轮约定端点定义基础闭环契约，主线程后续按实际实现校对。

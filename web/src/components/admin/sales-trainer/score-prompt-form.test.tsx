@@ -101,7 +101,7 @@ describe("SalesTrainerScorePromptForm", () => {
         fireEvent.change(screen.getByLabelText("output_schema（JSON）"), {
             target: { value: "{}" },
         });
-        fireEvent.change(screen.getByLabelText("学员可见评分标准（JSON）"), {
+        fireEvent.change(screen.getByLabelText("学员评分标准 JSON（可选覆盖）"), {
             target: {
                 value: JSON.stringify({
                     criteria: [{ label: "结构", weight: 40 }],
