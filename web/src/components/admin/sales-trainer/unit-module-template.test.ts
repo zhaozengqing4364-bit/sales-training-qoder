@@ -65,7 +65,7 @@ describe("unit-module-template", () => {
         });
 
         expect(template).toEqual(expect.objectContaining({
-            name: "第一关：PPT 讲解录音",
+            name: "第一关：PPT 讲解",
             unit_type: "audio_scoring",
         }));
         expect(template?.config.audio?.purpose).toBe("ppt_pitch");

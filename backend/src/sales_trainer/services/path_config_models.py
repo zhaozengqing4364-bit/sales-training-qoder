@@ -16,6 +16,12 @@ from sales_trainer.schemas import (
     SalesTrainerPathModuleType,
 )
 from sales_trainer.services.asset_revision_service import AssetChangeClass
+from sales_trainer.services.audio_evaluation_scenarios import (
+    AUDIO_EVALUATION_SCENARIOS,
+    COMPANY_PRODUCT_DEMO_SCENARIO_KEY,
+    resolve_audio_evaluation_scenario,
+    resolve_audio_evaluation_scenario_from_config,
+)
 from sales_trainer.services.path_config_audio_refs import audio_refs_from_unit
 from sales_trainer.services.readiness_state import CAPABILITY_KEYS
 
@@ -27,6 +33,7 @@ LEGACY_NEWCOMER_PATH_KEYS = {"new_seller_modules_v1"}
 CANONICAL_NEWCOMER_MODULE_KEYS: Final = frozenset(
     {
         "ppt_explanation",
+        "company_product_demo",
         "business_skills",
         "elevator_pitch",
         "realtime_roleplay",
@@ -35,6 +42,7 @@ CANONICAL_NEWCOMER_MODULE_KEYS: Final = frozenset(
 )
 CANONICAL_NEWCOMER_MODULE_TYPES: Final = {
     "ppt_explanation": "audio_scoring",
+    "company_product_demo": "audio_scoring",
     "business_skills": "article_exam",
     "elevator_pitch": "audio_scoring_group",
     "realtime_roleplay": "realtime_roleplay",
@@ -117,6 +125,25 @@ def validate_path_payload_for_write(payload: NewcomerPathConfigPayload) -> None:
                 f"模块 {module.title} 使用了不受支持的 module_key：{module.module_key}。",
                 422,
             )
+        scenario = resolve_audio_evaluation_scenario(
+            scenario_key=module.scenario_key,
+            module_key=module.module_key,
+        )
+        if module.scenario_key and scenario is None:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_PATH_CONFIG_INVALID]",
+                f"模块 {module.title} 使用了不受支持的录音评测场景：{module.scenario_key}。",
+                422,
+            )
+        if scenario is not None and scenario.module_key != module.module_key:
+            raise SalesTrainerPathConfigError(
+                "[NEWCOMER_PATH_CONFIG_INVALID]",
+                (
+                    f"模块 {module.title} 的录音评测场景 {scenario.scenario_key} "
+                    f"必须绑定 module_key={scenario.module_key}。"
+                ),
+                422,
+            )
         expected_module_type = CANONICAL_NEWCOMER_MODULE_TYPES[module.module_key]
         if module.module_type != expected_module_type:
             raise SalesTrainerPathConfigError(
@@ -170,8 +197,17 @@ def module_from_unit(
     module_key: str | None = None,
 ) -> NewcomerPathModuleConfig:
     audio_refs = audio_refs_from_unit(unit)
+    scenario = resolve_audio_evaluation_scenario_from_config(
+        unit.config if isinstance(unit.config, dict) else None,
+        scenario_key=config.scenario_key,
+        module_key=module_key or config.module_key,
+    )
     return NewcomerPathModuleConfig(
         module_key=module_key or config.module_key or str(unit.unit_id),
+        scenario_key=(
+            config.scenario_key
+            or (scenario.scenario_key if scenario is not None else None)
+        ),
         module_type=config.module_type or "audio_scoring",
         enabled=config.enabled,
         order_index=config.order_index,
@@ -235,6 +271,7 @@ def path_config_from_module(
         enabled=module.enabled,
         path_key=payload.path_key,
         module_key=module.module_key,
+        scenario_key=module.scenario_key,
         module_type=module.module_type,
         path_title=payload.title,
         goal_title=payload.goal_title,
@@ -374,13 +411,14 @@ def _infer_audio_module_key(unit: SalesTrainerUnit) -> str | None:
     audio = config.get("audio")
     if not isinstance(audio, dict):
         return None
+    scenario = resolve_audio_evaluation_scenario_from_config(config)
+    if scenario is not None:
+        return scenario.module_key
     purpose = audio.get("purpose")
-    if not isinstance(purpose, str):
-        return None
-    if purpose == "ppt_pitch":
-        return "ppt_explanation"
-    if purpose.startswith(("pyramid_speech", "elevator_pitch")):
-        return "elevator_pitch"
+    if purpose == "company_product_demo":
+        return COMPANY_PRODUCT_DEMO_SCENARIO_KEY
+    if isinstance(purpose, str) and purpose in AUDIO_EVALUATION_SCENARIOS:
+        return purpose
     return None
 
 

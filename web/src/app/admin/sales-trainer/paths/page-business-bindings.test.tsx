@@ -118,14 +118,14 @@ describe("SalesTrainerPathsPage business skill bindings", () => {
     it("saves selected learning content and paper into the path working revision", async () => {
         render(<SalesTrainerPathsPage />);
 
-        fireEvent.change(await screen.findByLabelText("学习文章（商务技巧新修订）"), {
+        fireEvent.change(await screen.findByLabelText("专题内容（商务技巧新修订）"), {
             target: { value: "content-2" },
         });
         fireEvent.change(screen.getByLabelText("考试考卷（商务技巧新修订）"), {
             target: { value: "paper-2" },
         });
         fireEvent.change(screen.getByLabelText("本次变更说明"), {
-            target: { value: "更新商务技巧学习文章和考卷" },
+            target: { value: "更新学习专题内容和考卷" },
         });
         fireEvent.click(screen.getByRole("button", { name: "保存当前配置为新修订" }));
 
@@ -133,7 +133,7 @@ describe("SalesTrainerPathsPage business skill bindings", () => {
             expect(savePathConfigMock).toHaveBeenCalled();
         });
         const request = savePathConfigMock.mock.calls[0]?.[0];
-        expect(request?.reason).toBe("更新商务技巧学习文章和考卷");
+        expect(request?.reason).toBe("更新学习专题内容和考卷");
         expect(request?.modules).toContainEqual(expect.objectContaining({
             module_key: "business_skills",
             learning_content_id: "content-2",

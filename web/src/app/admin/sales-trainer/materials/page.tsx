@@ -23,14 +23,18 @@ import type {
     SalesTrainerMaterial,
     SalesTrainerMaterialCreateRequest,
 } from "@/lib/api/types";
+import { audioEvaluationScenarioForSlug } from "@/lib/sales-trainer/audio-evaluation-scenarios";
 import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 
 export default function SalesTrainerMaterialsPage() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const toast = useToast();
-    const moduleKey = searchParams.get("module");
-    const purposeFromQuery = searchParams.get("purpose");
+    const toastError = toast.error;
+    const toastSuccess = toast.success;
+    const scenario = audioEvaluationScenarioForSlug(searchParams.get("scenario"));
+    const moduleKey = scenario?.moduleKey ?? searchParams.get("module");
+    const purposeFromQuery = scenario?.purposeKey ?? searchParams.get("purpose");
     const [items, setItems] = useState<SalesTrainerMaterial[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -63,11 +67,11 @@ export default function SalesTrainerMaterialsPage() {
             setItems([]);
             setSelectedMaterialId(null);
             setLoadError(message);
-            toast.error(message);
+            toastError(message);
         } finally {
             setIsLoading(false);
         }
-    }, [toast]);
+    }, [toastError]);
 
     useEffect(() => {
         if (routeAccess.isLoading) {
@@ -105,7 +109,7 @@ export default function SalesTrainerMaterialsPage() {
     async function createMaterial(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         if (!materialDraft.material_key.trim() || !materialDraft.name.trim()) {
-            toast.error("材料标识和名称不能为空。");
+            toastError("材料标识和名称不能为空。");
             return;
         }
         setIsSubmitting(true);
@@ -117,12 +121,12 @@ export default function SalesTrainerMaterialsPage() {
                 description: materialDraft.description?.trim() || null,
                 purpose: materialDraft.purpose?.trim() || "ppt_pitch",
             });
-            toast.success("训练材料已创建");
+            toastSuccess("训练材料已创建");
             setMaterialDraft(createEmptyMaterialDraft(purposeFromQuery));
             setSelectedMaterialId(created.material_id);
             await loadMaterials();
         } catch (createError) {
-            toast.error(getApiErrorMessage(createError));
+            toastError(getApiErrorMessage(createError));
         } finally {
             setIsSubmitting(false);
         }
@@ -131,15 +135,15 @@ export default function SalesTrainerMaterialsPage() {
     async function uploadVersion(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         if (!selectedMaterial) {
-            toast.error("请先创建或选择训练材料。");
+            toastError("请先创建或选择训练材料。");
             return;
         }
         if (!selectedFile) {
-            toast.error("请先上传 PPT 或文档文件。");
+            toastError("请先上传 PPT 或文档文件。");
             return;
         }
         if (!versionDraft.version_label.trim() || !versionDraft.title.trim()) {
-            toast.error("版本号和版本标题不能为空。");
+            toastError("版本号和版本标题不能为空。");
             return;
         }
         setIsSubmitting(true);
@@ -150,12 +154,12 @@ export default function SalesTrainerMaterialsPage() {
                 title: versionDraft.title.trim(),
                 release_notes: versionDraft.release_notes?.trim() || null,
             });
-            toast.success("材料文件已上传，版本已创建为草稿");
+            toastSuccess("材料文件已上传，版本已创建为草稿");
             setSelectedFile(null);
             setVersionDraft(createEmptyVersionDraft());
             await loadMaterials();
         } catch (createError) {
-            toast.error(getApiErrorMessage(createError));
+            toastError(getApiErrorMessage(createError));
         } finally {
             setIsSubmitting(false);
         }
@@ -165,10 +169,10 @@ export default function SalesTrainerMaterialsPage() {
         setIsSubmitting(true);
         try {
             await api.admin.salesTrainer.publishMaterialVersion(versionId);
-            toast.success("材料版本已发布为最新版");
+            toastSuccess("材料版本已发布为最新版");
             await loadMaterials();
         } catch (publishError) {
-            toast.error(getApiErrorMessage(publishError));
+            toastError(getApiErrorMessage(publishError));
         } finally {
             setIsSubmitting(false);
         }

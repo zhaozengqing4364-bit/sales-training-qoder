@@ -12,7 +12,7 @@
 
 新人训练路径负责完整训练闭环：PPT/材料学习、录音上传、AI 转写、AI 评分、必修训练任务、学习专题、试卷考试、AI Coach、实时对练入口投影、后台配置、训练记录、管理看板和审计。实时语音运行时仍由 `sales_bot`、`practice_sessions`、`training_runtime`、`/practice/[sessionId]` 和 `/api/v1/practice/sessions` 等运行时权威负责；`sales_trainer` 只能通过 runtime binding 和 outcome projection 纳入闭环，不得直接创建、修改或修复 realtime 会话。
 
-自 2026-07-08 起，原 `business_skills` 的“商务技巧文章”语义被拆分：训练路径 active revision 只保留必修训练任务；学习文章和小单元进入独立 `newcomer_learning_topics_v1` 治理资产。第一版学习专题只支持 `business_etiquette` / “商务礼仪规范”，但后台入口统一展示为“学习文章”，不得把“商务技巧”作为长期信息架构或接口语义。
+自 2026-07-08 起，原 `business_skills` 的“商务技巧文章”语义被拆分：训练路径 active revision 只保留必修训练任务；专题内容和小单元进入独立 `newcomer_learning_topics_v1` 治理资产。第一版学习专题只支持 `business_etiquette` / “商务礼仪规范”，但后台入口统一展示为“学习专题”，不得把“商务技巧”作为长期信息架构或接口语义。
 
 旧语义“模块 4 只能作为 disabled/coming-soon placeholder，且永不接入实时运行时”自 2026-06-27 起被本契约 supersede。实时对练可以纳入新人训练路径，但 learner 入口开放前必须同时满足 runtime binding、对象级权限、配置健康、provider readiness、TrainingJourney outcome projection、审计和 active revision rollback 语义。缺任一条件时模块必须 fail-closed，返回 typed diagnostic 或 disabled 状态；不得用占位成功、前端隐藏或 WebSocket 重连掩盖配置错误。
 
@@ -27,7 +27,7 @@
 - 培训负责人权限: `support` / `training_lead` / `training_manager` 可查看本人 `department` 范围内的学员录音、评分结果、做题记录和训练记录；当前后端同时保留题库维护兼容能力 `sales_trainer.manage_questions`；不能修改其他内容配置、查看系统日志或重试任务。无部门时使用空范围兜底，不放大全局权限。
 - 运维人员权限: `operations` / `ops` / `operator` / `sre` 可查看配置健康、操作日志、全局记录，并可重试转写/评分任务、显式重评历史成绩；不能管理文章、题库、考卷、材料等内容配置。
 - 销售训练材料单独管理: 销售训练 PPT、逐字稿、示例录音和附件属于 `sales_trainer` 域，不复用 `/admin/presentations` 的业务语义。
-- PPT 演练门禁: `unit.config.audio.purpose="ppt_pitch"` 的任务必须绑定已发布材料，学员提交前必须确认当前要求版本；提交记录冻结材料、任务简报和评分方案快照。
+- 录音评测场景门禁: `ppt_explanation`、`company_product_demo` 等场景通过 `AudioEvaluationScenario.material_policy` 声明是否必须绑定并确认已发布材料；学员提交前必须确认当前要求版本；提交记录冻结材料、任务简报和评分方案快照。旧 `ppt_pitch` / `ppt_explanation` 继续兼容映射到 PPT 讲解场景。
 - 兼容命名: API 路径和模块目录暂不改名；新增 DTO、后台导航和学员页面文案必须以“新人训练路径”为展示名。
 
 ### Admin Capability Projection
@@ -125,6 +125,7 @@ interface NewcomerTrainingPathConfig {
 interface NewcomerTrainingPathModuleConfig {
   module_key:
     | "ppt_explanation"
+    | "company_product_demo"
     | "business_skills"
     | "elevator_pitch"
     | "realtime_roleplay"
@@ -136,6 +137,7 @@ interface NewcomerTrainingPathModuleConfig {
   enabled: boolean;
   disabled_reason?: string | null;
   completion_rule: NewcomerPathCompletionRule;
+  scenario_key?: string | null;
   target_unit_id?: string | null;
   target_unit_ids?: string[];
   learning_content_id?: string | null;
@@ -248,8 +250,9 @@ StepAudio 2.5 provider migration 语义：
 
 | module_key | 默认名称 | module_type | 默认 enabled | completion_rule | 必要绑定 | 管理入口 | 权限 | audit action |
 |---|---|---|---|---|---|---|---|---|
-| `ppt_explanation` | `PPT 讲解录音` | `"audio_scoring"` | `true` | `passed` | `target_unit_id`、已发布材料、已发布评分提示词 | admin 新人训练路径模块/材料/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_materials`、`sales_trainer.manage_prompts` | `newcomer_module.ppt_explanation.*` |
-| `business_skills` | `商务礼仪规范（兼容源模块）` | `"article_exam"` | `true` | `passed`（legacy，不计入 required journey） | 不再作为必修阻断模块；仅作为旧 active path 生成学习专题草稿的兼容源 | admin 学习文章/学习专题治理 | `sales_trainer.manage_modules`、`sales_trainer.manage_papers`、`learning_content.manage` | `newcomer_learning_topics.*` |
+| `ppt_explanation` | `PPT 讲解` | `"audio_scoring"` | `true` | `passed` | `scenario_key="ppt_explanation"`、`target_unit_id`、场景策略要求的已发布材料、已发布评分提示词 | admin 训练任务 / PPT 讲解 | `sales_trainer.manage_modules`、`sales_trainer.manage_materials`、`sales_trainer.manage_prompts` | `newcomer_module.ppt_explanation.*` |
+| `company_product_demo` | `公司产品 Demo` | `"audio_scoring"` | `false`（第一版不自动加入默认路径） | `passed` | `scenario_key="company_product_demo"`、`target_unit_id`、产品资料或脚本材料、已发布评分提示词 | admin 训练任务 / 公司产品 Demo | `sales_trainer.manage_modules`、`sales_trainer.manage_materials`、`sales_trainer.manage_prompts` | `newcomer_module.company_product_demo.*` |
+| `business_skills` | `商务礼仪规范（兼容源模块）` | `"article_exam"` | `true` | `passed`（legacy，不计入 required journey） | 不再作为必修阻断模块；仅作为旧 active path 生成学习专题草稿的兼容源 | admin 学习专题治理 | `sales_trainer.manage_modules`、`sales_trainer.manage_papers`、`learning_content.manage` | `newcomer_learning_topics.*` |
 | `elevator_pitch` | `金字塔演讲` | `"audio_scoring_group"` | `true` | `passed` | `duration_options[].target_unit_id`、已发布评分提示词；材料可按企业训练包选配 | admin 新人训练路径模块/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_prompts` | `newcomer_module.elevator_pitch.*` |
 | `realtime_roleplay` | `实时对练` | `"realtime_roleplay"` | `false` | `submitted` | `runtime_binding`、provider readiness、已发布 runtime config、权限策略、outcome projection、rollback policy | admin 新人训练路径模块配置 + 运行时健康页 | `sales_trainer.manage_modules`、`sales_trainer.view_settings` | `newcomer_module.realtime_roleplay.*` |
 | `realtime_roleplay_placeholder` | `实时对练（旧占位）` | `"realtime_placeholder"` | `false` | `submitted` | 仅兼容历史 disabled 配置；不得作为新的 active revision 正式模块发布 | admin 新人训练路径模块配置 | `sales_trainer.manage_modules` | `newcomer_module.realtime_placeholder.*` |
@@ -261,7 +264,7 @@ StepAudio 2.5 provider migration 语义：
 - `path_key` 必填，默认 `newcomer_training_path_v1`；读取历史 `new_seller_modules_v1` 时必须标记为 compatibility alias。
 - `module_key` 在同一路径内唯一，`order_index` 必须为正整数且不可重复。
 - `display_name`、`description`、`disabled_reason`、按钮文案和空状态文案属于后台可配置展示内容；缺失时服务端可使用安全默认值，但响应必须标明 `fallback_applied=true`。
-- `"audio_scoring"` 模块必须绑定一个已发布 `audio_scoring` 单元、至少一个 required 材料绑定和已发布音频评分提示词；缺失返回 `[NEWCOMER_MODULE_BINDING_MISSING]`。
+- `"audio_scoring"` 模块必须绑定一个已发布 `audio_scoring` 单元和已发布音频评分提示词；当 `scenario_key` / `module_key` / `purpose` 解析出的录音评测场景声明 `material_policy="required_confirmed"` 时，还必须绑定至少一个 required 且 confirmation_required 的已发布材料；缺失返回 `[NEWCOMER_MODULE_BINDING_MISSING]`。
 - `"article_exam"` 模块必须绑定已发布 `LearningContent` 和已发布 `ExamPaper`；草稿或归档内容对 learner 返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` 或 `[PAPER_NOT_PUBLISHED]`。
 - `"audio_scoring_group"` 模块必须至少有一个 duration option；每个 option 的 `duration_minutes` 必须大于 0，`target_unit_id` 必须指向已发布音频评分单元。
 - `"realtime_roleplay"` 默认 disabled；启用并发布前必须通过 runtime binding 校验、provider readiness 校验和 rollback preview。learner start 时还必须读取 `sales_trainer.realtime_provider.registry` 当前 active 配置再次校验 provider 未被停用、descriptor 未被回滚替换且 readiness 仍然通过。任一校验失败返回 `[NEWCOMER_REALTIME_BINDING_INVALID]`、`[NEWCOMER_REALTIME_PROVIDER_REGISTRY_DISABLED]`、`[NEWCOMER_REALTIME_PROVIDER_DESCRIPTOR_MISSING]`、`[NEWCOMER_REALTIME_PROVIDER_DISABLED]`、`[NEWCOMER_REALTIME_PROVIDER_NOT_READY]` 或更具体错误，learner 不得进入实时运行时。
@@ -314,7 +317,7 @@ StepAudio 2.5 provider migration 语义：
 | `resource_type` | `newcomer_learning_topics` |
 | `logical_id` | `newcomer_learning_topics_v1` |
 | `schema_version` | `newcomer_learning_topics_v1` |
-| 后台入口 | `/admin/sales-trainer/articles`，用户可见名“学习文章” |
+| 后台入口 | `/admin/sales-trainer/articles`，用户可见名“学习专题” |
 | learner 入口 | `/sales-trainer/learning-topics/business-etiquette`；兼容保留 `/sales-trainer/business-skills` |
 
 第一版只支持 `business_etiquette` 专题。未来扩展销售技巧文章、客户常见质疑文章等专题时，应新增 topic key 和发布校验，不应恢复“商务技巧文章”作为顶层模块名。
@@ -2450,7 +2453,7 @@ Form fields:
 | `duration_seconds` | number | 否 | 可选元数据；不作为上传限制 |
 | `source_page` | string | 否 | 可选来源页面 |
 | `auto_process` | boolean | 否 | 默认 `true`，为 `true` 时在响应返回后调度转写和评分后台任务 |
-| `confirmed_material_version_id` | string | 否 | PPT 演练等要求确认材料版本时必填 |
+| `confirmed_material_version_id` | string | 否 | 按录音评测场景要求确认材料版本时必填 |
 
 Response `data`: `AudioSubmission`
 
@@ -2482,8 +2485,8 @@ Response `data`: `AudioSubmission`
 
 - `auto_process=true` 时，learner API 必须先返回 `status="uploaded"` 的提交记录，再调度后台转写和评分；结果页通过 `GET /audio-submissions/{submission_id}` 轮询 `transcribing -> transcribed -> scoring -> scored` 或失败状态。不得让上传请求同步等待完整 ASR/评分流程。
 - `auto_process=false` 只登记提交，不调度后台任务；主要用于测试、排障或管理员手动处理。
-- 非 PPT 普通录音沿用旧闭环，未绑定材料时仍可提交。
-- `purpose` 或训练单元配置解析为 `ppt_pitch` 时，训练单元必须绑定至少一个 required 且 confirmation_required 的已发布材料，否则返回 `[PPT_MATERIAL_BINDING_REQUIRED]`。
+- 录音提交先按 `scenario_key`、`module_key`、`purpose` 解析录音评测场景；未命中场景或场景材料策略为 optional/none 时，未绑定材料仍可按旧闭环提交。
+- 场景材料策略为 `required_confirmed` 时，训练单元必须绑定至少一个 required 且 confirmation_required 的已发布材料；旧 `ppt_pitch` / `ppt_explanation` 返回 `[PPT_MATERIAL_BINDING_REQUIRED]` 兼容错误码，其他场景返回 `[AUDIO_EVALUATION_MATERIAL_BINDING_REQUIRED]`。
 - 绑定材料要求确认时，`confirmed_material_version_id` 必须匹配当前要求版本，否则返回 `[MATERIAL_VERSION_CONFIRMATION_REQUIRED]` 或 `[MATERIAL_VERSION_CONFIRMATION_OUTDATED]`。
 - 提交成功后冻结 `material_snapshot`、`score_scheme_snapshot`、`task_brief_snapshot`，后续材料或评分方案变更不得改写历史提交解释依据。
 - 当提交命中新人训练路径 active revision 时，`task_brief_snapshot.submission_context` 必须冻结 `path_key`、`path_revision_id`、`path_revision_no`、`module_key`、`module_type` 和 `legacy_snapshot_only=false`；响应顶层字段从该历史快照读取。旧提交无法可靠匹配路径修订时返回 `legacy_snapshot_only=true`，不得从最新路径配置伪造历史 revision。
@@ -2583,16 +2586,16 @@ interface UnitRollbackRequest {
 - `quiz` 单元必须绑定至少 1 道题。
 - `audio_scoring` 单元必须配置已发布 `audio.scoring_prompt_id`。
 - `audio.pass_threshold` 如存在，必须在 `0-100` 范围内。
-- `audio.purpose="ppt_pitch"` 时必须配置 `materials.bindings`，且至少一个绑定项 `required=true`、`confirmation_required=true`。
+- `audio.scenario_key` / `audio.purpose` 解析出的录音评测场景声明 `material_policy="required_confirmed"` 时，必须配置 `materials.bindings`，且至少一个绑定项 `required=true`、`confirmation_required=true`。
 - 材料绑定项必须指向已发布材料；`current_published` 要求材料存在当前发布版本；`locked_version` 要求锁定版本已发布且属于该材料。
 - `task_brief`、`materials`、`learner_rubric` 等可调整业务内容必须通过配置结构或评分方案管理，不得硬编码在学员页面。
 - 已归档单元不可发布。
 
 `/api/v1/admin/newcomer-training/units`、`/api/v1/admin/newcomer-training/units/{unit_id}/revisions`、`/publish`、`/rollback` 和 `/archive` 是新人训练路径 admin 主入口。`/api/v1/admin/sales-trainer/units` 作为技术兼容入口保留；普通管理页面应优先使用 newcomer-training 命名入口。
 
-### 学习文章与旧模块绑定管理
+### 学习专题与旧模块绑定管理
 
-文章正文和章节继续由 `/api/v1/admin/curriculum/learning-contents` 及其章节接口管理；新人训练路径后台 `/admin/sales-trainer/articles` 只负责学习专题治理和旧 article module 兼容绑定。用户可见命名必须是“学习文章/学习内容”，不得继续把顶层入口命名为“商务技巧文章”。
+文章正文和章节继续由 `/api/v1/admin/curriculum/learning-contents` 及其章节接口管理；新人训练路径后台 `/admin/sales-trainer/articles` 只负责学习专题治理和旧 article module 兼容绑定。用户可见命名必须是“学习专题/专题内容”，不得继续把顶层入口命名为“商务技巧文章”。
 
 商务礼仪规范的正式 learner 展示绑定必须写入 `newcomer_learning_topics_v1.topics[].learning_content_id`。下列旧 article-binding API 仅保留给仍属于 path config 的 `article_exam` 模块或迁移兼容，不能作为商务礼仪规范学习专题的 learner 真源。
 
@@ -4461,7 +4464,8 @@ interface OperationLogListResponse {
 | `[MATERIAL_VERSION_NOT_PUBLISHED]` | 404/409 | 材料版本不存在、未发布或锁定版本不可用 |
 | `[MATERIAL_VERSION_CONFIRMATION_REQUIRED]` | 409 | 学员提交前未确认要求的材料版本 |
 | `[MATERIAL_VERSION_CONFIRMATION_OUTDATED]` | 409 | 学员确认版本不是当前要求版本，需要重新确认 |
-| `[PPT_MATERIAL_BINDING_REQUIRED]` | 409/422 | PPT 演练任务未绑定 required 且 confirmation_required 的已发布材料 |
+| `[PPT_MATERIAL_BINDING_REQUIRED]` | 409/422 | PPT 讲解场景未绑定 required 且 confirmation_required 的已发布材料；保留给旧 `ppt_pitch` 兼容 |
+| `[AUDIO_EVALUATION_MATERIAL_BINDING_REQUIRED]` | 409/422 | 录音评测场景要求确认材料，但当前任务未绑定 required 且 confirmation_required 的已发布材料 |
 | `[SALES_TRAINER_MATERIAL_BINDING_INVALID]` | 422 | 训练任务材料绑定配置结构非法 |
 | `[SALES_TRAINER_TASK_BRIEF_INVALID]` | 422 | 训练任务简报配置结构非法 |
 | `[LEARNER_RUBRIC_INVALID]` | 422 | 学员可见评分标准配置结构非法 |
@@ -4482,7 +4486,7 @@ interface OperationLogListResponse {
 | `[LEARNING_TOPIC_WORKING_REVISION_EXISTS]` | 409 | 已有学习专题 working revision，生成草稿必须显式覆盖 |
 | `[LEARNING_TOPIC_WORKING_REVISION_MISSING]` | 409 | 发布或发布预览前缺少学习专题 working revision |
 | `[LEARNING_TOPIC_CONFIG_INVALID]` | 422 | 学习专题 payload 非法，例如 required/blocks_next 非 false、重复 topic/unit 或不支持的 topic key |
-| `[LEARNING_TOPIC_CONTENT_MISSING]` | 409 | enabled 学习专题未绑定学习文章 |
+| `[LEARNING_TOPIC_CONTENT_MISSING]` | 409 | enabled 学习专题未绑定专题内容 |
 | `[LEARNING_TOPIC_CONTENT_INVALID]` | 409 | 学习专题绑定文章不存在、未发布或不可作为 learner 内容 |
 | `[LEARNING_TOPIC_UNITS_MISSING]` | 409 | enabled 学习专题缺少启用小单元 |
 | `[LEARNING_TOPIC_REVISION_NOT_FOUND]` | 404 | 学习专题回滚目标 revision 不存在 |
@@ -4550,14 +4554,16 @@ interface OperationLogListResponse {
 | `DEUCATE_MODEL` | `deucate` | Deucate 评分服务 | 环境配置/模型配置 | 缺失使用默认值 |
 | `DEUCATE_TIMEOUT_SECONDS` | `30` | Deucate 评分服务 | 环境配置/模型配置 | 必须为正数；非法返回 `[DEUCATE_CONFIG_INVALID]`，超时返回 `[DEUCATE_TIMEOUT]` |
 | `unit.config.audio.scoring_prompt_id` | 无 | 训练单元配置 | admin 训练单元管理 | 音频评分单元发布和评分时必须指向已发布提示词 |
-| `unit.config.audio.purpose` | `general_audio_scoring` | 训练单元配置与学员上传页面 | admin 训练单元管理 | 必填字符串；缺失时前端使用默认用途 |
+| `unit.config.audio.scenario_key` | 无 | 训练单元配置、路径投影与学员上传页面 | admin 训练任务 / 训练单元管理 | 可选兼容字段；命中 `AudioEvaluationScenario` registry 时按场景策略校验材料、评分和提交门禁 |
+| `unit.config.audio.purpose` | `general_audio_scoring` | 训练单元配置与学员上传页面 | admin 训练单元管理 | 必填字符串；缺失时前端使用默认用途；旧 `ppt_pitch` 继续映射到 `ppt_explanation` 场景 |
 | `unit.config.audio.pass_threshold` | `70` | 训练单元配置 | admin 训练单元管理 | 必须在 `0-100`；缺失使用默认值 |
 | `unit.config.quiz.pass_threshold` | 无 | 训练单元配置与做题服务 | admin 训练单元管理 | 必须为非负数字；非法返回 `[QUIZ_PASS_THRESHOLD_INVALID]` |
 | `unit.config.task_brief` | 按训练单元名称/描述兜底 | learner brief API、提交快照 | admin 训练单元管理 | 必须为对象；缺失使用安全默认简报 |
-| `unit.config.materials` | 空绑定 | learner brief API、提交快照 | admin 训练单元管理 | PPT 演练必须至少绑定一个确认材料；非法返回 `[SALES_TRAINER_MATERIAL_BINDING_INVALID]` |
+| `unit.config.materials` | 空绑定 | learner brief API、提交快照 | admin 训练单元管理 | 场景材料策略为 `required_confirmed` 时必须至少绑定一个确认材料；非法返回 `[SALES_TRAINER_MATERIAL_BINDING_INVALID]` |
 | `audio_score_prompt.learner_rubric` | `{}` | learner brief API、提交快照、结果页 | admin 评分方案管理 | 必须为对象；缺失使用 `{}` 并由通过线兜底 |
 | `newcomer_path.path_key` | `newcomer_training_path_v1` | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | 必填；兼容读取 `new_seller_modules_v1`；缺失返回 `[NEWCOMER_PATH_CONFIG_MISSING]` |
 | `newcomer_path.modules[].module_key` | 见默认模块矩阵 | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | 同一路径内唯一；重复或未知返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` |
+| `newcomer_path.modules[].scenario_key` | 由 `module_key` / `purpose` 兼容推断 | learner/admin 新人训练路径聚合服务 | admin 训练任务 / 新人训练路径配置 | 可选 additive 字段；录音模块命中 `AudioEvaluationScenario` registry 时必须与 module/purpose 兼容；未知或不匹配返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` |
 | `newcomer_path.modules[].module_type` | 无 | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | 只允许 `"audio_scoring"`、`"article_exam"`、`"audio_scoring_group"`、`"realtime_roleplay"`、`"realtime_placeholder"`；`realtime_placeholder` 仅兼容历史 disabled 配置 |
 | `newcomer_path.modules[].display_name` | 默认模块矩阵名称 | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | 1-120 字符；缺失使用默认值并标记 `fallback_applied=true` |
 | `newcomer_path.modules[].enabled` | 模块 1-3 `true`，模块 4 `false` | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | disabled 模块 learner 只展示停用状态，不允许提交或进入运行时 |
@@ -4565,7 +4571,7 @@ interface OperationLogListResponse {
 | `newcomer_path.modules[].learning_content_id` | 无 | 旧 `article_exam` 模块文章入口；商务礼仪规范不再读取此字段作为 learner 真源 | admin 新人训练路径文章绑定 | 必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` |
 | `newcomer_path.modules[].exam_paper_id` | 无 | 旧 `article_exam` 模块考卷入口 | admin 新人训练路径考卷管理 | 必须指向已发布考卷；缺失或草稿返回 `[PAPER_NOT_PUBLISHED]` |
 | `newcomer_learning_topics_v1.topics[]` | 空；第一版只支持 `business_etiquette` | learner `TrainingJourney.learning_topics`、商务礼仪文章/小单元/小测/AI Coach | `/admin/sales-trainer/articles` | 必须通过 `SalesTrainerAssetRevision` 发布治理；`required=false`、`blocks_next=false`；未发布不展示；发布后只影响未来 learner；非法返回 `[LEARNING_TOPIC_CONFIG_INVALID]` |
-| `newcomer_learning_topics_v1.topics[].learning_content_id` | 无 | 商务礼仪规范学习文章入口 | `/admin/sales-trainer/articles/business-etiquette` | enabled topic 发布时必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_TOPIC_CONTENT_MISSING]` / `[LEARNING_TOPIC_CONTENT_INVALID]` |
+| `newcomer_learning_topics_v1.topics[].learning_content_id` | 无 | 商务礼仪规范专题内容入口 | `/admin/sales-trainer/articles/business-etiquette` | enabled topic 发布时必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_TOPIC_CONTENT_MISSING]` / `[LEARNING_TOPIC_CONTENT_INVALID]` |
 | `newcomer_learning_topics_v1.topics[].learning_units[]` | 7 个商务礼仪小单元 seed | 商务礼仪 learner 首页、小单元详情、阅读进度和小测 | `/admin/sales-trainer/articles/business-etiquette` | 标题、顺序、章节、能力点、小测题量、通过线、重测规则、题型权重和 AI Coach 达标策略均可配置；缺失返回 `[LEARNING_TOPIC_UNITS_MISSING]` |
 | `newcomer_path.modules[].duration_options` | `10/20/30` 分钟可由 seed 初始化 | 金字塔演讲模块入口 | admin 新人训练路径配置 | 每项必须有正数时长和已发布音频单元；非法返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` |
 | `newcomer_path.modules[].capability_keys` | seed 写入 V0.9 固定新人能力 key | 达标档案 evidence/competency 映射、重练目标模块匹配、workbench 弱项归因 | admin 新人训练路径配置 | 必须命中 V0.9 固定能力模型且不得重复；发布配置非法返回 `[NEWCOMER_PATH_CONFIG_INVALID]`；缺失旧数据只允许后端兼容映射，不得由前端按标题推断 |
@@ -4598,6 +4604,7 @@ interface OperationLogListResponse {
 
 | 日期 | 变更 | 说明 |
 |---|---|---|
+| 2026-07-08 | 新增录音评测场景治理契约 | `AudioEvaluationScenario` registry 管理 PPT 讲解、公司产品 Demo、金字塔演讲；path module additive `scenario_key`；材料门禁从 PPT 特判改为场景策略 |
 | 2026-07-08 | 新增学习专题独立治理契约 | `newcomer_learning_topics_v1` 复用 asset revision；`TrainingJourney.learning_topics` 非阻塞展示；商务礼仪规范从旧 `business_skills` 生成草稿并独立发布 |
 | 2026-07-06 | 收紧达标档案确认与模块能力映射契约 | `approve` 只能在 `pending_review` 且有证据时提交；`newcomer_path.modules[].capability_keys` 成为达标档案能力映射配置源 |
 | 2026-07-06 | 新增 V0.9 训练达标档案与达标验收工作台契约 | `/readiness/workbench`、`/readiness/dossiers/{learner_id}`、`/review-actions` 聚合 journey、训练记录和 operation log；复核动作采用 operation-log-backed 状态 |

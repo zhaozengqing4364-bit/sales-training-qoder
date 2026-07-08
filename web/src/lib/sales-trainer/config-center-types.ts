@@ -12,6 +12,7 @@ import type {
 
 export type NewcomerConfigModuleKey =
     | "ppt_explanation"
+    | "company_product_demo"
     | "business_skills"
     | "elevator_pitch"
     | "realtime_roleplay"

@@ -182,13 +182,13 @@ function articleExamDiagnostic(
     const hasArticle = Boolean(module.learning_content_id);
     const hasPaper = Boolean(module.exam_paper_id);
     if (hasArticle && hasPaper) {
-        return moduleDiagnostic(module, "ready", "学习文章和考卷已绑定。");
+        return moduleDiagnostic(module, "ready", "专题内容和考卷已绑定。");
     }
     if (!hasArticle && !hasPaper) {
-        return moduleDiagnostic(module, "missing", "缺少学习文章和考卷绑定。");
+        return moduleDiagnostic(module, "missing", "缺少专题内容和考卷绑定。");
     }
     if (!hasArticle) {
-        return moduleDiagnostic(module, "missing", "缺少学习文章绑定。");
+        return moduleDiagnostic(module, "missing", "缺少专题内容绑定。");
     }
     return moduleDiagnostic(module, "missing", "缺少考卷绑定。");
 }

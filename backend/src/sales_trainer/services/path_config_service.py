@@ -32,12 +32,17 @@ from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionError,
     SalesTrainerAssetRevisionService,
 )
+from sales_trainer.services.audio_evaluation_scenarios import (
+    resolve_audio_evaluation_scenario,
+    resolve_audio_evaluation_scenario_from_config,
+)
 from sales_trainer.services.curriculum_practice_adapter import get_learning_content
 from sales_trainer.services.effective_audio_training_config import (
     merge_audio_path_config,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
+    LEGACY_NEWCOMER_PATH_KEYS,
     NEWCOMER_PATH_LOGICAL_ID,
     NEWCOMER_PATH_RESOURCE_TYPE,
     PathProjection,
@@ -69,6 +74,15 @@ from sales_trainer.services.prompt_template_revision_resolver import (
 AI_COACH_PROMPT_CATEGORY = "sales_trainer_ai_coach"
 
 
+def _management_payload_from_revision(
+    revision: SalesTrainerAssetRevision,
+) -> NewcomerPathConfigPayload:
+    payload = payload_from_revision(revision)
+    if payload.path_key in LEGACY_NEWCOMER_PATH_KEYS:
+        return payload.model_copy(update={"path_key": NEWCOMER_PATH_LOGICAL_ID})
+    return payload
+
+
 class SalesTrainerPathConfigService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
@@ -91,7 +105,7 @@ class SalesTrainerPathConfigService:
             path = await self._backfill_payload()
             source = "legacy_migration_snapshot"
         else:
-            path = payload_from_revision(active)
+            path = _management_payload_from_revision(active)
         legacy_snapshot_only = active is None
         return {
             "source": source,
@@ -1194,7 +1208,34 @@ class SalesTrainerPathConfigService:
                 f"{module.title}（{label}）绑定的音频训练单元不存在、未发布或类型不正确。",
                 409,
             )
+        self._validate_audio_unit_scenario(module, unit, label=label)
         return unit
+
+    @staticmethod
+    def _validate_audio_unit_scenario(
+        module: NewcomerPathModuleConfig,
+        unit: SalesTrainerUnit,
+        *,
+        label: str,
+    ) -> None:
+        expected = resolve_audio_evaluation_scenario(
+            scenario_key=module.scenario_key,
+            module_key=module.module_key,
+        )
+        if expected is None:
+            return
+        unit_config = unit.config if isinstance(unit.config, dict) else None
+        actual = resolve_audio_evaluation_scenario_from_config(unit_config)
+        if actual is not None and actual.scenario_key == expected.scenario_key:
+            return
+        raise SalesTrainerPathConfigError(
+            "[NEWCOMER_MODULE_CONFIG_INVALID]",
+            (
+                f"{module.title}（{label}）绑定的音频训练单元必须是"
+                f"{expected.display_name}场景，请先选择或新建对应训练单元。"
+            ),
+            409,
+        )
 
     async def _validate_audio_prompt(
         self,
@@ -1224,11 +1265,16 @@ class SalesTrainerPathConfigService:
     ) -> None:
         audio = config.get("audio")
         purpose = audio.get("purpose") if isinstance(audio, dict) else None
+        scenario = resolve_audio_evaluation_scenario_from_config(
+            config,
+            scenario_key=module.scenario_key,
+            module_key=module.module_key,
+            purpose_key=str(purpose) if isinstance(purpose, str) else None,
+        )
         materials = config.get("materials")
         bindings = materials.get("bindings") if isinstance(materials, dict) else None
         requires_material = (
-            module.module_key == "ppt_explanation"
-            or purpose == "ppt_pitch"
+            (scenario.requires_confirmed_material if scenario is not None else False)
             or bool(module.material_id)
         )
         if not requires_material:

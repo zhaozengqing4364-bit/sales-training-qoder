@@ -20,7 +20,7 @@ describe("SalesTrainerScorePromptForm", () => {
             throw new Error("适用用途字段应该是业务用途下拉。");
         }
         expect(purposeSelect.value).toBe("ppt_pitch");
-        expect(screen.getByText("PPT 讲解录音")).toBeTruthy();
+        expect(screen.getByText("PPT 讲解")).toBeTruthy();
     });
 
     it("allows editing published scoring standards as future-only revisions", () => {

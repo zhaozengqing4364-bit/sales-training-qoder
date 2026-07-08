@@ -1,31 +1,33 @@
+import { AUDIO_EVALUATION_SCENARIOS } from "./audio-evaluation-scenarios";
 import type { ModuleDefinition } from "./config-center-types";
 
-export const MODULE_DEFINITIONS = [
-    {
-        moduleKey: "ppt_explanation",
-        title: "PPT 讲解录音",
-        orderLabel: "第一关",
-        description: "绑定 PPT 材料和录音评分标准，学员上传讲解录音后获得转写与评分。",
-        remediationHref: "/admin/sales-trainer/materials?module=ppt_explanation&purpose=ppt_pitch",
-        learnerPreview: "学习 PPT 讲解要点，确认材料版本后上传录音。",
-    },
+const AUDIO_MODULE_DEFINITIONS = AUDIO_EVALUATION_SCENARIOS.map((scenario) => ({
+    moduleKey: scenario.moduleKey,
+    title: scenario.title,
+    orderLabel: scenario.orderLabel,
+    description: scenario.description,
+    remediationHref: `/admin/sales-trainer/training-tasks/${scenario.slug}`,
+    learnerPreview: scenario.learnerPreview,
+})) satisfies readonly ModuleDefinition[];
+
+const pptDefinition = AUDIO_MODULE_DEFINITIONS.find(
+    (definition) => definition.moduleKey === "ppt_explanation",
+);
+const elevatorDefinition = AUDIO_MODULE_DEFINITIONS.find(
+    (definition) => definition.moduleKey === "elevator_pitch",
+);
+
+export const CORE_MODULE_DEFINITIONS = [
+    ...(pptDefinition ? [pptDefinition] : []),
     {
         moduleKey: "business_skills",
-        title: "商务技巧",
-        orderLabel: "第二关",
-        description: "绑定学习文章和商务技巧考卷，学员先学习章节再考试。",
+        title: "学习专题",
+        orderLabel: "学习专题",
+        description: "绑定学习专题和小测，商务礼仪是当前第一个专题，后续可扩展销售技巧、客户常见质疑等专题。",
         remediationHref: "/admin/sales-trainer/articles",
-        learnerPreview: "阅读章节内容，完成后进入商务技巧考卷。",
+        learnerPreview: "阅读专题内容，完成后查看得分；专题得分不阻塞后续训练任务。",
     },
-    {
-        moduleKey: "elevator_pitch",
-        title: "金字塔演讲",
-        orderLabel: "第三关",
-        description: "配置多个录音时长选项，学员选择时长后上传演讲录音。",
-        remediationHref:
-            "/admin/sales-trainer/materials?module=elevator_pitch&purpose=elevator_pitch",
-        learnerPreview: "选择后台配置的演讲时长，上传录音并查看 AI 评分。",
-    },
+    ...(elevatorDefinition ? [elevatorDefinition] : []),
     {
         moduleKey: "realtime_roleplay_placeholder",
         title: "实时对练占位",
@@ -34,4 +36,11 @@ export const MODULE_DEFINITIONS = [
         remediationHref: "/admin/sales-trainer/paths",
         learnerPreview: "展示暂不开放原因，不进入实时对练。",
     },
+] as const satisfies readonly ModuleDefinition[];
+
+export const MODULE_DEFINITIONS = [
+    ...AUDIO_MODULE_DEFINITIONS,
+    ...CORE_MODULE_DEFINITIONS.filter((definition) =>
+        !AUDIO_EVALUATION_SCENARIOS.some((scenario) => scenario.moduleKey === definition.moduleKey),
+    ),
 ] as const satisfies readonly ModuleDefinition[];

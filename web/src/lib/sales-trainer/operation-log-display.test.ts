@@ -74,9 +74,9 @@ describe("buildOperationLogDisplay", () => {
             },
         }));
 
-        expect(binding.actionLabel).toBe("学习文章绑定已变更");
+        expect(binding.actionLabel).toBe("专题内容绑定已变更");
         expect(binding.targetLabel).toBe("新人训练路径关卡");
-        expect(binding.summaryLines).toContain("变更字段：学习文章");
+        expect(binding.summaryLines).toContain("变更字段：专题内容");
         expect(binding.summaryLines).toContain("修订：path-revision-2 → path-revision-3");
         expect(binding.summaryLines).toContain("影响范围：只影响后续学员");
 

@@ -242,7 +242,7 @@ describe("buildNewcomerOperationalDiagnostics", () => {
             {
                 title: "第2关：商务技巧",
                 status: "ready",
-                detail: "学习文章和考卷已绑定。",
+                detail: "专题内容和考卷已绑定。",
                 href: "/admin/sales-trainer/paths?module=business_skills",
             },
         ]);

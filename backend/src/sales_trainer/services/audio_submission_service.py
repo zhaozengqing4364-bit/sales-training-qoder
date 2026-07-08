@@ -32,6 +32,9 @@ from sales_trainer.models import (
 )
 from sales_trainer.rules import resolve_audio_pass_threshold
 from sales_trainer.schemas import AudioSubmissionCreate
+from sales_trainer.services.audio_evaluation_scenarios import (
+    resolve_audio_evaluation_scenario_from_config,
+)
 from sales_trainer.services.audio_submission_lineage import (
     freeze_submission_context,
     submission_lineage_fields,
@@ -257,7 +260,7 @@ class AudioSubmissionService:
                     status_code=exc.status_code,
                 ) from exc
             try:
-                self._require_material_binding_for_ppt(
+                self._require_material_binding_for_audio_scenario(
                     unit,
                     payload.purpose,
                     config_override=effective.config,
@@ -671,7 +674,7 @@ class AudioSubmissionService:
             else None,
         }
 
-    def _require_material_binding_for_ppt(
+    def _require_material_binding_for_audio_scenario(
         self,
         unit: SalesTrainerUnit,
         purpose: str,
@@ -679,9 +682,11 @@ class AudioSubmissionService:
         config_override: dict[str, Any] | None = None,
     ) -> None:
         config = config_override if config_override is not None else unit.config
-        unit_purpose = ((config or {}).get("audio") or {}).get("purpose")
-        resolved_purpose = str(unit_purpose or purpose or "")
-        if resolved_purpose != "ppt_pitch":
+        scenario = resolve_audio_evaluation_scenario_from_config(
+            config if isinstance(config, dict) else None,
+            purpose_key=purpose,
+        )
+        if scenario is None or not scenario.requires_confirmed_material:
             return
         materials_config = (config or {}).get("materials")
         bindings = (
@@ -689,10 +694,19 @@ class AudioSubmissionService:
             if isinstance(materials_config, dict)
             else None
         )
-        if not isinstance(bindings, list) or not bindings:
+        required_bindings = [
+            binding
+            for binding in bindings
+            if (
+                isinstance(binding, dict)
+                and binding.get("required") is True
+                and binding.get("confirmation_required") is True
+            )
+        ] if isinstance(bindings, list) else []
+        if not required_bindings:
             raise AudioSubmissionServiceError(
-                "[PPT_MATERIAL_BINDING_REQUIRED]",
-                "PPT 演练任务必须先绑定已发布训练材料。",
+                scenario.material_error_code,
+                f"{scenario.display_name}任务必须先绑定已发布训练材料。",
                 status_code=409,
             )
 

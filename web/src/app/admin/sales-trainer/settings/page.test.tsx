@@ -279,7 +279,7 @@ describe("SalesTrainerSettingsPage", () => {
         expect(screen.getByText("第1关：PPT讲解")).toBeTruthy();
         expect(screen.getByText("材料已绑定，缺少录音评分标准。")).toBeTruthy();
         expect(screen.getByText("第2关：商务技巧")).toBeTruthy();
-        expect(screen.getByText("学习文章和考卷已绑定。")).toBeTruthy();
+        expect(screen.getByText("专题内容和考卷已绑定。")).toBeTruthy();
         expect(screen.getByText("最近失败任务")).toBeTruthy();
         expect(screen.getAllByText("[ASR_TIMEOUT]").length).toBeGreaterThan(0);
         expect(screen.getAllByText("[AI_SCORING_FAILED]").length).toBeGreaterThan(0);

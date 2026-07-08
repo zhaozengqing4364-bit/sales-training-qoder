@@ -7,8 +7,10 @@ import type {
     NewcomerConfigCenterInput,
     NewcomerConfigIssue,
 } from "./config-center-types";
-
-type AudioModuleKey = "ppt_explanation" | "elevator_pitch";
+import {
+    audioEvaluationScenarioForModule,
+    type AudioEvaluationModuleKey,
+} from "./audio-evaluation-scenarios";
 
 interface AudioBindingRefs {
     readonly materialId: string | null;
@@ -17,12 +19,13 @@ interface AudioBindingRefs {
 }
 
 export function appendAudioIssues(
-    moduleKey: AudioModuleKey,
+    moduleKey: AudioEvaluationModuleKey,
     issues: NewcomerConfigIssue[],
     units: readonly SalesTrainerUnit[],
     input: NewcomerConfigCenterInput,
     pathModule: NewcomerPathModuleConfig | null,
 ): void {
+    const scenario = audioEvaluationScenarioForModule(moduleKey);
     const refs = audioBindingRefs(pathModule, units);
     const promptOk = Boolean(
         refs.scoringPromptId
@@ -43,14 +46,14 @@ export function appendAudioIssues(
         issues.push({
             code: "score_prompt_missing",
             message: "缺少已发布录音评分标准。",
-            href: `/admin/sales-trainer/paths?module=${moduleKey}`,
+            href: `/admin/sales-trainer/training-tasks/${scenario.slug}`,
         });
     }
-    if (!materialOk) {
+    if (scenario.materialRequired && !materialOk) {
         issues.push({
             code: "material_missing",
             message: "缺少已发布材料或当前版本。",
-            href: `/admin/sales-trainer/paths?module=${moduleKey}`,
+            href: `/admin/sales-trainer/training-tasks/${scenario.slug}`,
         });
     }
 }

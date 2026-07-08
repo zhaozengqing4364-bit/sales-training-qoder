@@ -9,6 +9,7 @@ import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/mod
 import { SalesTrainerScorePromptForm } from "@/components/admin/sales-trainer/score-prompt-form";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { audioEvaluationScenarioForSlug } from "@/lib/sales-trainer/audio-evaluation-scenarios";
 import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 import type {
     SalesTrainerAdminCapabilities,
@@ -20,7 +21,8 @@ export default function NewSalesTrainerScoreStandardPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const toast = useToast();
-    const initialPurpose = searchParams.get("purpose");
+    const scenario = audioEvaluationScenarioForSlug(searchParams.get("scenario"));
+    const initialPurpose = scenario?.purposeKey ?? searchParams.get("purpose");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
     const [capabilityError, setCapabilityError] = useState<string | null>(null);

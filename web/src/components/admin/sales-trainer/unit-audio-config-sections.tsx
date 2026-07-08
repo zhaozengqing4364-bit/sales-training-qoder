@@ -158,7 +158,7 @@ export function UnitMaterialBindingSection({
         <GlassCard className="space-y-4 p-6">
             <div>
                 <h2 className="text-lg font-bold text-slate-900">训练材料绑定</h2>
-                <p className="mt-1 text-sm text-slate-500">PPT 演练必须绑定训练材料库中的已发布材料，并要求学员确认最新版后上传。</p>
+                <p className="mt-1 text-sm text-slate-500">需要材料的录音评测场景必须绑定训练材料库中的已发布材料，并要求学员确认最新版后上传。</p>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">

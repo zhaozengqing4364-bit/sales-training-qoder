@@ -104,7 +104,7 @@ describe("SalesTrainerScoreStandardsPage", () => {
         });
 
         expect(await screen.findByText("PPT 讲解评分")).toBeTruthy();
-        expect(screen.getByText("PPT 讲解录音")).toBeTruthy();
+        expect(screen.getByText("PPT 讲解")).toBeTruthy();
         expect(screen.queryByText("ppt_pitch")).toBeNull();
         expect(screen.getByText("已发布")).toBeTruthy();
         expect(screen.queryByText("published")).toBeNull();

@@ -10,6 +10,7 @@ import type {
     AudioEditableModuleKey,
     PathAudioBindingValue,
 } from "@/lib/sales-trainer/path-config-editing";
+import { audioEvaluationScenarioForModule } from "@/lib/sales-trainer/audio-evaluation-scenarios";
 
 interface PathConfigAudioBindingEditorProps {
     readonly availableMaterials: readonly SalesTrainerMaterial[];
@@ -30,7 +31,8 @@ export function PathConfigAudioBindingEditor({
     onChange,
     value,
 }: PathConfigAudioBindingEditorProps) {
-    const purpose = moduleKey === "ppt_explanation" ? "ppt_pitch" : "elevator_pitch";
+    const scenario = audioEvaluationScenarioForModule(moduleKey);
+    const purpose = scenario.purposeKey;
     const materials = availableMaterials.filter((material) => (
         material.status === "published" && Boolean(material.current_version_id)
     ));
@@ -41,7 +43,9 @@ export function PathConfigAudioBindingEditor({
                 <div>
                     <p className="text-sm font-black text-slate-900">优先绑定已有发布资源</p>
                     <p className="mt-1 text-sm text-slate-500">
-                        如果没有合适资源，再去管理页创建评分标准或上传材料新版本。
+                        {scenario.materialRequired
+                            ? "该场景必须绑定已发布材料和评分标准；如果没有合适资源，可以先去管理页创建。"
+                            : "该场景必须绑定评分标准，材料可按企业训练包选配。"}
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-3 text-sm font-semibold text-blue-700">
@@ -62,7 +66,7 @@ export function PathConfigAudioBindingEditor({
             <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700" htmlFor={`${moduleKey}-material`}>
-                        主材料（{moduleTitle}）
+                        {scenario.materialRequired ? "主材料" : "选配材料"}（{moduleTitle}）
                     </label>
                     <select
                         id={`${moduleKey}-material`}

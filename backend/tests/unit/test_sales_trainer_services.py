@@ -251,6 +251,51 @@ def _user(role: str = "user") -> User:
     )
 
 
+async def _publish_audio_path_for_unit(
+    db: AsyncSession,
+    *,
+    actor: User,
+    unit: SalesTrainerUnit,
+    prompt: SalesTrainerAudioScorePrompt,
+    module_key: str,
+    scenario_key: str,
+    material: SalesTrainerMaterial | None = None,
+    material_version: SalesTrainerMaterialVersion | None = None,
+) -> None:
+    module: dict[str, object] = {
+        "module_key": module_key,
+        "scenario_key": scenario_key,
+        "module_type": "audio_scoring",
+        "order_index": 1,
+        "title": unit.name,
+        "description": unit.description,
+        "target_unit_id": unit.unit_id,
+        "scoring_prompt_id": prompt.prompt_id,
+        "completion_rule": "passed",
+    }
+    if material is not None:
+        module["material_id"] = material.material_id
+    if material_version is not None:
+        module["material_version_id"] = material_version.version_id
+    service = SalesTrainerPathConfigService(db)
+    await service.save_config(
+        NewcomerPathConfigSaveRequest.model_validate(
+            {
+                "path_key": "newcomer_training_path_v1",
+                "title": "新人训练路径",
+                "goal_title": "完成录音评测",
+                "reason": "测试录音任务 active revision",
+                "modules": [module],
+            }
+        ),
+        actor=actor,
+    )
+    await service.publish_config(
+        actor=actor,
+        reason="测试录音任务 active revision 生效",
+    )
+
+
 @pytest.mark.asyncio
 async def test_should_process_audio_submission_without_fixed_duration_limit(
     test_db: AsyncSession,
@@ -259,8 +304,8 @@ async def test_should_process_audio_submission_without_fixed_duration_limit(
     learner = _user("user")
     prompt = SalesTrainerAudioScorePrompt(
         prompt_id=str(uuid.uuid4()),
-        name="PPT 讲解评分",
-        purpose="general_audio_scoring",
+        name="公司产品 Demo 评分",
+        purpose="company_product_demo",
         system_prompt="你是销售训练评分员。",
         scoring_template="请评分：{transcript}",
         output_schema={},
@@ -270,21 +315,56 @@ async def test_should_process_audio_submission_without_fixed_duration_limit(
     )
     unit = SalesTrainerUnit(
         unit_id=str(uuid.uuid4()),
-        name="PPT 讲解录音",
+        name="公司产品 Demo",
         unit_type="audio_scoring",
         config={
             "audio": {
                 "scoring_prompt_id": prompt.prompt_id,
                 "pass_threshold": 80,
-                "purpose": "general_audio_scoring",
+                "purpose": "company_product_demo",
+                "scenario_key": "company_product_demo",
             }
         },
         status="published",
         created_by=admin.user_id,
         updated_by=admin.user_id,
     )
-    test_db.add_all([admin, learner, prompt, unit])
+    material = SalesTrainerMaterial(
+        material_id=str(uuid.uuid4()),
+        material_key=f"product-demo-material-{uuid.uuid4().hex[:8]}",
+        name="产品 Demo 资料",
+        material_type="script",
+        purpose="company_product_demo",
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    version = SalesTrainerMaterialVersion(
+        version_id=str(uuid.uuid4()),
+        material_id=material.material_id,
+        version_label="v2026.07",
+        title="产品 Demo 资料 2026-07",
+        file_name="demo.pdf",
+        content_type="application/pdf",
+        file_size_bytes=100,
+        storage_key="/tmp/demo.pdf",
+        status="published",
+        created_by=admin.user_id,
+        published_by=admin.user_id,
+    )
+    material.current_version_id = version.version_id
+    test_db.add_all([admin, learner, prompt, unit, material, version])
     await test_db.commit()
+    await _publish_audio_path_for_unit(
+        test_db,
+        actor=admin,
+        unit=unit,
+        prompt=prompt,
+        module_key="company_product_demo",
+        scenario_key="company_product_demo",
+        material=material,
+        material_version=version,
+    )
 
     service = AudioSubmissionService(
         test_db,
@@ -294,13 +374,14 @@ async def test_should_process_audio_submission_without_fixed_duration_limit(
     submission = await service.create_submission(
         AudioSubmissionCreate(
             unit_id=unit.unit_id,
-            purpose="general_audio_scoring",
+            purpose="company_product_demo",
             original_filename="long-recording.wav",
             content_type="audio/wav",
             size_bytes=1024,
             storage_key="/tmp/long-recording.wav",
             duration_seconds=10800,
             source_page="sales_trainer_unit_detail",
+            confirmed_material_version_id=version.version_id,
             auto_process=True,
         ),
         actor=learner,
@@ -1642,8 +1723,8 @@ async def test_should_require_latest_material_confirmation_for_ppt_submission(
     material.current_version_id = version.version_id
     prompt = SalesTrainerAudioScorePrompt(
         prompt_id=str(uuid.uuid4()),
-        name="PPT 讲解评分方案",
-        purpose="ppt_pitch",
+        name="公司产品 Demo 评分方案",
+        purpose="company_product_demo",
         system_prompt="你是销售训练评分员。",
         scoring_template="请评分：{transcript}",
         output_schema={},
@@ -1689,6 +1770,16 @@ async def test_should_require_latest_material_confirmation_for_ppt_submission(
     )
     test_db.add_all([admin, learner, material, version, prompt, unit])
     await test_db.commit()
+    await _publish_audio_path_for_unit(
+        test_db,
+        actor=admin,
+        unit=unit,
+        prompt=prompt,
+        module_key="ppt_explanation",
+        scenario_key="ppt_explanation",
+        material=material,
+        material_version=version,
+    )
 
     service = AudioSubmissionService(
         test_db,
@@ -1769,21 +1860,56 @@ async def test_should_score_audio_with_submission_prompt_snapshot(
     )
     unit = SalesTrainerUnit(
         unit_id=str(uuid.uuid4()),
-        name="PPT 演练",
+        name="公司产品 Demo",
         unit_type="audio_scoring",
         config={
             "audio": {
                 "scoring_prompt_id": prompt.prompt_id,
                 "pass_threshold": 80,
-                "purpose": "general_audio_scoring",
+                "purpose": "company_product_demo",
+                "scenario_key": "company_product_demo",
             }
         },
         status="published",
         created_by=admin.user_id,
         updated_by=admin.user_id,
     )
-    test_db.add_all([admin, learner, prompt, unit])
+    material = SalesTrainerMaterial(
+        material_id=str(uuid.uuid4()),
+        material_key=f"prompt-snapshot-demo-material-{uuid.uuid4().hex[:8]}",
+        name="产品 Demo 资料",
+        material_type="script",
+        purpose="company_product_demo",
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    version = SalesTrainerMaterialVersion(
+        version_id=str(uuid.uuid4()),
+        material_id=material.material_id,
+        version_label="v2026.07",
+        title="产品 Demo 资料 2026-07",
+        file_name="demo.pdf",
+        content_type="application/pdf",
+        file_size_bytes=100,
+        storage_key="/tmp/demo.pdf",
+        status="published",
+        created_by=admin.user_id,
+        published_by=admin.user_id,
+    )
+    material.current_version_id = version.version_id
+    test_db.add_all([admin, learner, prompt, unit, material, version])
     await test_db.commit()
+    await _publish_audio_path_for_unit(
+        test_db,
+        actor=admin,
+        unit=unit,
+        prompt=prompt,
+        module_key="company_product_demo",
+        scenario_key="company_product_demo",
+        material=material,
+        material_version=version,
+    )
 
     service = AudioSubmissionService(
         test_db,
@@ -1793,11 +1919,12 @@ async def test_should_score_audio_with_submission_prompt_snapshot(
     submission = await service.create_submission(
         AudioSubmissionCreate(
             unit_id=unit.unit_id,
-            purpose="general_audio_scoring",
+            purpose="company_product_demo",
             original_filename="ppt-recording.wav",
             content_type="audio/wav",
             size_bytes=1024,
             storage_key="/tmp/ppt-recording.wav",
+            confirmed_material_version_id=version.version_id,
             auto_process=False,
         ),
         actor=learner,

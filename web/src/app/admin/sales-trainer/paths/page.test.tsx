@@ -146,7 +146,7 @@ describe("SalesTrainerPathsPage", () => {
 
         expect(screen.getByRole("heading", { name: "新人训练路径配置中心" })).toBeTruthy();
         expect(screen.getByText("第一关")).toBeTruthy();
-        expect(screen.getByText("PPT 讲解录音")).toBeTruthy();
+        expect(screen.getByText("PPT 讲解")).toBeTruthy();
         expect(screen.getByText("第二关")).toBeTruthy();
         expect(screen.getByText("商务技巧新修订")).toBeTruthy();
         expect(screen.queryByText("模块二：旧商务技巧")).toBeNull();
@@ -156,28 +156,28 @@ describe("SalesTrainerPathsPage", () => {
         expect(screen.getByText("金字塔演讲")).toBeTruthy();
         expect(screen.getByText("第四关")).toBeTruthy();
         expect(screen.getByText("实时对练占位")).toBeTruthy();
-        expect(screen.getByText("学习文章：见客户前商务礼仪（1 节）")).toBeTruthy();
+        expect(screen.getByText("专题内容：见客户前商务礼仪（1 节）")).toBeTruthy();
         expect(screen.getByText("考卷：商务技巧考卷（0 题）")).toBeTruthy();
         expect(screen.getAllByText("缺少路径配置中心里的关卡配置。").length).toBeGreaterThan(0);
         expect(screen.getAllByRole("link", { name: "配置路径模块" })[0].getAttribute("href")).toBe(
             "/admin/sales-trainer/paths?module=ppt_explanation",
         );
         expect(screen.getAllByRole("link", { name: "选择评分标准" })[0].getAttribute("href")).toBe(
-            "/admin/sales-trainer/paths?module=ppt_explanation",
+            "/admin/sales-trainer/training-tasks/ppt-explanation",
         );
         expect(screen.getAllByRole("link", { name: "选择材料版本" })[0].getAttribute("href")).toBe(
-            "/admin/sales-trainer/paths?module=ppt_explanation",
+            "/admin/sales-trainer/training-tasks/ppt-explanation",
         );
         expect(
             screen.getAllByRole("link", { name: "选择材料版本" })[0].querySelector("button"),
         ).toBeNull();
-        expect(screen.getByRole("link", { name: "选择 PPT 材料" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/materials?module=ppt_explanation&purpose=ppt_pitch",
+        expect(screen.getByRole("link", { name: "治理PPT 讲解" }).getAttribute("href")).toBe(
+            "/admin/sales-trainer/training-tasks/ppt-explanation",
         );
         expect(
-            screen.getByRole("link", { name: "选择 PPT 材料" }).querySelector("button"),
+            screen.getByRole("link", { name: "治理PPT 讲解" }).querySelector("button"),
         ).toBeNull();
-        expect(screen.getByRole("link", { name: "配置商务技巧文章" }).getAttribute("href")).toBe(
+        expect(screen.getByRole("link", { name: "配置学习专题" }).getAttribute("href")).toBe(
             "/admin/sales-trainer/articles",
         );
         expect(screen.getByRole("link", { name: "查看配置健康" }).getAttribute("href")).toBe(
@@ -199,8 +199,8 @@ describe("SalesTrainerPathsPage", () => {
 
         render(<SalesTrainerPathsPage />);
 
-        expect(await screen.findByText("正在配置：PPT 讲解录音")).toBeTruthy();
-        expect(screen.getByRole("region", { name: "正在配置 PPT 讲解录音" })).toBeTruthy();
+        expect(await screen.findByText("正在配置：PPT 讲解")).toBeTruthy();
+        expect(screen.getByRole("region", { name: "正在配置 PPT 讲解" })).toBeTruthy();
     });
 
     it("keeps the configuration center visible and surfaces missing article binding content", async () => {
@@ -224,11 +224,11 @@ describe("SalesTrainerPathsPage", () => {
         expect(screen.getByText("商务技巧新修订")).toBeTruthy();
         expect(
             screen.getByText(
-                "商务技巧文章绑定状态读取失败：当前路径配置绑定的商务技巧文章不在内容列表中：missing-content",
+                "学习专题内容绑定状态读取失败：当前路径配置绑定的学习专题内容不在内容列表中：missing-content",
             ),
         ).toBeTruthy();
-        expect(screen.queryByText("缺少已发布商务技巧学习文章绑定。")).toBeNull();
-        expect(screen.getByRole("link", { name: "配置商务技巧文章" }).getAttribute("href")).toBe(
+        expect(screen.queryByText("缺少已发布学习专题内容绑定。")).toBeNull();
+        expect(screen.getByRole("link", { name: "配置学习专题" }).getAttribute("href")).toBe(
             "/admin/sales-trainer/articles",
         );
     });

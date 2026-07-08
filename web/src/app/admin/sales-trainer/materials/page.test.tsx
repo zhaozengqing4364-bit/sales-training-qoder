@@ -145,7 +145,7 @@ describe("SalesTrainerMaterialsPage", () => {
 
         expect((await screen.findAllByText("公司主胶片")).length).toBeGreaterThan(0);
         expect(screen.getAllByText("已发布").length).toBeGreaterThan(0);
-        expect(screen.getAllByText("PPT 讲解录音").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("PPT 讲解").length).toBeGreaterThan(0);
         expect(screen.queryByText("ppt_pitch")).toBeNull();
         expect(screen.queryByText("published")).toBeNull();
     });
@@ -153,10 +153,10 @@ describe("SalesTrainerMaterialsPage", () => {
     it("explains the PPT material configuration flow when opened from diagnostics", async () => {
         render(<SalesTrainerMaterialsPage />);
 
-        expect(await screen.findByRole("heading", { name: "PPT 讲解录音材料配置" })).toBeTruthy();
+        expect(await screen.findByRole("heading", { name: "PPT 讲解材料配置" })).toBeTruthy();
         expect(screen.getByText("1. 新建材料主档")).toBeTruthy();
         expect(screen.getByText("2. 上传文件生成材料版本")).toBeTruthy();
-        expect(screen.getByText("3. 回到路径配置中心发布绑定")).toBeTruthy();
+        expect(screen.getByText("3. 回到训练任务发布绑定")).toBeTruthy();
         expect(await screen.findByText("上传 PPT 或文档")).toBeTruthy();
         expect(screen.queryByText("文件存储地址")).toBeNull();
         expect(screen.queryByText("Storage Key")).toBeNull();
@@ -167,9 +167,9 @@ describe("SalesTrainerMaterialsPage", () => {
             throw new Error("用途字段应该是可选择的材料用途。");
         }
         expect(purposeSelect.value).toBe("ppt_pitch");
-        expect(screen.getAllByText("PPT 讲解录音").length).toBeGreaterThan(0);
-        const pathCenterLink = screen.getByRole("link", { name: "去路径配置中心发布绑定" });
-        expect(pathCenterLink.getAttribute("href")).toBe("/admin/sales-trainer/paths?module=ppt_explanation");
+        expect(screen.getAllByText("PPT 讲解").length).toBeGreaterThan(0);
+        const pathCenterLink = screen.getByRole("link", { name: "去训练任务治理页发布绑定" });
+        expect(pathCenterLink.getAttribute("href")).toBe("/admin/sales-trainer/training-tasks/ppt-explanation");
         expect(pathCenterLink.querySelector("button")).toBeNull();
     });
 

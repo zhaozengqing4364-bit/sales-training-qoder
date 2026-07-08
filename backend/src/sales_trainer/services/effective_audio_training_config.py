@@ -16,6 +16,7 @@ class EffectiveAudioContext(TypedDict):
     path_revision_id: str | None
     path_revision_no: int | None
     module_key: str | None
+    scenario_key: str | None
     module_type: str | None
     legacy_snapshot_only: bool
 
@@ -67,6 +68,7 @@ class EffectiveAudioTrainingConfigResolver:
                         "path_revision_id": projection.revision_id,
                         "path_revision_no": projection.revision_no,
                         "module_key": config.module_key,
+                        "scenario_key": config.scenario_key,
                         "module_type": config.module_type,
                         "legacy_snapshot_only": False,
                     },
@@ -92,6 +94,7 @@ class EffectiveAudioTrainingConfigResolver:
                 "path_revision_id": None,
                 "path_revision_no": None,
                 "module_key": _legacy_unit_module_key(unit),
+                "scenario_key": _legacy_unit_scenario_key(unit),
                 "module_type": None,
                 "legacy_snapshot_only": True,
             },
@@ -107,6 +110,10 @@ def merge_audio_path_config(
     if path.scoring_prompt_id:
         audio = _dict_value(config.get("audio"))
         audio["scoring_prompt_id"] = path.scoring_prompt_id
+        config["audio"] = audio
+    if path.scenario_key:
+        audio = _dict_value(config.get("audio"))
+        audio["scenario_key"] = path.scenario_key
         config["audio"] = audio
     if path.material_id:
         materials = _dict_value(config.get("materials"))
@@ -139,3 +146,11 @@ def _legacy_unit_module_key(unit: SalesTrainerUnit) -> str | None:
     if config is not None and config.module_key:
         return config.module_key
     return str(unit.unit_id)
+
+
+def _legacy_unit_scenario_key(unit: SalesTrainerUnit) -> str | None:
+    raw_config = unit.config
+    config = path_config(raw_config) if isinstance(raw_config, dict) else None
+    if config is not None and config.scenario_key:
+        return config.scenario_key
+    return None

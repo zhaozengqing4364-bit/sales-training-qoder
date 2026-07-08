@@ -20,7 +20,14 @@ from sales_trainer.schemas import (
     NewcomerPathConfigSaveRequest,
     NewcomerPathModuleConfig,
 )
-from sales_trainer.services.path_config_models import SalesTrainerPathConfigError
+from sales_trainer.services.asset_revision_service import (
+    SalesTrainerAssetRevisionService,
+)
+from sales_trainer.services.path_config_models import (
+    NEWCOMER_PATH_LOGICAL_ID,
+    NEWCOMER_PATH_RESOURCE_TYPE,
+    SalesTrainerPathConfigError,
+)
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
 from sales_trainer.services.path_service import SalesTrainerPathService
 
@@ -278,6 +285,48 @@ async def test_should_validate_path_config_diagnostics_contract(
 
     with pytest.raises(ValidationError):
         NewcomerPathConfigResponse.model_validate(invalid_config)
+
+
+@pytest.mark.asyncio
+async def test_should_expose_legacy_active_path_key_as_canonical_for_management(
+    test_db: AsyncSession,
+) -> None:
+    admin = _admin()
+    test_db.add(admin)
+    await test_db.commit()
+
+    payload = _payload_from_modules(
+        [
+            {
+                "module_key": "business_skills",
+                "module_type": "article_exam",
+                "enabled": True,
+                "order_index": 1,
+                "title": "商务礼仪规范",
+                "completion_rule": "submitted",
+            }
+        ],
+        path_key="new_seller_modules_v1",
+    )
+    await SalesTrainerAssetRevisionService(test_db).create_published_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        payload=payload.model_dump(mode="json", exclude={"reason"}),
+        actor=admin,
+        change_class="semantic",
+        reason="模拟旧 active revision",
+    )
+    await test_db.commit()
+
+    config = await SalesTrainerPathConfigService(test_db).get_config()
+
+    assert config["source"] == "active_revision"
+    assert config["legacy_snapshot_only"] is False
+    assert config["path"]["path_key"] == NEWCOMER_PATH_LOGICAL_ID
+    assert (
+        config["active_revision_snapshot"]["payload"]["path_key"]
+        == "new_seller_modules_v1"
+    )
 
 
 @pytest.mark.asyncio

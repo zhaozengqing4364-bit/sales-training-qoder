@@ -288,7 +288,7 @@ describe("buildNewcomerConfigCenter", () => {
 
         const businessModule = center.modules.find((item) => item.moduleKey === "business_skills");
         expect(businessModule?.status).toBe("ready");
-        expect(businessModule?.bindings).toContain("学习文章：见客户前商务礼仪（1 节）");
+        expect(businessModule?.bindings).toContain("专题内容：见客户前商务礼仪（1 节）");
         expect(businessModule?.bindings).toContain("考卷：商务技巧考卷（1 题）");
     });
 
@@ -369,7 +369,7 @@ describe("buildNewcomerConfigCenter", () => {
 
         const businessModule = center.modules.find((item) => item.moduleKey === "business_skills");
         expect(businessModule?.status).toBe("warning");
-        expect(businessModule?.bindings).toContain("学习文章：见客户前商务礼仪（1 节）");
+        expect(businessModule?.bindings).toContain("专题内容：见客户前商务礼仪（1 节）");
         expect(businessModule?.issues.map((issue) => issue.code)).toContain("article_binding_unavailable");
         expect(businessModule?.issues.find((issue) => issue.code === "article_binding_unavailable")?.message).toContain(
             "trace-bind-403",

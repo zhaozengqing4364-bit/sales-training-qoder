@@ -4,6 +4,10 @@ import type {
     SalesTrainerUnit,
 } from "@/lib/api/types";
 import { NEWCOMER_TRAINING_PATH_KEY } from "@/lib/sales-trainer/module-path";
+import {
+    AUDIO_EVALUATION_SCENARIOS,
+    type AudioEvaluationModuleKey,
+} from "@/lib/sales-trainer/audio-evaluation-scenarios";
 
 type TemplateContext = {
     readonly materials: readonly SalesTrainerMaterial[];
@@ -16,7 +20,8 @@ type AudioModuleTemplate = {
     readonly description: string;
     readonly levelDescription: string;
     readonly levelTitle: string;
-    readonly moduleKey: "ppt_explanation" | "elevator_pitch";
+    readonly materialRequired: boolean;
+    readonly moduleKey: AudioEvaluationModuleKey;
     readonly moduleType: "audio_scoring" | "audio_scoring_group";
     readonly name: string;
     readonly orderIndex: number;
@@ -26,35 +31,21 @@ type AudioModuleTemplate = {
     readonly taskBriefTitle: string;
 };
 
-const PPT_EXPLANATION_TEMPLATE: AudioModuleTemplate = {
-    audioPurpose: "ppt_pitch",
-    description: "学习并讲解当前 PPT 材料，上传录音后由 AI 转写和评分。",
-    levelDescription: "确认最新 PPT 材料后完成讲解录音。",
-    levelTitle: "第一关：PPT 讲解录音",
-    moduleKey: "ppt_explanation",
-    moduleType: "audio_scoring",
-    name: "第一关：PPT 讲解录音",
-    orderIndex: 1,
-    primaryActionLabel: "上传讲解录音",
-    taskBriefPurpose: "让新人先掌握公司介绍、产品价值和客户沟通结构。",
-    taskBriefScenario: "面向首次见客户前的内部演练，按最新 PPT 材料完成讲解。",
-    taskBriefTitle: "PPT 讲解录音",
-};
-
-const ELEVATOR_PITCH_TEMPLATE: AudioModuleTemplate = {
-    audioPurpose: "elevator_pitch",
-    description: "配置金字塔演讲录音任务，学员按后台材料与时长要求上传演讲录音。",
-    levelDescription: "按配置的金字塔演讲材料和时长要求完成录音。",
-    levelTitle: "第三关：金字塔演讲",
-    moduleKey: "elevator_pitch",
-    moduleType: "audio_scoring_group",
-    name: "第三关：金字塔演讲",
-    orderIndex: 3,
-    primaryActionLabel: "上传金字塔演讲录音",
-    taskBriefPurpose: "训练新人用短时间讲清公司、产品价值和下一步邀约。",
-    taskBriefScenario: "客户给你一段有限时间介绍机会，需要按金字塔结构完成清晰、有重点的价值说明。",
-    taskBriefTitle: "金字塔演讲录音",
-};
+const AUDIO_MODULE_TEMPLATES = AUDIO_EVALUATION_SCENARIOS.map((scenario) => ({
+    audioPurpose: scenario.purposeKey,
+    description: scenario.description,
+    levelDescription: scenario.learnerPreview,
+    levelTitle: `${scenario.orderLabel}：${scenario.title}`,
+    materialRequired: scenario.materialRequired,
+    moduleKey: scenario.moduleKey,
+    moduleType: scenario.moduleType,
+    name: `${scenario.orderLabel}：${scenario.title}`,
+    orderIndex: scenario.orderIndex,
+    primaryActionLabel: scenario.primaryActionLabel,
+    taskBriefPurpose: scenario.taskBriefPurpose,
+    taskBriefScenario: scenario.taskBriefScenario,
+    taskBriefTitle: scenario.taskBriefTitle,
+})) satisfies readonly AudioModuleTemplate[];
 
 export function buildUnitTemplateForModule({
     materials,
@@ -85,6 +76,7 @@ export function buildUnitTemplateForModule({
             audio: {
                 scoring_prompt_id: promptId,
                 purpose: template.audioPurpose,
+                scenario_key: template.moduleKey,
             },
             task_brief: {
                 enabled: true,
@@ -92,7 +84,7 @@ export function buildUnitTemplateForModule({
                 purpose: template.taskBriefPurpose,
                 scenario: template.taskBriefScenario,
             },
-            ...(materialId
+            ...(materialId && template.materialRequired
                 ? {
                       materials: {
                           require_latest_confirmation: true,
@@ -112,6 +104,7 @@ export function buildUnitTemplateForModule({
                 enabled: true,
                 path_key: NEWCOMER_TRAINING_PATH_KEY,
                 module_key: template.moduleKey,
+                scenario_key: template.moduleKey,
                 module_type: template.moduleType,
                 path_title: "新人训练路径",
                 level_title: template.levelTitle,
@@ -133,12 +126,5 @@ export function buildUnitTemplateForModule({
 }
 
 function templateForModule(moduleKey: string | null): AudioModuleTemplate | null {
-    switch (moduleKey) {
-        case "ppt_explanation":
-            return PPT_EXPLANATION_TEMPLATE;
-        case "elevator_pitch":
-            return ELEVATOR_PITCH_TEMPLATE;
-        default:
-            return null;
-    }
+    return AUDIO_MODULE_TEMPLATES.find((template) => template.moduleKey === moduleKey) ?? null;
 }

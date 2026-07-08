@@ -131,5 +131,5 @@ function boundArticleLoadErrorFromPathConfig(
     if (contents.some((item) => item.learning_content_id === boundArticleId)) {
         return null;
     }
-    return `当前路径配置绑定的商务技巧文章不在内容列表中：${boundArticleId}`;
+    return `当前路径配置绑定的学习专题内容不在内容列表中：${boundArticleId}`;
 }

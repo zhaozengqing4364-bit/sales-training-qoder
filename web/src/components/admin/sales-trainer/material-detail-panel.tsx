@@ -87,7 +87,7 @@ function MaterialOverviewCard({ selectedMaterial }: { readonly selectedMaterial:
                 </div>
             ) : (
                 <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    该材料还没有发布版本，不能绑定到学员 PPT 演练任务。
+                    该材料还没有发布版本，不能绑定到学员训练任务。
                 </div>
             )}
         </GlassCard>

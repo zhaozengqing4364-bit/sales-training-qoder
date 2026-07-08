@@ -13,7 +13,11 @@ import {
     appendAudioIssues,
     audioBindings,
 } from "./config-center-audio";
-import { MODULE_DEFINITIONS } from "./config-center-definitions";
+import {
+    CORE_MODULE_DEFINITIONS,
+    MODULE_DEFINITIONS,
+} from "./config-center-definitions";
+import { isAudioEvaluationModuleKey } from "./audio-evaluation-scenarios";
 import type {
     ModuleDefinition,
     NewcomerConfigCenterInput,
@@ -92,7 +96,7 @@ function buildModuleSummary(
 function orderedDefinitions(input: NewcomerConfigCenterInput): readonly ModuleDefinition[] {
     const modules = input.pathConfig?.path.modules ?? [];
     if (modules.length === 0) {
-        return MODULE_DEFINITIONS;
+        return CORE_MODULE_DEFINITIONS;
     }
     const definitionByKey = new Map<NewcomerConfigModuleKey, ModuleDefinition>(
         [...MODULE_DEFINITIONS, REALTIME_ROLEPLAY_DEFINITION].map((definition) => [
@@ -108,7 +112,7 @@ function orderedDefinitions(input: NewcomerConfigCenterInput): readonly ModuleDe
         .map((module) => definitionByKey.get(module.module_key))
         .filter((definition): definition is ModuleDefinition => Boolean(definition));
     const configuredKeys = new Set(configured.map((definition) => definition.moduleKey));
-    const remaining = MODULE_DEFINITIONS.filter((definition) => {
+    const remaining = CORE_MODULE_DEFINITIONS.filter((definition) => {
         if (definition.moduleKey === "realtime_roleplay_placeholder" && configuredKeys.has("realtime_roleplay")) {
             return false;
         }
@@ -184,7 +188,7 @@ function moduleIssues(
             `/admin/sales-trainer/paths?module=${moduleKey}`,
         ));
     }
-    if (moduleKey === "ppt_explanation" || moduleKey === "elevator_pitch") {
+    if (isAudioEvaluationModuleKey(moduleKey)) {
         appendAudioIssues(moduleKey, issues, units, input, pathModule);
     }
     if (moduleKey === "business_skills") {
@@ -206,14 +210,14 @@ function appendBusinessIssues(
     if (input.boundArticleLoadError) {
         issues.push(issue(
             "article_binding_unavailable",
-            `商务技巧文章绑定状态读取失败：${input.boundArticleLoadError}`,
+            `学习专题内容绑定状态读取失败：${input.boundArticleLoadError}`,
             "/admin/sales-trainer/articles",
         ));
     }
     if (!article && !input.boundArticleLoadError) {
-        issues.push(issue("article_missing", "缺少已发布商务技巧学习文章绑定。", "/admin/sales-trainer/articles"));
+        issues.push(issue("article_missing", "缺少已发布学习专题内容绑定。", "/admin/sales-trainer/articles"));
     } else if (article && article.chapters.length === 0) {
-        issues.push(issue("article_chapters_missing", "商务技巧文章还没有学习章节。", "/admin/sales-trainer/articles"));
+        issues.push(issue("article_chapters_missing", "学习专题内容还没有学习章节。", "/admin/sales-trainer/articles"));
     }
     const paperIds = new Set(units.map((unit) => unit.config.path?.exam_paper_id).filter(Boolean));
     const configuredPaperId = pathModule?.exam_paper_id ?? null;
@@ -221,7 +225,7 @@ function appendBusinessIssues(
         || [...paperIds].some((id) => input.papers.some((paper) => paper.paper_id === id && paper.status === "published"))
         || input.papers.some((paper) => paper.module_key === "business_skills" && paper.status === "published");
     if (!paperOk) {
-        issues.push(issue("paper_missing", "缺少已发布商务技巧考卷绑定。", "/admin/sales-trainer/papers"));
+        issues.push(issue("paper_missing", "缺少已发布学习专题考卷绑定。", "/admin/sales-trainer/papers"));
     }
 }
 
@@ -235,7 +239,7 @@ function moduleBindings(
         const article = businessArticle(input, pathModule);
         const paper = businessPaper(input, pathModule, units);
         return [
-            article ? `学习文章：${article.title}（${article.chapters.length} 节）` : "学习文章：未绑定",
+            article ? `专题内容：${article.title}（${article.chapters.length} 节）` : "专题内容：未绑定",
             paper ? `考卷：${paper.title}（${paper.questions.length} 题）` : "考卷：未绑定",
         ];
     }

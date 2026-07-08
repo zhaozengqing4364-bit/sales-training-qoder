@@ -50,6 +50,12 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
         icon: LayoutDashboard,
         href: "/admin/sales-trainer",
     },
+    trainingTasks: {
+        key: "trainingTasks",
+        label: "训练任务",
+        icon: Target,
+        href: "/admin/sales-trainer/training-tasks",
+    },
     units: {
         key: "units",
         label: "模块单元",
@@ -82,7 +88,7 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
     },
     articles: {
         key: "articles",
-        label: "学习文章",
+        label: "学习专题",
         icon: BookOpen,
         href: "/admin/sales-trainer/articles",
     },
@@ -144,6 +150,7 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
 
 export const SALES_TRAINER_ADMIN_CONTENT_NAV_ITEMS = [
     SALES_TRAINER_ADMIN_ROUTES.workbench,
+    SALES_TRAINER_ADMIN_ROUTES.trainingTasks,
     SALES_TRAINER_ADMIN_ROUTES.units,
     SALES_TRAINER_ADMIN_ROUTES.paths,
     SALES_TRAINER_ADMIN_ROUTES.aiCoach,
@@ -183,7 +190,11 @@ export const SALES_TRAINER_ADMIN_CAPABILITY_NAV = [
     },
     {
         capability: "manage_modules",
-        items: [SALES_TRAINER_ADMIN_ROUTES.units, SALES_TRAINER_ADMIN_ROUTES.paths],
+        items: [
+            SALES_TRAINER_ADMIN_ROUTES.trainingTasks,
+            SALES_TRAINER_ADMIN_ROUTES.units,
+            SALES_TRAINER_ADMIN_ROUTES.paths,
+        ],
     },
     {
         capability: "manage_prompts",
@@ -297,6 +308,11 @@ export function isSalesTrainerAdminPathAllowedForCapabilities(
 
 export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminContextNavGroup[] = [
     {
+        root: "/admin/sales-trainer/training-tasks",
+        label: "训练任务",
+        items: [SALES_TRAINER_ADMIN_ROUTES.trainingTasks],
+    },
+    {
         root: "/admin/sales-trainer/units",
         label: "模块单元",
         items: [SALES_TRAINER_ADMIN_ROUTES.units],
@@ -357,7 +373,7 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
     },
     {
         root: "/admin/sales-trainer/articles",
-        label: "学习文章",
+        label: "学习专题",
         items: [
             {
                 key: "articleBindings",

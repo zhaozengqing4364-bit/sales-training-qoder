@@ -69,6 +69,7 @@ class SalesTrainerPathConfig(BaseModel):
     enabled: bool = False
     path_key: str = Field("default", min_length=1, max_length=80)
     module_key: str | None = Field(None, min_length=1, max_length=80)
+    scenario_key: str | None = Field(None, min_length=1, max_length=80)
     module_type: SalesTrainerPathModuleType | None = None
     path_title: str | None = Field(None, max_length=120)
     goal_title: str | None = Field(None, max_length=200)
@@ -1366,6 +1367,7 @@ class NewcomerPathModuleConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     module_key: str = Field(..., min_length=1, max_length=80)
+    scenario_key: str | None = Field(None, min_length=1, max_length=80)
     module_type: Literal[
         "audio_scoring",
         "article_exam",

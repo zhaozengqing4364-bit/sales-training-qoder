@@ -2,6 +2,10 @@ import type {
     NewcomerConfigModuleSummary,
     NewcomerConfigStatus,
 } from "@/lib/sales-trainer/config-center";
+import {
+    audioEvaluationScenarioForModule,
+    isAudioEvaluationModuleKey,
+} from "@/lib/sales-trainer/audio-evaluation-scenarios";
 
 export const STATUS_COPY: Record<
     NewcomerConfigStatus,
@@ -31,7 +35,7 @@ export function issueActionLabel(code: string): string {
         return "配置考卷";
     }
     if (code === "article_missing" || code === "article_chapters_missing") {
-        return "配置学习文章";
+        return "配置专题内容";
     }
     if (code === "runtime_binding_missing") {
         return "配置运行时绑定";
@@ -44,13 +48,10 @@ export function issueActionLabel(code: string): string {
 
 export function remediationLabel(module: NewcomerConfigModuleSummary): string {
     if (module.moduleKey === "business_skills") {
-        return "配置学习文章";
+        return "配置学习专题";
     }
-    if (module.moduleKey === "ppt_explanation") {
-        return "选择 PPT 材料";
-    }
-    if (module.moduleKey === "elevator_pitch") {
-        return "选择金字塔演讲材料";
+    if (isAudioEvaluationModuleKey(module.moduleKey)) {
+        return `治理${audioEvaluationScenarioForModule(module.moduleKey).title}`;
     }
     if (module.moduleKey === "realtime_roleplay") {
         return "配置实时对练";

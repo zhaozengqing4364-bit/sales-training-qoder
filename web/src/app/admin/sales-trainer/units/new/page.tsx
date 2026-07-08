@@ -10,6 +10,7 @@ import { SalesTrainerUnitForm } from "@/components/admin/sales-trainer/unit-form
 import { buildUnitTemplateForModule } from "@/components/admin/sales-trainer/unit-module-template";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { audioEvaluationScenarioForSlug } from "@/lib/sales-trainer/audio-evaluation-scenarios";
 import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 import { NEWCOMER_QUESTION_TAG } from "@/lib/sales-trainer/question-scope";
 import type {
@@ -25,7 +26,8 @@ export default function NewSalesTrainerUnitPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { error: showError, success: showSuccess } = useToast();
-    const moduleKey = searchParams.get("module");
+    const scenario = audioEvaluationScenarioForSlug(searchParams.get("scenario"));
+    const moduleKey = scenario?.moduleKey ?? searchParams.get("module");
     const [questions, setQuestions] = useState<SalesTrainerQuestion[]>([]);
     const [prompts, setPrompts] = useState<SalesTrainerAudioScorePrompt[]>([]);
     const [materials, setMaterials] = useState<SalesTrainerMaterial[]>([]);

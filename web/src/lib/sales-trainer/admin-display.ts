@@ -5,6 +5,7 @@ import type {
     SalesTrainerUnit,
     SalesTrainerUnitType,
 } from "@/lib/api/types";
+import { AUDIO_EVALUATION_SCENARIOS } from "./audio-evaluation-scenarios";
 
 const LIFECYCLE_STATUS_LABELS = {
     draft: "草稿",
@@ -40,10 +41,12 @@ const UNIT_TYPE_LABELS = {
 >;
 
 export const TRAINING_PURPOSE_OPTIONS = [
-    { value: "ppt_pitch", label: "PPT 讲解录音" },
+    ...AUDIO_EVALUATION_SCENARIOS.map((scenario) => ({
+        value: scenario.purposeKey,
+        label: scenario.title,
+    })),
     { value: "general_audio_scoring", label: "通用录音评分" },
-    { value: "business_skills", label: "商务技巧" },
-    { value: "elevator_pitch", label: "金字塔演讲" },
+    { value: "business_skills", label: "学习专题" },
 ] as const;
 
 const TRAINING_PURPOSE_LABELS: Readonly<Record<string, string>> = Object.fromEntries(

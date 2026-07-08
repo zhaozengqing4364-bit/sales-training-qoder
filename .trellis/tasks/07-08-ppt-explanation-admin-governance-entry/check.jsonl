@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "确认后端质量检查入口与新增录音评测场景规范。"}
+{"file": ".trellis/spec/backend/sales-trainer-audio-evaluation-scenarios.md", "reason": "冻结场景 registry、材料策略和 path scenario_key 兼容要求。"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "确认前端类型检查、Vitest 和 admin 页面质量检查入口。"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "核对训练任务后台按用户意图拆页，不在列表页堆叠创建/编辑。"}

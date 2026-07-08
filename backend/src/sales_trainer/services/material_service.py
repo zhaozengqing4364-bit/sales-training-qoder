@@ -38,6 +38,9 @@ from sales_trainer.schemas import (
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
+from sales_trainer.services.audio_evaluation_scenarios import (
+    resolve_audio_evaluation_scenario_from_config,
+)
 from sales_trainer.services.effective_audio_training_config import (
     merge_audio_path_config,
 )
@@ -965,9 +968,8 @@ def validate_unit_material_and_brief_config(config: dict[str, Any]) -> None:
                 "训练任务简报配置不合法。",
                 status_code=422,
             ) from exc
-    raw_audio = config.get("audio") or {}
-    purpose = raw_audio.get("purpose") if isinstance(raw_audio, dict) else None
-    if purpose == "ppt_pitch":
+    scenario = resolve_audio_evaluation_scenario_from_config(config)
+    if scenario is not None and scenario.requires_confirmed_material:
         materials = _validate_materials_config(config)
         required_bindings = [
             binding
@@ -976,8 +978,8 @@ def validate_unit_material_and_brief_config(config: dict[str, Any]) -> None:
         ]
         if not required_bindings:
             raise MaterialServiceError(
-                "[PPT_MATERIAL_BINDING_REQUIRED]",
-                "PPT 演练任务必须绑定至少一个需要学员确认的训练材料。",
+                scenario.material_error_code,
+                f"{scenario.display_name}任务必须绑定至少一个需要学员确认的训练材料。",
                 status_code=422,
             )
 

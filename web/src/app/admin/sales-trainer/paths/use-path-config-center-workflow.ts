@@ -5,9 +5,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import { buildNewcomerConfigCenter } from "@/lib/sales-trainer/config-center";
 import {
+    type AudioEditableModuleKey,
     type PathAudioBindingValue,
+    type PathAudioScenarioValue,
     type PathBusinessBindingValue,
     updatePathAudioBinding,
+    updatePathAudioScenario,
     updatePathBusinessBinding,
 } from "@/lib/sales-trainer/path-config-editing";
 
@@ -74,7 +77,7 @@ export function usePathConfigCenterWorkflow(options: { enabled?: boolean } = {})
     }, [enabled]);
 
     const updateAudioBinding = useCallback((
-        moduleKey: "ppt_explanation" | "elevator_pitch",
+        moduleKey: AudioEditableModuleKey,
         value: PathAudioBindingValue,
     ) => {
         setData((current) => {
@@ -86,6 +89,24 @@ export function usePathConfigCenterWorkflow(options: { enabled?: boolean } = {})
                 pathConfig: {
                     ...current.pathConfig,
                     path: updatePathAudioBinding(current.pathConfig.path, moduleKey, value),
+                },
+            };
+        });
+    }, []);
+
+    const updateAudioScenario = useCallback((
+        moduleKey: AudioEditableModuleKey,
+        value: PathAudioScenarioValue,
+    ) => {
+        setData((current) => {
+            if (!current?.pathConfig) {
+                return current;
+            }
+            return {
+                ...current,
+                pathConfig: {
+                    ...current.pathConfig,
+                    path: updatePathAudioScenario(current.pathConfig.path, moduleKey, value),
                 },
             };
         });
@@ -193,6 +214,7 @@ export function usePathConfigCenterWorkflow(options: { enabled?: boolean } = {})
         saveCurrentRevision,
         setChangeReason,
         updateAudioBinding,
+        updateAudioScenario,
         updateBusinessBinding,
     };
 }

@@ -90,12 +90,12 @@ export function PathConfigBusinessBindingEditor({
                 <div>
                     <p className="text-sm font-black text-slate-900">在配置中心直接绑定学习与考试</p>
                     <p className="mt-1 text-sm text-slate-500">
-                        学员端按这里绑定的文章学习，再进入绑定考卷考试。
+                        学员端按这里绑定的专题内容学习，再进入绑定考卷考试。
                     </p>
                 </div>
                 <div className="flex gap-3 text-sm font-semibold text-blue-700">
                     <Link href="/admin/sales-trainer/articles" className="underline">
-                        管理文章
+                        管理专题内容
                     </Link>
                     <Link href="/admin/sales-trainer/papers" className="underline">
                         管理考卷
@@ -105,7 +105,7 @@ export function PathConfigBusinessBindingEditor({
             <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700" htmlFor="business-skills-learning-content">
-                        学习文章（{moduleTitle}）
+                        专题内容（{moduleTitle}）
                     </label>
                     <select
                         id="business-skills-learning-content"
@@ -114,7 +114,7 @@ export function PathConfigBusinessBindingEditor({
                         disabled={disabled}
                         className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm"
                     >
-                        <option value="">请选择已发布学习文章</option>
+                        <option value="">请选择已发布专题内容</option>
                         {articles.map((article) => (
                             <option key={article.learning_content_id} value={article.learning_content_id}>
                                 {article.title} · {article.chapters.length} 节
@@ -145,7 +145,7 @@ export function PathConfigBusinessBindingEditor({
 
             <div className="border-t border-slate-100 pt-4">
                 <div className="flex flex-col gap-1">
-                    <p className="text-sm font-black text-slate-900">商务礼仪 7 个训练小单元</p>
+                    <p className="text-sm font-black text-slate-900">当前专题的训练小单元</p>
                     <p className="text-sm text-slate-500">
                         小单元顺序、标题、说明、章节绑定和开放规则会保存到新人训练路径待发布修订。
                     </p>

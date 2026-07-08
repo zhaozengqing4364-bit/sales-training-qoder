@@ -34,7 +34,7 @@ describe("sales trainer admin display helpers", () => {
     });
 
     it("maps score prompt purpose codes to business labels", () => {
-        expect(formatScorePromptPurpose("ppt_pitch")).toBe("PPT 讲解录音");
+        expect(formatScorePromptPurpose("ppt_pitch")).toBe("PPT 讲解");
         expect(formatScorePromptPurpose("general_audio_scoring")).toBe("通用录音评分");
         expect(formatScorePromptPurpose("unknown_purpose")).toBe("自定义用途");
     });

@@ -4643,6 +4643,7 @@ export interface SalesTrainerUnitConfig {
         scoring_prompt_id?: string;
         pass_threshold?: number;
         purpose?: string;
+        scenario_key?: string | null;
         [key: string]: unknown;
     };
     task_brief?: {
@@ -4663,6 +4664,7 @@ export interface SalesTrainerUnitConfig {
         enabled?: boolean;
         path_key?: string;
         module_key?: string | null;
+        scenario_key?: string | null;
         module_type?: NewcomerTrainingModuleType | null;
         path_title?: string | null;
         goal_title?: string | null;
@@ -5571,6 +5573,7 @@ export interface NewcomerTrainingModuleValidation {
 export interface NewcomerTrainingPathModuleConfig {
     path_key: string;
     module_key: string;
+    scenario_key?: string | null;
     display_name: string;
     description?: string | null;
     order_index: number;
@@ -5645,6 +5648,7 @@ export interface NewcomerRealtimeRuntimeBinding {
 
 export interface NewcomerPathModuleConfig {
     readonly module_key: string;
+    readonly scenario_key?: string | null;
     readonly module_type: NewcomerPathModuleType;
     readonly enabled: boolean;
     readonly order_index: number;

@@ -25,6 +25,6 @@ describe("UnitAudioScoringSection", () => {
             throw new Error("录音用途应该使用业务下拉配置。");
         }
         expect(purposeSelect.value).toBe("ppt_pitch");
-        expect(screen.getByText("PPT 讲解录音")).toBeTruthy();
+        expect(screen.getByText("PPT 讲解")).toBeTruthy();
     });
 });
