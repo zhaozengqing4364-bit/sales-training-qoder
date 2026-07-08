@@ -245,3 +245,44 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: 新人训练路径 Playwright 审计治理闭环
+
+**Date**: 2026-07-08
+**Task**: 新人训练路径 Playwright 审计治理闭环
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+完成新人训练路径前台与后台管理专项 Playwright 审计治理：修复 TrainingJourney 非阻塞专题、analytics 模块身份、学员录音结果内部字段泄露和 seed 音频回放；补齐 API 契约、审计矩阵、归档备注、lint/build/Playwright 验证和归档证据。
+
+### Main Changes
+
+- 审计范围限定新人训练路径前台与后台管理端，不触碰 `/training/sales`、`/practice/*`、`/admin/business-rules/sales-trainer-phase2`。
+- 代码修复提交：`d38bda36 feat: audit and harden newcomer training governance`。
+- 归档提交：`baa86fdf chore(task): archive 07-08-newcomer-path-playwright-audit-governance`。
+- 闭环补充提交：`f32f0de3 docs: close newcomer training governance evidence`。
+- 验证覆盖：backend TrainingJourney 单测、web TypeScript、lint、生产构建、录音结果页/analytics Vitest、前后台专项 Playwright、闭环 smoke。
+- 归档证据位于 `.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/`。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d38bda36` | (see git log) |
+| `baa86fdf` | (see git log) |
+| `f32f0de3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
