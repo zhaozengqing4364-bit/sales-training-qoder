@@ -51,6 +51,7 @@ function formatPassedLabel(submission: SalesTrainerAudioSubmission): string {
 export default function SalesTrainerAudioSubmissionDetailPage() {
     const params = useParams<{ submissionId: string }>();
     const pathname = usePathname();
+    const isAudioManagementPath = pathname.startsWith("/admin/sales-trainer/audio");
     const { error: showError, success: showSuccess } = useToast();
     const [submission, setSubmission] = useState<SalesTrainerAudioSubmission | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -141,7 +142,9 @@ export default function SalesTrainerAudioSubmissionDetailPage() {
 
     return (
         <AdminDetailShell
-            backHref="/admin/sales-trainer/audio-submissions"
+            backHref={isAudioManagementPath
+                ? "/admin/sales-trainer/audio/submissions"
+                : "/admin/sales-trainer/audio-submissions"}
             title={submission ? submission.original_filename : "录音详情"}
             description="提供授权文件访问、转写结果、评分结果，以及后台重试操作。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}

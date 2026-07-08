@@ -18,7 +18,7 @@ const {
 }));
 
 vi.mock("next/navigation", () => ({
-    usePathname: () => "/admin/sales-trainer/score-standards",
+    usePathname: () => "/admin/sales-trainer/audio/score-standards",
     useRouter: () => ({ push: pushMock }),
 }));
 

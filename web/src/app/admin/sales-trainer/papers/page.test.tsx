@@ -29,7 +29,7 @@ const {
 });
 
 vi.mock("next/navigation", () => ({
-    usePathname: () => "/admin/sales-trainer/papers",
+    usePathname: () => "/admin/sales-trainer/learning-topics/papers",
 }));
 
 vi.mock("@/components/ui/toast", () => ({
@@ -207,17 +207,17 @@ describe("NewcomerPapersPage", () => {
         expect(await screen.findByText("商务礼仪入门考卷")).toBeTruthy();
         expect(await screen.findByRole("link", { name: "编辑草稿" })).toBeTruthy();
         expect(screen.getByRole("link", { name: "新建考卷" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/papers/new",
+            "/admin/sales-trainer/learning-topics/papers/new",
         );
         expect(screen.getByRole("link", { name: "编辑草稿" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/papers/paper-1/edit",
+            "/admin/sales-trainer/learning-topics/papers/paper-1/edit",
         );
         expect(screen.getByRole("link", { name: "编辑" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/papers/paper-2/edit",
+            "/admin/sales-trainer/learning-topics/papers/paper-2/edit",
         );
         expect(screen.queryByRole("button", { name: "复制草稿" })).toBeNull();
         expect(screen.getAllByRole("button", { name: "发布并生效" }).length).toBe(2);
-        expect(screen.getAllByText("商务技巧 · 0 题")).toHaveLength(2);
+        expect(screen.getAllByText("学习专题 · 0 题")).toHaveLength(2);
         expect(screen.getByText("草稿")).toBeTruthy();
         expect(screen.queryByText("business-paper")).toBeNull();
         expect(screen.queryByText("考卷标识")).toBeNull();
@@ -280,7 +280,7 @@ describe("NewcomerPapersPage", () => {
             capabilities: {
                 admin_full_access: false,
                 manage_content: false,
-                manage_questions: true,
+                manage_questions: false,
                 manage_modules: false,
                 manage_prompts: false,
                 view_records: false,
@@ -290,12 +290,12 @@ describe("NewcomerPapersPage", () => {
                 view_logs: false,
                 view_settings: false,
             },
-            capability_keys: ["manage_questions"],
+            capability_keys: [],
         });
 
         render(<NewcomerPapersPage />);
 
-        expect(await screen.findByText("考卷管理权限不足")).toBeTruthy();
+        expect(await screen.findByText("学习专题考卷权限不足")).toBeTruthy();
         expect(listPapersMock).not.toHaveBeenCalled();
         expect(listPaperRevisionsMock).not.toHaveBeenCalled();
         expect(screen.queryByRole("link", { name: "新建考卷" })).toBeNull();

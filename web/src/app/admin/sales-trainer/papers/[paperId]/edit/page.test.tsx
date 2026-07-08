@@ -33,7 +33,7 @@ const {
 
 vi.mock("next/navigation", () => ({
     useParams: () => ({ paperId: "paper-1" }),
-    usePathname: () => "/admin/sales-trainer/papers/paper-1/edit",
+    usePathname: () => "/admin/sales-trainer/learning-topics/papers/paper-1/edit",
     useRouter: () => ({ push: pushMock }),
 }));
 
@@ -146,7 +146,7 @@ describe("NewcomerPaperEditPage", () => {
 
         render(<NewcomerPaperEditPage />);
 
-        expect(await screen.findByText("考卷管理权限不足")).toBeTruthy();
+        expect(await screen.findByText("学习专题考卷权限不足")).toBeTruthy();
         expect(listPapersMock).not.toHaveBeenCalled();
         expect(listQuestionsMock).not.toHaveBeenCalled();
         expect(updatePaperMock).not.toHaveBeenCalled();
@@ -186,7 +186,7 @@ describe("NewcomerPaperEditPage", () => {
             });
         });
         expect(toastSuccessMock).toHaveBeenCalledWith("考卷草稿已保存");
-        expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/papers");
+        expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/learning-topics/papers");
     });
 
     it("saves a published paper as a future revision instead of blocking editing", async () => {

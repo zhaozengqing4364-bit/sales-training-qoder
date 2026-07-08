@@ -20,6 +20,7 @@ export default function EditSalesTrainerScoreStandardPage() {
     const params = useParams<{ id: string }>();
     const pathname = usePathname();
     const toast = useToast();
+    const isAudioManagementPath = pathname.startsWith("/admin/sales-trainer/audio");
     const [items, setItems] = useState<SalesTrainerAudioScorePrompt[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -101,7 +102,9 @@ export default function EditSalesTrainerScoreStandardPage() {
 
     return (
         <AdminFormShell
-            backHref="/admin/sales-trainer/score-standards"
+            backHref={isAudioManagementPath
+                ? "/admin/sales-trainer/audio/score-standards"
+                : "/admin/sales-trainer/score-standards"}
             title={prompt ? `编辑评分标准：${prompt.name}` : "编辑评分标准"}
             description="已发布评分标准也可以直接编辑；保存会生成待发布修订，发布后只影响后续学员和后续评分。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}

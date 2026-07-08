@@ -3,7 +3,18 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, BookOpen, Plus, RefreshCcw, RotateCcw, ShieldCheck } from "lucide-react";
+import {
+    ArrowLeft,
+    BookOpen,
+    ClipboardList,
+    FileText,
+    Plus,
+    RefreshCcw,
+    RotateCcw,
+    ShieldCheck,
+    Tags,
+    UploadCloud,
+} from "lucide-react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { Button } from "@/components/ui/button";
@@ -20,6 +31,33 @@ import type {
 
 const BUSINESS_ETIQUETTE_SOURCE = "sales_trainer_business_etiquette";
 const LEGACY_BUSINESS_SKILLS_SOURCE = "sales_trainer_business_skills";
+
+const TOPIC_SUPPORT_LINKS = [
+    {
+        title: "资料导入",
+        description: "导入商务礼仪资料草稿，生成章节和训练包版本。",
+        href: "/admin/sales-trainer/learning-topics/import",
+        icon: UploadCloud,
+    },
+    {
+        title: "能力点",
+        description: "维护小单元能力点、章节绑定和达标规则。",
+        href: "/admin/sales-trainer/learning-topics/capabilities",
+        icon: Tags,
+    },
+    {
+        title: "题目",
+        description: "管理正式题库、AI 出题审核和小测预览。",
+        href: "/admin/sales-trainer/learning-topics/questions",
+        icon: FileText,
+    },
+    {
+        title: "小测/考卷",
+        description: "管理专题使用的考卷、题目组合、发布和回滚。",
+        href: "/admin/sales-trainer/learning-topics/papers",
+        icon: ClipboardList,
+    },
+] as const;
 
 function statusLabel(status: string): string {
     if (status === "published") return "已发布";
@@ -234,7 +272,7 @@ export default function BusinessEtiquetteLearningTopicPage() {
                     secondaryActions={(
                         <div className="flex flex-wrap gap-2">
                             <Button asChild variant="outline">
-                                <Link href="/admin/sales-trainer/articles">
+                                <Link href="/admin/sales-trainer/learning-topics">
                                     <ArrowLeft className="mr-2 h-4 w-4" />
                                     返回专题列表
                                 </Link>
@@ -254,7 +292,7 @@ export default function BusinessEtiquetteLearningTopicPage() {
                 <GlassCard className="space-y-4 p-6">
                     <h2 className="text-lg font-black text-slate-900">商务礼仪规范尚未生成</h2>
                     <p className="text-sm leading-6 text-slate-500">
-                        先从 active path 的 business_skills 模块生成草稿，再在这里绑定学习文章和维护小单元。
+                        先从已发布路径里的学习专题兼容模块生成草稿，再在这里绑定学习文章和维护小单元。
                     </p>
                     <Button onClick={() => void generateDraft(false)} disabled={isSubmitting}>
                         生成草稿
@@ -323,6 +361,26 @@ export default function BusinessEtiquetteLearningTopicPage() {
                             <Button variant="outline" onClick={() => void generateDraft(true)} disabled={isSubmitting}>
                                 重新从路径覆盖草稿
                             </Button>
+                        </div>
+                    </GlassCard>
+
+                    <GlassCard className="space-y-3 p-5">
+                        <h2 className="text-lg font-black text-slate-900">配套治理</h2>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {TOPIC_SUPPORT_LINKS.map((item) => {
+                                const Icon = item.icon;
+                                return (
+                                    <Link key={item.href} href={item.href}>
+                                        <div className="h-full rounded-xl border border-slate-100 bg-slate-50 p-3 transition hover:border-slate-300 hover:bg-white">
+                                            <div className="flex items-center gap-2">
+                                                <Icon className="h-4 w-4 text-slate-500" aria-hidden />
+                                                <p className="font-bold text-slate-900">{item.title}</p>
+                                            </div>
+                                            <p className="mt-2 text-xs leading-5 text-slate-500">{item.description}</p>
+                                        </div>
+                                    </Link>
+                                );
+                            })}
                         </div>
                     </GlassCard>
 

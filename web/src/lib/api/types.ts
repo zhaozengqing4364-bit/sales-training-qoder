@@ -6208,7 +6208,7 @@ export interface NewcomerLearningTopicsConfigResponse {
     readonly source: "active_revision" | "not_configured";
     readonly fallback_reason?: string | null;
     readonly legacy_snapshot_only: false;
-    readonly management_entry: "/admin/sales-trainer/articles";
+    readonly management_entry: "/admin/sales-trainer/learning-topics";
     readonly permission: "sales_trainer.manage_modules";
     readonly payload: NewcomerLearningTopicsPayload;
     readonly active_revision_id: string | null;

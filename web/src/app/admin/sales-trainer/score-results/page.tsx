@@ -79,6 +79,7 @@ function getAudioScoreVariant(item: SalesTrainerAudioScoreResult): "green" | "or
 export default function SalesTrainerScoreResultsPage() {
     const pathname = usePathname();
     const router = useRouter();
+    const isAudioManagementPath = pathname.startsWith("/admin/sales-trainer/audio");
     const [quizItems, setQuizItems] = useState<SalesTrainerQuizAttempt[]>([]);
     const [scoreItems, setScoreItems] = useState<SalesTrainerAudioScoreResult[]>([]);
     const [quizUserId, setQuizUserId] = useState("");
@@ -108,7 +109,7 @@ export default function SalesTrainerScoreResultsPage() {
     }, []);
 
     const loadQuizAttempts = useCallback(async (filters?: { user_id?: string; unit_id?: string }) => {
-        if (!canAccessResults) {
+        if (!canAccessResults || isAudioManagementPath) {
             return;
         }
         setIsQuizLoading(true);
@@ -126,7 +127,7 @@ export default function SalesTrainerScoreResultsPage() {
         } finally {
             setIsQuizLoading(false);
         }
-    }, [canAccessResults]);
+    }, [canAccessResults, isAudioManagementPath]);
 
     const loadScoreResults = useCallback(async (filters?: { user_id?: string; submission_id?: string }) => {
         if (!canAccessResults) {
@@ -166,9 +167,15 @@ export default function SalesTrainerScoreResultsPage() {
             setIsScoreLoading(false);
             return;
         }
-        void loadQuizAttempts();
+        if (isAudioManagementPath) {
+            setQuizItems([]);
+            setQuizError(null);
+            setIsQuizLoading(false);
+        } else {
+            void loadQuizAttempts();
+        }
         void loadScoreResults();
-    }, [canAccessResults, isCapabilityLoading, loadQuizAttempts, loadScoreResults]);
+    }, [canAccessResults, isAudioManagementPath, isCapabilityLoading, loadQuizAttempts, loadScoreResults]);
 
     function applyQuizFilters(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -202,8 +209,10 @@ export default function SalesTrainerScoreResultsPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="新人训练路径学员结果"
-                    description="统一查看做题结果和录音评分结果，核对题目快照、学员答案、AI 反馈和评分结论。"
+                    title={isAudioManagementPath ? "录音评分结果" : "新人训练路径学员结果"}
+                    description={isAudioManagementPath
+                        ? "查看录音评分结果，核对录音快照、AI 反馈和评分结论；小测结果可在学习专题和训练记录中追溯。"
+                        : "统一查看做题结果和录音评分结果，核对题目快照、学员答案、AI 反馈和评分结论。"}
                     secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
                 />
             )}
@@ -220,7 +229,8 @@ export default function SalesTrainerScoreResultsPage() {
                 />
             ) : (
                 <div className="space-y-6">
-                <GlassCard className="p-6">
+	                {!isAudioManagementPath ? (
+	                <GlassCard className="p-6">
                     <div className="mb-4">
                         <h2 className="text-lg font-bold text-slate-900">做题结果</h2>
                         <p className="mt-1 text-sm text-slate-500">查看客观题自动判分和简答题 AI 评分后的答案快照。</p>
@@ -259,9 +269,11 @@ export default function SalesTrainerScoreResultsPage() {
                             </Button>
                         </div>
                     </form>
-                </GlassCard>
+                    </GlassCard>
+                ) : null}
 
-                <GlassCard className="overflow-hidden p-0">
+                {!isAudioManagementPath ? (
+                    <GlassCard className="overflow-hidden p-0">
                     {quizError ? (
                         <div className="border-b border-red-100 bg-red-50 px-6 py-4 text-sm text-red-700">
                             {quizError}
@@ -333,7 +345,8 @@ export default function SalesTrainerScoreResultsPage() {
                             })}
                         </tbody>
                     </table>
-                </GlassCard>
+	                </GlassCard>
+	                ) : null}
 
                 <GlassCard className="p-6">
                     <div className="mb-4">
@@ -423,7 +436,7 @@ export default function SalesTrainerScoreResultsPage() {
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            onClick={() => router.push(`/admin/sales-trainer/audio-submissions/${item.submission_id}`)}
+                                            onClick={() => router.push(`/admin/sales-trainer/audio/submissions/${item.submission_id}`)}
                                         >
                                             查看录音
                                         </Button>

@@ -29,6 +29,7 @@ import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-r
 export default function SalesTrainerMaterialsPage() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
+    const isAudioManagementPath = pathname.startsWith("/admin/sales-trainer/audio");
     const toast = useToast();
     const toastError = toast.error;
     const toastSuccess = toast.success;
@@ -182,8 +183,10 @@ export default function SalesTrainerMaterialsPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="新人训练路径材料库"
-                    description="单独管理新人训练路径 PPT、逐字稿和附件版本；训练任务只绑定这里的已发布材料。"
+                    title={isAudioManagementPath ? "录音材料" : "新人训练路径材料库"}
+                    description={isAudioManagementPath
+                        ? "管理 PPT、Demo 脚本和附件版本；录音任务只绑定这里的已发布材料。"
+                        : "单独管理新人训练路径 PPT、逐字稿和附件版本；录音任务只绑定这里的已发布材料。"}
                     secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={routeAccess.capabilities} />}
                 />
             )}

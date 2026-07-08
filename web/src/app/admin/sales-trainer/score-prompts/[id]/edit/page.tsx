@@ -5,5 +5,5 @@ export default function LegacyEditSalesTrainerScorePromptPage({
 }: {
     params: { id: string };
 }) {
-    redirect(`/admin/sales-trainer/score-standards/${params.id}/edit`);
+    redirect(`/admin/sales-trainer/audio/score-standards/${params.id}/edit`);
 }

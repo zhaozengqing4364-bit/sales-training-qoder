@@ -31,6 +31,7 @@ type ConfirmState =
 export default function NewcomerPapersPage() {
     const pathname = usePathname();
     const toast = useToast();
+    const isLearningTopicsPath = pathname.startsWith("/admin/sales-trainer/learning-topics");
     const [items, setItems] = useState<NewcomerExamPaper[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -174,11 +175,15 @@ export default function NewcomerPapersPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="商务技巧考卷管理"
-                    description="按考卷管理题目组合、分值和发布状态；题目内容来自正式题目库。"
+                    title={isLearningTopicsPath ? "学习专题小测/考卷" : "学习专题考卷管理"}
+                    description={isLearningTopicsPath
+                        ? "在学习专题内管理小测和考卷，题目内容来自正式题目库，发布后只影响后续学员。"
+                        : "按学习专题考卷管理题目组合、分值和发布状态；题目内容来自正式题目库。"}
                     primaryAction={canAccessPapers ? (
                         <Button asChild>
-                            <Link href="/admin/sales-trainer/papers/new">
+                            <Link href={isLearningTopicsPath
+                                ? "/admin/sales-trainer/learning-topics/papers/new"
+                                : "/admin/sales-trainer/papers/new"}>
                                 <Plus className="mr-2 h-4 w-4" />
                                 新建考卷
                             </Link>
@@ -199,16 +204,16 @@ export default function NewcomerPapersPage() {
             />
             {isCapabilityLoading ? (
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
-                    正在校验考卷管理权限...
+                    正在校验学习专题考卷权限...
                 </div>
             ) : capabilityError || !canAccessPapers ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
                     <div className="flex items-start gap-3">
                         <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
                         <div>
-                            <h2 className="font-bold text-amber-950">考卷管理权限不足</h2>
+                            <h2 className="font-bold text-amber-950">学习专题考卷权限不足</h2>
                             <p className="mt-1 text-sm leading-6">
-                                当前页不会在权限未确认时展示考卷写入入口。请联系管理员开通内容管理权限后重试。
+                                当前页不会在权限未确认时展示考卷写入入口。请联系管理员开通学习专题或题目管理权限后重试。
                             </p>
                             {capabilityError ? (
                                 <p className="mt-2 text-sm font-medium">{capabilityError}</p>
@@ -251,7 +256,7 @@ export default function NewcomerPapersPage() {
                                 <tr key={item.paper_id} className="border-b border-slate-100 last:border-b-0">
                                     <td className="px-6 py-4">
                                         <p className="font-medium text-slate-900">{item.title}</p>
-                                        <p className="mt-1 text-xs text-slate-500">商务技巧 · {item.questions.length} 题</p>
+                                        <p className="mt-1 text-xs text-slate-500">学习专题 · {item.questions.length} 题</p>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex flex-wrap gap-2">
@@ -267,7 +272,9 @@ export default function NewcomerPapersPage() {
                                         <div className="flex flex-wrap gap-2">
                                             {item.status !== "archived" ? (
                                                 <Button asChild variant="outline" size="sm">
-                                                    <Link href={`/admin/sales-trainer/papers/${item.paper_id}/edit`}>
+                                                    <Link href={isLearningTopicsPath
+                                                        ? `/admin/sales-trainer/learning-topics/papers/${item.paper_id}/edit`
+                                                        : `/admin/sales-trainer/papers/${item.paper_id}/edit`}>
                                                         <Pencil className="mr-1 h-4 w-4" />
                                                         {item.status === "draft" ? "编辑草稿" : "编辑"}
                                                     </Link>

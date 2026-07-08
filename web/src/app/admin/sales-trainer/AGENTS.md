@@ -1,18 +1,17 @@
 # admin/sales-trainer — Sales Trainer Admin Console
 
-Admin pages for managing sales trainer units, question banks, score prompts/standards, materials, paths, submissions, results, training records, operation logs, and configuration health.
+Admin pages for governing newcomer training by frontend-facing modules. Primary surfaces are audio management, learning topics, path/readiness, and system governance. Legacy resource routes remain for compatibility but should not be reintroduced as top-level navigation.
 
 ## Route Map
 
 | Route | Purpose |
 |-------|---------|
 | `page.tsx` | Module overview |
-| `units/` | Training unit list/create/edit |
-| `questions/` | Question bank and categories |
-| `score-prompts/`, `score-standards/` | Scoring prompt and standard governance |
-| `materials/` | Training material library |
-| `paths/` | Learner path configuration |
-| `audio-submissions/`, `quiz-attempts/`, `score-results/` | Attempt/submission review |
+| `audio/` | Recording management: audio tasks, materials, scoring standards, submissions, results |
+| `learning-topics/` | Learning topic governance: topic content, units, questions, quizzes/papers |
+| `paths/`, `units/`, `ai-coach/` | Path/readiness configuration and advanced module setup |
+| `readiness/`, `training-records/`, `analytics/` | Readiness review, records, and analysis |
+| `questions/`, `papers/`, `materials/`, `score-standards/`, `audio-submissions/`, `score-results/` | Legacy compatibility/resource pages; prefer module paths above |
 | `training-records/`, `operation-logs/` | Audit and learning records |
 | `settings/` | Configuration health |
 

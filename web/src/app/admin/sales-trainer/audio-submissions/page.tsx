@@ -23,6 +23,7 @@ function formatSubmissionUser(item: SalesTrainerAudioSubmission): string {
 export default function SalesTrainerAudioSubmissionsPage() {
     const pathname = usePathname();
     const router = useRouter();
+    const isAudioManagementPath = pathname.startsWith("/admin/sales-trainer/audio");
     const [items, setItems] = useState<SalesTrainerAudioSubmission[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -59,7 +60,7 @@ export default function SalesTrainerAudioSubmissionsPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="新人训练路径录音记录"
+                    title={isAudioManagementPath ? "学员录音" : "新人训练路径录音记录"}
                     description="查看录音状态、转写和评分入口。详情页提供重试和授权文件访问。"
                     secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={routeAccess.capabilities} />}
                 />
@@ -121,7 +122,9 @@ export default function SalesTrainerAudioSubmissionsPage() {
                                 </td>
                                 <td className="px-6 py-4">{new Date(item.created_at).toLocaleString()}</td>
                                 <td className="px-6 py-4">
-                                    <Button variant="outline" size="sm" onClick={() => router.push(`/admin/sales-trainer/audio-submissions/${item.submission_id}`)}>
+                                    <Button variant="outline" size="sm" onClick={() => router.push(isAudioManagementPath
+                                        ? `/admin/sales-trainer/audio/submissions/${item.submission_id}`
+                                        : `/admin/sales-trainer/audio-submissions/${item.submission_id}`)}>
                                         查看详情
                                     </Button>
                                 </td>

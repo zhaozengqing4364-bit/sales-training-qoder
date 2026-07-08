@@ -14,7 +14,7 @@ const {
 }));
 
 vi.mock("next/navigation", () => ({
-    usePathname: () => "/admin/sales-trainer/audio-submissions",
+    usePathname: () => "/admin/sales-trainer/audio/submissions",
     useRouter: () => ({ push: pushMock }),
 }));
 

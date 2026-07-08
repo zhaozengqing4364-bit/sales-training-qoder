@@ -21,6 +21,7 @@ export default function EditSalesTrainerQuestionPage() {
     const params = useParams<{ questionId: string }>();
     const pathname = usePathname();
     const toast = useToast();
+    const isLearningTopicsPath = pathname.startsWith("/admin/sales-trainer/learning-topics");
     const [question, setQuestion] = useState<SalesTrainerQuestion | null>(null);
     const [categories, setCategories] = useState<SalesTrainerQuestionCategory[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -105,7 +106,9 @@ export default function EditSalesTrainerQuestionPage() {
 
     return (
         <AdminFormShell
-            backHref="/admin/sales-trainer/questions"
+            backHref={isLearningTopicsPath
+                ? "/admin/sales-trainer/learning-topics/questions"
+                : "/admin/sales-trainer/questions"}
             title={question ? `编辑题目：${question.title}` : "编辑题目"}
             description="已发布题目也可以编辑；保存会生成待发布修订，发布后只影响后续组卷和后续学员作答。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}

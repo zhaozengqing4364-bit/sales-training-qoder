@@ -19,6 +19,7 @@ import type {
 export default function NewSalesTrainerQuestionPage() {
     const pathname = usePathname();
     const router = useRouter();
+    const isLearningTopicsPath = pathname.startsWith("/admin/sales-trainer/learning-topics");
     const { error: showError, success: showSuccess } = useToast();
     const [categories, setCategories] = useState<SalesTrainerQuestionCategory[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -86,7 +87,9 @@ export default function NewSalesTrainerQuestionPage() {
         try {
             const question = await api.admin.salesTrainer.createQuestion(payload);
             showSuccess("题目已创建");
-            router.push(`/admin/sales-trainer/questions/${question.question_id}/edit`);
+            router.push(isLearningTopicsPath
+                ? `/admin/sales-trainer/learning-topics/questions/${question.question_id}/edit`
+                : `/admin/sales-trainer/questions/${question.question_id}/edit`);
         } catch (submitError) {
             showError(getApiErrorMessage(submitError));
             setIsSubmitting(false);
@@ -95,7 +98,9 @@ export default function NewSalesTrainerQuestionPage() {
 
     return (
         <AdminFormShell
-            backHref="/admin/sales-trainer/questions"
+            backHref={isLearningTopicsPath
+                ? "/admin/sales-trainer/learning-topics/questions"
+                : "/admin/sales-trainer/questions"}
             title="新建销售题目"
             description="业务字段会由后端转换成标准 scoring_criteria，不需要手写 JSON。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}

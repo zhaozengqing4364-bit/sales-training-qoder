@@ -104,6 +104,7 @@ function QuestionProductionFlow() {
 
 export default function BusinessEtiquetteQuestionDraftsPage() {
     const pathname = usePathname();
+    const isLearningTopicsPath = pathname.startsWith("/admin/sales-trainer/learning-topics");
     const searchParams = useSearchParams();
     const toast = useToast();
     const [drafts, setDrafts] = useState<BusinessEtiquetteQuestionDraft[]>([]);
@@ -380,7 +381,9 @@ export default function BusinessEtiquetteQuestionDraftsPage() {
                         primaryAction={canAccessQuestions ? (
                             <div className="flex flex-wrap gap-2">
                                 <Button variant="outline" asChild>
-                                    <Link href="/admin/sales-trainer/questions">正式题目库</Link>
+                                    <Link href={isLearningTopicsPath
+                                        ? "/admin/sales-trainer/learning-topics/questions"
+                                        : "/admin/sales-trainer/questions"}>正式题目库</Link>
                                 </Button>
                                 <Button variant="outline" onClick={() => void loadData()}>
                                     <RefreshCcw className="mr-2 h-4 w-4" />
@@ -793,7 +796,9 @@ export default function BusinessEtiquetteQuestionDraftsPage() {
                                         已转为正式题目草稿。下一步到{" "}
                                         <Link
                                             className="font-semibold underline underline-offset-4"
-                                            href={`/admin/sales-trainer/questions/${selectedDraftEdit.question_id}/edit`}
+                                            href={isLearningTopicsPath
+                                                ? `/admin/sales-trainer/learning-topics/questions/${selectedDraftEdit.question_id}/edit`
+                                                : `/admin/sales-trainer/questions/${selectedDraftEdit.question_id}/edit`}
                                         >
                                             正式题目库
                                         </Link>

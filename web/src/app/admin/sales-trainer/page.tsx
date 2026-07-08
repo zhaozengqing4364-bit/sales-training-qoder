@@ -118,7 +118,7 @@ export default function SalesTrainerWorkbenchPage() {
             header={(
                 <AdminPageHeader
                     title="新人训练路径工作台"
-                    description="新人训练路径的模块、文章、考卷、录音评分、配置健康和操作记录集中在这里管理。"
+                    description="按录音管理、学习专题、路径与达标、系统治理组织新人训练后台配置和运营记录。"
                     secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={capabilities} />}
                 />
             )}

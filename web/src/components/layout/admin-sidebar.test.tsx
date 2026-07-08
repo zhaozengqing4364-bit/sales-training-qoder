@@ -74,7 +74,7 @@ function salesTrainerCapabilities(
 
 describe("AdminSidebarContent", () => {
     beforeEach(() => {
-        usePathnameMock.mockReturnValue("/admin/sales-trainer/units");
+        usePathnameMock.mockReturnValue("/admin/sales-trainer/paths");
     });
 
     it("keeps newcomer training path submodules collapsed until explicitly opened", async () => {
@@ -90,24 +90,23 @@ describe("AdminSidebarContent", () => {
 
         const sectionButton = await screen.findByRole("button", { name: "新人训练路径" });
         expect(sectionButton).not.toBeNull();
-        expect(screen.queryByRole("link", { name: "模块单元" })).toBeNull();
-        expect(screen.queryByRole("link", { name: "题库管理" })).toBeNull();
+        expect(screen.queryByRole("link", { name: "录音管理" })).toBeNull();
+        expect(screen.queryByRole("link", { name: "学习专题" })).toBeNull();
 
         fireEvent.click(sectionButton);
 
-        expect(await screen.findByRole("link", { name: "模块单元" })).not.toBeNull();
+        expect(await screen.findByRole("link", { name: "录音管理" })).not.toBeNull();
         const workbenchLink = await screen.findByRole("link", { name: "工作台" });
         expect(workbenchLink.getAttribute("href")).toBe("/admin/sales-trainer");
-        expect(screen.getByRole("link", { name: "路径配置" })).not.toBeNull();
-        expect(screen.getByRole("link", { name: "AI 教练配置" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/ai-coach",
+        expect(screen.getByRole("link", { name: "学习专题" })).not.toBeNull();
+        expect(screen.getByRole("link", { name: "路径与达标" }).getAttribute("href")).toBe(
+            "/admin/sales-trainer/paths",
         );
-        expect(screen.getByRole("link", { name: "题库管理" })).not.toBeNull();
-        expect(screen.getByRole("link", { name: "录音评分标准" })).not.toBeNull();
+        expect(screen.getByRole("link", { name: "系统治理" })).not.toBeNull();
     });
 
     it("highlights only the concrete newcomer training child route when expanded", async () => {
-        usePathnameMock.mockReturnValue("/admin/sales-trainer/questions");
+        usePathnameMock.mockReturnValue("/admin/sales-trainer/learning-topics/questions");
 
         render(
             <AdminSidebarContent
@@ -122,10 +121,10 @@ describe("AdminSidebarContent", () => {
         fireEvent.click(await screen.findByRole("button", { name: "新人训练路径" }));
 
         const workbenchLink = await screen.findByRole("link", { name: "工作台" });
-        const questionLink = await screen.findByRole("link", { name: "题库管理" });
+        const learningTopicsLink = await screen.findByRole("link", { name: "学习专题" });
 
         expect(workbenchLink.className).not.toContain("text-slate-900 bg-white shadow");
-        expect(questionLink.className).toContain("text-slate-900 bg-white shadow");
+        expect(learningTopicsLink.className).toContain("text-slate-900 bg-white shadow");
     });
 
     it("limits training leads to learner record entries", async () => {
@@ -148,11 +147,11 @@ describe("AdminSidebarContent", () => {
         fireEvent.click(await screen.findByRole("button", { name: "新人训练路径" }));
 
         expect(screen.queryByRole("link", { name: "工作台" })).toBeNull();
-        expect(await screen.findByRole("link", { name: "题库管理" })).not.toBeNull();
-        expect(screen.getByRole("link", { name: "配置" })).not.toBeNull();
+        expect(await screen.findByRole("link", { name: "学习专题" })).not.toBeNull();
+        expect(screen.getByRole("link", { name: "系统治理" })).not.toBeNull();
         expect(screen.getByRole("link", { name: "操作记录" })).not.toBeNull();
-        expect(await screen.findByRole("link", { name: "学员录音" })).not.toBeNull();
-        expect(screen.getByRole("link", { name: "评分结果" })).not.toBeNull();
+        expect(await screen.findByRole("link", { name: "录音管理" })).not.toBeNull();
+        expect(screen.getByRole("link", { name: "达标验收" })).not.toBeNull();
         expect(screen.getByRole("link", { name: "训练记录" })).not.toBeNull();
         expect(screen.queryByRole("link", { name: "用户管理" })).toBeNull();
         expect(screen.queryByRole("link", { name: "智能体管理" })).toBeNull();
@@ -179,13 +178,11 @@ describe("AdminSidebarContent", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "新人训练路径" }));
 
-        expect(await screen.findByRole("link", { name: "路径配置" })).not.toBeNull();
-        expect(screen.getByRole("link", { name: "AI 教练配置" })).not.toBeNull();
-        expect(screen.getByRole("link", { name: "商务技巧文章" })).not.toBeNull();
-        expect(screen.getByRole("link", { name: "考卷管理" })).not.toBeNull();
-        expect(screen.getByRole("link", { name: "材料库" })).not.toBeNull();
+        expect(await screen.findByRole("link", { name: "路径与达标" })).not.toBeNull();
+        expect(screen.getByRole("link", { name: "录音管理" })).not.toBeNull();
+        expect(screen.getByRole("link", { name: "学习专题" })).not.toBeNull();
         expect(screen.queryByRole("link", { name: "学员录音" })).toBeNull();
-        expect(screen.queryByRole("link", { name: "配置" })).toBeNull();
+        expect(screen.queryByRole("link", { name: "系统治理" })).toBeNull();
         expect(screen.queryByRole("link", { name: "操作记录" })).toBeNull();
         expect(screen.queryByRole("link", { name: "用户管理" })).toBeNull();
     });
@@ -213,12 +210,10 @@ describe("AdminSidebarContent", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "新人训练路径" }));
 
-        expect(await screen.findByRole("link", { name: "配置" })).not.toBeNull();
+        expect(await screen.findByRole("link", { name: "系统治理" })).not.toBeNull();
         expect(screen.getByRole("link", { name: "操作记录" })).not.toBeNull();
-        expect(screen.getByRole("link", { name: "学员录音" })).not.toBeNull();
-        expect(screen.getByRole("link", { name: "评分结果" })).not.toBeNull();
-        expect(screen.queryByRole("link", { name: "题库管理" })).toBeNull();
-        expect(screen.queryByRole("link", { name: "考卷管理" })).toBeNull();
+        expect(screen.getByRole("link", { name: "录音管理" })).not.toBeNull();
+        expect(screen.queryByRole("link", { name: "学习专题" })).toBeNull();
         expect(screen.queryByRole("link", { name: "材料库" })).toBeNull();
     });
 

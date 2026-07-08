@@ -16,7 +16,7 @@ const {
 }));
 
 vi.mock("next/navigation", () => ({
-    usePathname: () => "/admin/sales-trainer/materials",
+    usePathname: () => "/admin/sales-trainer/audio/materials",
     useSearchParams: () => new URLSearchParams("module=ppt_explanation&purpose=ppt_pitch"),
 }));
 
@@ -156,7 +156,7 @@ describe("SalesTrainerMaterialsPage", () => {
         expect(await screen.findByRole("heading", { name: "PPT 讲解材料配置" })).toBeTruthy();
         expect(screen.getByText("1. 新建材料主档")).toBeTruthy();
         expect(screen.getByText("2. 上传文件生成材料版本")).toBeTruthy();
-        expect(screen.getByText("3. 回到训练任务发布绑定")).toBeTruthy();
+        expect(screen.getByText("3. 回到录音任务发布绑定")).toBeTruthy();
         expect(await screen.findByText("上传 PPT 或文档")).toBeTruthy();
         expect(screen.queryByText("文件存储地址")).toBeNull();
         expect(screen.queryByText("Storage Key")).toBeNull();
@@ -168,8 +168,8 @@ describe("SalesTrainerMaterialsPage", () => {
         }
         expect(purposeSelect.value).toBe("ppt_pitch");
         expect(screen.getAllByText("PPT 讲解").length).toBeGreaterThan(0);
-        const pathCenterLink = screen.getByRole("link", { name: "去训练任务治理页发布绑定" });
-        expect(pathCenterLink.getAttribute("href")).toBe("/admin/sales-trainer/training-tasks/ppt-explanation");
+        const pathCenterLink = screen.getByRole("link", { name: "去录音任务页发布绑定" });
+        expect(pathCenterLink.getAttribute("href")).toBe("/admin/sales-trainer/audio/ppt-explanation");
         expect(pathCenterLink.querySelector("button")).toBeNull();
     });
 

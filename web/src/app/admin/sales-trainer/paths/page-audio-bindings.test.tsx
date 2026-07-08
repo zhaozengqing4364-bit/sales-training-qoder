@@ -121,10 +121,10 @@ describe("SalesTrainerPathsPage audio bindings", () => {
 
         expect(await screen.findByText("优先绑定已有发布资源")).toBeTruthy();
         expect(screen.getByRole("link", { name: "管理评分标准" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/score-standards?module=ppt_explanation&purpose=ppt_pitch",
+            "/admin/sales-trainer/audio/score-standards?module=ppt_explanation&purpose=ppt_pitch",
         );
         expect(screen.getByRole("link", { name: "管理材料库" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/materials?module=ppt_explanation&purpose=ppt_pitch",
+            "/admin/sales-trainer/audio/materials?module=ppt_explanation&purpose=ppt_pitch",
         );
 
         fireEvent.change(await screen.findByLabelText("主材料（PPT 讲解录音）"), {

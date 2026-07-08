@@ -19,7 +19,7 @@ import {
 } from "@/lib/auth/current-user";
 
 const SALES_TRAINER_ADMIN_PREFIX = "/admin/sales-trainer";
-const SALES_TRAINER_MANAGER_ENTRY = "/admin/sales-trainer/units";
+const SALES_TRAINER_MANAGER_ENTRY = "/admin/sales-trainer";
 
 function canUseAdminShell(role: string): boolean {
     return canUseAdminConsoleRole(role);

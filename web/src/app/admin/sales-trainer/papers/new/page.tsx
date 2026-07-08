@@ -25,6 +25,7 @@ export default function NewcomerPaperNewPage() {
     const pathname = usePathname();
     const router = useRouter();
     const toast = useToast();
+    const isLearningTopicsPath = pathname.startsWith("/admin/sales-trainer/learning-topics");
     const [questions, setQuestions] = useState<SalesTrainerQuestion[]>([]);
     const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
     const [title, setTitle] = useState("");
@@ -126,8 +127,10 @@ export default function NewcomerPaperNewPage() {
                 module_key: BUSINESS_SKILLS_MODULE_KEY,
                 questions: buildPaperQuestionBindings(selectedQuestionIds, parsedPoints),
             });
-            toast.success("商务技巧考卷已创建");
-            router.push("/admin/sales-trainer/papers");
+            toast.success("学习专题考卷已创建");
+            router.push(isLearningTopicsPath
+                ? "/admin/sales-trainer/learning-topics/papers"
+                : "/admin/sales-trainer/papers");
         } catch (error) {
             toast.error(getApiErrorMessage(error));
             setIsSubmitting(false);
@@ -136,17 +139,19 @@ export default function NewcomerPaperNewPage() {
 
     return (
         <AdminFormShell
-            backHref="/admin/sales-trainer/papers"
-            title="新建商务技巧考卷"
+            backHref={isLearningTopicsPath
+                ? "/admin/sales-trainer/learning-topics/papers"
+                : "/admin/sales-trainer/papers"}
+            title="新建学习专题考卷"
             description="从新人训练路径正式题目库选择题目组卷；内部考卷编号由系统自动生成。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
         >
             {isCapabilityLoading ? (
-                <GlassCard className="p-8 text-center text-sm text-slate-500">正在校验内容管理权限...</GlassCard>
+                <GlassCard className="p-8 text-center text-sm text-slate-500">正在校验学习专题考卷权限...</GlassCard>
             ) : capabilityError || !canAccessPaperForm ? (
                 <AdminLoadErrorCard
-                    title="考卷管理权限不足"
-                    description="当前页不会在权限未确认时加载题库或开放新建考卷表单。请联系管理员开通内容管理权限后重试。"
+                    title="学习专题考卷权限不足"
+                    description="当前页不会在权限未确认时加载题库或开放新建考卷表单。请联系管理员开通学习专题或题目管理权限后重试。"
                     message={capabilityError}
                     retryLabel="重新校验权限"
                     onRetry={() => void loadCapabilities()}

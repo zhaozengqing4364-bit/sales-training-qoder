@@ -100,6 +100,13 @@ export function SalesTrainerAdminModuleNav({
         return null;
     }
 
+    const activeHref = group.items
+        .filter((item) =>
+            currentPath === item.href ||
+            (item.href !== "/admin/sales-trainer" && currentPath.startsWith(`${item.href}/`)),
+        )
+        .sort((left, right) => right.href.length - left.href.length)[0]?.href;
+
     return (
         <nav
             aria-label={`${group.label}模块内导航`}
@@ -111,7 +118,7 @@ export function SalesTrainerAdminModuleNav({
                 </span>
                 {group.items.map((item) => {
                     const Icon = item.icon;
-                    const isActive = currentPath === item.href;
+                    const isActive = item.href === activeHref;
                     return (
                         <Link
                             key={item.href}

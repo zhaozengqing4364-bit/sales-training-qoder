@@ -20,6 +20,7 @@ export default function NewSalesTrainerScoreStandardPage() {
     const pathname = usePathname();
     const router = useRouter();
     const searchParams = useSearchParams();
+    const isAudioManagementPath = pathname.startsWith("/admin/sales-trainer/audio");
     const toast = useToast();
     const scenario = audioEvaluationScenarioForSlug(searchParams.get("scenario"));
     const initialPurpose = scenario?.purposeKey ?? searchParams.get("purpose");
@@ -55,7 +56,9 @@ export default function NewSalesTrainerScoreStandardPage() {
         try {
             const result = await api.admin.salesTrainer.createScorePrompt(payload);
             toast.success("录音评分标准已创建");
-            router.push(`/admin/sales-trainer/score-standards/${result.prompt_id}/edit`);
+            router.push(isAudioManagementPath
+                ? `/admin/sales-trainer/audio/score-standards/${result.prompt_id}/edit`
+                : `/admin/sales-trainer/score-standards/${result.prompt_id}/edit`);
         } catch (submitError) {
             toast.error(getApiErrorMessage(submitError));
             setIsSubmitting(false);
@@ -64,7 +67,9 @@ export default function NewSalesTrainerScoreStandardPage() {
 
     return (
         <AdminFormShell
-            backHref="/admin/sales-trainer/score-standards"
+            backHref={isAudioManagementPath
+                ? "/admin/sales-trainer/audio/score-standards"
+                : "/admin/sales-trainer/score-standards"}
             title="新建录音评分标准"
             description="后续训练单元只能绑定已发布的评分标准；发布后仍可编辑，保存会生成待发布修订，只影响后续学员。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}

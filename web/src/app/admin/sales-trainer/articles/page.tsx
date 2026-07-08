@@ -20,7 +20,7 @@ import type {
     SalesTrainerAdminCapabilities,
 } from "@/lib/api/types";
 
-const BUSINESS_ETIQUETTE_DETAIL_PATH = "/admin/sales-trainer/articles/business-etiquette";
+const BUSINESS_ETIQUETTE_DETAIL_PATH = "/admin/sales-trainer/learning-topics/business-etiquette";
 
 function statusLabel(status: string): string {
     if (status === "published") return "已发布";
@@ -146,7 +146,7 @@ export default function LearningArticlesPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="学习文章"
+                    title="学习专题"
                     description="按学习专题管理文章、章节、小单元和非阻塞得分展示；只有后台配置并发布的专题才会在前台出现。"
                     primaryAction={canAccessArticles ? (
                         <Button onClick={() => void generateDraft(false)} disabled={isSubmitting}>
@@ -169,13 +169,13 @@ export default function LearningArticlesPage() {
             )}
         >
             {isCapabilityLoading ? (
-                <GlassCard className="p-5 text-sm text-slate-500">正在校验学习文章管理权限...</GlassCard>
+                <GlassCard className="p-5 text-sm text-slate-500">正在校验学习专题管理权限...</GlassCard>
             ) : capabilityError || !canAccessArticles ? (
                 <GlassCard className="border border-amber-200 bg-amber-50 p-5 text-amber-800">
                     <div className="flex items-start gap-3">
                         <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
                         <div>
-                            <h2 className="font-bold text-amber-950">学习文章管理权限不足</h2>
+                            <h2 className="font-bold text-amber-950">学习专题管理权限不足</h2>
                             <p className="mt-1 text-sm leading-6">
                                 当前页不会在权限未确认时展示写入入口。请联系管理员开通内容管理权限后重试。
                             </p>
@@ -210,7 +210,7 @@ export default function LearningArticlesPage() {
                                 <div>
                                     <h2 className="text-lg font-black text-slate-900">还没有可显示的学习专题</h2>
                                     <p className="mt-1 text-sm leading-6 text-slate-500">
-                                        可以先从当前 active path 的 business_skills 模块生成商务礼仪规范草稿，再进入详情补齐文章和 7 个小单元。
+                                        可以先从当前已发布路径的学习专题模块生成商务礼仪规范草稿，再进入详情补齐文章和 7 个小单元。
                                     </p>
                                 </div>
                             </div>

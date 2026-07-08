@@ -284,11 +284,11 @@ describe("SalesTrainerSettingsPage", () => {
         expect(screen.getAllByText("[ASR_TIMEOUT]").length).toBeGreaterThan(0);
         expect(screen.getAllByText("[AI_SCORING_FAILED]").length).toBeGreaterThan(0);
         expect(screen.getByRole("link", { name: "查看学员录音" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/audio-submissions",
+            "/admin/sales-trainer/audio/submissions",
         );
         expect(screen.getByRole("link", { name: "查看学员录音" }).querySelector("button")).toBeNull();
         expect(screen.getByRole("link", { name: "查看评分结果" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/score-results",
+            "/admin/sales-trainer/audio/results",
         );
         expect(screen.getByRole("link", { name: "查看评分结果" }).querySelector("button")).toBeNull();
     });

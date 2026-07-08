@@ -108,10 +108,10 @@ function RecentFailureDiagnostics({
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <Button asChild variant="outline" className="rounded-full">
-                        <Link href="/admin/sales-trainer/audio-submissions">查看学员录音</Link>
+                        <Link href="/admin/sales-trainer/audio/submissions">查看学员录音</Link>
                     </Button>
                     <Button asChild variant="outline" className="rounded-full">
-                        <Link href="/admin/sales-trainer/score-results">查看评分结果</Link>
+                        <Link href="/admin/sales-trainer/audio/results">查看评分结果</Link>
                     </Button>
                 </div>
             </div>

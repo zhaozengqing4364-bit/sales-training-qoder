@@ -211,13 +211,13 @@ function appendBusinessIssues(
         issues.push(issue(
             "article_binding_unavailable",
             `学习专题内容绑定状态读取失败：${input.boundArticleLoadError}`,
-            "/admin/sales-trainer/articles",
+        "/admin/sales-trainer/learning-topics",
         ));
     }
     if (!article && !input.boundArticleLoadError) {
-        issues.push(issue("article_missing", "缺少已发布学习专题内容绑定。", "/admin/sales-trainer/articles"));
+        issues.push(issue("article_missing", "缺少已发布学习专题内容绑定。", "/admin/sales-trainer/learning-topics"));
     } else if (article && article.chapters.length === 0) {
-        issues.push(issue("article_chapters_missing", "学习专题内容还没有学习章节。", "/admin/sales-trainer/articles"));
+        issues.push(issue("article_chapters_missing", "学习专题内容还没有学习章节。", "/admin/sales-trainer/learning-topics"));
     }
     const paperIds = new Set(units.map((unit) => unit.config.path?.exam_paper_id).filter(Boolean));
     const configuredPaperId = pathModule?.exam_paper_id ?? null;
@@ -225,7 +225,7 @@ function appendBusinessIssues(
         || [...paperIds].some((id) => input.papers.some((paper) => paper.paper_id === id && paper.status === "published"))
         || input.papers.some((paper) => paper.module_key === "business_skills" && paper.status === "published");
     if (!paperOk) {
-        issues.push(issue("paper_missing", "缺少已发布学习专题考卷绑定。", "/admin/sales-trainer/papers"));
+        issues.push(issue("paper_missing", "缺少已发布学习专题考卷绑定。", "/admin/sales-trainer/learning-topics/papers"));
     }
 }
 

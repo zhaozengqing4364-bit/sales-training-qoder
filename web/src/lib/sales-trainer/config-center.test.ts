@@ -123,7 +123,7 @@ describe("buildNewcomerConfigCenter", () => {
         expect(center.modules[0].issues.find((issue) => issue.code === "module_unit_missing")?.href).toBe(
             "/admin/sales-trainer/paths?module=ppt_explanation",
         );
-        expect(center.modules[1].remediationHref).toBe("/admin/sales-trainer/articles");
+        expect(center.modules[1].remediationHref).toBe("/admin/sales-trainer/learning-topics");
         expect(center.summary.ready).toBe(false);
         expect(center.summary.missingCount).toBeGreaterThan(0);
     });

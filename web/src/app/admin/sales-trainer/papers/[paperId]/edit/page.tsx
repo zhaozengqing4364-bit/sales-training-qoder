@@ -27,6 +27,7 @@ export default function NewcomerPaperEditPage() {
     const pathname = usePathname();
     const router = useRouter();
     const toast = useToast();
+    const isLearningTopicsPath = pathname.startsWith("/admin/sales-trainer/learning-topics");
     const paperId = paramValue(params.paperId);
     const [paper, setPaper] = useState<NewcomerExamPaper | null>(null);
     const [questions, setQuestions] = useState<SalesTrainerQuestion[]>([]);
@@ -148,7 +149,9 @@ export default function NewcomerPaperEditPage() {
             toast.success(paper.status === "published"
                 ? "已保存为新修订，发布并生效后只影响后续学员"
                 : "考卷草稿已保存");
-            router.push("/admin/sales-trainer/papers");
+            router.push(isLearningTopicsPath
+                ? "/admin/sales-trainer/learning-topics/papers"
+                : "/admin/sales-trainer/papers");
         } catch (error) {
             toast.error(getApiErrorMessage(error));
             setIsSubmitting(false);
@@ -157,19 +160,21 @@ export default function NewcomerPaperEditPage() {
 
     return (
         <AdminFormShell
-            backHref="/admin/sales-trainer/papers"
-            title={paper?.status === "published" ? "编辑商务技巧考卷" : "编辑商务技巧考卷草稿"}
+            backHref={isLearningTopicsPath
+                ? "/admin/sales-trainer/learning-topics/papers"
+                : "/admin/sales-trainer/papers"}
+            title={paper?.status === "published" ? "编辑学习专题考卷" : "编辑学习专题考卷草稿"}
             description={paper?.status === "published"
                 ? "保存后生成新修订；发布并生效前，学员仍使用当前已发布版本。"
                 : "草稿保存后可发布并生效；历史考试记录会继续保留提交时快照。"}
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
         >
             {isCapabilityLoading ? (
-                <GlassCard className="p-8 text-center text-sm text-slate-500">正在校验内容管理权限...</GlassCard>
+                <GlassCard className="p-8 text-center text-sm text-slate-500">正在校验学习专题考卷权限...</GlassCard>
             ) : capabilityError || !canAccessPaperForm ? (
                 <AdminLoadErrorCard
-                    title="考卷管理权限不足"
-                    description="当前页不会在权限未确认时加载考卷或开放编辑表单。请联系管理员开通内容管理权限后重试。"
+                    title="学习专题考卷权限不足"
+                    description="当前页不会在权限未确认时加载考卷或开放编辑表单。请联系管理员开通学习专题或题目管理权限后重试。"
                     message={capabilityError}
                     retryLabel="重新校验权限"
                     onRetry={() => void loadCapabilities()}
@@ -186,7 +191,7 @@ export default function NewcomerPaperEditPage() {
                 />
             ) : !paper ? (
                 <GlassCard className="p-6 text-sm text-red-700">
-                    未找到对应商务技巧考卷。
+                    未找到对应学习专题考卷。
                 </GlassCard>
             ) : paper?.status === "archived" ? (
                 <GlassCard className="space-y-3 p-6">

@@ -606,9 +606,9 @@ function ImportResultPreview({ result }: { result: BusinessEtiquetteImportRespon
                         </Link>
                         <Link
                             className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                            href="/admin/sales-trainer/articles"
+                            href="/admin/sales-trainer/learning-topics"
                         >
-                            返回文章绑定
+                            返回学习专题
                         </Link>
                     </div>
                 </div>

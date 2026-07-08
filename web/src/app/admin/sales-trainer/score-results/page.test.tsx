@@ -163,7 +163,7 @@ describe("SalesTrainerScoreResultsPage", () => {
         expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/quiz-attempts/attempt-1");
 
         fireEvent.click(screen.getByRole("button", { name: "查看录音" }));
-        expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/audio-submissions/submission-1");
+        expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/audio/submissions/submission-1");
     });
 
     it("does not request result lists before view_records capability is confirmed", async () => {

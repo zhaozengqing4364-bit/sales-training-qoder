@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -76,7 +76,7 @@ describe("SalesTrainerAdminModuleNav", () => {
         );
     });
 
-    it("does not leak contextual entries when only one item is capability-visible", () => {
+    it("shows only path-governance entries allowed by module management capability", () => {
         render(
             <SalesTrainerAdminModuleNav
                 currentPath="/admin/sales-trainer/ai-coach"
@@ -84,8 +84,10 @@ describe("SalesTrainerAdminModuleNav", () => {
             />,
         );
 
-        expect(screen.queryByRole("link", { name: "AI 教练配置" })).toBeNull();
-        expect(screen.queryByRole("navigation", { name: "路径配置模块内导航" })).toBeNull();
+        expect(screen.getByRole("link", { name: "路径配置" })).toBeTruthy();
+        expect(screen.getByRole("link", { name: "模块单元" })).toBeTruthy();
+        expect(screen.getByRole("link", { name: "AI 教练配置" })).toBeTruthy();
+        expect(screen.queryByRole("link", { name: "达标验收" })).toBeNull();
     });
 
     it("fails closed when capability loading fails", async () => {

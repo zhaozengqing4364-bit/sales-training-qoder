@@ -94,10 +94,10 @@ export function PathConfigBusinessBindingEditor({
                     </p>
                 </div>
                 <div className="flex gap-3 text-sm font-semibold text-blue-700">
-                    <Link href="/admin/sales-trainer/articles" className="underline">
+                    <Link href="/admin/sales-trainer/learning-topics" className="underline">
                         管理专题内容
                     </Link>
-                    <Link href="/admin/sales-trainer/papers" className="underline">
+                    <Link href="/admin/sales-trainer/learning-topics/papers" className="underline">
                         管理考卷
                     </Link>
                 </div>

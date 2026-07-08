@@ -223,8 +223,8 @@ describe("buildNewcomerOperationalDiagnostics", () => {
             "[AI_SCORING_FAILED]",
             "[ASR_TIMEOUT]",
         ]);
-        expect(diagnostics.failedTasks[0]?.href).toBe("/admin/sales-trainer/score-results");
-        expect(diagnostics.failedTasks[1]?.href).toBe("/admin/sales-trainer/audio-submissions/sub-1");
+        expect(diagnostics.failedTasks[0]?.href).toBe("/admin/sales-trainer/audio/results");
+        expect(diagnostics.failedTasks[1]?.href).toBe("/admin/sales-trainer/audio/submissions/sub-1");
         expect(diagnostics.errorCodeBuckets).toEqual([
             { code: "[AI_SCORING_FAILED]", count: 1 },
             { code: "[ASR_TIMEOUT]", count: 1 },

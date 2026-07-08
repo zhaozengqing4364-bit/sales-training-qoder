@@ -28,7 +28,7 @@ const {
 }));
 
 vi.mock("next/navigation", () => ({
-    usePathname: () => "/admin/sales-trainer/articles",
+    usePathname: () => "/admin/sales-trainer/learning-topics",
 }));
 
 vi.mock("@/components/ui/toast", () => ({
@@ -106,7 +106,7 @@ function learningTopicsConfig(
         source: "active_revision",
         fallback_reason: null,
         legacy_snapshot_only: false,
-        management_entry: "/admin/sales-trainer/articles",
+        management_entry: "/admin/sales-trainer/learning-topics",
         permission: "sales_trainer.manage_modules",
         payload: {
             schema_version: "newcomer_learning_topics_v1",
@@ -173,11 +173,11 @@ describe("LearningArticlesPage", () => {
     it("shows configured learning topics and the bound article", async () => {
         render(<LearningArticlesPage />);
 
-        expect(await screen.findByText("学习文章")).toBeTruthy();
+        expect(await screen.findByText("学习专题")).toBeTruthy();
         expect(await screen.findByText("商务礼仪规范")).toBeTruthy();
         expect(screen.getByText("当前文章：见客户前商务礼仪（已发布）")).toBeTruthy();
         expect(screen.getByRole("link", { name: /进入专题配置/ }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/articles/business-etiquette",
+            "/admin/sales-trainer/learning-topics/business-etiquette",
         );
     });
 
@@ -234,7 +234,7 @@ describe("LearningArticlesPage", () => {
 
         render(<LearningArticlesPage />);
 
-        expect(await screen.findByText("学习文章管理权限不足")).toBeTruthy();
+        expect(await screen.findByText("学习专题管理权限不足")).toBeTruthy();
         expect(listLearningContentsMock).not.toHaveBeenCalled();
         expect(getLearningTopicsConfigMock).not.toHaveBeenCalled();
         expect(generateDraftMock).not.toHaveBeenCalled();

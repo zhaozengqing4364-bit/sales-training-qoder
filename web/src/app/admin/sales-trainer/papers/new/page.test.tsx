@@ -30,7 +30,7 @@ const {
 });
 
 vi.mock("next/navigation", () => ({
-    usePathname: () => "/admin/sales-trainer/papers/new",
+    usePathname: () => "/admin/sales-trainer/learning-topics/papers/new",
     useRouter: () => ({ push: pushMock }),
 }));
 
@@ -143,7 +143,7 @@ describe("NewcomerPaperNewPage", () => {
 
         render(<NewcomerPaperNewPage />);
 
-        expect(await screen.findByText("考卷管理权限不足")).toBeTruthy();
+        expect(await screen.findByText("学习专题考卷权限不足")).toBeTruthy();
         expect(listQuestionsMock).not.toHaveBeenCalled();
         expect(createPaperMock).not.toHaveBeenCalled();
         expect(screen.queryByLabelText("考卷标题")).toBeNull();
@@ -192,7 +192,7 @@ describe("NewcomerPaperNewPage", () => {
                 }],
             });
         });
-        expect(toastSuccessMock).toHaveBeenCalledWith("商务技巧考卷已创建");
-        expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/papers");
+        expect(toastSuccessMock).toHaveBeenCalledWith("学习专题考卷已创建");
+        expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/learning-topics/papers");
     });
 });

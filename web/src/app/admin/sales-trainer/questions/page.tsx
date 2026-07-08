@@ -27,6 +27,7 @@ type ConfirmState =
 export default function SalesTrainerQuestionsPage() {
     const pathname = usePathname();
     const router = useRouter();
+    const isLearningTopicsPath = pathname.startsWith("/admin/sales-trainer/learning-topics");
     const { error: showToastError, success: showToastSuccess } = useToast();
     const [questions, setQuestions] = useState<SalesTrainerQuestion[]>([]);
     const [categories, setCategories] = useState<SalesTrainerQuestionCategory[]>([]);
@@ -191,15 +192,21 @@ export default function SalesTrainerQuestionsPage() {
                         description="AI 草稿审核后会进入这里；只有发布后的题目才会被学员端小测抽取。"
                         primaryAction={canAccessQuestions ? (
                             <div className="flex flex-wrap gap-2">
-                                <Button variant="outline" onClick={() => router.push("/admin/sales-trainer/questions/drafts")}>
+                                <Button variant="outline" onClick={() => router.push(isLearningTopicsPath
+                                    ? "/admin/sales-trainer/learning-topics/questions/drafts"
+                                    : "/admin/sales-trainer/questions/drafts")}>
                                     <Sparkles className="mr-2 h-4 w-4" />
                                     AI 出题审核
                                 </Button>
-                                <Button variant="outline" onClick={() => router.push("/admin/sales-trainer/questions/quiz-preview")}>
+                                <Button variant="outline" onClick={() => router.push(isLearningTopicsPath
+                                    ? "/admin/sales-trainer/learning-topics/questions/quiz-preview"
+                                    : "/admin/sales-trainer/questions/quiz-preview")}>
                                     <Eye className="mr-2 h-4 w-4" />
                                     小测预览
                                 </Button>
-                                <Button onClick={() => router.push("/admin/sales-trainer/questions/new")}>
+                                <Button onClick={() => router.push(isLearningTopicsPath
+                                    ? "/admin/sales-trainer/learning-topics/questions/new"
+                                    : "/admin/sales-trainer/questions/new")}>
                                     <Plus className="mr-2 h-4 w-4" />
                                     新建题目
                                 </Button>
@@ -276,7 +283,9 @@ export default function SalesTrainerQuestionsPage() {
                     onArchive={(question) => setConfirmState({ type: "archive", question })}
                     onCategoryChange={setCategoryId}
                     onDifficultyChange={setDifficulty}
-                    onEdit={(questionId) => router.push(`/admin/sales-trainer/questions/${questionId}/edit`)}
+                    onEdit={(questionId) => router.push(isLearningTopicsPath
+                        ? `/admin/sales-trainer/learning-topics/questions/${questionId}/edit`
+                        : `/admin/sales-trainer/questions/${questionId}/edit`)}
                     onPublish={(question) => setConfirmState({ type: "publish", question })}
                     onRefresh={() => void loadData()}
                     onStatusChange={setStatus}

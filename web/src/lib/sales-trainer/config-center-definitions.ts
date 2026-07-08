@@ -6,7 +6,7 @@ const AUDIO_MODULE_DEFINITIONS = AUDIO_EVALUATION_SCENARIOS.map((scenario) => ({
     title: scenario.title,
     orderLabel: scenario.orderLabel,
     description: scenario.description,
-    remediationHref: `/admin/sales-trainer/training-tasks/${scenario.slug}`,
+    remediationHref: `/admin/sales-trainer/audio/${scenario.slug}`,
     learnerPreview: scenario.learnerPreview,
 })) satisfies readonly ModuleDefinition[];
 
@@ -24,7 +24,7 @@ export const CORE_MODULE_DEFINITIONS = [
         title: "学习专题",
         orderLabel: "学习专题",
         description: "绑定学习专题和小测，商务礼仪是当前第一个专题，后续可扩展销售技巧、客户常见质疑等专题。",
-        remediationHref: "/admin/sales-trainer/articles",
+        remediationHref: "/admin/sales-trainer/learning-topics",
         learnerPreview: "阅读专题内容，完成后查看得分；专题得分不阻塞后续训练任务。",
     },
     ...(elevatorDefinition ? [elevatorDefinition] : []),

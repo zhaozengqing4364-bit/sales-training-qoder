@@ -90,7 +90,7 @@ function audioFailureTask(submission: SalesTrainerAudioSubmission): NewcomerFail
         errorCode: errorCode ?? "[AUDIO_STATUS_FAILED]",
         errorMessage: submission.error_message,
         occurredAt: submission.updated_at,
-        href: `/admin/sales-trainer/audio-submissions/${encodeURIComponent(submission.submission_id)}`,
+        href: `/admin/sales-trainer/audio/submissions/${encodeURIComponent(submission.submission_id)}`,
     }];
 }
 
@@ -106,7 +106,7 @@ function scoreFailureTask(score: SalesTrainerAudioScoreResult): NewcomerFailedTa
         errorCode: score.error_code,
         errorMessage: score.error_message,
         occurredAt: score.created_at,
-        href: "/admin/sales-trainer/score-results",
+        href: "/admin/sales-trainer/audio/results",
     }];
 }
 

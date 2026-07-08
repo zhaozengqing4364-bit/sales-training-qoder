@@ -24,7 +24,7 @@ export function MaterialSetupGuide({ moduleKey }: MaterialSetupGuideProps) {
                 <p className="text-xs font-bold uppercase text-blue-500">来自配置诊断</p>
                 <h2 className="mt-1 text-xl font-black text-slate-900">{scenario.title}材料配置</h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
-                    材料库负责创建材料和发布版本；发布后回到训练任务治理页，保存并发布新的路径绑定修订。
+                    录音材料负责创建材料和发布版本；发布后回到录音任务页，保存并发布新的路径绑定修订。
                 </p>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
@@ -37,12 +37,12 @@ export function MaterialSetupGuide({ moduleKey }: MaterialSetupGuideProps) {
                     detail="选择 PPT 或文档，系统自动记录文件名、大小和存储位置，先生成草稿版本。"
                 />
                 <StepCard
-                    title="3. 回到训练任务发布绑定"
-                    detail="在对应关卡选择已发布材料，保存为待发布修订并发布生效。"
+                    title="3. 回到录音任务发布绑定"
+                    detail="在对应录音任务选择已发布材料，保存为待发布修订并发布生效。"
                 />
             </div>
             <Button asChild variant="outline" className="rounded-full">
-                <Link href={`/admin/sales-trainer/training-tasks/${scenario.slug}`}>去训练任务治理页发布绑定</Link>
+                <Link href={`/admin/sales-trainer/audio/${scenario.slug}`}>去录音任务页发布绑定</Link>
             </Button>
         </GlassCard>
     );

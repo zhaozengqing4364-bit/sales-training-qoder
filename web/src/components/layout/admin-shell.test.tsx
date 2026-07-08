@@ -160,7 +160,7 @@ describe("AdminShell auth and role routing", () => {
         );
 
         await waitFor(() => {
-            expect(replaceMock).toHaveBeenCalledWith("/admin/sales-trainer/units");
+            expect(replaceMock).toHaveBeenCalledWith("/admin/sales-trainer");
         });
     });
 

@@ -25,6 +25,7 @@ import type {
 export default function SalesTrainerScoreStandardsPage() {
     const pathname = usePathname();
     const router = useRouter();
+    const isAudioManagementPath = pathname.startsWith("/admin/sales-trainer/audio");
     const toast = useToast();
     const [items, setItems] = useState<SalesTrainerAudioScorePrompt[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -106,12 +107,16 @@ export default function SalesTrainerScoreStandardsPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="新人训练路径录音评分标准"
-                    description="评分方案同时管理 AI 评分 prompt 和学员可见 rubric；创建与编辑都在独立页面。"
+                    title={isAudioManagementPath ? "录音评分标准" : "新人训练路径录音评分标准"}
+                    description={isAudioManagementPath
+                        ? "管理录音任务使用的 AI 评分 prompt、学员可见 rubric 和发布版本。"
+                        : "评分方案同时管理 AI 评分 prompt 和学员可见 rubric；创建与编辑都在独立页面。"}
                     primaryAction={canAccessScoreStandards ? (
                         <Button
                             className="rounded-full bg-slate-900 text-white"
-                            onClick={() => router.push("/admin/sales-trainer/score-standards/new")}
+                            onClick={() => router.push(isAudioManagementPath
+                                ? "/admin/sales-trainer/audio/score-standards/new"
+                                : "/admin/sales-trainer/score-standards/new")}
                         >
                             新建评分标准
                         </Button>
@@ -187,7 +192,9 @@ export default function SalesTrainerScoreStandardsPage() {
                                 <td className="px-6 py-4">{item.version}</td>
                                 <td className="px-6 py-4">
                                     <div className="flex flex-wrap gap-2">
-                                        <Button variant="outline" size="sm" onClick={() => router.push(`/admin/sales-trainer/score-standards/${item.prompt_id}/edit`)}>
+                                        <Button variant="outline" size="sm" onClick={() => router.push(isAudioManagementPath
+                                            ? `/admin/sales-trainer/audio/score-standards/${item.prompt_id}/edit`
+                                            : `/admin/sales-trainer/score-standards/${item.prompt_id}/edit`)}>
                                             编辑
                                         </Button>
                                         {item.status !== "published" ? (

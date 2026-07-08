@@ -54,16 +54,20 @@ describe("sales trainer admin routes", () => {
             capabilities({ manage_content: true, manage_prompts: true }),
         );
 
-        expect(items.filter((item) => item.href === "/admin/sales-trainer/ai-coach")).toHaveLength(1);
+        expect(items.filter((item) => item.href === "/admin/sales-trainer/audio")).toHaveLength(1);
     });
 
     it("groups AI coach under path configuration context nav", () => {
         const group = getSalesTrainerAdminContextNavGroup("/admin/sales-trainer/ai-coach");
 
-        expect(group.label).toBe("路径配置");
+        expect(group.label).toBe("路径与达标");
         expect(group.items.map((item) => item.href)).toEqual([
             "/admin/sales-trainer/paths",
+            "/admin/sales-trainer/units",
             "/admin/sales-trainer/ai-coach",
+            "/admin/sales-trainer/readiness",
+            "/admin/sales-trainer/training-records",
+            "/admin/sales-trainer/analytics",
         ]);
     });
 
@@ -75,15 +79,17 @@ describe("sales trainer admin routes", () => {
 
         expect(group.items.map((item) => item.href)).toEqual([
             "/admin/sales-trainer/paths",
+            "/admin/sales-trainer/units",
+            "/admin/sales-trainer/ai-coach",
         ]);
     });
 
-    it("allows nested article routes when the parent route is capability-visible", () => {
+    it("allows nested learning topic routes when the parent route is capability-visible", () => {
         const items = filterSalesTrainerAdminRouteItemsForCapabilities(
             [
                 {
-                    key: "articleImport",
-                    href: "/admin/sales-trainer/articles/import",
+                    key: "learningTopicImport",
+                    href: "/admin/sales-trainer/learning-topics/import",
                     label: "资料导入",
                     icon: SALES_TRAINER_ADMIN_NAV_ITEMS[0].icon,
                 },
@@ -98,7 +104,7 @@ describe("sales trainer admin routes", () => {
         );
 
         expect(items.map((item) => item.href)).toEqual([
-            "/admin/sales-trainer/articles/import",
+            "/admin/sales-trainer/learning-topics/import",
         ]);
     });
 

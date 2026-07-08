@@ -50,13 +50,13 @@ export function PathConfigAudioBindingEditor({
                 </div>
                 <div className="flex flex-wrap gap-3 text-sm font-semibold text-blue-700">
                     <Link
-                        href={`/admin/sales-trainer/score-standards?module=${moduleKey}&purpose=${purpose}`}
+                        href={`/admin/sales-trainer/audio/score-standards?module=${moduleKey}&purpose=${purpose}`}
                         className="underline"
                     >
                         管理评分标准
                     </Link>
                     <Link
-                        href={`/admin/sales-trainer/materials?module=${moduleKey}&purpose=${purpose}`}
+                        href={`/admin/sales-trainer/audio/materials?module=${moduleKey}&purpose=${purpose}`}
                         className="underline"
                     >
                         管理材料库
