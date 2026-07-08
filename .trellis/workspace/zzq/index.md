@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-07-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~174 | Active |
+| `journal-1.md` | ~207 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-07-08 | 新人训练后台模块治理 | `7e415cba` | `codex/newcomer-training-v0-9-closure` |
 | 5 | 2026-07-08 | 新人训练后台录音评测场景治理 | `0e4f5ad0` | `codex/newcomer-training-v0-9-closure` |
 | 4 | 2026-07-08 | 新人训练学习专题独立治理收口 | `5e1428ea` | `codex/newcomer-training-v0-9-closure` |
 | 3 | 2026-07-07 | 新人训练路径全闭环 4 PR | `99a4744d` | `codex/newcomer-training-v0-9-closure` |

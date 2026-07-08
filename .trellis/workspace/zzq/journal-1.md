@@ -19,7 +19,10 @@
 
 ### Main Changes
 
-(Add details)
+- 后台信息架构收敛为「录音管理」「学习专题」「路径与达标」「系统治理」，顶层导航不再按材料、题库、评分结果等资源表散开。
+- 新增 `/admin/sales-trainer/audio/*` 与 `/admin/sales-trainer/learning-topics/*` 模块路由；旧的 training-tasks、score-prompts、articles、papers、questions、materials、score-results 等入口保留兼容或转向新模块语义。
+- 录音管理内聚场景配置、材料、录音评分标准、学员录音、评分结果；学习专题内聚商务礼仪专题、导入、能力点、题库和考卷。
+- 同步更新权限导航、模块内二级导航、配置中心、运营诊断、API 契约文档与相关页面测试。
 
 ### Git Commits
 
@@ -29,7 +32,11 @@
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] CodeGraph `impact` / `affected` 用于影响面与测试选择。
+- [OK] `npx vitest run` 覆盖 27 个新人训练后台相关测试文件，99 个测试通过。
+- [OK] `npx eslint` 覆盖变更 TS/TSX 文件，0 错误。
+- [OK] `npx tsc --noEmit` 通过。
+- [OK] `npx next build` 通过，确认新旧管理路由可构建。
 
 ### Status
 
@@ -160,6 +167,39 @@
 | Hash | Message |
 |------|---------|
 | `0e4f5ad0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 6: 新人训练后台模块治理
+
+**Date**: 2026-07-08
+**Task**: 新人训练后台模块治理
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+按 Trellis 全流程完成新人训练后台治理：重组为录音管理、学习专题、路径与达标、系统治理，补齐新旧路由兼容、权限导航、模块内配套管理入口和验证记录。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7e415cba` | (see git log) |
 
 ### Testing
 
