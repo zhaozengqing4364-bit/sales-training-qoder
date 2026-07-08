@@ -17,6 +17,7 @@ from sales_trainer.models import (
     SalesTrainerExamPaper,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
+    SalesTrainerQuizAttempt,
     SalesTrainerUnit,
 )
 from sales_trainer.schemas import (
@@ -415,6 +416,138 @@ async def test_should_retry_scoring_failed_submission_when_transcript_exists(
     )
     assert total == 2
     assert any(score.total_score == 90 for score in scores)
+
+
+@pytest.mark.asyncio
+async def test_mark_unexpected_failure_pushes_non_terminal_submission_to_scoring_failed(
+    test_db: AsyncSession,
+) -> None:
+    """R2: 后台任务未预期异常时，submission 必须落到 scoring_failed 终态，不能卡在 transcribing/scoring。"""
+
+    admin = _user("admin")
+    learner = _user("user")
+    unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="销售录音",
+        unit_type="audio_scoring",
+        config={"audio": {"pass_threshold": 80}},
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    # 状态卡在 transcribing（模拟 _transcribe flush 后、_score 前崩溃）
+    submission = SalesTrainerAudioSubmission(
+        submission_id=str(uuid.uuid4()),
+        unit_id=unit.unit_id,
+        user_id=learner.user_id,
+        purpose="general_audio_scoring",
+        original_filename="pitch.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/pitch.wav",
+        status="transcribing",
+    )
+    test_db.add_all([admin, learner, unit, submission])
+    await test_db.commit()
+
+    service = AudioSubmissionService(test_db)
+    await service.mark_unexpected_failure(
+        str(submission.submission_id),
+        actor=admin,
+        error=RuntimeError("boom"),
+    )
+    await test_db.commit()
+
+    refreshed = await test_db.get(
+        SalesTrainerAudioSubmission, str(submission.submission_id)
+    )
+    assert refreshed is not None
+    assert refreshed.status == "scoring_failed"
+    assert refreshed.error_code == "[AUDIO_SUBMISSION_UNEXPECTED_ERROR]"
+    assert "RuntimeError" in (refreshed.error_message or "")
+
+
+@pytest.mark.asyncio
+async def test_mark_unexpected_failure_skips_already_terminal_submission(
+    test_db: AsyncSession,
+) -> None:
+    """R2.2: 已在终态（scored）的 submission 不被兜底覆盖。"""
+
+    admin = _user("admin")
+    learner = _user("user")
+    submission = SalesTrainerAudioSubmission(
+        submission_id=str(uuid.uuid4()),
+        unit_id=None,
+        user_id=learner.user_id,
+        purpose="general_audio_scoring",
+        original_filename="pitch.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/pitch.wav",
+        status="scored",
+    )
+    test_db.add_all([admin, learner, submission])
+    await test_db.commit()
+
+    service = AudioSubmissionService(test_db)
+    await service.mark_unexpected_failure(
+        str(submission.submission_id),
+        actor=admin,
+        error=RuntimeError("boom"),
+    )
+    await test_db.commit()
+
+    refreshed = await test_db.get(
+        SalesTrainerAudioSubmission, str(submission.submission_id)
+    )
+    assert refreshed is not None
+    assert refreshed.status == "scored"
+    assert refreshed.error_code is None
+
+
+@pytest.mark.asyncio
+async def test_score_logs_warning_when_status_not_transcribed(
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R8.1: _score 在状态非 transcribed 时静默 return 必须留 warning 日志，断点可观测。"""
+
+    from sales_trainer.services import audio_submission_service as service_module
+
+    warnings: list[tuple[str, dict[str, object]]] = []
+    original_warning = service_module.logger.warning
+
+    def spy_warning(msg: str, *args: object, **kwargs: object) -> None:
+        warnings.append((msg, dict(kwargs)))
+        original_warning(msg, *args, **kwargs)
+
+    monkeypatch.setattr(service_module.logger, "warning", spy_warning)
+
+    admin = _user("admin")
+    learner = _user("user")
+    # 状态为 scoring（非 transcribed），_score 应早退并记日志
+    submission = SalesTrainerAudioSubmission(
+        submission_id=str(uuid.uuid4()),
+        unit_id=None,
+        user_id=learner.user_id,
+        purpose="general_audio_scoring",
+        original_filename="pitch.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/pitch.wav",
+        status="scoring",
+    )
+    test_db.add_all([admin, learner, submission])
+    await test_db.commit()
+
+    service = AudioSubmissionService(test_db)
+    await service._score(submission, actor=admin)
+
+    assert any(
+        msg == "sales_trainer_audio_score_skipped_non_transcribed"
+        and kw.get("status") == "scoring"
+        for msg, kw in warnings
+    ), f"expected skipped warning, got {warnings}"
 
 
 @pytest.mark.asyncio
@@ -1684,3 +1817,116 @@ async def test_should_score_audio_with_submission_prompt_snapshot(
     assert total == 1
     assert scores[0].prompt_version == 1
     assert scores[0].prompt_hash == "hash-snapshot-score"
+
+
+@pytest.mark.asyncio
+async def test_find_attempt_by_client_token_returns_existing_attempt(
+    test_db: AsyncSession,
+) -> None:
+    """R7: 同一 client_token 重复提交时，helper 应命中已存在 attempt（幂等）。"""
+
+    from sales_trainer.services.quiz_service import find_attempt_by_client_token
+
+    owner = _user("user")
+    other = _user("user")
+    unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="做题单元",
+        unit_type="quiz",
+        config={"quiz": {"pass_threshold": 10}},
+        status="published",
+        created_by=owner.user_id,
+        updated_by=owner.user_id,
+    )
+    attempt = SalesTrainerQuizAttempt(
+        attempt_id=str(uuid.uuid4()),
+        unit_id=unit.unit_id,
+        user_id=owner.user_id,
+        status="scored",
+        client_token="token-abc",
+    )
+    test_db.add_all([owner, other, unit, attempt])
+    await test_db.commit()
+
+    found = await find_attempt_by_client_token(
+        test_db, client_token="token-abc", user_id=str(owner.user_id)
+    )
+    assert found is not None
+    assert found.attempt_id == attempt.attempt_id
+
+    # 他人提交同一 token 不应命中（防越权）
+    other_found = await find_attempt_by_client_token(
+        test_db, client_token="token-abc", user_id=str(other.user_id)
+    )
+    assert other_found is None
+
+
+@pytest.mark.asyncio
+async def test_find_attempt_by_client_token_returns_none_for_empty_token(
+    test_db: AsyncSession,
+) -> None:
+    """R7: 无 client_token（旧客户端/旧数据）时返回 None，调用方正常新建。"""
+
+    from sales_trainer.services.quiz_service import find_attempt_by_client_token
+
+    owner = _user("user")
+    test_db.add(owner)
+    await test_db.commit()
+
+    assert (
+        await find_attempt_by_client_token(
+            test_db, client_token=None, user_id=str(owner.user_id)
+        )
+        is None
+    )
+    assert (
+        await find_attempt_by_client_token(
+            test_db, client_token="", user_id=str(owner.user_id)
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_quiz_attempt_client_token_column_persists(
+    test_db: AsyncSession,
+) -> None:
+    """R7: client_token 列可读写，向后兼容 nullable（无 token 时为 None）。"""
+
+    owner = _user("user")
+    unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="做题单元",
+        unit_type="quiz",
+        config={"quiz": {"pass_threshold": 10}},
+        status="published",
+        created_by=owner.user_id,
+        updated_by=owner.user_id,
+    )
+    attempt_with_token = SalesTrainerQuizAttempt(
+        attempt_id=str(uuid.uuid4()),
+        unit_id=unit.unit_id,
+        user_id=owner.user_id,
+        status="scored",
+        client_token="persist-token",
+    )
+    attempt_without_token = SalesTrainerQuizAttempt(
+        attempt_id=str(uuid.uuid4()),
+        unit_id=unit.unit_id,
+        user_id=owner.user_id,
+        status="scored",
+        client_token=None,
+    )
+    test_db.add_all([owner, unit, attempt_with_token, attempt_without_token])
+    await test_db.commit()
+
+    refreshed_with = await test_db.get(
+        SalesTrainerQuizAttempt, attempt_with_token.attempt_id
+    )
+    refreshed_without = await test_db.get(
+        SalesTrainerQuizAttempt, attempt_without_token.attempt_id
+    )
+    assert refreshed_with is not None
+    assert refreshed_with.client_token == "persist-token"
+    assert refreshed_without is not None
+    assert refreshed_without.client_token is None

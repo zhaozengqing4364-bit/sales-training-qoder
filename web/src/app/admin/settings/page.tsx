@@ -98,12 +98,33 @@ function GovernedSettingsNotice() {
 }
 
 const PROVIDER_OPTIONS: { value: ModelProvider; label: string }[] = [
-    { value: "openai", label: "OpenAI" },
+    { value: "openai", label: "OpenAI / 兼容接口" },
     { value: "azure", label: "Azure OpenAI" },
     { value: "alibaba", label: "阿里云" },
     { value: "anthropic", label: "Anthropic" },
     { value: "local", label: "本地/其他" },
     { value: "local_streaming", label: "本地流式（ASR）" },
+];
+
+const OPENAI_COMPATIBLE_LLM_PRESETS = [
+    {
+        label: "DeepSeek Flash",
+        name: "DeepSeek Flash 默认模型",
+        base_url: "https://api.deepseek.com/v1",
+        model_name: "deepseek-v4-flash",
+    },
+    {
+        label: "DeepSeek Chat",
+        name: "DeepSeek Chat 默认模型",
+        base_url: "https://api.deepseek.com/v1",
+        model_name: "deepseek-chat",
+    },
+    {
+        label: "OpenAI GPT-4o",
+        name: "OpenAI GPT-4o 默认模型",
+        base_url: "https://api.openai.com/v1",
+        model_name: "gpt-4o",
+    },
 ];
 
 const MODEL_PROVIDER_MAP: Record<ModelType, ModelProvider[]> = {
@@ -418,6 +439,19 @@ export default function SettingsPage() {
             extra_config: {},
             is_default: false,
         });
+        setTestResult(null);
+    };
+
+    const applyOpenAICompatiblePreset = (
+        preset: typeof OPENAI_COMPATIBLE_LLM_PRESETS[number],
+    ) => {
+        setFormData((prev) => ({
+            ...prev,
+            name: prev.name.trim() ? prev.name : preset.name,
+            provider: "openai",
+            base_url: preset.base_url,
+            model_name: preset.model_name,
+        }));
         setTestResult(null);
     };
 
@@ -1105,11 +1139,40 @@ export default function SettingsPage() {
                             </label>
                             <input
                                 className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
-                                placeholder="https://api.openai.com/v1"
+                                placeholder={
+                                    formData.model_type === "llm" && formData.provider === "openai"
+                                        ? "https://api.deepseek.com/v1 或 https://api.openai.com/v1"
+                                        : "https://api.openai.com/v1"
+                                }
                                 value={formData.base_url}
                                 onChange={(e) => setFormData((prev) => ({ ...prev, base_url: e.target.value }))}
                             />
                         </div>
+
+                        {formData.model_type === "llm" && formData.provider === "openai" && (
+                            <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+                                <div>
+                                    <div className="text-xs font-bold text-blue-700">OpenAI 兼容 LLM 默认配置</div>
+                                    <p className="mt-1 text-xs text-blue-700/80">
+                                        DeepSeek 按 OpenAI-compatible 接口接入，provider 保持 openai，默认配置会被文本 LLM 服务统一消费。
+                                    </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {OPENAI_COMPATIBLE_LLM_PRESETS.map((preset) => (
+                                        <Button
+                                            key={preset.label}
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="rounded-full border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+                                            onClick={() => applyOpenAICompatiblePreset(preset)}
+                                        >
+                                            {preset.label}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">
@@ -1128,7 +1191,11 @@ export default function SettingsPage() {
                             <label className="text-xs font-bold text-slate-500 uppercase">模型名称 *</label>
                             <input
                                 className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
-                                placeholder="gpt-4o / text-embedding-3-small"
+                                placeholder={
+                                    formData.model_type === "llm" && formData.provider === "openai"
+                                        ? "deepseek-v4-flash / deepseek-chat / gpt-4o"
+                                        : "gpt-4o / text-embedding-3-small"
+                                }
                                 value={formData.model_name}
                                 onChange={(e) => setFormData((prev) => ({ ...prev, model_name: e.target.value }))}
                             />

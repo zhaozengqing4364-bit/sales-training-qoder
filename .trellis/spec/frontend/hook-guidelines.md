@@ -27,11 +27,12 @@ Export a single primary hook: `useCamelCase`.
 
 ```
 hooks/websocket/
-├── types.ts              # shared types (PracticeState, events)
-├── transport.ts          # connect, send, reconnect
-├── message-handlers.ts   # dispatch by message type
-├── use-audio-playback.ts # audio-specific sub-hook
-└── index.ts              # re-exports types, handlers, audio (transport imported directly by orchestrator)
+├── types.ts                   # shared types (PracticeState, events)
+├── transport.ts               # connect, send, reconnect
+├── message-handlers.ts        # dispatch by message type
+├── use-audio-playback.ts      # audio-specific sub-hook
+├── practice-ws-diagnostics.ts # structured WS lifecycle diagnostics (connect_*, reconnect_*, teardown); imported directly, not via the barrel
+└── index.ts                   # re-exports types, handlers, audio (transport + diagnostics imported directly by orchestrator)
 ```
 
 Orchestrators:

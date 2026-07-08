@@ -5010,6 +5010,39 @@ export interface TrainingJourneyRetrainingRequest {
     created_at: string;
 }
 
+export interface TrainingJourneyLearningTopicUnitProgress {
+    unit_key: string;
+    title: string;
+    order_index: number;
+    enabled: boolean;
+    capability_keys: string[];
+    require_quiz: boolean;
+    quiz_question_count: number;
+    quiz_pass_threshold: number | null;
+    score: number | null;
+    max_score: number | null;
+    passed: boolean | null;
+    status: "not_started" | "submitted" | "scored" | "passed" | "failed";
+    latest_attempt_id: string | null;
+    latest_attempt_submitted_at: string | null;
+}
+
+export interface TrainingJourneyLearningTopicProgress {
+    topic_key: string;
+    source_module_key: string;
+    title: string;
+    description: string | null;
+    order_index: number;
+    learning_content_id: string | null;
+    required: false;
+    blocks_next: false;
+    score_display_policy: "quiz_attempt_score";
+    status: "not_started" | "in_progress" | "passed" | "needs_remediation";
+    units: TrainingJourneyLearningTopicUnitProgress[];
+    ai_coach: SalesTrainerAiCoachAvailability | null;
+    source: Record<string, unknown>;
+}
+
 export interface TrainingJourneyResponse {
     journey_id: string;
     learner_id: string;
@@ -5025,6 +5058,7 @@ export interface TrainingJourneyResponse {
     role_level: TrainingJourneyLearnerLevel;
     training_stage: TrainingJourneyStage;
     modules: TrainingJourneyModuleProgress[];
+    learning_topics: TrainingJourneyLearningTopicProgress[];
     overall_progress: TrainingJourneyOverallProgress;
     retraining_requests: TrainingJourneyRetrainingRequest[];
     diagnostics: TrainingJourneyDiagnostic[];
@@ -5413,6 +5447,19 @@ export interface TrainingJourneyAnalyticsModuleSummary {
     average_score?: number | null;
 }
 
+export interface TrainingJourneyAnalyticsLearningTopicSummary {
+    topic_key: string;
+    source_module_key?: string | null;
+    title: string;
+    learner_count: number;
+    completed_count: number;
+    needs_remediation_count: number;
+    status_counts: Record<string, number>;
+    completion_rate: number | null;
+    average_unit_score?: number | null;
+    blocking_required_path: boolean;
+}
+
 export interface TrainingJourneyAnalyticsWeaknessHeatmapEntry {
     heatmap_key: string;
     module_key: string;
@@ -5481,6 +5528,7 @@ export interface TrainingJourneyAnalyticsResponse {
     summary: TrainingJourneyAnalyticsSummary;
     funnel: TrainingJourneyAnalyticsFunnelEntry[];
     module_summaries: TrainingJourneyAnalyticsModuleSummary[];
+    learning_topic_summaries?: TrainingJourneyAnalyticsLearningTopicSummary[];
     weakness_heatmap: TrainingJourneyAnalyticsWeaknessHeatmapEntry[];
     trend_data: TrainingJourneyAnalyticsTrendPoint[];
     learner_level_summaries: TrainingJourneyAnalyticsLevelSummary[];
@@ -5715,6 +5763,7 @@ export interface BusinessEtiquetteLearningUnit extends BusinessEtiquetteTraining
 
 export interface BusinessEtiquetteLearningUnitsResponse {
     module_key: string;
+    topic_key?: string | null;
     learning_content_id: string;
     path_revision_id: string | null;
     path_revision_no: number | null;
@@ -6091,6 +6140,99 @@ export interface NewcomerPathConfigResponse {
     readonly working_revision_no: number | null;
     readonly has_unpublished_revision: boolean;
     readonly diagnostics: NewcomerPathConfigDiagnostics;
+}
+
+export interface NewcomerLearningTopicConfig {
+    readonly topic_key: "business_etiquette";
+    readonly source_module_key: "business_skills";
+    readonly enabled: boolean;
+    readonly title: string;
+    readonly description: string | null;
+    readonly order_index: number;
+    readonly learning_content_id: string | null;
+    readonly learning_units: readonly BusinessEtiquetteTrainingUnitConfig[];
+    readonly ai_coach?: AiCoachAdminConfigLike | null;
+    readonly required: false;
+    readonly blocks_next: false;
+    readonly score_display_policy: "quiz_attempt_score";
+}
+
+export interface NewcomerLearningTopicsPayload {
+    readonly schema_version: "newcomer_learning_topics_v1";
+    readonly topics: readonly NewcomerLearningTopicConfig[];
+}
+
+export interface NewcomerLearningTopicsSaveRequest extends NewcomerLearningTopicsPayload {
+    readonly reason?: string | null;
+}
+
+export interface NewcomerLearningTopicsActionRequest {
+    readonly reason: string;
+    readonly revision_id?: string | null;
+}
+
+export interface NewcomerLearningTopicsGenerateDraftRequest {
+    readonly overwrite_working?: boolean;
+    readonly reason?: string | null;
+}
+
+export interface NewcomerLearningTopicRevisionSummary {
+    readonly revision_id: string;
+    readonly revision_no: number;
+    readonly status: NewcomerPathRevisionStatus;
+    readonly change_class: NewcomerPathChangeClass;
+    readonly title: string;
+    readonly topic_count: number;
+    readonly is_active: boolean;
+    readonly is_working: boolean;
+    readonly source_revision_id: string | null;
+    readonly payload_hash: string;
+    readonly reason: string | null;
+    readonly trace_id: string | null;
+    readonly created_by: string | null;
+    readonly published_by: string | null;
+    readonly created_at: string;
+    readonly published_at: string | null;
+}
+
+export interface NewcomerLearningTopicsRevisionListResponse {
+    readonly items: readonly NewcomerLearningTopicRevisionSummary[];
+    readonly total: number;
+}
+
+export interface NewcomerLearningTopicsConfigResponse {
+    readonly source: "active_revision" | "not_configured";
+    readonly fallback_reason?: string | null;
+    readonly legacy_snapshot_only: false;
+    readonly management_entry: "/admin/sales-trainer/articles";
+    readonly permission: "sales_trainer.manage_modules";
+    readonly payload: NewcomerLearningTopicsPayload;
+    readonly active_revision_id: string | null;
+    readonly active_revision_no: number | null;
+    readonly active_revision_snapshot?: Record<string, unknown> | null;
+    readonly working_revision_id: string | null;
+    readonly working_revision_no: number | null;
+    readonly has_unpublished_revision: boolean;
+    readonly diagnostics: readonly TrainingJourneyDiagnostic[];
+}
+
+export interface NewcomerLearningTopicsPreviewResponse {
+    readonly action: "newcomer_learning_topics.publish" | "newcomer_learning_topics.rollback";
+    readonly permission: "sales_trainer.manage_modules";
+    readonly requires_reason: boolean;
+    readonly requires_trace_id: boolean;
+    readonly future_only: boolean;
+    readonly risk_level: "low" | "medium" | "high";
+    readonly risk_reasons: readonly string[];
+    readonly change_class: NewcomerPathChangeClass;
+    readonly target_revision_id: string;
+    readonly target_revision_no: number;
+    readonly target_revision_status: NewcomerPathRevisionStatus;
+    readonly impact_scope: Record<string, unknown>;
+    readonly before_snapshot?: Record<string, unknown> | null;
+    readonly after_snapshot: Record<string, unknown>;
+    readonly audit_event: Record<string, unknown>;
+    readonly rollback_hint: Record<string, unknown>;
 }
 
 export interface NewcomerPathPublishPreviewResponse {
@@ -7901,6 +8043,8 @@ export interface AiCoachAdminConfigLike {
     min_turns: number;
     max_turns: number;
     mastery_threshold: number;
+    generation_model?: string | null;
+    scoring_model?: string | null;
     prompt_template_id: string | null;
     prompt_revision_id: string | null;
     prompt_contract_hash: string | null;

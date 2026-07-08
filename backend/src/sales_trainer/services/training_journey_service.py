@@ -37,6 +37,9 @@ from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
 from sales_trainer.services.audio_submission_service import AudioSubmissionService
+from sales_trainer.services.learning_topic_projection_service import (
+    LearningTopicProjectionService,
+)
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
@@ -290,6 +293,9 @@ class TrainingJourneyService:
             "summary": self._analytics_summary(loaded_journeys, filtered_total),
             "funnel": self._analytics_funnel(loaded_journeys),
             "module_summaries": self._analytics_modules(module_scoped_journeys),
+            "learning_topic_summaries": self._analytics_learning_topics(
+                loaded_journeys
+            ),
             "weakness_heatmap": self._analytics_weakness_heatmap(
                 module_scoped_journeys
             ),
@@ -393,6 +399,9 @@ class TrainingJourneyService:
             )
         path_payload = payload_from_revision(active)
         modules = self._journey_modules(path_payload.modules)
+        learning_topics = await LearningTopicProjectionService(
+            self._db
+        ).learner_topics(user_id=str(learner.user_id))
         outcomes = await self._outcomes_for_active_revision(
             learner_id=str(learner.user_id),
             path_revision_id=str(active.revision_id),
@@ -433,6 +442,7 @@ class TrainingJourneyService:
         retraining_requests = await self._retraining_requests(
             learner_id=str(learner.user_id),
             modules=module_payloads,
+            learning_topics=learning_topics,
         )
         return {
             "journey_id": (
@@ -451,6 +461,7 @@ class TrainingJourneyService:
             "role_level": role_level,
             "training_stage": training_stage,
             "modules": module_payloads,
+            "learning_topics": learning_topics,
             "overall_progress": overall,
             "retraining_requests": retraining_requests,
             "diagnostics": diagnostics,
@@ -463,6 +474,8 @@ class TrainingJourneyService:
     ) -> list[JourneyModule]:
         modules: list[JourneyModule] = []
         for module in sorted(path_modules, key=lambda item: item.order_index):
+            if module.module_key == "business_skills":
+                continue
             modules.append(self._base_module(module))
             ai_module = self._ai_coach_module(module)
             if ai_module is not None:
@@ -1384,6 +1397,7 @@ class TrainingJourneyService:
         *,
         learner_id: str,
         modules: list[dict[str, Any]],
+        learning_topics: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         logs, _ = await OperationLogService(self._db).list_logs(
             target_type=READINESS_DOSSIER_TARGET_TYPE,
@@ -1410,6 +1424,7 @@ class TrainingJourneyService:
             evidence_ids = unique_non_empty(metadata.get("source_evidence_ids") or [])
             target_modules = _retraining_target_modules(
                 modules,
+                learning_topics,
                 evidence_ids=evidence_ids,
                 capability_keys=capability_keys,
             )
@@ -1718,6 +1733,70 @@ class TrainingJourneyService:
             for bucket in sorted(
                 buckets.values(),
                 key=lambda item: (-int(item["learner_count"]), str(item["module_key"])),
+            )
+        ]
+
+    @staticmethod
+    def _analytics_learning_topics(
+        journeys: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        buckets: dict[str, dict[str, Any]] = {}
+        for journey in journeys:
+            for topic in journey.get("learning_topics") or []:
+                key = str(topic.get("topic_key") or "unknown")
+                bucket = buckets.setdefault(
+                    key,
+                    {
+                        "topic_key": key,
+                        "source_module_key": topic.get("source_module_key"),
+                        "title": topic.get("title") or key,
+                        "learner_count": 0,
+                        "completed_count": 0,
+                        "needs_remediation_count": 0,
+                        "status_counts": {},
+                        "unit_score_sum": 0.0,
+                        "unit_score_count": 0,
+                    },
+                )
+                bucket["learner_count"] += 1
+                status = str(topic.get("status") or "not_started")
+                bucket["status_counts"][status] = (
+                    bucket["status_counts"].get(status, 0) + 1
+                )
+                if status == "passed":
+                    bucket["completed_count"] += 1
+                if status == "needs_remediation":
+                    bucket["needs_remediation_count"] += 1
+                for unit in topic.get("units") or []:
+                    if not isinstance(unit, dict):
+                        continue
+                    score = TrainingJourneyService._float_or_none(unit.get("score"))
+                    if score is not None:
+                        bucket["unit_score_sum"] += score
+                        bucket["unit_score_count"] += 1
+        return [
+            {
+                "topic_key": bucket["topic_key"],
+                "source_module_key": bucket["source_module_key"],
+                "title": bucket["title"],
+                "learner_count": bucket["learner_count"],
+                "completed_count": bucket["completed_count"],
+                "needs_remediation_count": bucket["needs_remediation_count"],
+                "status_counts": bucket["status_counts"],
+                "completion_rate": _rate(
+                    bucket["completed_count"],
+                    bucket["learner_count"],
+                ),
+                "average_unit_score": (
+                    round(bucket["unit_score_sum"] / bucket["unit_score_count"], 2)
+                    if bucket["unit_score_count"]
+                    else None
+                ),
+                "blocking_required_path": False,
+            }
+            for bucket in sorted(
+                buckets.values(),
+                key=lambda item: (-int(item["learner_count"]), str(item["topic_key"])),
             )
         ]
 
@@ -2490,6 +2569,10 @@ def _journey_matches_filters(
     if module_key and not any(
         module.get("module_key") == module_key
         for module in journey.get("modules") or []
+    ) and not any(
+        topic.get("topic_key") == module_key
+        or topic.get("source_module_key") == module_key
+        for topic in journey.get("learning_topics") or []
     ):
         return False
     if learner_level:
@@ -2527,8 +2610,15 @@ def _module_practice_path(module: JourneyModule) -> str | None:
     return None
 
 
+def _learning_topic_practice_path(topic_key: str) -> str | None:
+    if topic_key == "business_etiquette":
+        return "/sales-trainer/learning-topics/business-etiquette"
+    return None
+
+
 def _retraining_target_modules(
     modules: list[dict[str, Any]],
+    learning_topics: list[dict[str, Any]],
     *,
     evidence_ids: list[str],
     capability_keys: list[str],
@@ -2554,7 +2644,15 @@ def _retraining_target_modules(
         not in evidence_keys
         and _module_matches_retraining_capability(module, capability_set)
     ]
-    matched = evidence_matched + capability_matched
+    matched = (
+        evidence_matched
+        + capability_matched
+        + _retraining_target_learning_topics(
+            learning_topics,
+            evidence_set=evidence_set,
+            capability_set=capability_set,
+        )
+    )
     deduped: dict[tuple[str, str], dict[str, Any]] = {}
     for module in matched:
         key = (str(module.get("kind") or ""), str(module.get("module_key") or ""))
@@ -2566,6 +2664,83 @@ def _retraining_target_modules(
             key=lambda item: int(item.get("order_index") or 0),
         )
     ]
+
+
+def _retraining_target_learning_topics(
+    learning_topics: list[dict[str, Any]],
+    *,
+    evidence_set: set[str],
+    capability_set: set[str],
+) -> list[dict[str, Any]]:
+    matched: list[dict[str, Any]] = []
+    for topic in learning_topics:
+        topic_key = str(topic.get("topic_key") or "")
+        source_module_key = str(topic.get("source_module_key") or "")
+        topic_capability_keys = _learning_topic_capability_keys(topic)
+        evidence_matched = bool(
+            evidence_set
+            and source_module_key == "business_skills"
+            and any(
+                evidence_id.startswith("ai_coach_session:")
+                or evidence_id.startswith("business_etiquette_quiz_attempt:")
+                for evidence_id in evidence_set
+            )
+        )
+        capability_matched = bool(capability_set.intersection(topic_capability_keys))
+        if not evidence_matched and not capability_matched:
+            continue
+        ai_coach = topic.get("ai_coach")
+        ai_available = isinstance(ai_coach, dict) and bool(ai_coach.get("available"))
+        coach_path = (
+            str(ai_coach.get("coach_path"))
+            if ai_available and ai_coach.get("coach_path")
+            else None
+        )
+        topic_path = _learning_topic_practice_path(topic_key)
+        matched.append(
+            {
+                "module_key": source_module_key or topic_key,
+                "title": topic.get("title"),
+                "kind": "ai_coach" if coach_path else "learning_topic",
+                "module_type": "learning_topic_ai_coach"
+                if coach_path
+                else "learning_topic",
+                "status": topic.get("status"),
+                "order_index": topic.get("order_index"),
+                "capability_keys": topic_capability_keys,
+                "next_action": {
+                    "label": "进入 AI 教练" if coach_path else "继续学习",
+                    "target_path": coach_path or topic_path,
+                    "disabled": (coach_path or topic_path) is None,
+                    "disabled_reason": None
+                    if (coach_path or topic_path)
+                    else "学习专题暂不可用。",
+                },
+            }
+        )
+    return matched
+
+
+def _learning_topic_capability_keys(topic: dict[str, Any]) -> list[str]:
+    keys: list[str] = []
+    for unit in topic.get("units") or []:
+        if not isinstance(unit, dict):
+            continue
+        keys.extend(
+            value
+            for value in unit.get("capability_keys") or []
+            if isinstance(value, str)
+        )
+    if keys:
+        return unique_non_empty(keys)
+    return module_capability_keys(
+        {
+            "module_key": topic.get("source_module_key") or topic.get("topic_key"),
+            "title": topic.get("title"),
+            "kind": "learning_topic",
+            "module_type": "learning_topic",
+        }
+    )
 
 
 def _module_matches_retraining_evidence(

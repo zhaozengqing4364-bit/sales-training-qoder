@@ -28,6 +28,11 @@ from websocket_routes import register_websocket_routes
 load_dotenv()
 configure_logging(os.getenv("LOG_LEVEL", "INFO"))
 
+IPV4_CORS_HOST_PATTERN = (
+    r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
+    r"(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}"
+)
+
 DEV_CORS_ORIGINS = [
     "http://localhost:3445",
     "http://localhost:3000",
@@ -41,6 +46,7 @@ DEV_CORS_ORIGINS = [
 
 DEV_CORS_ALLOW_ORIGIN_REGEX = (
     r"^https?://("
+    rf"{IPV4_CORS_HOST_PATTERN}|"
     r"localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|"
     r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
     r"192\.168\.\d{1,3}\.\d{1,3}|"

@@ -47,6 +47,12 @@ import type {
     NewcomerExamPaperListResponse,
     NewcomerExamPaperRevisionListResponse,
     NewcomerExamPaperUpdateRequest,
+    NewcomerLearningTopicsActionRequest,
+    NewcomerLearningTopicsConfigResponse,
+    NewcomerLearningTopicsGenerateDraftRequest,
+    NewcomerLearningTopicsPreviewResponse,
+    NewcomerLearningTopicsRevisionListResponse,
+    NewcomerLearningTopicsSaveRequest,
     NewcomerPaperAttempt,
     NewcomerPaperAttemptCreateRequest,
     NewcomerPaperRollbackRequest,
@@ -117,6 +123,28 @@ export function createNewcomerTrainingDomain({
         getBusinessEtiquetteLearningUnits: async () => {
             return request<BusinessEtiquetteLearningUnitsResponse>(
                 "/newcomer-training/business-etiquette/learning-units",
+            );
+        },
+
+        getBusinessEtiquetteArticle: async () => {
+            return request<NewcomerArticle>(
+                "/newcomer-training/business-etiquette/article",
+            );
+        },
+
+        completeBusinessEtiquetteArticleChapter: async (
+            chapterId: string,
+            options?: { learning_content_id?: string | null },
+        ) => {
+            return request<NewcomerArticleProgressResponse>(
+                "/newcomer-training/business-etiquette/article-progress",
+                {
+                    method: "POST",
+                    body: JSON.stringify({
+                        chapter_id: chapterId,
+                        learning_content_id: options?.learning_content_id ?? null,
+                    }),
+                },
             );
         },
 
@@ -651,6 +679,79 @@ export function createAdminNewcomerTrainingDomain({
         rollbackPathConfig: async (payload: NewcomerPathConfigActionRequest) => {
             return request<NewcomerPathConfigResponse>(
                 "/admin/newcomer-training/path-config/rollback",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        getLearningTopicsConfig: async () => {
+            return request<NewcomerLearningTopicsConfigResponse>(
+                "/admin/newcomer-training/learning-topics/config",
+                { method: "GET" },
+            );
+        },
+
+        saveLearningTopicsConfig: async (payload: NewcomerLearningTopicsSaveRequest) => {
+            return request<NewcomerLearningTopicsConfigResponse>(
+                "/admin/newcomer-training/learning-topics/config",
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        generateBusinessEtiquetteLearningTopicDraft: async (
+            payload: NewcomerLearningTopicsGenerateDraftRequest = {},
+        ) => {
+            return request<NewcomerLearningTopicsConfigResponse>(
+                "/admin/newcomer-training/learning-topics/business-etiquette/generate-draft",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        previewLearningTopicsPublish: async () => {
+            return request<NewcomerLearningTopicsPreviewResponse>(
+                "/admin/newcomer-training/learning-topics/publish/preview",
+                { method: "POST" },
+            );
+        },
+
+        publishLearningTopicsConfig: async (payload: NewcomerLearningTopicsActionRequest) => {
+            return request<NewcomerLearningTopicsConfigResponse>(
+                "/admin/newcomer-training/learning-topics/publish",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        listLearningTopicsRevisions: async () => {
+            return request<NewcomerLearningTopicsRevisionListResponse>(
+                "/admin/newcomer-training/learning-topics/revisions",
+                { method: "GET" },
+            );
+        },
+
+        previewLearningTopicsRollback: async (revisionId: string) => {
+            return request<NewcomerLearningTopicsPreviewResponse>(
+                "/admin/newcomer-training/learning-topics/rollback/preview",
+                {
+                    method: "POST",
+                    body: JSON.stringify({ revision_id: revisionId }),
+                },
+            );
+        },
+
+        rollbackLearningTopicsConfig: async (payload: NewcomerLearningTopicsActionRequest) => {
+            return request<NewcomerLearningTopicsConfigResponse>(
+                "/admin/newcomer-training/learning-topics/rollback",
                 {
                     method: "POST",
                     body: JSON.stringify(payload),

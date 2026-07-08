@@ -21,7 +21,7 @@ def resolve_ai_coach_llm_model_config(model_name: str | None) -> ModelConfig | N
     if not normalized:
         return None
     for config in get_config_manager().get_all_configs(ModelType.LLM):
-        if str(config.model_name) == normalized:
+        if str(config.id) == normalized or str(config.model_name) == normalized:
             return config
     raise AiCoachModelConfigError(
         "[AI_COACH_MODEL_CONFIG_NOT_FOUND]",
@@ -40,7 +40,7 @@ async def resolve_ai_coach_llm_model_config_from_db(
         select(ModelConfig)
         .where(
             ModelConfig.model_type == ModelType.LLM.value,
-            ModelConfig.model_name == normalized,
+            (ModelConfig.id == normalized) | (ModelConfig.model_name == normalized),
             ModelConfig.is_active.is_(True),
         )
         .order_by(ModelConfig.is_default.desc(), ModelConfig.updated_at.desc())

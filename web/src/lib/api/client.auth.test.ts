@@ -160,6 +160,26 @@ describe("API client 401 handling", () => {
         expect(headers.get("X-CSRF-Token")).toBe("tts-csrf-token");
     });
 
+    it("normalizes admin TTS preview blob body read failures through the shared API client", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue({
+                ok: true,
+                status: 200,
+                blob: () => Promise.reject(new TypeError("body stream failed")),
+            }),
+        );
+
+        await expect(
+            api.admin.previewTTSBlob({ text: "读取失败试听" }),
+        ).rejects.toMatchObject({
+            name: "ApiRequestError",
+            status: 0,
+            errorCode: "[NETWORK_ERROR]",
+            rawMessage: "body stream failed",
+        });
+    });
+
     it("normalizes admin TTS preview failures into Chinese ApiRequestError text", async () => {
         vi.stubGlobal(
             "fetch",
@@ -236,6 +256,123 @@ describe("API client 401 handling", () => {
             name: "ApiRequestError",
             errorCode: "[NETWORK_ERROR]",
         });
+    });
+
+    it("password login request aborts after configured timeout", async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchMock = vi.fn(
+                (_url: RequestInfo | URL, init?: RequestInit) => new Promise((_resolve, reject) => {
+                    init?.signal?.addEventListener("abort", () => {
+                        reject(new DOMException("The operation was aborted.", "AbortError"));
+                    });
+                }),
+            );
+            vi.stubGlobal("fetch", fetchMock);
+
+            const request = api.auth.login({ email: "admin@qoder.ai", password: "password" });
+            const rejection = expect(request).rejects.toMatchObject({
+                name: "ApiRequestError",
+                status: 0,
+                errorCode: "[REQUEST_TIMEOUT]",
+                message: "登录超时，请重试。",
+            });
+            await vi.advanceTimersByTimeAsync(8000);
+
+            const requestSignal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal | undefined;
+            expect(requestSignal?.aborted).toBe(true);
+            await rejection;
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("password login request aborts when JSON body read stalls past the configured timeout", async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchMock = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => new Promise((_resolve, reject) => {
+                    init?.signal?.addEventListener("abort", () => {
+                        reject(new DOMException("The operation was aborted.", "AbortError"));
+                    });
+                }),
+            }));
+            vi.stubGlobal("fetch", fetchMock);
+
+            const request = api.auth.login({ email: "admin@qoder.ai", password: "password" });
+            const rejection = expect(request).rejects.toMatchObject({
+                name: "ApiRequestError",
+                status: 0,
+                errorCode: "[REQUEST_TIMEOUT]",
+                message: "登录超时，请重试。",
+            });
+            await vi.advanceTimersByTimeAsync(8000);
+
+            const requestSignal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal | undefined;
+            expect(requestSignal?.aborted).toBe(true);
+            await rejection;
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("current-user request aborts after configured timeout", async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchMock = vi.fn(
+                (_url: RequestInfo | URL, init?: RequestInit) => new Promise((_resolve, reject) => {
+                    init?.signal?.addEventListener("abort", () => {
+                        reject(new DOMException("The operation was aborted.", "AbortError"));
+                    });
+                }),
+            );
+            vi.stubGlobal("fetch", fetchMock);
+
+            const request = api.user.getMe();
+            const rejection = expect(request).rejects.toMatchObject({
+                name: "ApiRequestError",
+                status: 0,
+                errorCode: "[REQUEST_TIMEOUT]",
+            });
+            await vi.advanceTimersByTimeAsync(8000);
+
+            const requestSignal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal | undefined;
+            expect(requestSignal?.aborted).toBe(true);
+            await rejection;
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("dashboard stats request aborts after configured timeout with section fallback copy", async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchMock = vi.fn(
+                (_url: RequestInfo | URL, init?: RequestInit) => new Promise((_resolve, reject) => {
+                    init?.signal?.addEventListener("abort", () => {
+                        reject(new DOMException("The operation was aborted.", "AbortError"));
+                    });
+                }),
+            );
+            vi.stubGlobal("fetch", fetchMock);
+
+            const request = api.dashboard.getStats();
+            const rejection = expect(request).rejects.toMatchObject({
+                name: "ApiRequestError",
+                status: 0,
+                errorCode: "[REQUEST_TIMEOUT]",
+                message: "训练统计加载较慢，请稍后刷新。",
+            });
+            await vi.advanceTimersByTimeAsync(8000);
+
+            const requestSignal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal | undefined;
+            expect(requestSignal?.aborted).toBe(true);
+            await rejection;
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("aligns loopback API host with the current page host so dev-login cookies survive on 127.0.0.1", () => {

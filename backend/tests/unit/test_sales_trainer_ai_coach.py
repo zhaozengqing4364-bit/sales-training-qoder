@@ -26,6 +26,7 @@ from sales_trainer.schemas import (
     AiCoachScoringRubricV1,
     AiCoachTurnSubmitV1,
     NewcomerPathConfigSaveRequest,
+    NewcomerPathModuleConfig,
 )
 from sales_trainer.services.ai_coach_scoring_service import (
     AiCoachScoreOutputV1,
@@ -34,6 +35,9 @@ from sales_trainer.services.ai_coach_scoring_service import (
 from sales_trainer.services.ai_coach_session_service import (
     AiCoachSessionService,
     AiCoachSessionServiceError,
+)
+from sales_trainer.services.learning_topic_config_service import (
+    LearningTopicConfigError,
 )
 from sales_trainer.services.prompt_template_revision_resolver import (
     RESULT_OK,
@@ -71,6 +75,53 @@ class _SessionLookupDb(_FakeDb):
 
     async def get(self, _model: object, _record_id: str) -> object | None:
         return self._session
+
+
+def _patch_business_etiquette_learning_topic(
+    monkeypatch: pytest.MonkeyPatch,
+    path_payload: dict[str, object],
+    *,
+    revision_id: str = "revision-1",
+    revision_no: int = 1,
+) -> None:
+    modules = path_payload["modules"]
+    assert isinstance(modules, list)
+    module_payload = modules[0]
+    module = NewcomerPathModuleConfig.model_validate(module_payload)
+
+    class FakeLearningTopicConfigService:
+        def __init__(self, db: object) -> None:
+            self._db = db
+
+        async def active_business_etiquette_module_config(
+            self,
+        ) -> tuple[str, int, NewcomerPathModuleConfig]:
+            return revision_id, revision_no, module
+
+    monkeypatch.setattr(
+        "sales_trainer.services.ai_coach_session_service.NewcomerLearningTopicConfigService",
+        FakeLearningTopicConfigService,
+    )
+
+
+def _patch_missing_business_etiquette_learning_topic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeLearningTopicConfigService:
+        def __init__(self, db: object) -> None:
+            self._db = db
+
+        async def active_business_etiquette_module_config(self) -> object:
+            raise LearningTopicConfigError(
+                "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
+                "新人训练路径尚未发布 active revision，学习专题不能启动训练。",
+                409,
+            )
+
+    monkeypatch.setattr(
+        "sales_trainer.services.ai_coach_session_service.NewcomerLearningTopicConfigService",
+        FakeLearningTopicConfigService,
+    )
 
 
 def _compiled_contract() -> CompiledPromptContract:
@@ -686,20 +737,9 @@ def test_score_short_answer_accepts_resolver_ok_status(
 def test_create_session_v1_rejects_disallowed_coach_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class FakePathConfigService:
-        def __init__(self, db: object) -> None:
-            self._db = db
-
-        async def get_config(self) -> dict[str, object]:
-            return {
-                "path": _path_payload_with_ai_coach(mastery_threshold=80),
-                "active_revision_id": "revision-1",
-                "active_revision_no": 1,
-            }
-
-    monkeypatch.setattr(
-        "sales_trainer.services.ai_coach_session_service.SalesTrainerPathConfigService",
-        FakePathConfigService,
+    _patch_business_etiquette_learning_topic(
+        monkeypatch,
+        _path_payload_with_ai_coach(mastery_threshold=80),
     )
     service = AiCoachSessionService(_FakeDb())  # type: ignore[arg-type]
 
@@ -719,20 +759,9 @@ def test_create_session_v1_rejects_disallowed_coach_mode(
 def test_create_session_v1_rejects_disallowed_explicit_interaction_type(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class FakePathConfigService:
-        def __init__(self, db: object) -> None:
-            self._db = db
-
-        async def get_config(self) -> dict[str, object]:
-            return {
-                "path": _path_payload_with_ai_coach(mastery_threshold=80),
-                "active_revision_id": "revision-1",
-                "active_revision_no": 1,
-            }
-
-    monkeypatch.setattr(
-        "sales_trainer.services.ai_coach_session_service.SalesTrainerPathConfigService",
-        FakePathConfigService,
+    _patch_business_etiquette_learning_topic(
+        monkeypatch,
+        _path_payload_with_ai_coach(mastery_threshold=80),
     )
     service = AiCoachSessionService(_FakeDb())  # type: ignore[arg-type]
 
@@ -752,21 +781,7 @@ def test_create_session_v1_rejects_disallowed_explicit_interaction_type(
 def test_create_session_v1_rejects_missing_active_revision(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class FakePathConfigService:
-        def __init__(self, db: object) -> None:
-            self._db = db
-
-        async def get_config(self) -> dict[str, object]:
-            return {
-                "path": _path_payload_with_ai_coach(mastery_threshold=80),
-                "active_revision_id": None,
-                "active_revision_no": None,
-            }
-
-    monkeypatch.setattr(
-        "sales_trainer.services.ai_coach_session_service.SalesTrainerPathConfigService",
-        FakePathConfigService,
-    )
+    _patch_missing_business_etiquette_learning_topic(monkeypatch)
     service = AiCoachSessionService(_FakeDb())  # type: ignore[arg-type]
 
     with pytest.raises(AiCoachSessionServiceError) as exc_info:
@@ -791,21 +806,7 @@ def test_create_session_v1_rejects_module_without_ai_coach_config(
     assert isinstance(module, dict)
     module["ai_coach"] = None
 
-    class FakePathConfigService:
-        def __init__(self, db: object) -> None:
-            self._db = db
-
-        async def get_config(self) -> dict[str, object]:
-            return {
-                "path": path_payload,
-                "active_revision_id": "revision-1",
-                "active_revision_no": 1,
-            }
-
-    monkeypatch.setattr(
-        "sales_trainer.services.ai_coach_session_service.SalesTrainerPathConfigService",
-        FakePathConfigService,
-    )
+    _patch_business_etiquette_learning_topic(monkeypatch, path_payload)
     service = AiCoachSessionService(_FakeDb())  # type: ignore[arg-type]
 
     with pytest.raises(AiCoachSessionServiceError) as exc_info:

@@ -1,0 +1,1102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>商务技巧 AI 教练 · 三个设计方向</title>
+  <style>
+    :root {
+      --bg-main: #fafaf9;
+      --bg-canvas: #f8fafc;
+      --surface: rgba(255, 255, 255, 0.72);
+      --surface-solid: #ffffff;
+      --muted: #f1f5f9;
+      --border: #e2e8f0;
+      --border-soft: rgba(255, 255, 255, 0.68);
+      --text: #18181b;
+      --text-2: #52525b;
+      --text-3: #71717a;
+      --blue: #3b82f6;
+      --blue-soft: #eff6ff;
+      --violet: #8b5cf6;
+      --violet-soft: #f5f3ff;
+      --emerald: #10b981;
+      --emerald-soft: #ecfdf5;
+      --amber: #f59e0b;
+      --amber-soft: #fffbeb;
+      --red-soft: #fef2f2;
+      --shadow-card: 0 8px 30px rgba(0, 0, 0, 0.04);
+      --shadow-float: 0 20px 40px rgba(0, 0, 0, 0.06);
+      --radius-card: 32px;
+      --radius-panel: 24px;
+      --radius-small: 16px;
+      color-scheme: light;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 12% -6%, rgba(59, 130, 246, 0.08), transparent 28rem),
+        radial-gradient(circle at 90% 0%, rgba(139, 92, 246, 0.07), transparent 24rem),
+        var(--bg-main);
+      color: var(--text);
+      font-family: "Avenir Next", "Segoe UI", "PingFang SC", "Microsoft YaHei", "Heiti SC", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    .page {
+      width: min(1480px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: end;
+      margin-bottom: 22px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--violet);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 860px;
+      margin: 0;
+      color: #0f172a;
+      font-size: clamp(28px, 3.4vw, 48px);
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      text-wrap: balance;
+    }
+
+    .lead {
+      max-width: 760px;
+      margin: 12px 0 0;
+      color: var(--text-2);
+      font-size: 15px;
+      line-height: 1.8;
+    }
+
+    .dials {
+      width: min(390px, 100%);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-panel);
+      background: var(--surface);
+      box-shadow: var(--shadow-card);
+      padding: 16px;
+      backdrop-filter: blur(18px);
+    }
+
+    .dial {
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr) 32px;
+      gap: 10px;
+      align-items: center;
+      color: var(--text-2);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .dial + .dial {
+      margin-top: 10px;
+    }
+
+    .dial input {
+      width: 100%;
+      accent-color: #0f172a;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .direction {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-card);
+      background: rgba(255, 255, 255, 0.66);
+      box-shadow: var(--shadow-card);
+      backdrop-filter: blur(18px);
+    }
+
+    .direction header {
+      display: flex;
+      min-height: 116px;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid rgba(226, 232, 240, 0.72);
+    }
+
+    .direction h2 {
+      margin: 0;
+      color: #0f172a;
+      font-size: 19px;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .direction p {
+      margin: 8px 0 0;
+      color: var(--text-3);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .badge {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      min-height: 28px;
+      border-radius: 999px;
+      padding: 0 10px;
+      color: #0f172a;
+      background: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .badge.recommended {
+      color: #065f46;
+      background: var(--emerald-soft);
+    }
+
+    .stage {
+      display: grid;
+      min-height: 560px;
+      padding: 14px;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(250, 250, 249, 0.5));
+    }
+
+    .mock {
+      overflow: hidden;
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      border-radius: 22px;
+      background: var(--surface-solid);
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
+    }
+
+    .appbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 54px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .brand {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 10px;
+      color: #0f172a;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 12px;
+      color: var(--violet);
+      background: var(--violet-soft);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .small-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 6px 9px;
+      color: var(--text-2);
+      background: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .chat-bubble {
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 12px;
+      color: var(--text-2);
+      background: #fff;
+      font-size: 12px;
+      line-height: 1.65;
+      box-shadow: 0 5px 14px rgba(15, 23, 42, 0.04);
+    }
+
+    .chat-bubble strong {
+      color: #0f172a;
+      font-weight: 800;
+    }
+
+    .chat-bubble.user {
+      border-color: #0f172a;
+      color: #fff;
+      background: #0f172a;
+    }
+
+    .task-card {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: var(--shadow-card);
+    }
+
+    .task-card h3 {
+      margin: 0;
+      color: #0f172a;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .task-card p {
+      margin: 6px 0 0;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .choice {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 9px 10px;
+      color: var(--text-2);
+      background: #fff;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .choice.active {
+      border-color: rgba(59, 130, 246, 0.42);
+      background: var(--blue-soft);
+      color: #1d4ed8;
+      font-weight: 700;
+    }
+
+    .primary-button,
+    .ghost-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      border: 0;
+      border-radius: 999px;
+      padding: 0 14px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 800;
+      transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .primary-button {
+      color: #fff;
+      background: #0f172a;
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.16);
+    }
+
+    .ghost-button {
+      color: var(--text-2);
+      background: var(--muted);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .primary-button:hover,
+      .ghost-button:hover {
+        transform: translateY(-1px);
+      }
+    }
+
+    .primary-button:active,
+    .ghost-button:active {
+      transform: scale(0.98);
+    }
+
+    .choose {
+      margin: auto 20px 20px;
+    }
+
+    .choose .primary-button {
+      width: 100%;
+    }
+
+    .notes {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .note {
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-panel);
+      background: rgba(255, 255, 255, 0.64);
+      box-shadow: var(--shadow-card);
+      padding: 18px;
+      backdrop-filter: blur(18px);
+    }
+
+    .note h3 {
+      margin: 0 0 10px;
+      color: #0f172a;
+      font-size: 15px;
+    }
+
+    .note ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--text-2);
+      font-size: 13px;
+      line-height: 1.75;
+    }
+
+    .note li + li {
+      margin-top: 5px;
+    }
+
+    .mock-a {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      min-height: 100%;
+    }
+
+    .mock-a .body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 148px;
+      min-height: 0;
+    }
+
+    .conversation {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 12px;
+      padding: 14px;
+      background: #fff;
+    }
+
+    .side-mini {
+      border-left: 1px solid var(--border);
+      background: var(--bg-canvas);
+      padding: 14px 12px;
+    }
+
+    .metric {
+      border-radius: 16px;
+      padding: 11px;
+      background: #fff;
+      color: var(--text-2);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .metric + .metric {
+      margin-top: 10px;
+    }
+
+    .meter {
+      overflow: hidden;
+      height: 7px;
+      margin-top: 9px;
+      border-radius: 999px;
+      background: #e2e8f0;
+    }
+
+    .meter span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--emerald);
+    }
+
+    .composer {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      border-top: 1px solid var(--border);
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.94);
+    }
+
+    .composer .input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 10px 12px;
+      color: var(--text-3);
+      background: #fff;
+      font-size: 12px;
+    }
+
+    .mock-b {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 100%;
+    }
+
+    .mock-b .body {
+      display: grid;
+      grid-template-columns: 112px minmax(0, 1fr);
+      min-height: 0;
+      background: var(--bg-canvas);
+    }
+
+    .rail {
+      border-right: 1px solid var(--border);
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.86);
+    }
+
+    .rail-item {
+      border-radius: 16px;
+      padding: 10px;
+      color: var(--text-2);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .rail-item.active {
+      color: #0f172a;
+      background: var(--violet-soft);
+    }
+
+    .rail-item + .rail-item {
+      margin-top: 7px;
+    }
+
+    .workbench {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .task-focus {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 112px;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .coach-snippet {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      border-radius: 16px;
+      padding: 10px;
+      background: #fff;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--text-2);
+    }
+
+    .avatar {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border-radius: 999px;
+      color: var(--violet);
+      background: var(--violet-soft);
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .mock-c {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 100%;
+      background: #fff;
+    }
+
+    .mock-c .body {
+      display: grid;
+      grid-template-columns: 132px minmax(0, 1fr);
+      min-height: 0;
+    }
+
+    .script {
+      border-right: 1px solid var(--border);
+      background: var(--bg-canvas);
+      padding: 14px 12px;
+    }
+
+    .script-step {
+      position: relative;
+      padding-left: 22px;
+      color: var(--text-3);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .script-step::before {
+      position: absolute;
+      top: 2px;
+      left: 0;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #cbd5e1;
+      border-radius: 999px;
+      background: #fff;
+      content: "";
+    }
+
+    .script-step::after {
+      position: absolute;
+      top: 18px;
+      bottom: -18px;
+      left: 6px;
+      width: 1px;
+      background: #e2e8f0;
+      content: "";
+    }
+
+    .script-step:last-child::after {
+      display: none;
+    }
+
+    .script-step.active {
+      color: #0f172a;
+      font-weight: 800;
+    }
+
+    .script-step.active::before {
+      border-color: var(--blue);
+      background: var(--blue);
+      box-shadow: 0 0 0 4px var(--blue-soft);
+    }
+
+    .script-step + .script-step {
+      margin-top: 18px;
+    }
+
+    .scene {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 12px;
+      padding: 14px;
+      background: #fff;
+    }
+
+    .scene-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .dialogue-card {
+      border-radius: 20px;
+      padding: 14px;
+      background: linear-gradient(180deg, #f8fafc, #ffffff);
+      border: 1px solid var(--border);
+    }
+
+    .persona {
+      border-radius: 16px;
+      padding: 10px;
+      background: #0f172a;
+      color: #fff;
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      place-items: center;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.28);
+      backdrop-filter: blur(10px);
+    }
+
+    .modal-backdrop.open {
+      display: grid;
+    }
+
+    .modal {
+      width: min(520px, 100%);
+      border: 1px solid var(--border-soft);
+      border-radius: 28px;
+      background: #fff;
+      box-shadow: var(--shadow-float);
+      padding: 22px;
+    }
+
+    .modal h2 {
+      margin: 0;
+      color: #0f172a;
+      font-size: 22px;
+      letter-spacing: -0.02em;
+    }
+
+    .modal p {
+      margin: 10px 0 0;
+      color: var(--text-2);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .modal textarea {
+      width: 100%;
+      min-height: 96px;
+      margin-top: 14px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 12px;
+      resize: vertical;
+      color: var(--text);
+      outline: none;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 30;
+      display: none;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: var(--shadow-float);
+      padding: 12px 14px;
+      color: #0f172a;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .toast.show {
+      display: block;
+    }
+
+    @media (max-width: 1180px) {
+      .topbar,
+      .grid,
+      .notes {
+        grid-template-columns: 1fr;
+      }
+
+      .direction header {
+        min-height: 0;
+      }
+
+      .stage {
+        min-height: 520px;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .page {
+        width: min(100% - 20px, 1480px);
+        padding-top: 18px;
+      }
+
+      .topbar {
+        gap: 14px;
+      }
+
+      .direction header {
+        flex-direction: column;
+      }
+
+      .stage {
+        min-height: auto;
+      }
+
+      .mock,
+      .mock-a,
+      .mock-b,
+      .mock-c {
+        min-height: 620px;
+      }
+
+      .mock-a .body,
+      .mock-b .body,
+      .mock-c .body,
+      .task-focus {
+        grid-template-columns: 1fr;
+      }
+
+      .side-mini,
+      .rail,
+      .script {
+        border-right: 0;
+        border-left: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .side-mini {
+        order: -1;
+      }
+
+      .composer {
+        align-items: stretch;
+      }
+
+      .modal-actions {
+        flex-direction: column-reverse;
+      }
+
+      .modal-actions button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="topbar">
+      <div>
+        <p class="eyebrow">Coach redesign directions</p>
+        <h1>商务技巧 AI 教练的三个产品化界面方向</h1>
+        <p class="lead">
+          这是方向样机，不是最终 App / 最终页面；选择后才进入正式实现。三套方案都沿用当前项目的 Modern Soft UI：暖灰画布、白色毛玻璃、slate 主按钮、粉彩状态标签和大圆角卡片。
+        </p>
+      </div>
+      <aside class="dials" aria-label="设计拨盘">
+        <label class="dial">视觉冒险度 <input id="variance" type="range" min="1" max="10" value="5"> <span id="varianceValue">5</span></label>
+        <label class="dial">动效强度 <input id="motion" type="range" min="1" max="10" value="4"> <span id="motionValue">4</span></label>
+        <label class="dial">信息密度 <input id="density" type="range" min="1" max="10" value="6"> <span id="densityValue">6</span></label>
+      </aside>
+    </section>
+
+    <section class="grid" aria-label="三个设计方向">
+      <article class="direction" data-direction="A" data-name="对话优先型">
+        <header>
+          <div>
+            <h2>A · 对话优先型</h2>
+            <p>把 Coach 还给“对话”。训练卡、评分和总结都作为教练消息的附件出现。</p>
+          </div>
+          <span class="badge recommended">推荐</span>
+        </header>
+        <div class="stage">
+          <div class="mock mock-a">
+            <div class="appbar">
+              <div class="brand"><span class="brand-mark">AI</span><span>商务技巧 AI 教练</span></div>
+              <span class="small-pill" style="color:#047857;background:var(--emerald-soft)"><span class="dot"></span>训练中</span>
+            </div>
+            <div class="body">
+              <section class="conversation">
+                <div class="chat-bubble"><strong>教练</strong><br>上一题你的问题不是态度，而是回应太快下结论。先承认对方顾虑，再补一个选择。</div>
+                <div class="chat-bubble user">如果客户说“你们报价还是偏高”，我会说：我们可以再谈。</div>
+                <div class="chat-bubble"><strong>教练</strong><br>这句话有让步，但缺少价值锚点。先做这张改写卡，我会按“确认顾虑、价值解释、下一步”三点批改。</div>
+                <div class="task-card" style="padding:12px">
+                  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px">
+                    <h3>当前训练卡 · 表达改写</h3>
+                    <span class="small-pill" style="background:var(--blue-soft);color:#1d4ed8">第 3 章</span>
+                  </div>
+                  <p>客户认为报价偏高，你需要保留合作推进空间，并避免直接降价。</p>
+                  <div style="display:grid;gap:8px;margin-top:12px">
+                    <div class="choice active">先确认预算压力，再说明服务边界</div>
+                    <div class="choice">直接承诺给到最低价</div>
+                    <div class="choice">先暂停沟通，等待客户主动回复</div>
+                  </div>
+                </div>
+              </section>
+              <aside class="side-mini">
+                <div class="metric"><strong>本轮目标</strong><br>价格异议回应</div>
+                <div class="metric"><strong>达标进度</strong><div class="meter"><span style="width:68%"></span></div></div>
+                <div class="metric"><strong>薄弱点</strong><br>价值锚点<br>下一步收口</div>
+              </aside>
+            </div>
+            <div class="composer">
+              <div class="input">问教练、提交答案或继续下一题</div>
+              <button class="primary-button">发送</button>
+            </div>
+          </div>
+        </div>
+        <div class="choose">
+          <button class="primary-button qmdp-pick-button" data-pick="A">选择 A · 对话优先型</button>
+        </div>
+      </article>
+
+      <article class="direction" data-direction="B" data-name="任务侧栏型">
+        <header>
+          <div>
+            <h2>B · 任务侧栏型</h2>
+            <p>保留工作台效率，但把对话和反馈放回主区域；侧栏只承载任务状态和证据。</p>
+          </div>
+          <span class="badge">高效率</span>
+        </header>
+        <div class="stage">
+          <div class="mock mock-b">
+            <div class="appbar">
+              <div class="brand"><span class="brand-mark">AI</span><span>价格谈判训练</span></div>
+              <span class="small-pill">继续下一题</span>
+            </div>
+            <div class="body">
+              <aside class="rail">
+                <div class="rail-item active">当前任务<br><span style="font-weight:500;color:var(--text-3)">作答中</span></div>
+                <div class="rail-item">教练反馈</div>
+                <div class="rail-item">达标进度</div>
+                <div class="rail-item">完整记录</div>
+              </aside>
+              <section class="workbench">
+                <div class="coach-snippet">
+                  <span class="avatar">AI</span>
+                  <span>先完成当前训练卡。提交后我会判断是否达标，并给出下一步。</span>
+                </div>
+                <div class="task-focus">
+                  <div class="task-card" style="padding:14px">
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+                      <span class="small-pill" style="background:var(--amber-soft);color:#b45309">场景判断</span>
+                      <span class="small-pill">标准难度</span>
+                    </div>
+                    <h3>客户说“你们方案太复杂，我们内部推不动”。你应该先做什么？</h3>
+                    <div style="display:grid;gap:8px;margin-top:14px">
+                      <div class="choice">解释所有功能模块</div>
+                      <div class="choice active">确认推进阻力，并拆出最小试点</div>
+                      <div class="choice">要求客户安排更高层会议</div>
+                    </div>
+                  </div>
+                  <aside class="task-card" style="padding:12px;background:var(--bg-canvas)">
+                    <h3>侧栏摘要</h3>
+                    <p>能力点：推进收口</p>
+                    <p>证据：2 张已评分卡</p>
+                    <div class="meter"><span style="width:52%;background:var(--amber)"></span></div>
+                  </aside>
+                </div>
+                <div style="display:flex;gap:8px;overflow:hidden">
+                  <button class="primary-button">提交训练卡</button>
+                  <button class="ghost-button">讲解一下</button>
+                  <button class="ghost-button">总结本轮</button>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div class="choose">
+          <button class="primary-button qmdp-pick-button" data-pick="B">选择 B · 任务侧栏型</button>
+        </div>
+      </article>
+
+      <article class="direction" data-direction="C" data-name="训练剧本型">
+        <header>
+          <div>
+            <h2>C · 训练剧本型</h2>
+            <p>把训练理解成一场可推进的剧本：场景、角色、回合、复盘和下一幕清楚分段。</p>
+          </div>
+          <span class="badge">强引导</span>
+        </header>
+        <div class="stage">
+          <div class="mock mock-c">
+            <div class="appbar">
+              <div class="brand"><span class="brand-mark">AI</span><span>商务场景剧本</span></div>
+              <span class="small-pill" style="background:var(--blue-soft);color:#1d4ed8">第 2 幕</span>
+            </div>
+            <div class="body">
+              <aside class="script">
+                <div class="script-step">开场校准<br>确认目标</div>
+                <div class="script-step active">客户异议<br>选择回应</div>
+                <div class="script-step">教练复盘<br>指出风险</div>
+                <div class="script-step">下一幕<br>提高难度</div>
+              </aside>
+              <section class="scene">
+                <div class="scene-title">
+                  <div>
+                    <h3 style="margin:0;color:#0f172a;font-size:15px">场景：客户担心推进成本</h3>
+                    <p style="margin-top:6px">目标是在不压迫客户的情况下，拿到一个可执行下一步。</p>
+                  </div>
+                  <span class="small-pill">角色回应卡</span>
+                </div>
+                <div class="dialogue-card">
+                  <div class="persona">客户：这个方案听起来可行，但我们团队现在没有精力配合这么多动作。</div>
+                  <div style="display:grid;gap:8px;margin-top:12px">
+                    <div class="choice active">“我理解推进成本的顾虑。我们可以先把动作收敛到一个两周试点，只验证最关键的一项结果。”</div>
+                    <div class="choice">“这个方案其实不复杂，我们之前很多客户都能做。”</div>
+                    <div class="choice">“那我们等你们内部资源充足以后再说。”</div>
+                  </div>
+                </div>
+                <div class="task-card" style="padding:12px;background:var(--emerald-soft);border-color:#bbf7d0">
+                  <h3>教练将按三项批改</h3>
+                  <p>是否承认顾虑 · 是否降到最小试点 · 是否有下一步收口</p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div class="choose">
+          <button class="primary-button qmdp-pick-button" data-pick="C">选择 C · 训练剧本型</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="notes" aria-label="设计理念说明">
+      <article class="note">
+        <h3>A · 对话优先型</h3>
+        <ul>
+          <li>主线是“人和教练的连续交流”，最符合 Coach 心智。</li>
+          <li>训练卡作为消息附件，解决“历史对话在下方”的割裂。</li>
+          <li>代价是卡片工作台感变弱，需要右侧小面板承接进度。</li>
+        </ul>
+      </article>
+      <article class="note">
+        <h3>B · 任务侧栏型</h3>
+        <ul>
+          <li>适合高频训练，用户能快速定位当前任务、反馈和进度。</li>
+          <li>保留现有工作台结构，改造成本最低，风险较小。</li>
+          <li>代价是仍然偏工具型，情绪陪练感不如 A。</li>
+        </ul>
+      </article>
+      <article class="note">
+        <h3>C · 训练剧本型</h3>
+        <ul>
+          <li>把训练拆成“场景推进”，最适合商务表达、异议处理和角色回应。</li>
+          <li>引导感强，用户知道现在处于哪一幕、下一步是什么。</li>
+          <li>代价是改造最大，需要把后端事件映射成稳定剧本状态。</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <div id="modalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <section class="modal">
+      <h2 id="modalTitle">确认选择</h2>
+      <p id="modalDescription"></p>
+      <textarea id="adjustments" placeholder="可写调整建议，例如：要 A 的对话主线 + C 的剧本感；更稳一点；信息更密一点。"></textarea>
+      <div class="modal-actions">
+        <button id="cancel" class="ghost-button">取消</button>
+        <button id="confirm" class="primary-button">确认这个方向</button>
+      </div>
+    </section>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite">已记录选择</div>
+
+  <script>
+    const state = { selected: null };
+    const dials = ["variance", "motion", "density"];
+    for (const id of dials) {
+      const input = document.getElementById(id);
+      const value = document.getElementById(`${id}Value`);
+      input.addEventListener("input", () => {
+        value.textContent = input.value;
+      });
+    }
+
+    const backdrop = document.getElementById("modalBackdrop");
+    const description = document.getElementById("modalDescription");
+    const adjustments = document.getElementById("adjustments");
+    const toast = document.getElementById("toast");
+
+    function dialValues() {
+      return {
+        variance: Number(document.getElementById("variance").value),
+        motion: Number(document.getElementById("motion").value),
+        density: Number(document.getElementById("density").value)
+      };
+    }
+
+    function openModal(id) {
+      const card = document.querySelector(`[data-direction="${id}"]`);
+      state.selected = {
+        id,
+        label: id,
+        name: card.dataset.name,
+        dials: dialValues()
+      };
+      description.textContent = `方向 ${id} · ${state.selected.name}，当前拨盘：视觉冒险度 ${state.selected.dials.variance}/10，动效强度 ${state.selected.dials.motion}/10，信息密度 ${state.selected.dials.density}/10。`;
+      adjustments.value = "";
+      backdrop.classList.add("open");
+      adjustments.focus();
+    }
+
+    function closeModal() {
+      backdrop.classList.remove("open");
+    }
+
+    async function confirmSelection() {
+      if (!state.selected) return;
+      const payload = {
+        ...state.selected,
+        notes: `${state.selected.name} selected from coach-ui-directions preview`,
+        adjustments: adjustments.value.trim(),
+        selectedAt: new Date().toISOString()
+      };
+      localStorage.setItem("coach-ui-direction-selection", JSON.stringify(payload, null, 2));
+      try {
+        await fetch("/api/select", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      } catch (_error) {
+        // Static preview fallback: localStorage is enough for visual selection.
+      }
+      closeModal();
+      toast.textContent = `已记录：${payload.label} · ${payload.name}`;
+      toast.classList.add("show");
+      window.setTimeout(() => toast.classList.remove("show"), 2600);
+    }
+
+    document.querySelectorAll("[data-pick]").forEach((button) => {
+      button.addEventListener("click", () => openModal(button.dataset.pick));
+    });
+    document.getElementById("cancel").addEventListener("click", closeModal);
+    document.getElementById("confirm").addEventListener("click", confirmSelection);
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) closeModal();
+    });
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeModal();
+      if (event.key === "1") openModal("A");
+      if (event.key === "2") openModal("B");
+      if (event.key === "3") openModal("C");
+    });
+  </script>
+</body>
+</html>

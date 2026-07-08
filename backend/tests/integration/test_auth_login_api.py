@@ -580,6 +580,57 @@ async def test_dev_login_sets_http_only_cookie_and_allows_cookie_auth(
 
 
 @pytest.mark.asyncio
+async def test_dev_login_returns_admin_role_for_new_dev_user(
+    async_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    response = await async_client.post("/api/v1/auth/dev-login")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["user"]["role"] == "admin"
+    assert payload["data"]["user"]["email"] == "dev@example.com"
+
+
+@pytest.mark.asyncio
+async def test_dev_login_normalizes_legacy_dev_user_role_to_admin(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    legacy = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id="dev_wechat_user",
+        email="dev@example.com",
+        name="Developer",
+        department="Development",
+        role="user",
+        is_active=True,
+    )
+    test_db.add(legacy)
+    await test_db.commit()
+
+    response = await async_client.post("/api/v1/auth/dev-login")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["user"]["role"] == "admin"
+
+    refreshed = await test_db.execute(
+        select(User).where(User.email == "dev@example.com")
+    )
+    persisted = refreshed.scalars().first()
+    assert persisted is not None
+    assert persisted.role == "admin"
+
+
+@pytest.mark.asyncio
 async def test_forgot_password_reissues_token_without_marking_previous_one_as_consumed(
     async_client,
     test_db: AsyncSession,

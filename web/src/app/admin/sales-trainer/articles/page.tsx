@@ -2,15 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, BookOpen, Plus, RefreshCcw } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { AlertTriangle, ArrowRight, BookOpen, RefreshCcw, UploadCloud } from "lucide-react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
-import {
-    CurrentArticleBindingCard,
-    PendingArticleBindingCard,
-} from "@/components/admin/sales-trainer/article-binding-cards";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { useToast } from "@/components/ui/toast";
@@ -18,118 +15,63 @@ import { api, getApiErrorMessage } from "@/lib/api/client";
 import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 import type {
     LearningContent,
-    NewcomerArticleBinding,
-    NewcomerPathConfigResponse,
+    NewcomerLearningTopicConfig,
+    NewcomerLearningTopicsConfigResponse,
     SalesTrainerAdminCapabilities,
 } from "@/lib/api/types";
 
-const BUSINESS_SKILLS_MODULE_KEY = "business_skills";
-const NEWCOMER_PATH_KEY = "newcomer_training_path_v1";
-const BUSINESS_SKILLS_CONTENT_SOURCE = "sales_trainer_business_skills";
-const SEEDED_NEWCOMER_CONTENT_SOURCE = "seed_newcomer_training_path";
-
-const STATUS_LABELS: Record<string, string> = {
-    draft: "草稿",
-    published: "已发布",
-    archived: "已归档",
-};
+const BUSINESS_ETIQUETTE_DETAIL_PATH = "/admin/sales-trainer/articles/business-etiquette";
 
 function statusLabel(status: string): string {
-    return STATUS_LABELS[status] ?? status;
+    if (status === "published") return "已发布";
+    if (status === "draft") return "草稿";
+    if (status === "archived") return "已归档";
+    return status;
 }
 
-function createBusinessSkillsArticlePayload() {
-    return {
-        title: "见客户前商务礼仪",
-        summary: "新人训练路径商务技巧模块学习文章。",
-        owner: "新人训练路径",
-        source: BUSINESS_SKILLS_CONTENT_SOURCE,
-        safety_flagged: false,
-    };
+function topicStatusLabel(topic: NewcomerLearningTopicConfig): string {
+    if (!topic.enabled) return "已停用";
+    if (!topic.learning_content_id) return "待绑定文章";
+    if (topic.learning_units.length === 0) return "待配置小单元";
+    return "可发布";
 }
 
-function belongsToBusinessSkillsContent(
-    item: LearningContent,
-    boundContentId: string | null,
-): boolean {
-    return item.learning_content_id === boundContentId
-        || item.source === BUSINESS_SKILLS_CONTENT_SOURCE
-        || item.source === SEEDED_NEWCOMER_CONTENT_SOURCE;
-}
-
-function boundContentIdFromPathConfig(pathConfig: NewcomerPathConfigResponse): string | null {
-    return pathConfig.path.modules.find(
-        (module) => module.module_key === BUSINESS_SKILLS_MODULE_KEY,
-    )?.learning_content_id ?? null;
-}
-
-function articleBindingActionLabel(
-    contentId: string,
-    boundContentId: string | null,
-    pendingBinding: NewcomerArticleBinding | null,
-): string {
-    if (contentId === boundContentId) {
-        return "当前生效";
-    }
-    if (contentId === pendingBinding?.learning_content_id) {
-        return "待发布路径修订";
-    }
-    return "保存为待发布绑定";
-}
-
-export default function NewcomerArticleBindingPage() {
+export default function LearningArticlesPage() {
     const pathname = usePathname();
-    const router = useRouter();
     const toast = useToast();
-    const [items, setItems] = useState<LearningContent[]>([]);
-    const [boundContentId, setBoundContentId] = useState<string | null>(null);
-    const [pendingBinding, setPendingBinding] = useState<NewcomerArticleBinding | null>(null);
+    const [contents, setContents] = useState<LearningContent[]>([]);
+    const [config, setConfig] = useState<NewcomerLearningTopicsConfigResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [capabilities, setCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
     const [capabilityError, setCapabilityError] = useState<string | null>(null);
     const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
     const canAccessArticles = isSalesTrainerAdminPathAllowedForCapabilities(pathname, capabilities);
 
-    const boundContent = useMemo(
-        () => items.find((item) => item.learning_content_id === boundContentId) ?? null,
-        [boundContentId, items],
+    const topics = useMemo(
+        () => [...(config?.payload.topics ?? [])].sort((left, right) => left.order_index - right.order_index),
+        [config],
     );
-    const pendingContent = useMemo(
-        () => items.find((item) => item.learning_content_id === pendingBinding?.learning_content_id) ?? null,
-        [items, pendingBinding],
-    );
-    const visibleItems = useMemo(
-        () => items.filter((item) => belongsToBusinessSkillsContent(item, boundContentId)),
-        [boundContentId, items],
+    const contentsById = useMemo(
+        () => new Map(contents.map((item) => [item.learning_content_id, item])),
+        [contents],
     );
 
     const load = useCallback(async () => {
-        if (!canAccessArticles) {
-            return;
-        }
+        if (!canAccessArticles) return;
         setIsLoading(true);
         setError(null);
-        setPendingBinding(null);
         try {
-            const [contents, pathConfig] = await Promise.all([
+            const [contentResponse, topicConfig] = await Promise.all([
                 api.learningContents.list(),
-                api.admin.newcomerTraining.getPathConfig(),
+                api.admin.newcomerTraining.getLearningTopicsConfig(),
             ]);
-            setItems(contents.items);
-            const nextBoundContentId = boundContentIdFromPathConfig(pathConfig);
-            setBoundContentId(nextBoundContentId);
-            if (
-                nextBoundContentId
-                && !contents.items.some((item) => item.learning_content_id === nextBoundContentId)
-            ) {
-                setError(`当前路径配置绑定的商务技巧文章不在内容列表中：${nextBoundContentId}`);
-            }
+            setContents(contentResponse.items);
+            setConfig(topicConfig);
         } catch (loadError) {
-            setItems([]);
-            setBoundContentId(null);
+            setContents([]);
+            setConfig(null);
             setError(getApiErrorMessage(loadError));
         } finally {
             setIsLoading(false);
@@ -144,10 +86,10 @@ export default function NewcomerArticleBindingPage() {
                 setCapabilities(result);
                 setCapabilityError(null);
             })
-            .catch((error) => {
+            .catch((capabilityLoadError) => {
                 if (!isCurrent) return;
                 setCapabilities(null);
-                setCapabilityError(getApiErrorMessage(error));
+                setCapabilityError(getApiErrorMessage(capabilityLoadError));
             })
             .finally(() => {
                 if (!isCurrent) return;
@@ -159,62 +101,44 @@ export default function NewcomerArticleBindingPage() {
     }, []);
 
     useEffect(() => {
-        if (isCapabilityLoading) {
-            return;
-        }
+        if (isCapabilityLoading) return;
         if (!canAccessArticles) {
-            setItems([]);
-            setBoundContentId(null);
-            setPendingBinding(null);
-            setError(null);
+            setContents([]);
+            setConfig(null);
             setIsLoading(false);
             return;
         }
         void load();
     }, [canAccessArticles, isCapabilityLoading, load]);
 
-    async function bindContent(content: LearningContent) {
-        if (content.status !== "published") {
-            toast.error("只能绑定已发布文章。请先进入内容详情完成发布。");
-            return;
-        }
+    async function generateDraft(overwriteWorking: boolean) {
         setIsSubmitting(true);
         try {
-            const result = await api.admin.newcomerTraining.bindModuleArticle(
-                BUSINESS_SKILLS_MODULE_KEY,
-                {
-                    learning_content_id: content.learning_content_id,
-                    path_key: NEWCOMER_PATH_KEY,
-                    reason: "更新商务技巧学习文章绑定",
-                },
-            );
-            setPendingBinding(result);
-            toast.success("已保存为待发布路径修订");
-        } catch (bindError) {
-            if (bindError instanceof Error) {
-                toast.error(getApiErrorMessage(bindError));
-            } else {
-                throw bindError;
-            }
+            const response = await api.admin.newcomerTraining.generateBusinessEtiquetteLearningTopicDraft({
+                overwrite_working: overwriteWorking,
+                reason: overwriteWorking ? "覆盖生成商务礼仪规范学习专题草稿" : "生成商务礼仪规范学习专题草稿",
+            });
+            setConfig(response);
+            toast.success("已生成商务礼仪规范草稿");
+        } catch (submitError) {
+            toast.error(getApiErrorMessage(submitError));
         } finally {
             setIsSubmitting(false);
         }
     }
 
-    async function createArticle() {
-        setIsCreating(true);
+    async function publish() {
+        setIsSubmitting(true);
         try {
-            const created = await api.learningContents.create(createBusinessSkillsArticlePayload());
-            toast.success("已创建商务技巧文章草稿");
-            router.push(`/admin/learning-contents/${created.learning_content_id}`);
-        } catch (createError) {
-            if (createError instanceof Error) {
-                toast.error(getApiErrorMessage(createError));
-            } else {
-                throw createError;
-            }
+            const response = await api.admin.newcomerTraining.publishLearningTopicsConfig({
+                reason: "发布学习专题配置",
+            });
+            setConfig(response);
+            toast.success("学习专题已发布");
+        } catch (submitError) {
+            toast.error(getApiErrorMessage(submitError));
         } finally {
-            setIsCreating(false);
+            setIsSubmitting(false);
         }
     }
 
@@ -222,21 +146,21 @@ export default function NewcomerArticleBindingPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="商务技巧文章"
-                    description="管理学习页展示的 Markdown 文章与章节；章节数量可随时扩展，不改变新人训练路径外层模块。"
+                    title="学习文章"
+                    description="按学习专题管理文章、章节、小单元和非阻塞得分展示；只有后台配置并发布的专题才会在前台出现。"
                     primaryAction={canAccessArticles ? (
-                        <Button className="rounded-full bg-slate-900 text-white" onClick={() => void createArticle()} disabled={isCreating}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            新建商务技巧文章
+                        <Button onClick={() => void generateDraft(false)} disabled={isSubmitting}>
+                            <UploadCloud className="mr-2 h-4 w-4" />
+                            从路径生成草稿
                         </Button>
                     ) : null}
                     secondaryActions={(
                         <div className="flex flex-wrap gap-2">
                             {canAccessArticles ? (
-                            <Button variant="outline" className="rounded-full" onClick={() => void load()} disabled={isLoading}>
-                                <RefreshCcw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-                                刷新
-                            </Button>
+                                <Button variant="outline" onClick={() => void load()} disabled={isLoading}>
+                                    <RefreshCcw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                                    刷新
+                                </Button>
                             ) : null}
                             <SalesTrainerAdminModuleNav currentPath={pathname} capabilities={capabilities} />
                         </div>
@@ -245,88 +169,97 @@ export default function NewcomerArticleBindingPage() {
             )}
         >
             {isCapabilityLoading ? (
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
-                    正在校验文章管理权限...
-                </div>
+                <GlassCard className="p-5 text-sm text-slate-500">正在校验学习文章管理权限...</GlassCard>
             ) : capabilityError || !canAccessArticles ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+                <GlassCard className="border border-amber-200 bg-amber-50 p-5 text-amber-800">
                     <div className="flex items-start gap-3">
                         <AlertTriangle className="mt-0.5 h-5 w-5" aria-hidden />
                         <div>
-                            <h2 className="font-bold text-amber-950">文章管理权限不足</h2>
+                            <h2 className="font-bold text-amber-950">学习文章管理权限不足</h2>
                             <p className="mt-1 text-sm leading-6">
-                                当前页不会在权限未确认时展示文章写入入口。请联系管理员开通内容管理权限后重试。
+                                当前页不会在权限未确认时展示写入入口。请联系管理员开通内容管理权限后重试。
                             </p>
-                            {capabilityError ? (
-                                <p className="mt-2 text-sm font-medium">{capabilityError}</p>
-                            ) : null}
+                            {capabilityError ? <p className="mt-2 text-sm font-medium">{capabilityError}</p> : null}
                         </div>
                     </div>
-                </div>
+                </GlassCard>
             ) : null}
+
             {error ? <GlassCard className="p-4 text-sm font-medium text-red-700">{error}</GlassCard> : null}
 
-            {pendingBinding && pendingContent ? (
-                <PendingArticleBindingCard binding={pendingBinding} content={pendingContent} />
-            ) : null}
-
-            {boundContent ? (
-                <CurrentArticleBindingCard content={boundContent} statusLabel={statusLabel(boundContent.status)} />
-            ) : null}
-
             {canAccessArticles ? (
-            <GlassCard className="overflow-hidden">
-                <div className="border-b border-slate-100 px-6 py-4">
-                    <h2 className="text-lg font-bold text-slate-900">可绑定学习内容</h2>
-                    <p className="mt-1 text-sm text-slate-500">在内容详情中维护第一节、第二节、第三节及图片 Markdown，发布后即可绑定到商务技巧学习页。</p>
-                </div>
-                {isLoading ? (
-                    <div className="p-8 text-center text-sm text-slate-500">加载中...</div>
-                ) : (
-                    <div className="divide-y divide-slate-100">
-                        {visibleItems.map((item) => (
-                            <div key={item.learning_content_id} className="flex flex-col gap-4 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white">
-                                        <BookOpen className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <h3 className="font-bold text-slate-900">{item.title}</h3>
-                                        <p className="mt-1 text-sm text-slate-500">{item.summary ?? "暂无摘要"}</p>
-                                        <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium text-slate-500">
-                                            <span>{statusLabel(item.status)}</span>
-                                            <span>{item.chapters.length} 节</span>
-                                            <span>{item.owner ?? "未设置负责人"}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <Button asChild variant="outline" className="rounded-full">
-                                        <Link href={`/admin/learning-contents/${item.learning_content_id}`}>
-                                            编辑章节
-                                        </Link>
-                                    </Button>
-                                    <Button
-                                        className="rounded-full bg-slate-900 text-white"
-                                        disabled={
-                                            isSubmitting
-                                            || item.status !== "published"
-                                            || item.learning_content_id === boundContentId
-                                            || item.learning_content_id === pendingBinding?.learning_content_id
-                                        }
-                                        onClick={() => void bindContent(item)}
-                                    >
-                                        {articleBindingActionLabel(item.learning_content_id, boundContentId, pendingBinding)}
-                                    </Button>
+                <section className="space-y-4">
+                    {config?.has_unpublished_revision ? (
+                        <GlassCard className="flex flex-col gap-3 border border-amber-200 bg-amber-50 p-4 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <p className="font-bold text-amber-950">存在未发布草稿</p>
+                                <p className="mt-1 text-sm text-amber-800">发布后才会影响前台学习专题展示，历史小测记录不会被改写。</p>
+                            </div>
+                            <Button onClick={() => void publish()} disabled={isSubmitting}>
+                                发布学习专题
+                            </Button>
+                        </GlassCard>
+                    ) : null}
+
+                    {isLoading ? (
+                        <GlassCard className="p-8 text-center text-sm text-slate-500">加载中...</GlassCard>
+                    ) : topics.length === 0 ? (
+                        <GlassCard className="space-y-4 p-6">
+                            <div className="flex items-start gap-3">
+                                <BookOpen className="mt-1 h-5 w-5 text-slate-500" />
+                                <div>
+                                    <h2 className="text-lg font-black text-slate-900">还没有可显示的学习专题</h2>
+                                    <p className="mt-1 text-sm leading-6 text-slate-500">
+                                        可以先从当前 active path 的 business_skills 模块生成商务礼仪规范草稿，再进入详情补齐文章和 7 个小单元。
+                                    </p>
                                 </div>
                             </div>
-                        ))}
-                        {visibleItems.length === 0 ? (
-                            <div className="p-8 text-center text-sm text-slate-500">暂无学习内容，请先新建文章草稿。</div>
-                        ) : null}
-                    </div>
-                )}
-            </GlassCard>
+                            <Button onClick={() => void generateDraft(false)} disabled={isSubmitting}>
+                                生成商务礼仪规范草稿
+                            </Button>
+                        </GlassCard>
+                    ) : (
+                        <div className="grid gap-4 xl:grid-cols-2">
+                            {topics.map((topic) => {
+                                const content = topic.learning_content_id
+                                    ? contentsById.get(topic.learning_content_id)
+                                    : null;
+                                return (
+                                    <GlassCard key={topic.topic_key} className="space-y-4 p-5">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="space-y-2">
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Badge variant="gray">学习专题</Badge>
+                                                    <Badge variant={topic.enabled ? "green" : "secondary"}>
+                                                        {topicStatusLabel(topic)}
+                                                    </Badge>
+                                                    <Badge variant="outline">不阻塞训练路径</Badge>
+                                                </div>
+                                                <h2 className="text-xl font-black text-slate-900">{topic.title}</h2>
+                                                <p className="text-sm leading-6 text-slate-500">
+                                                    {topic.description || "管理商务礼仪规范文章、7 个小单元、测验规则和可选 AI 教练。"}
+                                                </p>
+                                            </div>
+                                            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-right">
+                                                <p className="text-xs text-slate-500">小单元</p>
+                                                <p className="mt-1 text-lg font-black text-slate-900">{topic.learning_units.length}</p>
+                                            </div>
+                                        </div>
+                                        <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                                            当前文章：{content ? `${content.title}（${statusLabel(content.status)}）` : "未绑定"}
+                                        </div>
+                                        <Button asChild>
+                                            <Link href={BUSINESS_ETIQUETTE_DETAIL_PATH}>
+                                                <ArrowRight className="mr-2 h-4 w-4" />
+                                                进入专题配置
+                                            </Link>
+                                        </Button>
+                                    </GlassCard>
+                                );
+                            })}
+                        </div>
+                    )}
+                </section>
             ) : null}
         </AdminIndexShell>
     );

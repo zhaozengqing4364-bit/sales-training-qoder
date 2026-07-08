@@ -23,6 +23,7 @@ These guides help you **ask the right questions before coding**.
 |-------|---------|-------------|
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
+| [Design Artifact Audit Guide](./design-artifact-audit-guide.md) | Seven-dimension audit of prd/design/implement artifacts before `task.py start` | After writing any design artifact; rerun after each fix round |
 
 ---
 

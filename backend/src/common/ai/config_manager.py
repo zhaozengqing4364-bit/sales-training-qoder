@@ -17,6 +17,14 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from common.ai.encryption import decrypt_api_key
 from common.ai.models import ModelConfig, ModelProvider, ModelType
+from common.config import (
+    DEFAULT_LLM_BASE_URL,
+    DEFAULT_LLM_MAX_TOKENS,
+    DEFAULT_LLM_MODEL,
+    DEFAULT_LLM_PROVIDER,
+    DEFAULT_LLM_TEMPERATURE,
+    DEFAULT_LLM_TIMEOUT_SECONDS,
+)
 from common.db.session import AsyncSessionLocal
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
@@ -229,19 +237,49 @@ class ConfigManager:
             Dict with config values or None
         """
         if model_type == ModelType.LLM:
-            # Support both LLM_API_KEY (new) and OPENAI_API_KEY (legacy) for backward compatibility
-            api_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+            # DB admin config is primary. Env is only fallback; keep OPENAI_* for
+            # legacy bootstrap while LLM_* uses the project default LLM.
+            llm_api_key = os.getenv("LLM_API_KEY")
+            legacy_openai_api_key = os.getenv("OPENAI_API_KEY")
+            api_key = llm_api_key or legacy_openai_api_key
             if api_key:
+                has_llm_env = any(
+                    os.getenv(name)
+                    for name in (
+                        "LLM_API_KEY",
+                        "LLM_PROVIDER",
+                        "LLM_BASE_URL",
+                        "LLM_MODEL",
+                    )
+                )
+                default_base_url = (
+                    DEFAULT_LLM_BASE_URL
+                    if has_llm_env
+                    else "https://api.openai.com/v1"
+                )
+                default_model_name = DEFAULT_LLM_MODEL if has_llm_env else "gpt-4o"
+                timeout = os.getenv("LLM_TIMEOUT") or os.getenv(
+                    "LLM_TIMEOUT_SECONDS",
+                    str(DEFAULT_LLM_TIMEOUT_SECONDS),
+                )
                 return {
-                    "provider": os.getenv("LLM_PROVIDER", "openai"),
+                    "provider": os.getenv("LLM_PROVIDER", DEFAULT_LLM_PROVIDER),
                     "base_url": os.getenv("LLM_BASE_URL")
-                    or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+                    or os.getenv("OPENAI_BASE_URL", default_base_url),
                     "api_key": api_key,
                     "model_name": os.getenv("LLM_MODEL")
-                    or os.getenv("OPENAI_MODEL", "gpt-4o"),
+                    or os.getenv("OPENAI_MODEL", default_model_name),
                     "extra_config": {
-                        "temperature": float(os.getenv("LLM_TEMPERATURE", "0.7")),
-                        "timeout": float(os.getenv("LLM_TIMEOUT", "10.0")),
+                        "temperature": float(
+                            os.getenv(
+                                "LLM_TEMPERATURE",
+                                str(DEFAULT_LLM_TEMPERATURE),
+                            )
+                        ),
+                        "timeout": float(timeout),
+                        "max_tokens": int(
+                            os.getenv("LLM_MAX_TOKENS", str(DEFAULT_LLM_MAX_TOKENS))
+                        ),
                     },
                 }
 

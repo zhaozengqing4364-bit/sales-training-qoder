@@ -1,0 +1,14 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端质量检查入口规范"}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "检查配置治理、审计、回滚与 fail-closed"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查 API 错误语义与异常处理"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "检查 trace_id 和敏感日志"}
+{"file": ".trellis/spec/backend/prompt-template-governance.md", "reason": "检查 AI Coach 配置治理"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试/lint/type-check 检查"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端质量检查入口规范"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "检查后台页面状态和信息架构"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查 API 类型映射与枚举安全"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试/lint/a11y 检查"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查跨层数据流和兼容性"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "检查重复常量和重复实现"}
+{"file": ".trellis/tasks/07-08-newcomer-training-admin-modular-governance/research/repo-constraints.md", "reason": "检查是否符合已发现仓库约束"}
+{"file": ".trellis/tasks/07-08-newcomer-training-admin-modular-governance/prd.md", "reason": "按 PR1-PR6 验收标准核验"}

@@ -44,7 +44,7 @@ export function issueActionLabel(code: string): string {
 
 export function remediationLabel(module: NewcomerConfigModuleSummary): string {
     if (module.moduleKey === "business_skills") {
-        return "配置商务技巧文章";
+        return "配置学习文章";
     }
     if (module.moduleKey === "ppt_explanation") {
         return "选择 PPT 材料";

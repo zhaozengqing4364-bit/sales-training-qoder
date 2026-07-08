@@ -18,7 +18,7 @@ export const BUSINESS_SKILLS_COACH_WORKBENCH_COPY = {
     preparationNoUnit: "暂未读取到可用小单元，进入后按综合训练处理。",
     unavailableTitle: "商务技巧 AI 教练暂不可用",
     unavailableDescription: "AI 教练配置缺失或未启用。",
-    activeSessionSubtitle: "对话主导，需要练习时教练会放入卡片",
+    activeSessionSubtitle: "对话主线里完成反馈、训练卡和下一步",
     startingSessionSubtitle: "正在建立训练局",
     loadingResume: "正在恢复训练局",
     loadingNew: "正在新开训练局",
@@ -58,7 +58,7 @@ export const BUSINESS_SKILLS_COACH_WORKBENCH_COPY = {
     fallbackUnitDescription: "本轮会按当前能力点完成训练。",
     noActiveCardTitle: "等待下一张训练卡",
     noActiveCardDescription:
-        "可以直接和教练聊；需要验证理解时，教练会在对话里放入练习卡。",
+        "可以继续生成训练卡，也可以先让教练讲解；主工作区会保留当前最需要处理的一步。",
     feedbackTitle: "教练反馈",
     feedbackEmptyTitle: "提交训练卡后查看反馈",
     feedbackEmptyDescription: "系统会展示做对了什么、主要问题、建议表达和下一步训练。",
@@ -73,7 +73,7 @@ export const BUSINESS_SKILLS_COACH_WORKBENCH_COPY = {
     endPanelNotMastered: "本轮继续练习",
     endPanelWhy: "原因",
     endPanelNext: "下一步",
-    conversationEvidenceTitle: "教练对话",
+    conversationEvidenceTitle: "教练对话与记录",
     followupPromptTitle: "教练给你的可选方向",
     commandBarLabel: "教练动作",
     followupPlaceholderWhenActive: "可以问教练，也可以先提交当前练习卡",
@@ -97,7 +97,7 @@ export const BUSINESS_SKILLS_COACH_WORKBENCH_COPY = {
     streamingCardSubmitPlaceholder: "生成完成后可提交",
     coachGuidanceTitle: "教练判断",
     coachGuidanceDescription: "这里只保留结论、薄弱点和下一步，不再把所有记录堆在首屏。",
-    conversationEvidenceDescription: "历史对话和完整证据仅在需要复盘时展开查看。",
+    conversationEvidenceDescription: "完整记录只保留复盘入口，不抢占对话主线。",
 } as const;
 
 export const BUSINESS_SKILLS_COACH_PROGRESS_LABELS: Record<

@@ -33,9 +33,9 @@ web/src/
 │   └── providers/
 ├── hooks/
 │   ├── use-*.ts                # shared hooks
-│   └── websocket/              # WS transport, handlers, audio playback
+│   └── websocket/              # WS transport, handlers, audio playback, diagnostics
 ├── lib/
-│   ├── api/                    # client.ts facade, types.ts, client-domains.ts, domains/*
+│   ├── api/                    # client.ts facade, types.ts, types/<domain>.ts barrels, client-domains.ts, domains/*
 │   ├── query/                  # QueryClient factory, auth query keys
 │   ├── auth/, observability/
 │   └── utils.ts                # cn()
@@ -63,7 +63,7 @@ Example: `app/(user)/practice/[sessionId]/page.tsx` + `use-practice-session-life
 
 ### New API access
 
-- Types in `lib/api/types.ts`.
+- Types in `lib/api/types.ts` (author DTOs here). For extracted domains, re-export the domain's DTOs through `lib/api/types/<domain>.ts` and import them from there in the domain factory.
 - Public transport, auth, trace, stream parsing, error mapping, and the exported `api` facade stay in `lib/api/client.ts`.
 - `lib/api/client-domains.ts` is the aggregation seam: it exports domain factories and still contains legacy/low-growth domain builders.
 - New or high-growth domains should live in `lib/api/domains/<domain>.ts`, receive typed dependencies from `lib/api/domains/shared.ts`, then be wired through `client-domains.ts` and instantiated in `client.ts`.
@@ -73,6 +73,7 @@ Reference files:
 
 - `lib/api/domains/shared.ts` — `ApiRequest`, `ApiStream`, `ApiUpload`, query/value helpers.
 - `lib/api/domains/newcomer-training.ts` — extracted domain with HTTP and SSE stream methods.
+- `lib/api/types/newcomer-training.ts` — per-domain type re-export barrel consumed by the domain factory.
 - `lib/api/client-domains.ts` — exports extracted factories and hosts remaining domain builders.
 - `lib/api/client.ts` — creates domain instances and exposes the public `api` object.
 - `lib/api/client-domains.test.ts` — includes the boundary test that forbids UI imports from `client-domains` or `domains/*`.

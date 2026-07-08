@@ -1,7 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render as testingLibraryRender, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createAppQueryClient } from "@/lib/query/client";
 import { DashboardShell } from "./dashboard-shell";
 
 const {
@@ -19,11 +21,16 @@ const {
 }));
 
 vi.mock("next/link", () => ({
-    default: ({ href, children, ...props }: { href: string; children: ReactNode }) => (
-        <a href={href} {...props}>
-            {children}
-        </a>
-    ),
+    default: ({ href, children, ...props }: { href: string; children: ReactNode; prefetch?: boolean }) => {
+        const { prefetch, ...anchorProps } = props;
+        void prefetch;
+
+        return (
+            <a href={href} {...anchorProps}>
+                {children}
+            </a>
+        );
+    },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -90,6 +97,16 @@ const currentUser = {
     is_active: true,
     created_at: "2026-04-01T00:00:00Z",
 };
+
+function render(ui: ReactNode) {
+    const queryClient = createAppQueryClient();
+
+    return testingLibraryRender(
+        <QueryClientProvider client={queryClient}>
+            {ui}
+        </QueryClientProvider>,
+    );
+}
 
 describe("DashboardShell learner help entry", () => {
     beforeEach(() => {

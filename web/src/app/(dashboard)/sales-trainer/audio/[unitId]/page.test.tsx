@@ -179,7 +179,7 @@ describe("SalesTrainerAudioUploadPage", () => {
         });
 
         expect(await screen.findByText(/已选择：pitch.wav/)).toBeTruthy();
-        fireEvent.click(screen.getByText(/我已下载并确认使用 v2026.06/));
+        fireEvent.click(screen.getByRole("checkbox", { name: /我已下载并确认使用 v2026.06/ }));
 
         fireEvent.click(screen.getByRole("button", { name: /上传并开始评分/ }));
 
@@ -195,6 +195,26 @@ describe("SalesTrainerAudioUploadPage", () => {
         expect(screen.queryByText(/50 秒|最大时长/)).toBeNull();
         expect(listPathsMock).not.toHaveBeenCalled();
         expect(pushMock).toHaveBeenCalledWith("/sales-trainer/audio/result/submission-1");
+    });
+
+    it("tells the learner what to do when material confirmation blocks upload", async () => {
+        render(<SalesTrainerAudioUploadPage />);
+
+        await screen.findByText("第二关：录音表达");
+
+        const file = new File(["audio"], "pitch.wav", { type: "audio/wav" });
+        fireEvent.change(screen.getByLabelText("选择音频文件"), {
+            target: { files: [file] },
+        });
+
+        expect(await screen.findByText(/已选择：pitch.wav/)).toBeTruthy();
+        expect(screen.getByText(/下一步：勾选上方“我已下载并确认使用 v2026.06 版本进行本次录音。”/)).toBeTruthy();
+        expect(screen.getByRole("button", { name: /上传并开始评分/ })).toHaveProperty("disabled", true);
+
+        fireEvent.click(screen.getByRole("checkbox", { name: /我已下载并确认使用 v2026.06/ }));
+
+        expect(screen.getByText("录音与材料版本已确认，可以上传并开始评分。")).toBeTruthy();
+        expect(screen.getByRole("button", { name: /上传并开始评分/ })).toHaveProperty("disabled", false);
     });
 
     it("uses unit brief as the only learner source and does not fail when legacy paths are unavailable", async () => {

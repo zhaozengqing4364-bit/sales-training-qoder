@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, PlusCircle, RefreshCw } from "lucide-react";
+import { ArrowLeft, Bot, PlusCircle, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -30,7 +30,7 @@ import { BUSINESS_SKILLS_COACH_WORKBENCH_COPY } from "./coach-workbench-config";
 type ResumeStrategy = "latest_in_progress" | "new";
 type StreamApplyResult = "status" | "delta" | "snapshot" | "error";
 type AiCoachUiEventDelta = Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }>;
-type AiCoachReasoningTextDelta = Extract<AiCoachChatStreamEvent, { type: "reasoning_text_delta" }>;
+type AiCoachAssistantTextDelta = Extract<AiCoachChatStreamEvent, { type: "assistant_text_delta" }>;
 
 type CoachPreparationPanelProps = {
     readonly learningUnits: readonly BusinessEtiquetteLearningUnit[];
@@ -86,6 +86,22 @@ function aiCoachStreamErrorMessage(
         return BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachSessionMissingUnitSnapshot;
     }
     return event.message;
+}
+
+function mergeStreamingText(
+    current: AiCoachAssistantTextDelta | null,
+    next: AiCoachAssistantTextDelta,
+): string {
+    if (!current || current.delta_id !== next.delta_id) {
+        return next.text;
+    }
+    if (next.text.startsWith(current.text)) {
+        return next.text;
+    }
+    if (current.text.endsWith(next.text)) {
+        return current.text;
+    }
+    return `${current.text}${next.text}`;
 }
 
 function CoachPreparationPanel({
@@ -209,8 +225,8 @@ export default function AiCoachPage() {
     );
     const [streamActivityLabel, setStreamActivityLabel] = useState<string | null>(null);
     const [streamPhase, setStreamPhase] = useState<AiCoachChatStreamPhase | null>(null);
-    const [streamingReasoningText, setStreamingReasoningText] =
-        useState<AiCoachReasoningTextDelta | null>(null);
+    const [streamingAssistantText, setStreamingAssistantText] =
+        useState<AiCoachAssistantTextDelta | null>(null);
     const [streamingCardDelta, setStreamingCardDelta] =
         useState<AiCoachUiEventDelta | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -229,20 +245,20 @@ export default function AiCoachPage() {
             return "delta";
         }
         if (event.type === "assistant_text_delta") {
+            setStreamingAssistantText((current) => ({
+                ...event,
+                text: mergeStreamingText(current, event),
+            }));
             setStreamPhase(event.phase);
             return "delta";
         }
         if (event.type === "reasoning_text_delta") {
-            setStreamingReasoningText((current) => ({
-                ...event,
-                text: `${current?.text ?? ""}${event.text}`,
-            }));
             setStreamPhase(event.phase);
             return "delta";
         }
         if (event.type === "session_snapshot") {
             setSession(event.session);
-            setStreamingReasoningText(null);
+            setStreamingAssistantText(null);
             setStreamingCardDelta(null);
             setStreamPhase(event.phase);
             if (event.session.coach_state?.business_etiquette_progress) {
@@ -254,7 +270,7 @@ export default function AiCoachPage() {
             return "snapshot";
         }
         setStreamActivityLabel(null);
-        setStreamingReasoningText(null);
+        setStreamingAssistantText(null);
         setStreamingCardDelta(null);
         setStreamPhase(event.phase);
         setError(aiCoachStreamErrorMessage(event));
@@ -286,7 +302,7 @@ export default function AiCoachPage() {
         const { controller, operationId } = beginStreamOperation();
         setError(null);
         setStreamPhase(null);
-        setStreamingReasoningText(null);
+        setStreamingAssistantText(null);
         setStreamingCardDelta(null);
         setIsStarting(true);
         setStreamActivityLabel(
@@ -437,7 +453,7 @@ export default function AiCoachPage() {
         setInput("");
         setError(null);
         setStreamPhase(null);
-        setStreamingReasoningText(null);
+        setStreamingAssistantText(null);
         setStreamingCardDelta(null);
         setIsSending(true);
         setPendingUserMessage(message);
@@ -495,7 +511,7 @@ export default function AiCoachPage() {
         const { controller, operationId } = beginStreamOperation();
         setError(null);
         setStreamPhase(null);
-        setStreamingReasoningText(null);
+        setStreamingAssistantText(null);
         setStreamingCardDelta(null);
         setIsSending(true);
         setPendingCommand(command);
@@ -566,7 +582,7 @@ export default function AiCoachPage() {
             const { controller, operationId } = beginStreamOperation();
             setError(null);
             setStreamPhase(null);
-            setStreamingReasoningText(null);
+            setStreamingAssistantText(null);
             setStreamingCardDelta(null);
             setStreamActivityLabel(BUSINESS_SKILLS_COACH_WORKBENCH_COPY.scoringAnswer);
             setSubmittingEventIds((current) => new Set(current).add(event.event_id));
@@ -628,7 +644,12 @@ export default function AiCoachPage() {
     if (isLoading) {
         return (
             <div className="space-y-6 pb-10">
-                <div className="h-[70vh] animate-pulse rounded-2xl border border-violet-100 bg-violet-50" />
+                <div className="flex h-[70vh] flex-col items-center justify-center gap-4 rounded-2xl border border-slate-200 bg-slate-50">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
+                        <Bot className="h-6 w-6 animate-pulse" />
+                    </div>
+                    <p className="text-sm font-medium text-slate-600">正在准备 AI 教练...</p>
+                </div>
             </div>
         );
     }
@@ -677,14 +698,7 @@ export default function AiCoachPage() {
     }
 
     return (
-        <div className="space-y-4 pb-4">
-            <Link
-                href="/sales-trainer"
-                className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
-            >
-                <ArrowLeft className="h-4 w-4" />
-                {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.backLabel}
-            </Link>
+        <div className="pb-4">
             <AiCoachChatSurface
                 session={session}
                 learningUnits={learningUnits}
@@ -700,7 +714,7 @@ export default function AiCoachPage() {
                 submittingEventIds={submittingEventIds}
                 streamActivityLabel={streamActivityLabel}
                 streamPhase={streamPhase}
-                streamingReasoningText={streamingReasoningText}
+                streamingAssistantText={streamingAssistantText}
                 streamingCardDelta={streamingCardDelta}
                 error={error}
                 onInputChange={setInput}

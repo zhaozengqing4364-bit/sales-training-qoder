@@ -1,8 +1,11 @@
 import type {
     AiCoachAnswerPayloadV1,
+    AiCoachChatMessagePublicV1,
     AiCoachChatSessionPublicV1,
+    AiCoachChatStreamEvent,
     AiCoachInteractionPublicV1,
     AiCoachUiEventPublicV1,
+    BusinessEtiquetteAiCoachProgress,
     BusinessEtiquetteLearningUnit,
 } from "@/lib/api/types";
 
@@ -13,6 +16,145 @@ export type DraftByEventId = Readonly<Record<string, AiCoachAnswerPayloadV1 | nu
 
 export type QuizCardEvent = Extract<AiCoachUiEventPublicV1, { type: "quiz_card" }>;
 export type SummaryCardEvent = Extract<AiCoachUiEventPublicV1, { type: "summary_card" }>;
+export type StreamingAssistantText = Extract<
+    AiCoachChatStreamEvent,
+    { type: "assistant_text_delta" }
+>;
+
+export type CoachTimelineMessage = {
+    readonly message_id: string;
+    readonly role: "assistant" | "user";
+    readonly content: string;
+    readonly order_index: number;
+    readonly created_at: string;
+    readonly events: readonly AiCoachUiEventPublicV1[];
+    readonly state: "persisted" | "pending" | "streaming";
+};
+
+export interface CoachConversationViewModel {
+    readonly timeline: readonly CoachTimelineMessage[];
+    readonly activeEventId: string | null;
+    readonly activeQuiz: QuizCardEvent | null;
+    readonly latestScoredQuiz: QuizCardEvent | null;
+    readonly latestSummary: SummaryCardEvent | null;
+    readonly referenceQuiz: QuizCardEvent | null;
+    readonly currentUnit: BusinessEtiquetteLearningUnit | null;
+    readonly latestAssistantMessageId: string | null;
+    readonly sessionEventCount: number;
+    readonly quizCardCount: number;
+    readonly scoredQuizCardCount: number;
+}
+
+export function buildCoachConversationViewModel({
+    session,
+    learningUnits,
+    coachProgress,
+    pendingUserMessage,
+    streamingAssistantText,
+}: {
+    readonly session: AiCoachChatSessionPublicV1 | null;
+    readonly learningUnits: readonly BusinessEtiquetteLearningUnit[];
+    readonly coachProgress: BusinessEtiquetteAiCoachProgress | null;
+    readonly pendingUserMessage: string | null;
+    readonly streamingAssistantText: StreamingAssistantText | null;
+}): CoachConversationViewModel {
+    const activeEventId = activeEventIdForSession(session);
+    const activeQuiz = activeQuizEventForSession(session);
+    const latestScoredQuiz = latestScoredQuizEventForSession(session);
+    const latestSummary = latestSummaryEventForSession(session);
+    const referenceQuiz = trainingReferenceEventForSession(session);
+    const progressUnit = coachProgress
+        ? learningUnits.find((unit) => unit.unit_key === coachProgress.learning_unit_key)
+        : null;
+    const currentUnit = progressUnit ?? resolveCurrentLearningUnit(learningUnits, referenceQuiz);
+    const eventsByMessage = groupEventsByMessage(session?.ui_events ?? []);
+    const timeline = [
+        ...buildPersistedTimeline(session?.messages ?? [], eventsByMessage),
+        ...buildPendingTimelineMessage(session, pendingUserMessage),
+        ...buildStreamingTimelineMessage(session, streamingAssistantText),
+    ];
+    const latestAssistantMessageId =
+        [...timeline].reverse().find((item) => item.role === "assistant")?.message_id ?? null;
+    const quizCards = quizEventsForSession(session);
+
+    return {
+        timeline,
+        activeEventId,
+        activeQuiz,
+        latestScoredQuiz,
+        latestSummary,
+        referenceQuiz,
+        currentUnit,
+        latestAssistantMessageId,
+        sessionEventCount: session?.ui_events.length ?? 0,
+        quizCardCount: quizCards.length,
+        scoredQuizCardCount: quizCards.filter((event) => event.status === "scored").length,
+    };
+}
+
+function buildPersistedTimeline(
+    messages: readonly AiCoachChatMessagePublicV1[],
+    eventsByMessage: ReadonlyMap<string, readonly AiCoachUiEventPublicV1[]>,
+): readonly CoachTimelineMessage[] {
+    return messages.map((message) => ({
+        message_id: message.message_id,
+        role: message.role,
+        content: message.content,
+        order_index: message.order_index,
+        created_at: message.created_at,
+        events: eventsByMessage.get(message.message_id) ?? [],
+        state: "persisted",
+    }));
+}
+
+function buildPendingTimelineMessage(
+    session: AiCoachChatSessionPublicV1 | null,
+    pendingUserMessage: string | null,
+): readonly CoachTimelineMessage[] {
+    if (!pendingUserMessage) {
+        return [];
+    }
+    return [
+        {
+            message_id: "pending-user",
+            role: "user",
+            content: pendingUserMessage,
+            order_index: (session?.messages.length ?? 0) + 1,
+            created_at: new Date().toISOString(),
+            events: [],
+            state: "pending",
+        },
+    ];
+}
+
+function buildStreamingTimelineMessage(
+    session: AiCoachChatSessionPublicV1 | null,
+    streamingAssistantText: StreamingAssistantText | null,
+): readonly CoachTimelineMessage[] {
+    const content = streamingAssistantText?.text.trim() ?? "";
+    if (!content) {
+        return [];
+    }
+    return [
+        {
+            message_id: "streaming-assistant",
+            role: "assistant",
+            content,
+            order_index: (session?.messages.length ?? 0) + 2,
+            created_at: new Date().toISOString(),
+            events: [],
+            state: "streaming",
+        },
+    ];
+}
+
+function groupEventsByMessage(events: readonly AiCoachUiEventPublicV1[]) {
+    const grouped = new Map<string, readonly AiCoachUiEventPublicV1[]>();
+    for (const event of events) {
+        grouped.set(event.message_id, [...(grouped.get(event.message_id) ?? []), event]);
+    }
+    return grouped;
+}
 
 export function activeEventIdForSession(
     session: AiCoachChatSessionPublicV1 | null,

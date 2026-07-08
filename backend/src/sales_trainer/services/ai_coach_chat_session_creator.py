@@ -15,6 +15,11 @@ from sales_trainer.services.ai_coach_chat_runtime import (
     AiCoachChatRuntimeError,
 )
 from sales_trainer.services.ai_coach_chat_store import AiCoachChatStore
+from sales_trainer.services.learning_topic_config_service import (
+    BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+    LearningTopicConfigError,
+    NewcomerLearningTopicConfigService,
+)
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import NEWCOMER_PATH_LOGICAL_ID
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
@@ -42,32 +47,54 @@ class AiCoachChatSessionCreator:
         actor: User | None,
         start_auto_advance: bool = True,
     ) -> str:
-        path_response = await SalesTrainerPathConfigService(self._db).get_config()
         try:
-            if (
-                path_response.get("path") is None
-                or not path_response.get("active_revision_id")
-                or path_response.get("active_revision_no") is None
-            ):
-                raise AiCoachChatRuntimeError(
-                    "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
-                    "新人训练路径尚未发布 active revision，AI Coach 不能启动。",
-                    409,
+            if module_key == BUSINESS_SKILLS_SOURCE_MODULE_KEY:
+                (
+                    path_revision_id,
+                    path_revision_no,
+                    module,
+                ) = await NewcomerLearningTopicConfigService(
+                    self._db
+                ).active_business_etiquette_module_config()
+                config = module.ai_coach
+                if config is None:
+                    raise AiCoachChatRuntimeError(
+                        "[AI_COACH_NOT_CONFIGURED]",
+                        "商务礼仪规范学习专题未配置 AI 教练。",
+                        409,
+                    )
+            else:
+                path_response = await SalesTrainerPathConfigService(self._db).get_config()
+                if (
+                    path_response.get("path") is None
+                    or not path_response.get("active_revision_id")
+                    or path_response.get("active_revision_no") is None
+                ):
+                    raise AiCoachChatRuntimeError(
+                        "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
+                        "新人训练路径尚未发布 active revision，AI Coach 不能启动。",
+                        409,
+                    )
+                module, config = self._runtime.module_ai_coach_config(
+                    path_response.get("path"),
+                    module_key,
                 )
-            module, config = self._runtime.module_ai_coach_config(
-                path_response.get("path"),
-                module_key,
-            )
+                path_revision_id = path_response.get("active_revision_id")
+                path_revision_no = path_response.get("active_revision_no")
             self._runtime.validate_chat_config(config)
             article_snapshot = await self._runtime.article_snapshot(module)
+        except LearningTopicConfigError as exc:
+            raise service_error_from_exception(
+                AiCoachChatRuntimeError(exc.code, exc.message, exc.status_code)
+            ) from exc
         except AiCoachChatRuntimeError as exc:
             raise service_error_from_exception(exc) from exc
         session = SalesTrainerAiCoachSession(
             user_id=user_id,
             module_key=module_key,
             path_key=NEWCOMER_PATH_LOGICAL_ID,
-            path_revision_id=path_response.get("active_revision_id"),
-            path_revision_no=path_response.get("active_revision_no"),
+            path_revision_id=path_revision_id,
+            path_revision_no=path_revision_no,
             article_snapshot=article_snapshot,
             path_config_snapshot=module.model_dump(mode="json"),
             prompt_template_id=config.prompt_template_id,

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetAiCoachConfig = vi.fn();
 const mockGetAdminCapabilities = vi.fn();
+const mockGetModelConfigs = vi.fn();
 const mockSaveAiCoachConfig = vi.fn();
 const mockPublishAiCoachConfig = vi.fn();
 
@@ -15,6 +16,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/api/client", () => ({
     api: {
         admin: {
+            getModelConfigs: (...args: unknown[]) => mockGetModelConfigs(...args),
             salesTrainer: {
                 getCapabilities: (...args: unknown[]) => mockGetAdminCapabilities(...args),
             },
@@ -124,6 +126,8 @@ const aiCoachConfig = {
     min_turns: 3,
     max_turns: 10,
     mastery_threshold: 80,
+    generation_model: "llm-config-1",
+    scoring_model: null,
     prompt_template_id: null,
     prompt_revision_id: null,
     prompt_contract_hash: null,
@@ -151,6 +155,34 @@ describe("AdminAiCoachConfigPage", () => {
             },
         });
         mockGetAiCoachConfig.mockResolvedValue(aiCoachConfig);
+        mockGetModelConfigs.mockResolvedValue({
+            llm: [
+                {
+                    id: "llm-config-1",
+                    name: "DeepSeek Flash",
+                    model_type: "llm",
+                    provider: "openai",
+                    model_name: "deepseek-v4-flash",
+                    is_default: true,
+                    is_active: true,
+                    last_test_status: "success",
+                },
+                {
+                    id: "llm-config-disabled",
+                    name: "停用模型",
+                    model_type: "llm",
+                    provider: "openai",
+                    model_name: "disabled-model",
+                    is_default: false,
+                    is_active: false,
+                    last_test_status: null,
+                },
+            ],
+            embedding: [],
+            asr: [],
+            tts: [],
+            total: 2,
+        });
         mockSaveAiCoachConfig.mockResolvedValue({
             module_key: "business_skills",
             ai_coach: aiCoachConfig,
@@ -203,6 +235,13 @@ describe("AdminAiCoachConfigPage", () => {
             (screen.getByLabelText(/max_auto_steps_per_session/) as HTMLInputElement)
                 .value,
         ).toBe("1");
+        await waitFor(() => {
+            expect((screen.getByLabelText("对话生成模型") as HTMLSelectElement).value).toBe(
+                "llm-config-1",
+            );
+        });
+        expect(screen.getAllByText("DeepSeek Flash · openai/deepseek-v4-flash · 默认").length).toBeGreaterThan(0);
+        expect(screen.queryByText("停用模型 · openai/disabled-model")).toBeNull();
     });
 
     it("fails closed before loading config without AI Coach management capability", async () => {
@@ -225,6 +264,7 @@ describe("AdminAiCoachConfigPage", () => {
 
         expect(await screen.findByText("AI 教练配置权限不足")).toBeTruthy();
         expect(mockGetAiCoachConfig).not.toHaveBeenCalled();
+        expect(mockGetModelConfigs).not.toHaveBeenCalled();
         expect(mockSaveAiCoachConfig).not.toHaveBeenCalled();
         expect(mockPublishAiCoachConfig).not.toHaveBeenCalled();
         expect(screen.queryByRole("button", { name: /保存草稿/ })).toBeNull();
@@ -270,6 +310,8 @@ describe("AdminAiCoachConfigPage", () => {
                     ],
                     entry_resume_policy: "latest_active_or_new",
                     generation_timeout_seconds: 30,
+                    generation_model: "llm-config-1",
+                    scoring_model: null,
                     max_auto_steps_per_session: 1,
                     max_cards_per_message: 1,
                     empty_response_recovery_prompts: ["继续下一题", "换个场景", "总结本轮"],

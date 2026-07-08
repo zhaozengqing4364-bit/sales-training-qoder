@@ -1,4 +1,5 @@
-import { renderToString } from "react-dom/server";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -10,6 +11,8 @@ import {
     shouldStayInSalesTrainerAdmin,
     type CurrentUser,
 } from "@/lib/auth/current-user";
+import { currentUserQueryKey } from "@/lib/query/auth";
+import { createAppQueryClient } from "@/lib/query/client";
 
 import { useCurrentUser } from "./use-current-user";
 
@@ -24,16 +27,58 @@ const currentUser = {
     created_at: "2026-04-01T00:00:00Z",
 } as const satisfies CurrentUser;
 
-function CurrentUserProbe() {
-    const { data } = useCurrentUser(currentUser);
+const nextSessionUser = {
+    id: "user-2",
+    user_id: "user-2",
+    name: "李小红",
+    display_name: "李小红",
+    email: "next@example.com",
+    role: "admin",
+    is_active: true,
+    created_at: "2026-04-02T00:00:00Z",
+} as const satisfies CurrentUser;
 
-    return <span>{data?.display_name}</span>;
+function createWrapper(queryClient: QueryClient) {
+    return function Wrapper({ children }: { children: React.ReactNode }) {
+        return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    };
 }
 
 describe("useCurrentUser", () => {
-    it("uses server-provided current user during SSR without requiring an app query provider", () => {
-        expect(() => renderToString(<CurrentUserProbe />)).not.toThrow();
-        expect(renderToString(<CurrentUserProbe />)).toContain("王小明");
+    it("seeds the shared current-user query cache from server-provided user data", async () => {
+        const queryClient = createAppQueryClient();
+
+        const { result } = renderHook(() => useCurrentUser(currentUser), {
+            wrapper: createWrapper(queryClient),
+        });
+
+        await waitFor(() => {
+            expect(result.current.data?.display_name).toBe("王小明");
+        });
+
+        expect(queryClient.getQueryData(currentUserQueryKey)).toMatchObject({
+            id: "user-1",
+            display_name: "王小明",
+        });
+    });
+
+    it("replaces stale cached current-user data with the server-provided session user", async () => {
+        const queryClient = createAppQueryClient();
+        queryClient.setQueryData(currentUserQueryKey, currentUser);
+
+        const { result } = renderHook(() => useCurrentUser(nextSessionUser), {
+            wrapper: createWrapper(queryClient),
+        });
+
+        expect(result.current.data?.id).toBe("user-2");
+        expect(result.current.data?.role).toBe("admin");
+
+        await waitFor(() => {
+            expect(queryClient.getQueryData(currentUserQueryKey)).toMatchObject({
+                id: "user-2",
+                role: "admin",
+            });
+        });
     });
 
     it("preserves project-specific admin roles instead of coercing them to user", () => {

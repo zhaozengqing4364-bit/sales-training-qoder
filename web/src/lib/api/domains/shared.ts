@@ -1,6 +1,8 @@
 export type ApiRequestOptions = RequestInit & {
     signal?: AbortSignal;
     skipSessionExpiredHandling?: boolean;
+    timeoutMs?: number;
+    timeoutMessage?: string;
 };
 
 export type ApiRequest = <T>(endpoint: string, options?: ApiRequestOptions) => Promise<T>;

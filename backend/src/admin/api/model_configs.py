@@ -60,7 +60,7 @@ router = APIRouter(
 ModelConfigApiResponse = (
     ModelConfigSuccessResponse | ModelConfigErrorResponse | JSONResponse
 )
-TestConfigApiResponse = TestConfigSuccessResponse | ModelConfigErrorResponse
+TestConfigApiResponse = TestConfigSuccessResponse | ModelConfigErrorResponse | JSONResponse
 
 
 SUPPORTED_PROVIDERS_BY_TYPE: dict[ModelType, set[ModelProvider]] = {
@@ -382,20 +382,26 @@ async def create_model_config(
         existing = result.scalar_one_or_none()
 
         if existing:
-            return ModelConfigErrorResponse(
-                error="Configuration already exists",
-                error_code="[MODEL_CONFIG_DUPLICATE]",
-                trace_id=get_trace_id(),
+            return _error_response(
+                ModelConfigErrorResponse(
+                    error="Configuration already exists",
+                    error_code="[MODEL_CONFIG_DUPLICATE]",
+                    trace_id=get_trace_id(),
+                ),
+                status_code=409,
             )
 
         api_key_encrypted = ""
         if request.api_key.strip():
             encrypt_result = encrypt_api_key(request.api_key)
             if not encrypt_result.is_success:
-                return ModelConfigErrorResponse(
-                    error="Failed to encrypt API key",
-                    error_code="[ENCRYPTION_ERROR]",
-                    trace_id=get_trace_id(),
+                return _error_response(
+                    ModelConfigErrorResponse(
+                        error="Failed to encrypt API key",
+                        error_code="[ENCRYPTION_ERROR]",
+                        trace_id=get_trace_id(),
+                    ),
+                    status_code=500,
                 )
             api_key_encrypted = encrypt_result.value or ""
 
@@ -466,10 +472,13 @@ async def create_model_config(
     except SQLAlchemyError as e:
         logger.error(f"Failed to create model config: {e}")
         await db.rollback()
-        return ModelConfigErrorResponse(
-            error=str(e),
-            error_code="[MODEL_CONFIG_CREATE_FAILED]",
-            trace_id=get_trace_id(),
+        return _error_response(
+            ModelConfigErrorResponse(
+                error=str(e),
+                error_code="[MODEL_CONFIG_CREATE_FAILED]",
+                trace_id=get_trace_id(),
+            ),
+            status_code=500,
         )
 
 
@@ -528,10 +537,13 @@ async def list_model_configs(
 
     except SQLAlchemyError as e:
         logger.error(f"Failed to list model configs: {e}")
-        return ModelConfigErrorResponse(
-            error=str(e),
-            error_code="[MODEL_CONFIG_LIST_FAILED]",
-            trace_id=get_trace_id(),
+        return _error_response(
+            ModelConfigErrorResponse(
+                error=str(e),
+                error_code="[MODEL_CONFIG_LIST_FAILED]",
+                trace_id=get_trace_id(),
+            ),
+            status_code=500,
         )
 
 
@@ -549,10 +561,13 @@ async def get_model_config(
         config = result.scalar_one_or_none()
 
         if not config:
-            return ModelConfigErrorResponse(
-                error="Configuration not found",
-                error_code="[MODEL_CONFIG_NOT_FOUND]",
-                trace_id=get_trace_id(),
+            return _error_response(
+                ModelConfigErrorResponse(
+                    error="Configuration not found",
+                    error_code="[MODEL_CONFIG_NOT_FOUND]",
+                    trace_id=get_trace_id(),
+                ),
+                status_code=404,
             )
 
         api_key_plain: str | None = None
@@ -568,10 +583,13 @@ async def get_model_config(
 
     except SQLAlchemyError as e:
         logger.error(f"Failed to get model config: {e}")
-        return ModelConfigErrorResponse(
-            error=str(e),
-            error_code="[MODEL_CONFIG_GET_FAILED]",
-            trace_id=get_trace_id(),
+        return _error_response(
+            ModelConfigErrorResponse(
+                error=str(e),
+                error_code="[MODEL_CONFIG_GET_FAILED]",
+                trace_id=get_trace_id(),
+            ),
+            status_code=500,
         )
 
 
@@ -603,10 +621,13 @@ async def update_model_config(
         config = result.scalar_one_or_none()
 
         if not config:
-            return ModelConfigErrorResponse(
-                error="Configuration not found",
-                error_code="[MODEL_CONFIG_NOT_FOUND]",
-                trace_id=get_trace_id(),
+            return _error_response(
+                ModelConfigErrorResponse(
+                    error="Configuration not found",
+                    error_code="[MODEL_CONFIG_NOT_FOUND]",
+                    trace_id=get_trace_id(),
+                ),
+                status_code=404,
             )
 
         config_row = cast(Any, config)
@@ -655,17 +676,23 @@ async def update_model_config(
             if request.api_key.strip():
                 encrypt_result = encrypt_api_key(request.api_key)
                 if not encrypt_result.is_success:
-                    return ModelConfigErrorResponse(
-                        error="Failed to encrypt API key",
-                        error_code="[ENCRYPTION_ERROR]",
-                        trace_id=get_trace_id(),
+                    return _error_response(
+                        ModelConfigErrorResponse(
+                            error="Failed to encrypt API key",
+                            error_code="[ENCRYPTION_ERROR]",
+                            trace_id=get_trace_id(),
+                        ),
+                        status_code=500,
                     )
                 config_row.api_key_encrypted = encrypt_result.value or ""
             elif _requires_api_key(model_type, provider):
-                return ModelConfigErrorResponse(
-                    error="API key is required for this provider",
-                    error_code="[MODEL_CONFIG_API_KEY_REQUIRED]",
-                    trace_id=get_trace_id(),
+                return _error_response(
+                    ModelConfigErrorResponse(
+                        error="API key is required for this provider",
+                        error_code="[MODEL_CONFIG_API_KEY_REQUIRED]",
+                        trace_id=get_trace_id(),
+                    ),
+                    status_code=400,
                 )
             else:
                 config_row.api_key_encrypted = ""
@@ -681,10 +708,13 @@ async def update_model_config(
                 db, config_row.model_type, config_row.id
             )
             if not replacement_default:
-                return ModelConfigErrorResponse(
-                    error="Cannot remove the only active default configuration for this type",
-                    error_code="[CANNOT_UNSET_DEFAULT]",
-                    trace_id=get_trace_id(),
+                return _error_response(
+                    ModelConfigErrorResponse(
+                        error="Cannot remove the only active default configuration for this type",
+                        error_code="[CANNOT_UNSET_DEFAULT]",
+                        trace_id=get_trace_id(),
+                    ),
+                    status_code=409,
                 )
             cast(Any, replacement_default).is_default = True
             config_row.is_default = False
@@ -732,10 +762,13 @@ async def update_model_config(
     except SQLAlchemyError as e:
         logger.error(f"Failed to update model config: {e}")
         await db.rollback()
-        return ModelConfigErrorResponse(
-            error=str(e),
-            error_code="[MODEL_CONFIG_UPDATE_FAILED]",
-            trace_id=get_trace_id(),
+        return _error_response(
+            ModelConfigErrorResponse(
+                error=str(e),
+                error_code="[MODEL_CONFIG_UPDATE_FAILED]",
+                trace_id=get_trace_id(),
+            ),
+            status_code=500,
         )
 
 
@@ -756,10 +789,13 @@ async def delete_model_config(
         config = result.scalar_one_or_none()
 
         if not config:
-            return ModelConfigErrorResponse(
-                error="Configuration not found",
-                error_code="[MODEL_CONFIG_NOT_FOUND]",
-                trace_id=get_trace_id(),
+            return _error_response(
+                ModelConfigErrorResponse(
+                    error="Configuration not found",
+                    error_code="[MODEL_CONFIG_NOT_FOUND]",
+                    trace_id=get_trace_id(),
+                ),
+                status_code=404,
             )
 
         config_row = cast(Any, config)
@@ -772,10 +808,13 @@ async def delete_model_config(
                 db, config_row.model_type, config_row.id
             )
             if not replacement_config:
-                return ModelConfigErrorResponse(
-                    error="Cannot delete the only active configuration for this type",
-                    error_code="[CANNOT_DELETE_DEFAULT]",
-                    trace_id=get_trace_id(),
+                return _error_response(
+                    ModelConfigErrorResponse(
+                        error="Cannot delete the only active configuration for this type",
+                        error_code="[CANNOT_DELETE_DEFAULT]",
+                        trace_id=get_trace_id(),
+                    ),
+                    status_code=409,
                 )
 
             cast(Any, replacement_config).is_default = True
@@ -816,10 +855,13 @@ async def delete_model_config(
     except SQLAlchemyError as e:
         logger.error(f"Failed to delete model config: {e}")
         await db.rollback()
-        return ModelConfigErrorResponse(
-            error=str(e),
-            error_code="[MODEL_CONFIG_DELETE_FAILED]",
-            trace_id=get_trace_id(),
+        return _error_response(
+            ModelConfigErrorResponse(
+                error=str(e),
+                error_code="[MODEL_CONFIG_DELETE_FAILED]",
+                trace_id=get_trace_id(),
+            ),
+            status_code=500,
         )
 
 
@@ -861,10 +903,13 @@ async def test_model_config(
         config = result.scalar_one_or_none()
 
         if not config:
-            return ModelConfigErrorResponse(
-                error="Configuration not found",
-                error_code="[MODEL_CONFIG_NOT_FOUND]",
-                trace_id=get_trace_id(),
+            return _error_response(
+                ModelConfigErrorResponse(
+                    error="Configuration not found",
+                    error_code="[MODEL_CONFIG_NOT_FOUND]",
+                    trace_id=get_trace_id(),
+                ),
+                status_code=404,
             )
 
         config_row = cast(Any, config)

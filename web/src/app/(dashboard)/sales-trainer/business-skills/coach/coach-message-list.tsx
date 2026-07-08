@@ -1,78 +1,75 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, type ReactNode, type Ref } from "react";
-import { Bot, UserRound } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import type {
     AiCoachAnswerPayloadV1,
-    AiCoachChatMessagePublicV1,
-    AiCoachChatSessionPublicV1,
     AiCoachUiEventPublicV1,
 } from "@/lib/api/types";
 
-import { type DraftByEventId } from "./coach-session";
+import {
+    type CoachConversationViewModel,
+    type CoachTimelineMessage,
+    type DraftByEventId,
+} from "./coach-session";
 import { GenerativeCard } from "./coach-cards";
 import { BUSINESS_SKILLS_COACH_WORKBENCH_COPY } from "./coach-workbench-config";
 
-type PendingMessage = {
-    readonly message_id: "pending-user";
-    readonly role: "user";
-    readonly content: string;
-    readonly order_index: number;
-    readonly created_at: string;
-};
-
 export function CoachMessageList({
-    session,
-    pendingUserMessage,
+    viewModel,
     drafts,
     submittingEventIds,
     isStarting,
     isSending,
     isAdvancing,
     activityLabel,
-    activeEventId,
     hiddenEventIds,
     error,
     autoScrollKey,
     trailingNode,
+    streamingMetaNode,
+    streamingAttachmentNode,
+    commandBar,
     className,
     onFollowupPrompt,
     onDraftChange,
     onSubmitEvent,
 }: {
-    readonly session: AiCoachChatSessionPublicV1 | null;
-    readonly pendingUserMessage: string | null;
+    readonly viewModel: CoachConversationViewModel;
     readonly drafts: DraftByEventId;
     readonly submittingEventIds: ReadonlySet<string>;
     readonly isStarting: boolean;
     readonly isSending: boolean;
     readonly isAdvancing: boolean;
     readonly activityLabel: string | null;
-    readonly activeEventId: string | null;
     readonly hiddenEventIds?: ReadonlySet<string>;
     readonly error: string | null;
     readonly autoScrollKey?: string | number;
     readonly trailingNode?: ReactNode;
+    readonly streamingMetaNode?: ReactNode;
+    readonly streamingAttachmentNode?: ReactNode;
+    readonly commandBar?: ReactNode;
     readonly className?: string;
     readonly onFollowupPrompt: (prompt: string) => void;
     readonly onDraftChange: (eventId: string, payload: AiCoachAnswerPayloadV1) => void;
     readonly onSubmitEvent: (event: AiCoachUiEventPublicV1) => void;
 }) {
-    const messages = buildMessages(session, pendingUserMessage);
-    const eventsByMessage = groupEventsByMessage(session?.ui_events ?? []);
+    const messages = viewModel.timeline;
     const logRef = useRef<HTMLDivElement | null>(null);
     const latestTurnRef = useRef<HTMLElement | null>(null);
     const shouldFollowLatestRef = useRef(true);
     const lastPendingMessageRef = useRef<string | null>(null);
+    const pendingUserMessage = messages.find((message) => message.state === "pending")?.content ?? null;
+    const hasStreamingMessage = messages.some((message) => message.state === "streaming");
     const eventScrollKey = useMemo(
         () =>
-            (session?.ui_events ?? [])
+            messages
+                .flatMap((message) => message.events)
                 .map((event) => `${event.event_id}:${event.status}:${event.score_result?.mastered ?? ""}`)
                 .join("|"),
-        [session?.ui_events],
+        [messages],
     );
 
     const latestTurnTop = useCallback((log: HTMLDivElement, target: HTMLElement) => (
@@ -102,7 +99,7 @@ export function CoachMessageList({
         }
         log.scrollTop = top;
     }, [
-        activeEventId,
+        viewModel.activeEventId,
         error,
         eventScrollKey,
         isAdvancing,
@@ -134,18 +131,21 @@ export function CoachMessageList({
                     Math.abs(log.scrollTop - targetTop) <= 160
                     || log.scrollTop > targetTop;
             }}
-            className={className ?? "min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5 md:px-8"}
+            className={className ?? "min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-5 md:px-8"}
         >
             {messages.map((message, index) => (
                 <ChatMessage
                     key={message.message_id}
                     anchorRef={index === messages.length - 1 && !trailingNode ? latestTurnRef : undefined}
                     message={message}
-                    events={eventsByMessage.get(message.message_id) ?? []}
-                    activeEventId={activeEventId}
+                    activeEventId={viewModel.activeEventId}
                     hiddenEventIds={hiddenEventIds ?? EMPTY_EVENT_ID_SET}
                     drafts={drafts}
                     submittingEventIds={submittingEventIds}
+                    isLatestAssistant={message.message_id === viewModel.latestAssistantMessageId}
+                    streamingMetaNode={message.state === "streaming" ? streamingMetaNode : null}
+                    streamingAttachmentNode={message.state === "streaming" ? streamingAttachmentNode : null}
+                    commandBar={commandBar}
                     onFollowupPrompt={onFollowupPrompt}
                     onDraftChange={onDraftChange}
                     onSubmitEvent={onSubmitEvent}
@@ -155,13 +155,13 @@ export function CoachMessageList({
                 <article
                     ref={latestTurnRef}
                     data-latest-turn-anchor="true"
-                    className="flex gap-3"
+                    className="flex items-start gap-3"
                 >
-                    <Avatar role="assistant" />
-                    <div className="max-w-[84%] flex-1">{trailingNode}</div>
+                    <MessageAvatar role="assistant" />
+                    <div className="min-w-0 flex-1">{trailingNode}</div>
                 </article>
             ) : null}
-            {(isStarting || isSending || isAdvancing) && !trailingNode ? (
+            {(isStarting || isSending || isAdvancing) && !trailingNode && !hasStreamingMessage ? (
                 <AssistantLoading
                     label={activityLabel ?? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.defaultThinkingLabel}
                 />
@@ -175,50 +175,31 @@ export function CoachMessageList({
     );
 }
 
-function buildMessages(
-    session: AiCoachChatSessionPublicV1 | null,
-    pendingUserMessage: string | null,
-): ReadonlyArray<AiCoachChatMessagePublicV1 | PendingMessage> {
-    const messages = [...(session?.messages ?? [])];
-    if (pendingUserMessage) {
-        messages.push({
-            message_id: "pending-user",
-            role: "user",
-            content: pendingUserMessage,
-            order_index: messages.length + 1,
-            created_at: new Date().toISOString(),
-        });
-    }
-    return messages;
-}
-
-function groupEventsByMessage(events: readonly AiCoachUiEventPublicV1[]) {
-    const grouped = new Map<string, AiCoachUiEventPublicV1[]>();
-    for (const event of events) {
-        grouped.set(event.message_id, [...(grouped.get(event.message_id) ?? []), event]);
-    }
-    return grouped;
-}
-
 function ChatMessage({
     anchorRef,
     message,
-    events,
     activeEventId,
     hiddenEventIds,
     drafts,
     submittingEventIds,
+    isLatestAssistant,
+    streamingMetaNode,
+    streamingAttachmentNode,
+    commandBar,
     onFollowupPrompt,
     onDraftChange,
     onSubmitEvent,
 }: {
     readonly anchorRef?: Ref<HTMLElement>;
-    readonly message: AiCoachChatMessagePublicV1 | PendingMessage;
-    readonly events: readonly AiCoachUiEventPublicV1[];
+    readonly message: CoachTimelineMessage;
     readonly activeEventId: string | null;
     readonly hiddenEventIds: ReadonlySet<string>;
     readonly drafts: DraftByEventId;
     readonly submittingEventIds: ReadonlySet<string>;
+    readonly isLatestAssistant: boolean;
+    readonly streamingMetaNode?: ReactNode;
+    readonly streamingAttachmentNode?: ReactNode;
+    readonly commandBar?: ReactNode;
     readonly onFollowupPrompt: (prompt: string) => void;
     readonly onDraftChange: (eventId: string, payload: AiCoachAnswerPayloadV1) => void;
     readonly onSubmitEvent: (event: AiCoachUiEventPublicV1) => void;
@@ -228,42 +209,51 @@ function ChatMessage({
         <article
             ref={anchorRef}
             data-latest-turn-anchor={anchorRef ? "true" : undefined}
-            className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}
+            className={isUser ? "flex items-start justify-end gap-3" : "flex items-start gap-3"}
         >
-            {!isUser ? <Avatar role="assistant" /> : null}
-            <div className={`max-w-[84%] space-y-3 ${isUser ? "items-end" : ""}`}>
-                <div
-                    className={
-                        isUser
-                            ? "rounded-2xl bg-slate-950 px-4 py-3 text-sm leading-relaxed text-white"
-                            : "rounded-2xl bg-white px-4 py-3 text-sm leading-relaxed text-slate-800 shadow-sm"
-                    }
-                >
-                    {isUser ? message.content : <CoachMarkdown content={message.content} />}
-                </div>
-                {!isUser ? (
-                    <div className="space-y-3">
-                        {events.map((event) =>
-                            shouldRenderEvent(event, activeEventId, hiddenEventIds) ? (
-                                <GenerativeCard
-                                    key={event.event_id}
-                                    event={event}
-                                    draft={drafts[event.event_id] ?? null}
-                                    isActive={event.event_id === activeEventId}
-                                    isSubmitting={submittingEventIds.has(event.event_id)}
-                                    presentation="compact"
-                                    onFollowupPrompt={onFollowupPrompt}
-                                    onDraftChange={(payload) =>
-                                        onDraftChange(event.event_id, payload)
-                                    }
-                                    onSubmit={() => onSubmitEvent(event)}
-                                />
-                            ) : null,
-                        )}
+            {isUser ? (
+                <>
+                    <p className="max-w-[80%] rounded-2xl rounded-br-md bg-slate-900 px-4 py-2.5 text-sm leading-relaxed text-white">
+                        {message.content}
+                    </p>
+                    <MessageAvatar role="user" />
+                </>
+            ) : (
+                <>
+                    <MessageAvatar role="assistant" />
+                    <div className="min-w-0 flex-1 space-y-3">
+                        <div className="max-w-[72ch] rounded-2xl rounded-tl-md border border-slate-200 bg-white px-4 py-3 text-sm leading-7 text-slate-800 shadow-sm">
+                            <CoachMarkdown content={message.content} />
+                            {streamingMetaNode}
+                        </div>
+                        {streamingAttachmentNode}
+                        <div className="space-y-3">
+                            {message.events.map((event) =>
+                                shouldRenderEvent(event, activeEventId, hiddenEventIds) ? (
+                                    <GenerativeCard
+                                        key={event.event_id}
+                                        event={event}
+                                        draft={drafts[event.event_id] ?? null}
+                                        isActive={event.event_id === activeEventId}
+                                        isSubmitting={submittingEventIds.has(event.event_id)}
+                                        presentation="compact"
+                                        onFollowupPrompt={onFollowupPrompt}
+                                        onDraftChange={(payload) =>
+                                            onDraftChange(event.event_id, payload)
+                                        }
+                                        onSubmit={() => onSubmitEvent(event)}
+                                    />
+                                ) : null,
+                            )}
+                        </div>
+                        {isLatestAssistant && commandBar ? (
+                            <div className="max-w-[72ch] rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                                {commandBar}
+                            </div>
+                        ) : null}
                     </div>
-                ) : null}
-            </div>
-            {isUser ? <Avatar role="user" /> : null}
+                </>
+            )}
         </article>
     );
 }
@@ -324,7 +314,7 @@ const chatMarkdownComponents = {
         <strong className="font-semibold text-slate-950">{children}</strong>
     ),
     blockquote: ({ children }: { readonly children?: ReactNode }) => (
-        <blockquote className="mb-3 rounded-r-xl border-l-4 border-slate-300 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-700 last:mb-0">
+        <blockquote className="mb-3 rounded-xl bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-700 last:mb-0">
             {children}
         </blockquote>
     ),
@@ -354,25 +344,32 @@ const chatMarkdownComponents = {
     ),
 };
 
-function Avatar({ role }: { readonly role: "assistant" | "user" }) {
-    const className =
-        role === "assistant"
-            ? "bg-violet-600 text-white"
-            : "bg-slate-900 text-white";
-    const Icon = role === "assistant" ? Bot : UserRound;
+function MessageAvatar({ role }: { readonly role: "assistant" | "user" }) {
+    const label = role === "assistant" ? "AI" : "我";
+    const className = role === "assistant"
+        ? "bg-violet-50 text-violet-700 ring-violet-100"
+        : "bg-slate-900 text-white ring-slate-900";
     return (
-        <div className={`mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${className}`}>
-            <Icon className="h-4 w-4" />
-        </div>
+        <span
+            aria-label={role === "assistant" ? "教练" : "你"}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black ring-1 ${className}`}
+        >
+            {label}
+        </span>
     );
 }
 
 function AssistantLoading({ label }: { readonly label: string }) {
     return (
-        <article className="flex gap-3">
-            <Avatar role="assistant" />
-            <div className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-slate-500 shadow-sm">
-                {label}
+        <article className="flex items-start gap-3">
+            <MessageAvatar role="assistant" />
+            <div className="flex items-center gap-2 rounded-2xl rounded-tl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
+                <span className="flex gap-1">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:0ms]" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:300ms]" />
+                </span>
+                <span>{label}</span>
             </div>
         </article>
     );

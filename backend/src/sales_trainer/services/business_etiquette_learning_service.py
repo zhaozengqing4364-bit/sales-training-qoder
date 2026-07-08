@@ -11,8 +11,6 @@ from sales_trainer.schemas import (
     BusinessEtiquetteLearningUnitResponse,
     BusinessEtiquetteLearningUnitsResponse,
     NewcomerArticleBinding,
-    NewcomerPathConfigPayload,
-    NewcomerPathModuleConfig,
 )
 from sales_trainer.services.article_binding_service import (
     ArticleBindingService,
@@ -26,8 +24,10 @@ from sales_trainer.services.curriculum_practice_adapter import (
     LearningProgressAdapter,
     LearningProgressChapterRef,
 )
-from sales_trainer.services.path_config_models import SalesTrainerPathConfigError
-from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
+from sales_trainer.services.learning_topic_config_service import (
+    LearningTopicConfigError,
+    NewcomerLearningTopicConfigService,
+)
 
 BUSINESS_SKILLS_MODULE_KEY = "business_skills"
 
@@ -51,16 +51,17 @@ class BusinessEtiquetteLearningService:
         module_key: str = BUSINESS_SKILLS_MODULE_KEY,
     ) -> BusinessEtiquetteLearningUnitsResponse:
         try:
-            path_response = await SalesTrainerPathConfigService(self._db).get_config()
-        except SalesTrainerPathConfigError as exc:
+            topic, revision = await NewcomerLearningTopicConfigService(
+                self._db
+            ).active_business_etiquette_topic()
+        except LearningTopicConfigError as exc:
             raise BusinessEtiquetteLearningServiceError(
                 exc.code,
                 exc.message,
                 exc.status_code,
             ) from exc
-        path_payload = NewcomerPathConfigPayload.model_validate(path_response["path"])
-        module = _module_by_key(path_payload, module_key)
-        if module is None or module.module_type != "article_exam":
+        module = topic
+        if module.source_module_key != module_key:
             raise BusinessEtiquetteLearningServiceError(
                 "[BUSINESS_ETIQUETTE_MODULE_CONFIG_MISSING]",
                 "商务礼仪学习模块配置不存在。",
@@ -75,13 +76,22 @@ class BusinessEtiquetteLearningService:
         if not module.learning_units:
             raise BusinessEtiquetteLearningServiceError(
                 "[BUSINESS_ETIQUETTE_LEARNING_UNITS_MISSING]",
-                "商务礼仪小单元配置缺失，请管理员在路径配置中心补齐。",
+                "商务礼仪小单元配置缺失，请管理员在学习专题配置中补齐。",
+                409,
+            )
+        if not module.learning_content_id:
+            raise BusinessEtiquetteLearningServiceError(
+                "[BUSINESS_ETIQUETTE_ARTICLE_BINDING_MISSING]",
+                "商务礼仪规范未绑定已发布学习文章。",
                 409,
             )
 
         try:
             article = await ArticleBindingService(self._db).resolve_module_article(
-                NewcomerArticleBinding(module_key=module_key)
+                NewcomerArticleBinding(
+                    module_key=module_key,
+                    learning_content_id=module.learning_content_id,
+                )
             )
         except ArticleBindingServiceError as exc:
             raise BusinessEtiquetteLearningServiceError(
@@ -137,21 +147,12 @@ class BusinessEtiquetteLearningService:
         ]
         return BusinessEtiquetteLearningUnitsResponse(
             module_key=module_key,
+            topic_key=topic.topic_key,
             learning_content_id=str(article["learning_content_id"]),
-            path_revision_id=path_response["active_revision_id"],
-            path_revision_no=path_response["active_revision_no"],
+            path_revision_id=str(revision.revision_id),
+            path_revision_no=revision.revision_no,
             units=units,
         )
-
-
-def _module_by_key(
-    payload: NewcomerPathConfigPayload,
-    module_key: str,
-) -> NewcomerPathModuleConfig | None:
-    for module in payload.modules:
-        if module.module_key == module_key:
-            return module
-    return None
 
 
 def _article_chapters(article: dict[str, object]) -> list[dict[str, Any]]:

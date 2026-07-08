@@ -10,7 +10,9 @@
 
 本契约的用户可见产品名为“新人训练路径”。`sales_trainer`、`/sales-trainer`、`/api/v1/sales-trainer` 和 `/api/v1/admin/sales-trainer` 在第一版只作为兼容技术命名保留，不代表产品应继续对学员或管理员展示为“销售队列”或“销售训练队列”。
 
-新人训练路径负责完整训练闭环：PPT/材料学习、录音上传、AI 转写、AI 评分、Markdown 文章学习、试卷考试、AI Coach、实时对练入口投影、后台配置、训练记录、管理看板和审计。实时语音运行时仍由 `sales_bot`、`practice_sessions`、`training_runtime`、`/practice/[sessionId]` 和 `/api/v1/practice/sessions` 等运行时权威负责；`sales_trainer` 只能通过 runtime binding 和 outcome projection 纳入闭环，不得直接创建、修改或修复 realtime 会话。
+新人训练路径负责完整训练闭环：PPT/材料学习、录音上传、AI 转写、AI 评分、必修训练任务、学习专题、试卷考试、AI Coach、实时对练入口投影、后台配置、训练记录、管理看板和审计。实时语音运行时仍由 `sales_bot`、`practice_sessions`、`training_runtime`、`/practice/[sessionId]` 和 `/api/v1/practice/sessions` 等运行时权威负责；`sales_trainer` 只能通过 runtime binding 和 outcome projection 纳入闭环，不得直接创建、修改或修复 realtime 会话。
+
+自 2026-07-08 起，原 `business_skills` 的“商务技巧文章”语义被拆分：训练路径 active revision 只保留必修训练任务；学习文章和小单元进入独立 `newcomer_learning_topics_v1` 治理资产。第一版学习专题只支持 `business_etiquette` / “商务礼仪规范”，但后台入口统一展示为“学习文章”，不得把“商务技巧”作为长期信息架构或接口语义。
 
 旧语义“模块 4 只能作为 disabled/coming-soon placeholder，且永不接入实时运行时”自 2026-06-27 起被本契约 supersede。实时对练可以纳入新人训练路径，但 learner 入口开放前必须同时满足 runtime binding、对象级权限、配置健康、provider readiness、TrainingJourney outcome projection、审计和 active revision rollback 语义。缺任一条件时模块必须 fail-closed，返回 typed diagnostic 或 disabled 状态；不得用占位成功、前端隐藏或 WebSocket 重连掩盖配置错误。
 
@@ -247,7 +249,7 @@ StepAudio 2.5 provider migration 语义：
 | module_key | 默认名称 | module_type | 默认 enabled | completion_rule | 必要绑定 | 管理入口 | 权限 | audit action |
 |---|---|---|---|---|---|---|---|---|
 | `ppt_explanation` | `PPT 讲解录音` | `"audio_scoring"` | `true` | `passed` | `target_unit_id`、已发布材料、已发布评分提示词 | admin 新人训练路径模块/材料/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_materials`、`sales_trainer.manage_prompts` | `newcomer_module.ppt_explanation.*` |
-| `business_skills` | `商务技巧` | `"article_exam"` | `true` | `passed` | `learning_content_id`、`exam_paper_id` | admin 新人训练路径文章绑定/考卷管理 | `sales_trainer.manage_modules`、`sales_trainer.manage_papers`、`learning_content.manage` | `newcomer_module.business_skills.*` |
+| `business_skills` | `商务礼仪规范（兼容源模块）` | `"article_exam"` | `true` | `passed`（legacy，不计入 required journey） | 不再作为必修阻断模块；仅作为旧 active path 生成学习专题草稿的兼容源 | admin 学习文章/学习专题治理 | `sales_trainer.manage_modules`、`sales_trainer.manage_papers`、`learning_content.manage` | `newcomer_learning_topics.*` |
 | `elevator_pitch` | `金字塔演讲` | `"audio_scoring_group"` | `true` | `passed` | `duration_options[].target_unit_id`、已发布评分提示词；材料可按企业训练包选配 | admin 新人训练路径模块/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_prompts` | `newcomer_module.elevator_pitch.*` |
 | `realtime_roleplay` | `实时对练` | `"realtime_roleplay"` | `false` | `submitted` | `runtime_binding`、provider readiness、已发布 runtime config、权限策略、outcome projection、rollback policy | admin 新人训练路径模块配置 + 运行时健康页 | `sales_trainer.manage_modules`、`sales_trainer.view_settings` | `newcomer_module.realtime_roleplay.*` |
 | `realtime_roleplay_placeholder` | `实时对练（旧占位）` | `"realtime_placeholder"` | `false` | `submitted` | 仅兼容历史 disabled 配置；不得作为新的 active revision 正式模块发布 | admin 新人训练路径模块配置 | `sales_trainer.manage_modules` | `newcomer_module.realtime_placeholder.*` |
@@ -303,9 +305,102 @@ StepAudio 2.5 provider migration 语义：
 
 高风险发布必须返回影响范围预览；高风险重评必须走独立 `regrade_run`，写入 before/after、reason、trace_id，并保留原始结果。
 
+### 学习专题配置治理
+
+学习专题是新人训练路径旁路的非阻塞学习区。它和 path config 解耦，使用同一张 `sales_trainer_asset_revisions` 做发布治理，不新增业务表、不做 migration：
+
+| 字段 | 值 |
+|---|---|
+| `resource_type` | `newcomer_learning_topics` |
+| `logical_id` | `newcomer_learning_topics_v1` |
+| `schema_version` | `newcomer_learning_topics_v1` |
+| 后台入口 | `/admin/sales-trainer/articles`，用户可见名“学习文章” |
+| learner 入口 | `/sales-trainer/learning-topics/business-etiquette`；兼容保留 `/sales-trainer/business-skills` |
+
+第一版只支持 `business_etiquette` 专题。未来扩展销售技巧文章、客户常见质疑文章等专题时，应新增 topic key 和发布校验，不应恢复“商务技巧文章”作为顶层模块名。
+
+```typescript
+type LearningTopicScoreDisplayPolicy = "quiz_attempt_score";
+
+interface NewcomerLearningTopicConfig {
+  topic_key: "business_etiquette";
+  source_module_key: "business_skills";
+  enabled: boolean;
+  title: string; // 默认“商务礼仪规范”
+  description?: string | null;
+  order_index: number;
+  learning_content_id?: string | null;
+  learning_units: BusinessEtiquetteTrainingUnitConfig[];
+  ai_coach?: AiCoachAdminConfigLike | null;
+  required: false;
+  blocks_next: false;
+  score_display_policy: LearningTopicScoreDisplayPolicy;
+}
+
+interface NewcomerLearningTopicsPayload {
+  schema_version: "newcomer_learning_topics_v1";
+  topics: NewcomerLearningTopicConfig[];
+}
+
+interface NewcomerLearningTopicsConfigResponse {
+  source: "active_revision" | "not_configured";
+  fallback_reason?: string | null;
+  legacy_snapshot_only: false;
+  management_entry: "/admin/sales-trainer/articles";
+  permission: "sales_trainer.manage_modules";
+  payload: NewcomerLearningTopicsPayload;
+  active_revision_id: string | null;
+  active_revision_no: number | null;
+  active_revision_snapshot?: Record<string, unknown> | null;
+  working_revision_id: string | null;
+  working_revision_no: number | null;
+  has_unpublished_revision: boolean;
+  diagnostics: TrainingJourneyDiagnostic[];
+}
+```
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/v1/admin/newcomer-training/learning-topics/config` | 读取 active/working 学习专题配置；有 working 时返回可编辑 payload，但 active 指针仍单独暴露 |
+| `PUT` | `/api/v1/admin/newcomer-training/learning-topics/config` | 保存学习专题 working revision |
+| `POST` | `/api/v1/admin/newcomer-training/learning-topics/business-etiquette/generate-draft` | 从 active path 的旧 `business_skills` 生成商务礼仪规范草稿；不自动发布 |
+| `POST` | `/api/v1/admin/newcomer-training/learning-topics/publish/preview` | 发布影响预览 |
+| `POST` | `/api/v1/admin/newcomer-training/learning-topics/publish` | 发布 working revision，只影响未来 learner 展示 |
+| `GET` | `/api/v1/admin/newcomer-training/learning-topics/revisions` | 学习专题修订列表 |
+| `POST` | `/api/v1/admin/newcomer-training/learning-topics/rollback/preview` | 回滚影响预览 |
+| `POST` | `/api/v1/admin/newcomer-training/learning-topics/rollback` | 回滚到指定 revision，只影响未来 learner 展示 |
+
+生成草稿 request:
+
+```typescript
+interface NewcomerLearningTopicsGenerateDraftRequest {
+  overwrite_working?: boolean; // 默认 false；已有 working 时必须显式覆盖
+  reason?: string | null;
+}
+```
+
+发布/回滚 request:
+
+```typescript
+interface NewcomerLearningTopicsActionRequest {
+  reason: string;
+  revision_id?: string | null; // rollback 时必填；publish 时忽略
+}
+```
+
+配置与发布约束：
+
+- `required` 和 `blocks_next` 必须恒为 `false`；学习专题未完成不阻塞下一关、不计入 `overall_progress.total_modules`、不触发达标验收未达标。
+- `score_display_policy` 只能是 `quiz_attempt_score`；展示分数来自小单元 quiz attempt 的 `total_score`、`max_score`、`passed`，不得新增计费、积分或奖励语义。
+- `enabled=false` 或缺少 active learning topic revision 时，learner `learning_topics=[]`，前端不得硬展示“商务礼仪规范”。
+- 发布 enabled topic 时，`learning_content_id` 必须指向已发布 `LearningContent`，enabled 小单元必须非空且章节/能力点引用有效。
+- AI Coach 可选；`ai_coach.enabled=false` 时专题可发布。`ai_coach.enabled=true` 时 Prompt、模型、输出 schema 和字段级 RBAC 必须 fail-closed，坏配置不得发布或启动 session。
+- 发布、回滚、从旧 `business_skills` 生成草稿都必须写 `SalesTrainerOperationLog`，metadata 包含 actor、action、before/after revision、reason、trace_id、change_class 和 `impact_scope="future_learners_only"`。
+- 回滚只移动 active pointer，不改写历史阅读进度、quiz attempt、AI Coach session、训练记录或达标复核动作。
+
 ### AI Coach 模块配置
 
-`modules[].ai_coach` 是商务技巧 AI 教练的可选配置。它只控制 chatbot 训练模式，不替代固定试卷考试、后端评分记录或掌握状态聚合。
+`modules[].ai_coach` 仍用于必修 path module 的 AI 教练配置；商务礼仪规范学习专题必须使用 `newcomer_learning_topics_v1.topics[].ai_coach`。AI 教练只控制 chatbot 训练模式，不替代固定试卷考试、后端评分记录、学习专题小测得分或人工达标确认。
 
 默认值：
 
@@ -369,11 +464,11 @@ Learner 工作台 UI 配置：
 
 公开投影与入口：
 
-- Learner 展示 AI Coach 入口必须以 `GET /api/v1/sales-trainer/journey` 的 `modules[].next_action` 为唯一运行真源；`action_key` / `target_path` / `disabled` / `disabled_reason` 由后端 TrainingJourney 统一投影。
+- Learner 展示必修模块 AI Coach 入口必须以 `GET /api/v1/sales-trainer/journey` 的 `modules[].next_action` 为唯一运行真源；商务礼仪规范学习专题的 AI Coach 入口必须来自 `learning_topics[].ai_coach`。
 - `GET /api/v1/sales-trainer/paths` 的 `levels[].ai_coach_availability` 仅作为 legacy 兼容读面，不得作为 learner 页面、考试结果页或商务技巧页展示 AI Coach 入口的权威来源。
 - `ai_coach_availability` 只包含 `enabled`、`configured`、`available`、`coach_path`、`disabled_reason`、`allowed_interaction_types`，不得携带 prompt、评分、answer key 或路径配置快照。
 - Learner `SalesTrainerUnit.config.path` 不返回完整 `ai_coach` 配置；不得暴露 `prompt_template_id`、`prompt_revision_id`、`prompt_contract_hash`、`scoring_prompt_template_id`、`scoring_prompt_revision_id`、answer key、rubric、interaction snapshot 或 path/config snapshot。
-- `enabled=false`、缺少生成 Prompt、配置非法或未发布时，TrainingJourney 必须不给可执行 AI Coach `next_action` 或返回 disabled action；learner 首页、商务技巧页和结果页不得前端合成入口。直达 `/sales-trainer/business-skills/coach` 必须显示明确不可用错误。
+- `enabled=false`、缺少生成 Prompt、配置非法或未发布时，TrainingJourney 必须不给可执行 AI Coach 入口或返回 disabled action；learner 首页、学习专题页和结果页不得前端合成入口。直达 `/sales-trainer/business-skills/coach` 必须显示明确不可用错误。
 - 考试结果页只在 TrainingJourney 返回可执行 AI Coach `next_action` 时展示 AI 教练入口；不得只因 legacy `ai_coach_availability.available=true` 展示入口。
 
 管理入口与路由：
@@ -1020,6 +1115,17 @@ interface TrainingJourneyAnalyticsResponse {
     pass_rate: number;
     average_score?: number | null;
   }>;
+  learning_topic_summaries: Array<{
+    topic_key: string;
+    source_module_key: string;
+    title: string;
+    learner_count: number;
+    passed_count: number;
+    needs_remediation_count: number;
+    status_counts: Record<string, number>;
+    pass_rate: number;
+    average_score?: number | null;
+  }>;
   weakness_heatmap: Array<{
     heatmap_key: string; // `${module_key}:${kind}`，避免同一 module_key 下文章考卷与 AI Coach 被混聚
     module_key: string;
@@ -1104,6 +1210,7 @@ interface TrainingJourneyAnalyticsResponse {
 - `role_level` 来自后端 `TrainingJourney.role_level.level_key`，由 `sales_trainer.role_level.policy` 发布配置投影生成；权限仍由 `role_capabilities` 表达，前端不得把 capability scope 当角色等级。
 - `role_level_summaries` 当前来自 `TrainingJourney.role_level`；后端必须返回 `source`，前端不得本地伪造等级。
 - 当请求包含 `module_key` 时，`module_summaries`、`weakness_heatmap`、`trend_data` 和 `risk_learners` 必须只基于该模块的 Journey module outcome 聚合；`summary/funnel/level_summaries` 仍表示匹配该模块条件的学员集合。
+- `learning_topic_summaries` 独立于 `module_summaries`，只统计 `learning_topics[]` 的非阻塞学习证据；不得混入 required module 通过率。`module_key=business_skills` 可用于定位商务礼仪规范学习专题，但不得把其未完成计为 required risk。
 - `additive_observation` 是附加诊断块，不得替换现有 analytics 字段。它必须只基于 `TrainingJourneyService` 已授权并已加载的 learner/session scope 聚合，禁止裸扫全表后再由前端过滤。
 - `additive_observation.session_count` 表示当前已加载 learner scope 下、`voice_policy_snapshot.external_binding.owner="sales_trainer"` 且属于当前 active path revision 的 realtime session 数；`observed_session_count`/`observation_count` 只统计这些 session 的 observation sidecar 行。
 - 当请求包含 `module_key` 且不等于 `realtime_roleplay` 时，`additive_observation` 仍返回诊断字段，但 `session_count`、`observed_session_count`、`observation_count`、`top_signal_keys` 和 `high_risk_session_count` 必须为 0。
@@ -1329,6 +1436,7 @@ interface ReadinessDossierNextAction {
 - realtime 对练是下一阶段 gate：realtime provider 或 runtime binding 异常不得覆盖前置训练档案的达标判断，但 `realtime_gate.locked` 必须解释下一阶段是否仍不可进入。
 - `evidence[]` 只展示已授权 scope 内的训练证据，且必须保留材料、评分、任务简报或 path revision 的可追溯快照引用；普通管理页面不得展示 Prompt 原文、模型密钥、trace raw payload。
 - `competencies[]` 第一版能力项采用固定代码集合；每个训练模块覆盖哪些固定能力项由 `newcomer_path.modules[].capability_keys` 配置和 active revision 快照决定。缺失旧数据可使用后端兼容映射，但新增/发布配置不得依赖前端按模块名推断能力项。通过线、评分结果、模块启停、题库、材料和 AI Coach 行为必须继续来自后台配置与训练记录，不得由前端写死。
+- 学习专题 evidence（商务礼仪小测、商务礼仪 AI Coach）可以进入 `evidence[]` 和能力项弱项说明，但不参与 `summary.total_modules`、`pending_review` 门槛或 `approved` 前置必达判断。未完成学习专题不得把 dossier 置为 `not_passed`、`needs_retraining` 或 `blocked_by_config`。
 - `source_evidence_ids` 和 `capability_keys` 如传入未知值，后端必须返回 typed error；省略时后端可以基于当前档案选择默认证据和能力项。
 
 ```typescript
@@ -1450,6 +1558,44 @@ interface ModuleProgress {
   outcome_history: ModuleOutcome[];
 }
 
+interface TrainingJourneyLearningTopicUnitProgress {
+  unit_key: string;
+  title: string;
+  order_index: number;
+  enabled: boolean;
+  require_quiz: boolean;
+  quiz_question_count: number;
+  quiz_pass_threshold?: number | null;
+  score?: number | null;
+  max_score?: number | null;
+  passed?: boolean | null;
+  status: "not_started" | "submitted" | "scored" | "passed" | "failed";
+  latest_attempt_id?: string | null;
+  latest_attempt_submitted_at?: string | null;
+}
+
+interface TrainingJourneyLearningTopicProgress {
+  topic_key: "business_etiquette";
+  source_module_key: "business_skills";
+  title: string;
+  description?: string | null;
+  order_index: number;
+  learning_content_id?: string | null;
+  required: false;
+  blocks_next: false;
+  score_display_policy: "quiz_attempt_score";
+  status: "not_started" | "in_progress" | "passed" | "needs_remediation";
+  units: TrainingJourneyLearningTopicUnitProgress[];
+  ai_coach?: SalesTrainerAiCoachAvailability | null;
+  source: {
+    resource_type: "newcomer_learning_topics";
+    logical_id: "newcomer_learning_topics_v1";
+    revision_id: string;
+    revision_no: number;
+    future_only: true;
+  };
+}
+
 interface TrainingJourneyRetrainingRequest {
   request_id: string; // 稳定 key；普通 learner UI 不展示
   task_id: string; // 重练任务内部追踪 key；普通 learner UI 不展示
@@ -1488,6 +1634,7 @@ interface TrainingJourney {
   role_level: LearnerLevel;
   training_stage: TrainingStage;
   modules: ModuleProgress[];
+  learning_topics: TrainingJourneyLearningTopicProgress[];
   overall_progress: {
     total_modules: number;
     completed_modules: number;
@@ -1509,16 +1656,17 @@ interface TrainingJourney {
 约束:
 
 - 权限由 `RoleCapability` 表达，控制谁能看、配、审、重试、重评、看日志和进入 realtime；前端不得复制角色字符串矩阵。
-- `target_unit_id` / `target_unit_ids` / `learning_content_id` / `exam_paper_id` 必须来自 active path revision，是 learner 文章学习、考试、AI Coach 上下文的唯一运行绑定真源。`module_key="business_skills"` 会同时出现 `kind="quiz_attempt"` 和 `kind="ai_coach"` 两类模块；前端读取文章/考卷绑定时必须锁定 `kind="quiz_attempt"`，读取 AI Coach 入口时必须使用 `kind="ai_coach"` 的 `next_action`。不得从 `/paths`、`SalesTrainerUnit.config.path` 或 catalog fallback 回填这些运行绑定。
+- 必修模块的 `target_unit_id` / `target_unit_ids` / `exam_paper_id` 必须来自 active path revision。学习专题的 `learning_content_id`、小单元和 AI Coach 配置必须来自 active `newcomer_learning_topics_v1` revision。`business_skills` 只作为兼容 source module key；前端不得从 `/paths`、`SalesTrainerUnit.config.path` 或 catalog fallback 回填学习专题运行绑定。
 - 角色等级由 `role_level` 表达，来源为 `sales_trainer.role_level.policy`，用于展示、筛选和分析，不等价于权限 scope。
 - 学员等级由 `LearnerLevel` 表达，影响内容可见性、模块启用、推荐训练和管理筛选。首版等级来源未冻结时，后端必须在 `source` 和 `config_revision_id` 中暴露来源，不得由前端本地推断。`modules[].learner_level_required` 是后端执行字段：TrainingJourney 必须把不匹配等级的模块置为 locked 并返回 `[NEWCOMER_LEARNER_LEVEL_NOT_ALLOWED]`；learner `/paths` 只能展示同一 locked 状态；直链 unit detail/brief、audio submit、quiz submit 必须复用后端 Journey 判定 fail-closed。
 - 训练阶段等级由 `TrainingStage` 表达，前端只渲染后端状态和 `unmet_reasons`，不得自行把 `passed=null` 推断为失败。
 - `completion_satisfied` 表示该模块的完成规则是否满足，独立于考核通过语义。`completion_rule="passed"` 必须 `passed=true`；`completion_rule="submitted"` 只要求有受治理的 outcome 记录。前端不得用本地规则重算该字段。
+- `learning_topics[]` 是非阻塞学习证据投影，不属于 `modules[]`，不得计入 `overall_progress.total_modules`、`completed_modules`、`passed_modules` 或下一关阻断。管理端筛选 `module_key=business_skills` 时可以匹配学习专题 evidence，但 funnel/readiness 主结果仍只基于 required modules。
 - `ModuleOutcome` 必须覆盖录音、普通试卷、商务礼仪小测、AI Coach、realtime、补救、重评。历史展示 snapshot-first：优先读取记录创建时冻结的 snapshot/revision refs；旧数据只能标记 `legacy_snapshot_only=true`，不得从 latest active revision 伪造历史解释。
 - 重评必须以 append-only `ModuleOutcome(record_type="regrade", snapshot_ref.snapshot_type="regrade_snapshot")` 进入对应 audio/quiz 模块的 `outcome_history`。`source_record_id` 指向被重评的原始训练记录，`evidence.record_id` 指向 `sales_trainer_regrade_runs.run_id`；原始 audio/quiz outcome 必须继续保留在 history 中，不得被重评结果覆盖或改写。重评失败或 `after_snapshot.error_code` 存在时 outcome 为 `error_terminal`，成功重评分数按 `after_snapshot.total_score/max_score/passed` 投影。
 - `retraining_requests[]` 是管理员达标复核动作对 learner 端的只读投影。来源仍是 `ReadinessDossier` 的 operation-log-backed review state，但 learner UI 只能展示用户语言：补练能力、负责人原因、关联证据数量、可进入的训练模块和入口；不得展示 `operation_log`、审计日志 ID、raw evidence id、Prompt、trace 或模型调试字段。若复核引用了具体证据，`target_modules` 必须优先定位产生该证据的模块；能力项匹配只作为补充。
-- PPT 录音、商务技巧考卷、AI Coach 和 realtime 模块都必须通过 `modules[].next_action` 暴露 learner 入口或锁定原因；前端不得回退读取 `/paths`/catalog 来拼接入口。
-- AI Coach 是首版完整闭环必过模块。若 active revision 声明 `require_ai_coach=true`，TrainingJourney 必须返回 AI Coach `ModuleProgress` 和达标 outcome；缺 Prompt、坏配置或模型不可用必须返回 typed terminal/transient 状态，不得静默默认通过。
+- PPT 录音、考卷、必修模块 AI Coach 和 realtime 模块都必须通过 `modules[].next_action` 暴露 learner 入口或锁定原因；学习专题入口必须通过 `learning_topics[]` 暴露。前端不得回退读取 `/paths`/catalog 来拼接入口。
+- AI Coach 对必修训练任务可配置为必过；对学习专题只能是可选、非阻塞学习证据。若 active revision 声明必修模块 `require_ai_coach=true`，TrainingJourney 必须返回 AI Coach `ModuleProgress` 和达标 outcome；若学习专题 `ai_coach.enabled=true`，只影响学习专题入口和证据，不得阻塞 overall/readiness。缺 Prompt、坏配置或模型不可用必须返回 typed terminal/transient 状态，不得静默默认通过。
 - realtime outcome 只能来自 runtime binding 的 outcome projection。`sales_trainer` 不直接消费 WebSocket 中间态作为通过依据，不从前端连接状态推断完成。
 - 首版 outcome projection 从 completed practice session 的 `voice_policy_snapshot.external_binding` 读取冻结路径上下文，并把结果写入 `ModuleOutcome(record_type="realtime_roleplay_session", snapshot_ref.snapshot_type="runtime_outcome_snapshot")`。分数可来自 runtime 写回的会话分数字段；未定义通过阈值时 `passed` 必须保持 `null`，不得把“完成实时会话”伪装成“通过考核”。
 
@@ -2442,9 +2590,11 @@ interface UnitRollbackRequest {
 
 `/api/v1/admin/newcomer-training/units`、`/api/v1/admin/newcomer-training/units/{unit_id}/revisions`、`/publish`、`/rollback` 和 `/archive` 是新人训练路径 admin 主入口。`/api/v1/admin/sales-trainer/units` 作为技术兼容入口保留；普通管理页面应优先使用 newcomer-training 命名入口。
 
-### 商务技巧文章绑定管理
+### 学习文章与旧模块绑定管理
 
-文章正文和章节继续由 `/api/v1/admin/curriculum/learning-contents` 及其章节接口管理；新人训练路径后台只负责把已发布 `LearningContent` 绑定到 `business_skills` 等 `article_exam` 模块。
+文章正文和章节继续由 `/api/v1/admin/curriculum/learning-contents` 及其章节接口管理；新人训练路径后台 `/admin/sales-trainer/articles` 只负责学习专题治理和旧 article module 兼容绑定。用户可见命名必须是“学习文章/学习内容”，不得继续把顶层入口命名为“商务技巧文章”。
+
+商务礼仪规范的正式 learner 展示绑定必须写入 `newcomer_learning_topics_v1.topics[].learning_content_id`。下列旧 article-binding API 仅保留给仍属于 path config 的 `article_exam` 模块或迁移兼容，不能作为商务礼仪规范学习专题的 learner 真源。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -2834,7 +2984,7 @@ interface BusinessEtiquetteQuestionDraftRejectRequest {
 
 ### 商务礼仪训练小单元
 
-商务礼仪训练小单元归属于新人训练路径 `business_skills` 模块配置，字段为 `NewcomerPathModuleConfig.learning_units`。它是后台可配置业务规则，不得由学员页面硬生成。缺失时 learner endpoint 返回 `[BUSINESS_ETIQUETTE_LEARNING_UNITS_MISSING]`。
+商务礼仪训练小单元归属于学习专题 `newcomer_learning_topics_v1.topics[topic_key="business_etiquette"].learning_units`。旧 `NewcomerPathModuleConfig.learning_units` 仅作为从 active path `business_skills` 生成草稿的兼容来源。它是后台可配置业务规则，不得由学员页面硬生成。缺失时 learner endpoint 返回 `[BUSINESS_ETIQUETTE_LEARNING_UNITS_MISSING]`。
 
 ```typescript
 interface BusinessEtiquetteTrainingUnitConfig {
@@ -2884,12 +3034,15 @@ interface BusinessEtiquetteTrainingUnitConfig {
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `GET` | `/api/v1/newcomer-training/business-etiquette/learning-units` | 读取当前发布路径下的商务礼仪小单元、对应原文章节和本人阅读进度 |
+| `GET` | `/api/v1/newcomer-training/business-etiquette/article` | 读取当前发布学习专题绑定的商务礼仪文章和本人阅读进度 |
+| `POST` | `/api/v1/newcomer-training/business-etiquette/article-progress` | 写入当前学习专题的章节阅读进度 |
+| `GET` | `/api/v1/newcomer-training/business-etiquette/learning-units` | 读取当前发布学习专题下的商务礼仪小单元、对应原文章节和本人阅读进度 |
 
 Response `data`:
 
 ```typescript
 interface BusinessEtiquetteLearningUnitsResponse {
+  topic_key: "business_etiquette";
   module_key: "business_skills";
   learning_content_id: string;
   path_revision_id: string | null;
@@ -2914,16 +3067,16 @@ interface BusinessEtiquetteLearningUnitsResponse {
 
 校验与失败语义:
 
-- learner 读取 `/learning-units` 前必须复用 active TrainingJourney 模块准入：无 active revision、无 `business_skills` 模块、模块停用或 `learner_level_required` 不匹配时 fail-closed，返回 404 `[SALES_TRAINER_UNIT_NOT_FOUND]`；不得只靠前端隐藏入口。
-- `business_skills` 模块必须存在、启用且为 `"article_exam"`，否则返回 `[BUSINESS_ETIQUETTE_MODULE_CONFIG_MISSING]` 或 `[BUSINESS_ETIQUETTE_MODULE_DISABLED]`。
-- 模块必须绑定已发布 `LearningContent`；复用文章绑定错误码 `[LEARNING_CONTENT_NOT_PUBLISHED]`、`[LEARNING_CONTENT_NOT_FOUND]`、`[LEARNING_CONTENT_CHAPTERS_MISSING]`。
+- learner 读取 `/article`、`/article-progress` 或 `/learning-units` 前必须复用 active TrainingJourney `learning_topics[]` 准入：无 active path revision、无 active learning topic revision、专题未发布、专题停用或未投影到该学员时 fail-closed，返回 404 `[SALES_TRAINER_UNIT_NOT_FOUND]`；不得只靠前端隐藏入口。
+- `business_etiquette` 专题必须存在、启用且包含 `source_module_key="business_skills"`；否则返回 `[BUSINESS_ETIQUETTE_MODULE_CONFIG_MISSING]` 或 `[BUSINESS_ETIQUETTE_MODULE_DISABLED]`。
+- 专题必须绑定已发布 `LearningContent`；复用文章绑定错误码 `[LEARNING_CONTENT_NOT_PUBLISHED]`、`[LEARNING_CONTENT_NOT_FOUND]`、`[LEARNING_CONTENT_CHAPTERS_MISSING]`。
 - enabled 小单元必须至少绑定一个有效原文章节；配置引用不存在的章节时返回 `[BUSINESS_ETIQUETTE_UNIT_CHAPTERS_MISSING]`。
 - `ai_coach_required_capability_keys` 为空时使用 `capability_keys`；非空时必须是 `capability_keys` 子集。`ai_coach_pass_mastery_level_key` / `ai_coach_ready_mastery_level_key` 必须命中能力点快照中的 `mastery_levels[].level_key`，且可上场等级分值不得低于达标等级。
 - 阅读进度仍由现有 `LearningProgressService` 和 `/modules/{module_key}/article-progress` 写入；本接口只聚合当前小单元视图。
 
 ### 商务礼仪小单元测验
 
-商务礼仪小测由 `BusinessEtiquetteTrainingUnitConfig` 驱动组卷，只允许使用已发布、`usage_scope="sales_trainer"`、未安全拦截且命中小单元能力点的题目。测验提交后冻结路径 revision、训练包能力点快照、题目快照、答案快照和能力点得分，后续配置变更不回写历史尝试。
+商务礼仪小测由学习专题中的 `BusinessEtiquetteTrainingUnitConfig` 驱动组卷，只允许使用已发布、`usage_scope="sales_trainer"`、未安全拦截且命中小单元能力点的题目。测验提交后冻结学习专题/兼容路径 revision、训练包能力点快照、题目快照、答案快照和能力点得分，后续配置变更不回写历史尝试。
 
 ```typescript
 interface BusinessEtiquetteQuizQuestion {
@@ -3027,7 +3180,7 @@ interface BusinessEtiquetteUnitQuizAttempt {
 
 校验与失败语义:
 
-- learner 读取 quiz、提交 quiz-attempt 或读取本人 quiz-attempt 列表前必须复用 active TrainingJourney 模块准入：无 active revision、无 `business_skills` 模块、模块停用或 `learner_level_required` 不匹配时 fail-closed，返回 404 `[SALES_TRAINER_UNIT_NOT_FOUND]`；不得允许猜测 `unit_key` 绕过 Journey locked 状态。
+- learner 读取 quiz、提交 quiz-attempt 或读取本人 quiz-attempt 列表前必须复用 active TrainingJourney `learning_topics[]` 准入：无 active learning topic revision、无 `business_etiquette` 专题、专题停用或未投影到该学员时 fail-closed，返回 404 `[SALES_TRAINER_UNIT_NOT_FOUND]`；不得允许猜测 `unit_key` 绕过 Journey locked 状态。
 - `require_quiz=false` 返回 `[BUSINESS_ETIQUETTE_UNIT_QUIZ_DISABLED]`；小单元、模块或训练包未发布时返回对应 Terminal 错误，不允许前端盲目重试。
 - 组卷只引用训练包 active revision 中未归档能力点；小单元绑定不存在或已归档能力点返回 `[BUSINESS_ETIQUETTE_UNIT_CAPABILITY_INVALID]`。
 - 题库没有可用题时返回 `[BUSINESS_ETIQUETTE_UNIT_QUIZ_QUESTIONS_MISSING]`；不会降级为无能力点题目。
@@ -4217,9 +4370,9 @@ interface OperationLogListResponse {
 | `[BUSINESS_ETIQUETTE_CAPABILITY_CONFIG_INVALID]` | 400/409/422 | 能力点 key、掌握等级、达标线、证据规则或快照结构非法 |
 | `[BUSINESS_ETIQUETTE_CAPABILITY_BINDING_INVALID]` | 422 | 章节能力点绑定为空、重复、引用不存在章节或引用不存在/已归档能力点 |
 | `[BUSINESS_ETIQUETTE_CAPABILITY_NOT_FOUND]` | 404 | 发布或归档的能力点 key 不存在 |
-| `[BUSINESS_ETIQUETTE_MODULE_CONFIG_MISSING]` | 404 | 商务礼仪 `business_skills` 模块配置不存在或不是文章考试模块 |
-| `[BUSINESS_ETIQUETTE_MODULE_DISABLED]` | 409 | 商务礼仪模块已停用 |
-| `[BUSINESS_ETIQUETTE_LEARNING_UNITS_MISSING]` | 409 | 商务礼仪模块缺少后台配置的小单元 |
+| `[BUSINESS_ETIQUETTE_MODULE_CONFIG_MISSING]` | 404 | 商务礼仪规范学习专题不存在，或兼容 `business_skills` source module 无法生成运行配置 |
+| `[BUSINESS_ETIQUETTE_MODULE_DISABLED]` | 409 | 商务礼仪规范学习专题已停用 |
+| `[BUSINESS_ETIQUETTE_LEARNING_UNITS_MISSING]` | 409 | 商务礼仪规范学习专题缺少后台配置的小单元 |
 | `[BUSINESS_ETIQUETTE_UNIT_CHAPTERS_MISSING]` | 409 | 商务礼仪 enabled 小单元没有绑定有效原文章节 |
 | `[BUSINESS_ETIQUETTE_PROGRESS_UNAVAILABLE]` | 500 | 商务礼仪小单元阅读进度读取失败 |
 | `[BUSINESS_ETIQUETTE_QUESTION_PROMPT_INVALID]` | 400 | 商务礼仪题目生成 Prompt 模板 ID 非法 |
@@ -4324,6 +4477,17 @@ interface OperationLogListResponse {
 | `[NEWCOMER_MODULE_CONFIG_INVALID]` | 422 | 新人训练路径模块配置非法，例如未知 `module_type`、重复排序或绑定不存在 |
 | `[NEWCOMER_MODULE_BINDING_MISSING]` | 409 | 模块必要绑定缺失，例如文章、考卷、材料、评分提示词或目标单元 |
 | `[NEWCOMER_MODULE_DISABLED]` | 409 | learner 尝试进入已停用模块 |
+| `[LEARNING_TOPIC_ACTIVE_REVISION_MISSING]` | 404 | 学习专题尚未发布，learner 不展示学习专题，直链商务礼仪规范 fail-closed |
+| `[LEARNING_TOPIC_NOT_CONFIGURED]` | 404 | `business_etiquette` 专题不存在、未启用或未发布 |
+| `[LEARNING_TOPIC_WORKING_REVISION_EXISTS]` | 409 | 已有学习专题 working revision，生成草稿必须显式覆盖 |
+| `[LEARNING_TOPIC_WORKING_REVISION_MISSING]` | 409 | 发布或发布预览前缺少学习专题 working revision |
+| `[LEARNING_TOPIC_CONFIG_INVALID]` | 422 | 学习专题 payload 非法，例如 required/blocks_next 非 false、重复 topic/unit 或不支持的 topic key |
+| `[LEARNING_TOPIC_CONTENT_MISSING]` | 409 | enabled 学习专题未绑定学习文章 |
+| `[LEARNING_TOPIC_CONTENT_INVALID]` | 409 | 学习专题绑定文章不存在、未发布或不可作为 learner 内容 |
+| `[LEARNING_TOPIC_UNITS_MISSING]` | 409 | enabled 学习专题缺少启用小单元 |
+| `[LEARNING_TOPIC_REVISION_NOT_FOUND]` | 404 | 学习专题回滚目标 revision 不存在 |
+| `[LEARNING_TOPIC_REVISION_TARGET_MISMATCH]` | 409 | 学习专题回滚目标不属于 `newcomer_learning_topics_v1` |
+| `[LEARNING_TOPIC_REVISION_INVALID]` | 500 | 学习专题历史 revision payload 无法解析 |
 | `[NEWCOMER_REALTIME_PLACEHOLDER_ONLY]` | 409 | 旧错误码，仅用于历史 disabled placeholder 兼容；新接入必须使用 runtime binding 相关错误码 |
 | `[NEWCOMER_REALTIME_BINDING_INVALID]` | 409/422 | realtime 模块缺少 runtime binding、binding 指向不可用 runtime descriptor，或 outcome projection/rollback policy 不完整 |
 | `[NEWCOMER_REALTIME_PROVIDER_REGISTRY_DISABLED]` | 503 | `sales_trainer.realtime_provider.registry` 缺失、停用或 fallback 到默认 disabled registry，learner 不得进入运行时 |
@@ -4377,7 +4541,7 @@ interface OperationLogListResponse {
 | `SALES_TRAINER_ASR_MODEL` | `fun-asr` | DashScope 文件识别 | 环境配置/系统配置 | `language_hints` 仅在 `paraformer-v2` 时传入 |
 | `SALES_TRAINER_MANAGER_ROLES` | `support,training_lead,training_manager` | 培训负责人记录查看能力兼容配置 | 环境配置/系统配置 | 逗号分隔角色列表；缺失/空值使用默认培训负责人角色；显式配置只保留 allowlist 合法角色，混入非法值记录诊断，全非法配置 fail-closed 为空角色集合；只授予团队记录读取能力，不授予内容管理、日志、配置健康或任务重试能力 |
 | `sales_trainer.phase2.closed_loop_policy` | `sales_trainer_phase2_closed_loop_policy_v1`、`enabled=true`、`low_score_threshold=70`、`repeat_practice_threshold=2`、`dashboard_record_limit=500`、默认主管动作与补救动作 | 阶段 2 训练记录投影、能力画像、补救动作、管理者看板和 settings 策略摘要 | `/admin/business-rules/sales-trainer-phase2`，复用 `BusinessRuleConfig` 发布/回滚/禁用/审计 | 阈值范围 `0..100`、`1..20`、`1..5000`；action code/record_type 必须覆盖且不重复；文案/模板非空；缺失、非法或 disabled 使用 bundled default，并返回 `phase2_policy.fallback_applied=true` |
-| `modules[].ai_coach.allowed_training_card_types` | 裸默认 `["scenario_judgment"]`；商务礼仪 seed/admin 默认 `["scenario_judgment","expression_rewrite","role_response"]` | 新人训练路径 active/working revision 的 `business_skills.ai_coach` | `/admin/sales-trainer/ai-coach` | 至少 1 项，只允许 `scenario_judgment`、`expression_rewrite`、`role_response`；改写/角色回应必须同时启用 `short_answer` 并绑定评分 prompt；非法保存返回 Pydantic 校验错误，运行时输出不命中返回 `[AI_COACH_TRAINING_CARD_TYPE_NOT_ALLOWED]` |
+| `modules[].ai_coach.allowed_training_card_types` | 裸默认 `["scenario_judgment"]`；商务礼仪 seed/admin 默认 `["scenario_judgment","expression_rewrite","role_response"]` | 必修 path module 的 `modules[].ai_coach`；商务礼仪规范读取 `newcomer_learning_topics_v1.topics[].ai_coach` | `/admin/sales-trainer/ai-coach` + `/admin/sales-trainer/articles/business-etiquette` | 至少 1 项，只允许 `scenario_judgment`、`expression_rewrite`、`role_response`；改写/角色回应必须同时启用 `short_answer` 并绑定评分 prompt；非法保存返回 Pydantic 校验错误，运行时输出不命中返回 `[AI_COACH_TRAINING_CARD_TYPE_NOT_ALLOWED]` |
 | `BUSINESS_SKILLS_COACH_WORKBENCH_COPY` | 页面标题、聊天工作台、教练反馈、结束面板、按钮和空状态文案 | `web/src/app/(dashboard)/sales-trainer/business-skills/coach/coach-workbench-config.ts` | 当前为前端集中配置；未来运营可调时迁移到 `/admin/sales-trainer/ai-coach` | 必须非空、语义与 Chat-First 教练工作台一致；缺失会在构建/类型检查阶段暴露；当前不支持后台热更新 |
 | `BUSINESS_SKILLS_COACH_WORKBENCH_RULES.showFreeFollowup` | `true` | 同上 | 当前为前端集中配置；未来迁移到 `modules[].ai_coach` | `true` 时自由追问只走 chat message stream；`false` 时隐藏输入框；不得替代训练卡提交 |
 | `BUSINESS_SKILLS_COACH_WORKBENCH_RULES.allowSkipActiveCard` | `false` | 同上 | 当前为前端集中配置；未来迁移到 `modules[].ai_coach`，由 `sales_trainer.manage_modules` 管理 | `false` 时 active pending 训练卡存在则禁用“继续下一题”；如配置为 `true` 必须确认不会破坏达标状态机 |
@@ -4398,8 +4562,11 @@ interface OperationLogListResponse {
 | `newcomer_path.modules[].display_name` | 默认模块矩阵名称 | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | 1-120 字符；缺失使用默认值并标记 `fallback_applied=true` |
 | `newcomer_path.modules[].enabled` | 模块 1-3 `true`，模块 4 `false` | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | disabled 模块 learner 只展示停用状态，不允许提交或进入运行时 |
 | `newcomer_path.modules[].target_unit_id(s)` | 无 | learner 模块入口、完成状态聚合 | admin 新人训练路径配置 | 必须指向已发布训练单元；缺失返回 `[NEWCOMER_MODULE_BINDING_MISSING]` |
-| `newcomer_path.modules[].learning_content_id` | 无 | 商务技巧文章入口 | admin 新人训练路径文章绑定 | 必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` |
-| `newcomer_path.modules[].exam_paper_id` | 无 | 商务技巧考卷入口 | admin 新人训练路径考卷管理 | 必须指向已发布考卷；缺失或草稿返回 `[PAPER_NOT_PUBLISHED]` |
+| `newcomer_path.modules[].learning_content_id` | 无 | 旧 `article_exam` 模块文章入口；商务礼仪规范不再读取此字段作为 learner 真源 | admin 新人训练路径文章绑定 | 必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` |
+| `newcomer_path.modules[].exam_paper_id` | 无 | 旧 `article_exam` 模块考卷入口 | admin 新人训练路径考卷管理 | 必须指向已发布考卷；缺失或草稿返回 `[PAPER_NOT_PUBLISHED]` |
+| `newcomer_learning_topics_v1.topics[]` | 空；第一版只支持 `business_etiquette` | learner `TrainingJourney.learning_topics`、商务礼仪文章/小单元/小测/AI Coach | `/admin/sales-trainer/articles` | 必须通过 `SalesTrainerAssetRevision` 发布治理；`required=false`、`blocks_next=false`；未发布不展示；发布后只影响未来 learner；非法返回 `[LEARNING_TOPIC_CONFIG_INVALID]` |
+| `newcomer_learning_topics_v1.topics[].learning_content_id` | 无 | 商务礼仪规范学习文章入口 | `/admin/sales-trainer/articles/business-etiquette` | enabled topic 发布时必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_TOPIC_CONTENT_MISSING]` / `[LEARNING_TOPIC_CONTENT_INVALID]` |
+| `newcomer_learning_topics_v1.topics[].learning_units[]` | 7 个商务礼仪小单元 seed | 商务礼仪 learner 首页、小单元详情、阅读进度和小测 | `/admin/sales-trainer/articles/business-etiquette` | 标题、顺序、章节、能力点、小测题量、通过线、重测规则、题型权重和 AI Coach 达标策略均可配置；缺失返回 `[LEARNING_TOPIC_UNITS_MISSING]` |
 | `newcomer_path.modules[].duration_options` | `10/20/30` 分钟可由 seed 初始化 | 金字塔演讲模块入口 | admin 新人训练路径配置 | 每项必须有正数时长和已发布音频单元；非法返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` |
 | `newcomer_path.modules[].capability_keys` | seed 写入 V0.9 固定新人能力 key | 达标档案 evidence/competency 映射、重练目标模块匹配、workbench 弱项归因 | admin 新人训练路径配置 | 必须命中 V0.9 固定能力模型且不得重复；发布配置非法返回 `[NEWCOMER_PATH_CONFIG_INVALID]`；缺失旧数据只允许后端兼容映射，不得由前端按标题推断 |
 | `newcomer_path.modules[].learner_level_required` | 空数组 | 模块内容可见性、Journey 状态、learner `/paths` 展示和直链 unit/audio/quiz 授权 | admin 新人训练路径配置 + `sales_trainer.learner_level.policy` | 空数组表示所有学员等级可见；非空时必须匹配 `TrainingJourney.learner_level.level_key`，不匹配返回 locked/disabled 与 `[NEWCOMER_LEARNER_LEVEL_NOT_ALLOWED]`，不得仅靠前端隐藏 |
@@ -4418,19 +4585,20 @@ interface OperationLogListResponse {
 | `business_etiquette_release.settings.max_assigned_retraining_users` | `100` | 管理员指定人群重练批量上限 | 后端发布配置 / 后续后台配置 | 范围 `1..1000`；超过上限返回 `[BUSINESS_ETIQUETTE_RETRAINING_ASSIGNMENT_INVALID]` |
 | `business_etiquette_release.settings.notification_template` | `商务礼仪训练包已更新，你可以选择重练新版。` | 发布影响分析、后续通知或 learner 重练提示 | 后端发布配置 / 后续后台配置 | 非空字符串；缺失使用安全默认值，不影响发布主流程 |
 | `business_etiquette_release.settings.large_change_chapter_threshold` | `2` | 发布影响分析建议策略 | 后端发布配置 / 后续后台配置 | 正整数；非法时使用默认值并在影响分析配置中返回兜底值 |
-| `newcomer_path.modules[].learning_units[]` | 7 个商务礼仪小单元 seed | 商务礼仪 learner 首页、小单元详情、阅读进度 | admin 新人训练路径配置 | 标题、顺序、章节、能力点、开放/跳过/阻断规则均可配置；缺失返回 `[BUSINESS_ETIQUETTE_LEARNING_UNITS_MISSING]` |
-| `newcomer_path.modules[].learning_units[].ai_coach_required_capability_keys` | `capability_keys` | 商务礼仪 AI 教练 progress service、训练局冻结快照 | `/admin/sales-trainer/paths` 商务技巧绑定区 | 为空时使用 `capability_keys`；非空必须是 `capability_keys` 子集；缺失用 Pydantic 默认补齐 |
-| `newcomer_path.modules[].learning_units[].ai_coach_pass_mastery_level_key` | `basic_mastery` | 商务礼仪 AI 教练达标判断 | `/admin/sales-trainer/paths` 商务技巧绑定区 | 必须命中能力点 `mastery_levels[].level_key`；非法返回 `[BUSINESS_ETIQUETTE_AI_COACH_CONFIG_INVALID]` |
-| `newcomer_path.modules[].learning_units[].ai_coach_ready_mastery_level_key` | `field_ready` | 商务礼仪 AI 教练可上场判断 | `/admin/sales-trainer/paths` 商务技巧绑定区 | 必须命中能力点等级，且 min_score 不低于达标等级 |
-| `newcomer_path.modules[].learning_units[].ai_coach_max_remediation_attempts` | `3` | 商务礼仪 AI 教练人工复盘阈值 | `/admin/sales-trainer/paths` 商务技巧绑定区 | 范围 `1..20`；达到且未达标时进入 `manual_review` |
-| `newcomer_path.modules[].learning_units[].ai_coach_manual_review_after_max_attempts` | `true` | 商务礼仪 AI 教练人工复盘状态 | `/admin/sales-trainer/paths` 商务技巧绑定区 | false 时不自动进入人工复盘，但仍返回弱项和补救建议 |
-| `newcomer_path.modules[].learning_units[].ai_coach_block_next_until_passed` | `true` | 商务礼仪 AI 教练后续小单元阻断 | `/admin/sales-trainer/paths` 商务技巧绑定区 | `block_next = 配置值 && !passed`；前端不得自行降低阻断要求 |
-| `newcomer_path.modules[].learning_units[].ai_coach_remediation_chapter_orders` | `source_chapter_orders` | 商务礼仪 AI 教练补救章节建议 | `/admin/sales-trainer/paths` 商务技巧绑定区 | 为空时回落到小单元章节；必须为正整数且不重复 |
+| `newcomer_path.modules[].learning_units[]` | 7 个商务礼仪小单元 seed | 仅作为旧 `business_skills` 生成学习专题草稿的来源 | admin 新人训练路径配置（legacy） | 新 learner 真源是 `newcomer_learning_topics_v1.topics[].learning_units[]`；旧字段缺失时只影响草稿生成，不得由前端兜底 |
+| `newcomer_learning_topics_v1.topics[].learning_units[].ai_coach_required_capability_keys` | `capability_keys` | 商务礼仪 AI 教练 progress service、训练局冻结快照 | `/admin/sales-trainer/articles/business-etiquette` | 为空时使用 `capability_keys`；非空必须是 `capability_keys` 子集；缺失用 Pydantic 默认补齐 |
+| `newcomer_learning_topics_v1.topics[].learning_units[].ai_coach_pass_mastery_level_key` | `basic_mastery` | 商务礼仪 AI 教练达标判断 | `/admin/sales-trainer/articles/business-etiquette` | 必须命中能力点 `mastery_levels[].level_key`；非法返回 `[BUSINESS_ETIQUETTE_AI_COACH_CONFIG_INVALID]` |
+| `newcomer_learning_topics_v1.topics[].learning_units[].ai_coach_ready_mastery_level_key` | `field_ready` | 商务礼仪 AI 教练可上场判断 | `/admin/sales-trainer/articles/business-etiquette` | 必须命中能力点等级，且 min_score 不低于达标等级 |
+| `newcomer_learning_topics_v1.topics[].learning_units[].ai_coach_max_remediation_attempts` | `3` | 商务礼仪 AI 教练人工复盘阈值 | `/admin/sales-trainer/articles/business-etiquette` | 范围 `1..20`；达到且未达标时进入 `manual_review` |
+| `newcomer_learning_topics_v1.topics[].learning_units[].ai_coach_manual_review_after_max_attempts` | `true` | 商务礼仪 AI 教练人工复盘状态 | `/admin/sales-trainer/articles/business-etiquette` | false 时不自动进入人工复盘，但仍返回弱项和补救建议 |
+| `newcomer_learning_topics_v1.topics[].learning_units[].ai_coach_block_next_until_passed` | `true` | 商务礼仪 AI 教练小单元内部补练提示 | `/admin/sales-trainer/articles/business-etiquette` | 只影响学习专题内部状态，不得阻塞 required path 下一关 |
+| `newcomer_learning_topics_v1.topics[].learning_units[].ai_coach_remediation_chapter_orders` | `source_chapter_orders` | 商务礼仪 AI 教练补救章节建议 | `/admin/sales-trainer/articles/business-etiquette` | 为空时回落到小单元章节；必须为正整数且不重复 |
 
 ## 更新记录
 
 | 日期 | 变更 | 说明 |
 |---|---|---|
+| 2026-07-08 | 新增学习专题独立治理契约 | `newcomer_learning_topics_v1` 复用 asset revision；`TrainingJourney.learning_topics` 非阻塞展示；商务礼仪规范从旧 `business_skills` 生成草稿并独立发布 |
 | 2026-07-06 | 收紧达标档案确认与模块能力映射契约 | `approve` 只能在 `pending_review` 且有证据时提交；`newcomer_path.modules[].capability_keys` 成为达标档案能力映射配置源 |
 | 2026-07-06 | 新增 V0.9 训练达标档案与达标验收工作台契约 | `/readiness/workbench`、`/readiness/dossiers/{learner_id}`、`/review-actions` 聚合 journey、训练记录和 operation log；复核动作采用 operation-log-backed 状态 |
 | 2026-07-03 | 冻结 StepFun roleplay compliance record-only 契约 | `roleplay_observation_v1` 全局 `record_only`，current turn `main_chain_effect=none`；next-turn soft steering 非阻断且可审计；旧同步 cancel/regenerate/repair audio 退役，恢复阻断必须另起 ADR |

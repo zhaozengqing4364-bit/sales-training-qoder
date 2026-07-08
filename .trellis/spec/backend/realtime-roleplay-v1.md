@@ -8,6 +8,7 @@
 
 - Trigger: changing the fixed v1 realtime customer roleplay for state-owned, central-enterprise, government, education, or healthcare information-technology leaders.
 - Scope: `sales_bot` platform direct-practice runtime only: `VoiceRuntimePolicyService`, `VoiceInstructionCompiler`, StepFun realtime policy/state helpers, knowledge search degradation, offline scoring/report projection, and v1 regression fixtures.
+- Shared compliance engine in scope: `common/roleplay_contracts.py` — `check_roleplay_output`, `roleplay_contract_hash`, `ROLEPLAY_CONTRACT_SCHEMA_VERSION`, and `BLOCKING_VIOLATION_ACTIONS` live here and are imported by `sales_bot/services/roleplay_compliance_checker.py`, `sales_bot/services/it_leader_roleplay_v1.py`, and `sales_bot/websocket/components/stepfun_roleplay_runtime_helpers.py`. The error-matrix row "Output violates roleplay contract with blocking action" is implemented by `check_roleplay_output` + `_blocking_decision` in that common module.
 - Not scope: `sales_trainer` newcomer-training realtime placeholder, curriculum `PracticeTemplate` entry, DB migrations, new realtime handlers, large admin UI, live LLM/TTS/StepFun calls in tests.
 
 ### 2. Signatures

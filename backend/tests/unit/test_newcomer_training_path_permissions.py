@@ -7,6 +7,7 @@ from sales_trainer.ai_coach_policy import (
     requires_manage_prompts,
 )
 from sales_trainer.permissions import (
+    can_enter_sales_trainer_learning_path,
     can_manage_sales_trainer,
     can_manage_sales_trainer_prompts,
     can_regrade_sales_trainer_history,
@@ -191,4 +192,29 @@ def test_ai_coach_high_risk_fields_require_manage_prompts() -> None:
 
     assert expected_fields <= AI_COACH_FIELDS_REQUIRING_MANAGE_PROMPTS
     assert all(requires_manage_prompts(field) for field in expected_fields)
-    assert not requires_manage_prompts("output_schema_version")
+    assert not requires_manage_prompts("output_schema_output")
+
+
+def test_admin_can_enter_learner_path_for_dev_and_acceptance() -> None:
+    """Platform admins may enter the learner path without a separate learner account."""
+    admin = _user("admin")
+    super_admin = _user("super_admin")
+    assert can_enter_sales_trainer_learning_path(admin) is True
+    assert can_enter_sales_trainer_learning_path(super_admin) is True
+
+
+def test_learner_and_user_can_enter_learner_path() -> None:
+    assert can_enter_sales_trainer_learning_path(_user("user")) is True
+    assert can_enter_sales_trainer_learning_path(_user("learner")) is True
+
+
+def test_inactive_admin_cannot_enter_learner_path() -> None:
+    admin = _user("admin")
+    admin.is_active = False
+    assert can_enter_sales_trainer_learning_path(admin) is False
+
+
+def test_content_admin_and_ops_still_cannot_enter_learner_path() -> None:
+    """Only platform admins are admitted; other admin roles stay gated."""
+    assert can_enter_sales_trainer_learning_path(_user("content_admin")) is False
+    assert can_enter_sales_trainer_learning_path(_user("operations")) is False

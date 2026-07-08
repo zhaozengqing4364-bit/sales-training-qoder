@@ -6,6 +6,7 @@ TDD Tests for Task B5: Implement PromptTemplateLoader
 
 import asyncio
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -219,6 +220,40 @@ class TestPromptTemplateLoader:
 
         # Should only load the uncached one
         assert loader._load_from_db.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_load_from_db_normalizes_legacy_null_timestamps(self, loader):
+        """Historical rows without timestamps should not break runtime loading."""
+        template_id = uuid4()
+        db_template = SimpleNamespace(
+            id=str(template_id),
+            name="Legacy Template",
+            prompt_type="summary",
+            business_purpose=None,
+            category="test",
+            template="Hello {{ name }}",
+            variables=["name"],
+            is_active=True,
+            is_default=False,
+            is_system=False,
+            created_at=None,
+            updated_at=None,
+        )
+
+        class FakeResult:
+            def scalar_one_or_none(self):
+                return db_template
+
+        class FakeSession:
+            async def execute(self, _statement):
+                return FakeResult()
+
+        template = await loader._load_from_db(template_id, FakeSession())
+
+        assert template is not None
+        assert template.id == template_id
+        assert template.created_at.tzinfo is not None
+        assert template.updated_at == template.created_at
 
 
 class TestGetLoader:

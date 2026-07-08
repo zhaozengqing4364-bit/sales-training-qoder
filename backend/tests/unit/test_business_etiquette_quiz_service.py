@@ -14,6 +14,8 @@ from sales_trainer.schemas import (
     BusinessEtiquetteQuizAnswerSubmit,
     BusinessEtiquetteTrainingUnitConfig,
     BusinessEtiquetteUnitQuizAttemptCreate,
+    NewcomerLearningTopicConfig,
+    NewcomerLearningTopicsPayload,
     NewcomerPathConfigPayload,
     NewcomerPathModuleConfig,
 )
@@ -30,6 +32,12 @@ from sales_trainer.services.business_etiquette_import_service import (
 )
 from sales_trainer.services.business_etiquette_quiz_service import (
     BusinessEtiquetteQuizService,
+)
+from sales_trainer.services.learning_topic_config_service import (
+    BUSINESS_ETIQUETTE_TOPIC_KEY,
+    BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+    NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+    NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
 )
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
@@ -84,6 +92,24 @@ async def _seed_active_path(
     quiz_allow_retake: bool = True,
     quiz_max_attempts: int | None = None,
 ) -> None:
+    business_skills_unit = BusinessEtiquetteTrainingUnitConfig(
+        unit_key="trust_foundation",
+        title="职业信任底座",
+        description="尊重分寸、第一印象。",
+        order_index=1,
+        enabled=True,
+        source_chapter_orders=[1],
+        capability_keys=["respect_boundaries"],
+        unlock_after_unit_keys=[],
+        require_reading=True,
+        require_quiz=True,
+        require_ai_coach=True,
+        quiz_question_count=quiz_question_count,
+        quiz_pass_threshold=None,
+        quiz_allow_retake=quiz_allow_retake,
+        quiz_max_attempts=quiz_max_attempts,
+        quiz_question_type_weights=quiz_question_type_weights or {},
+    )
     payload = NewcomerPathConfigPayload(
         path_key=NEWCOMER_PATH_LOGICAL_ID,
         title="新人训练路径",
@@ -94,26 +120,7 @@ async def _seed_active_path(
                 enabled=True,
                 order_index=1,
                 title="商务礼仪",
-                learning_units=[
-                    BusinessEtiquetteTrainingUnitConfig(
-                        unit_key="trust_foundation",
-                        title="职业信任底座",
-                        description="尊重分寸、第一印象。",
-                        order_index=1,
-                        enabled=True,
-                        source_chapter_orders=[1],
-                        capability_keys=["respect_boundaries"],
-                        unlock_after_unit_keys=[],
-                        require_reading=True,
-                        require_quiz=True,
-                        require_ai_coach=True,
-                        quiz_question_count=quiz_question_count,
-                        quiz_pass_threshold=None,
-                        quiz_allow_retake=quiz_allow_retake,
-                        quiz_max_attempts=quiz_max_attempts,
-                        quiz_question_type_weights=quiz_question_type_weights or {},
-                    )
-                ],
+                learning_units=[business_skills_unit],
             )
         ],
     )
@@ -124,6 +131,28 @@ async def _seed_active_path(
         actor=admin,
         change_class="binding",
         reason="发布商务礼仪小单元配置",
+    )
+    await SalesTrainerAssetRevisionService(test_db).create_published_revision(
+        resource_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+        logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+        payload=NewcomerLearningTopicsPayload(
+            topics=[
+                NewcomerLearningTopicConfig(
+                    topic_key=BUSINESS_ETIQUETTE_TOPIC_KEY,
+                    source_module_key=BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+                    enabled=True,
+                    title="商务礼仪规范",
+                    order_index=1,
+                    learning_units=[business_skills_unit],
+                    required=False,
+                    blocks_next=False,
+                    score_display_policy="quiz_attempt_score",
+                )
+            ]
+        ).model_dump(mode="json"),
+        actor=admin,
+        change_class="binding",
+        reason="发布商务礼仪学习专题配置",
     )
     await test_db.commit()
 

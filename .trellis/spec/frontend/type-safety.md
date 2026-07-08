@@ -41,7 +41,8 @@ export interface ApiResponse<T> {
 ```
 
 - Field names match backend: `weekly_activity`, `session_id`, etc.
-- Central types file is large (~4000+ lines) — add new DTOs in the appropriate feature section; do not duplicate in pages.
+- Central types file is large (~8000+ lines) — add new DTOs in the appropriate feature section; do not duplicate in pages.
+- Extracted domains use a two-tier convention: DTOs are still **authored** in `types.ts`, then **re-exported** through a per-domain barrel in `lib/api/types/<domain>.ts` (e.g. `types/newcomer-training.ts`, `types/sales-trainer.ts`). The domain factory in `lib/api/domains/<domain>.ts` imports its types from `../types/<domain>`, not directly from `types.ts`. Add a new `types/<domain>.ts` barrel when you extract a domain, and re-export only the DTOs that domain owns.
 
 Domain API builders are split between the legacy aggregation seam `lib/api/client-domains.ts` and extracted modules under `lib/api/domains/*`. Tests: `lib/api/client-domains.test.ts`, feature-specific `lib/api/*.test.ts`, and page tests where the API result drives UI behavior.
 
@@ -424,6 +425,7 @@ api.clonePromptTemplate(templateId: string, payload: PromptTemplateCloneRequest)
 | Artifact | Path |
 |----------|------|
 | Core API types | `lib/api/types.ts` |
+| Per-domain type re-export barrels | `lib/api/types/<domain>.ts` |
 | Client + guards | `lib/api/client.ts` |
 | Domain aggregation seam | `lib/api/client-domains.ts` |
 | Extracted domain factories | `lib/api/domains/*` |

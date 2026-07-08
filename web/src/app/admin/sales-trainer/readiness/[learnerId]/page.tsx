@@ -572,8 +572,8 @@ export default function SalesTrainerReadinessDossierPage() {
                                     档案存在需要处理的诊断
                                 </p>
                                 <ul className="mt-2 space-y-1">
-                                    {dossier.diagnostics.map((diagnostic) => (
-                                        <li key={`${diagnostic.code}-${diagnostic.message}`}>
+                                    {dossier.diagnostics.map((diagnostic, index) => (
+                                        <li key={`${diagnostic.code}-${diagnostic.message}-${index}`}>
                                             {readinessDisplayMessage(diagnostic.message)}
                                         </li>
                                     ))}

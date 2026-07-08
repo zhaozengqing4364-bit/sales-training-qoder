@@ -1,246 +1,279 @@
----
-description: 
-alwaysApply: true
----
+最多使用3个agent
+所有的回复到要使用中文！！！！
+DO NOT send optional commentary
+DO NOT send optional commentary
+DO NOT send optional commentary
+DO NOT send optional commentary
+Spend time on thinking; you do not need to use the commentary channel to report progress to me.
+Spend time on thinking; you do not need to use the commentary channel to report progress to me.
+优先级：
+1. codegraph_explore：理解功能链路、业务流程、架构区域
+2. codegraph_node：查看某个 symbol 或文件的源码和调用关系
+3. codegraph_search：定位 symbol
+4. codegraph_callers：查调用点
+5. codegraph impact / affected：改动前后做影响分析和测试选择
+禁止只以“当前能跑”为完成标准。
+### 上下文内完成原则（In-Flow Completion）
 
-# Agent 工程宪章
+业务系统不应为了数据模型完整而打断用户当前任务。
 
-适用于人类与 AI（Cursor、Codex、Claude Code 等）在本仓库及可迁移到的其他软件项目中的协作。
-**效力高于**各工具里的零散偏好；与项目专有说明（`CLAUDE.md`、`.trellis/`、层内 `AGENTS.md`）冲突时，以本宪章为准，项目说明仅可**加严**、不可放宽核心条款。
+当用户在完成主流程时遇到缺失数据、缺失关联对象、缺失角色、缺失配置或缺失上下文，系统应优先在当前页面、弹窗、抽屉或内联区域提供就地处理能力，而不是要求用户跳转到另一个模块。
 
-**语言**：对用户的解释与汇报使用简体中文。
+默认交互模式：
 
----
+- 从已有数据中选择；
+- 快速新建最小必要对象；
+- 自动关联到当前上下文；
+- 后台同步到标准数据模型；
+- 支持稍后补充或指派他人补充；
+- 保留权限校验、去重检查、审计记录和失败反馈。
 
-## 0. 规则层级
+前台体验要轻，后台治理要稳。
 
-| 层级 | 载体 | 内容 |
-|------|------|------|
-| L0 宪章 | 本文件 | 原则、守则、完成哲学 |
-| L1 领域 | `CONTEXT.md`、`docs/adr/` | 术语、边界、已决议 |
-| L2 契约 | `docs/api-contract/` 等 | 接口与错误语义 |
-| L3 实现 | 层内 `AGENTS.md`、`.trellis/spec/` | 目录、风格、命令 |
-| L4 任务 | Issue、PRD、用户指令 | 本次交付范围 |
+禁止为了维护数据表，让用户离开当前任务流程去另一个页面补资料后再回来。
 
-下层不得违背上层；L4 可以收窄交付，**不能免除 L0 的调查与披露义务**（见 §V.3）。
+<!-- CODEGRAPH_START -->
+## CodeGraph
 
----
+In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
 
-## I. 认知伦理 — 先求真，再动手
+- **MCP tools** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them. `codegraph_node` returns one symbol's source + callers, or reads a whole file with line numbers. If the tools are listed but deferred, load them by name via tool search.
+- **Shell** (always works): `codegraph explore "<symbol names or question>"` and `codegraph node <symbol-or-file>` print the same output.
 
-1. **不伪装确定**：有歧义则列出解释；有更简单路径则提出；无法推进再提问。
-2. **假设显式化**：实施前用一两句话说明假设；实施中发现假设失效，停止扩 scope，先更正假设或回写 L1/L2。
-3. **代码是事实，文档是地图**：以仓库为准；文档滞后时相信代码，并建议更新 L1/L2。
-4. **意图优先于实现**（Knuth）：先弄清「要达成什么行为」，再写代码；AI 协作尤其要抵抗「意图缺口」。
+If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
+<!-- CODEGRAPH_END -->
+# Finding Your Unknowns — Working Guidelines
 
----
+> Derived from [A Field Guide to Fable: Finding Your Unknowns](https://x.com/trq212/article/2073100352921215386) by Thariq (Anthropic).
+> Core insight: **the map is not the territory.** The map is the user's prompt, rules, and acceptance criteria; the territory is the real codebase and its actual constraints. The gap between them is made of *unknowns*. Every unknown forces you to guess, and accumulated wrong guesses are how long tasks go badly off course.
 
-## II. 设计原则 — 简单，但不简陋
+**Tradeoff:** These guidelines bias toward discovery over speed. For trivial tasks (typo-level fixes), use judgment and skip the ceremony.
 
-### 核心
+## The Four Kinds of Unknowns
 
-- **KISS**：选当前问题下最简单的**正确**方案；清晰优于聪明。
-- **YAGNI**：不为假想未来加功能；**不为已存在的第 N 条旁路拒绝统一**——重复的业务结构（创建、鉴权、重试）属于还债，不是过度设计。
-- **DRY**：知识一处维护（契约、错误码、组装逻辑）；复制粘贴是缺陷信号。
-- **深模块**（Ousterhout）：窄接口、厚实现；把复杂度关在模块内，便于人与 AI 局部推理。
-- **关注点分离**：业务 / 持久化 / 传输 / 展示分层；禁止 UI 补丁承载本属服务端的规则。
+Every task the user gives you contains four kinds of information:
 
-### 变更
+1. **Known knowns** — what the prompt explicitly states.
+2. **Known unknowns** — what the user knows they haven't figured out yet.
+3. **Unknown knowns** — standards the user holds but never wrote down because they felt obvious. They will only recognize them when they see your output ("no, not like that").
+4. **Unknown unknowns** — options, risks, and possibilities the user hasn't considered at all.
 
-- **手术式修改**：只动任务必需处；不顺手改相邻风格；不删无关死代码（可指出）。
-- **与仓库一致**：命名、错误处理、目录习惯跟现有代码走。
-- **破窗不容忍**：不引入已知坏模式；不复制明显旁路而不标注。
+Your job is not to take the prompt and grind. Your job is to surface types 2, 3, and 4 — before, during, and after implementation. **Every blindspot pass, brainstorm, interview, and prototype is a cheap way to find a problem before it becomes expensive to fix.**
 
-### 简化的边界
+## Pre-implementation
 
-「简单」指**概念和依赖**简单，不是**省略契约与验证**。下列情况不能省：
+### 1. Blindspot Pass
 
-- 多入口共用的组装与校验
-- 可分类的失败语义
-- 一条真实用户路径上的验证
+When the user enters unfamiliar territory (a new module, an unfamiliar technology, a type of work they haven't done):
 
----
+- Quickly survey the codebase/domain and list what the user likely doesn't know they don't know.
+- Tell them what "good" looks like in this domain, what the historical potholes are, and what questions they should be asking.
+- The goal is to teach the user to prompt you better — not to make decisions for them.
 
-## III. 架构原则 — 边界与演进
+### 2. Brainstorm & Prototype
 
-1. **单一权威（Single Authority）**  
-   每种业务结果（创建会话、发布配置、启动运行时）应有**一个**权威模块负责组装与不变量；其他路径调用它，或显式登记为**受控旁路**（含退役计划）。
+When the task involves "I'll know it when I see it" criteria (visual design, interaction, direction):
 
-2. **契约先行（Contract First）**  
-   先定义「可运行 / 不可运行」及机器可读原因，再实现 HTTP、WS、UI。契约落在 L2，实现可迭代。
+- Produce several clearly different options or mock prototypes first (single HTML file, fake data). **Do not touch real code.**
+- Let the user react to something concrete instead of imagining from a description.
+- Why: reversing a wrong direction later costs far more than reviewing a mock now. Small spec changes can cause drastically different implementations.
 
-3. **诊断前移（Shift Left）**  
-   配置错误、缺字段、权限不足在**创建 / 启动 / 预检**暴露；传输层（WebSocket、SSE、轮询）是**最后一道门**，不是主诊断界面。
+### 3. Interview
 
-4. **失败可分类（Typed Failure）**  
-   - **Terminal**：不可通过重试修复（鉴权、契约不满足、资源未配置）→ 明确提示，**禁止**盲目重连。  
-   - **Transient**：网络、进程重启、上游短暂不可用 → 有限重试 + 退避 + 对用户可理解的恢复态。  
-   - **Voluntary**：用户取消 / 正常结束 → 不记入故障。  
-   策略绑定类型，不绑定「连接」一词。
+When ambiguity remains after brainstorming, interview the user:
 
-5. **入口等价（Entry Parity）**  
-   用户感知为同一类操作（如「开始训练」「开始考核」），系统可有多 runtime，但须经过同一组装抽象或等价校验；禁止隐式捷径绕开不变量。
+- One question at a time.
+- Prioritize questions whose answers would change the architecture. Don't spend the question budget on trivia.
 
-6. **横切集中（Centralize Cross-Cutting）**  
-   重试、鉴权、错误映射、观测字段在一处定义，多端消费；新增失败类型 = 登记契约 + 更新消费方，而非在某 hook 私造语义。
+### 4. References
 
-7. **演进分阶段（Phased Evolution）**  
-   允许分期交付；**契约与失败分类先稳定**，状态机与大重构可后移。未授权不得擅自上 P3 级架构，但须在 L4 披露结构债。
+When the user struggles to describe what they want, proactively ask: "Is there an existing implementation/component/library that looks like what you want? Point me at it." Source code is the best reference, even in a different language.
 
-8. **奥卡姆剃刀**  
-   无必要不增实体：少一层框架、少一个状态、少一条未文档化的路径。
+### 5. Implementation Plan
 
----
+Before executing a complex task, present an implementation plan for review:
 
-## IV. 运行时系统 — 长连接与多入口
+- Lead with the parts the user is most likely to change: data models, type interfaces, user-facing behavior.
+- Bury the mechanical refactoring at the bottom — they trust you on that part.
 
-适用于实时通信、会话型业务、工作流引擎、设备在线等，**不绑定具体技术栈**。
+## During implementation
 
-1. **Runnable 与 Draft**  
-   「有记录」≠「可运行」。可运行条件写进 L2；创建路径负责写入或拒绝，连接路径只验证。
+### 6. Implementation Notes
 
-2. **探索宽、交付窄**  
-   触及会话生命周期、实时连接、鉴权、多入口创建时：**调查**须覆盖相关入口与层；**交付**可按用户授权裁剪，但须**书面说明**未覆盖入口与残留风险（见 §V.3）。
+While executing a long task, maintain a temporary `implementation-notes.md`:
 
-3. **配置与代码分责**  
-   结论须能回答：是环境/数据/权限（配置），还是旁路/契约/实现（代码）。不把两类混为「再试一次重连」。
+- When an edge case forces you off the plan: pick the conservative option, log it under "Deviations", and keep going.
+- Never silently change direction — every deviation must leave a trace so the user can fix the map next time.
 
-4. **韧性 ≠ 掩盖**  
-   产品要求「尽量不中断」时，仅适用于 **Transient**；对 **Terminal** 应快速、稳定、可操作地失败，而非无限重试。
+## Post-implementation
 
-5. **真实旅程验证**  
-   完成定义至少包含一条从**用户入口**到**运行时**的路径；单测不能替代旅程，只能补充。
+### 7. Explainer & Quiz
 
----
+After a large change, when the user asks (or the change is far bigger than they expected), produce a change report:
 
-## V. AI 辅助开发守则 — Cursor / Agent 场景
+- Include the context, the intuition, what was done, and why.
+- End with a quiz about the change. The user truly understands it only when they pass.
+- Why: a diff gives only shallow understanding — much of the behavior depends on existing code paths. Merging without understanding is how future unknowns accumulate.
 
-### V.1 工作方式
+## Reminders
 
-- **工具优先**：不凭记忆断言；并行检索、读文件、查契约。
-- **上下文分轨**：快速本地检索 + 必要时深度探索；合并后再决策。
-- **委派**：跨多域、>100 行、陌生栈或强依赖链时委派；委派须带目标、边界、成功标准。
+- Too-specific instructions make you follow orders when a pivot is warranted; too-vague instructions make you guess with "industry best practices" that may not fit this project. When you feel this tension, stop and ask instead of pushing through.
+- When a long-horizon task comes back wrong, the likely cause is not model capability — it's undefined unknowns. Instead of retrying, bring the user back through the unknown-discovery process.
+- # AGENTS.md — AI 开发协作规范
 
-### V.2 范围 — 纠正旧误区
+## 0. 适用范围
 
-| 旧说法 | 宪章说法 |
-|--------|----------|
-| 只实现用户明确要求的 | **交付**限于授权范围；**调查**不得因用户只报症状而缩小 |
-| 不为一次性代码抽象 | 不为**假想**抽象；对**已重复 N 次**的组装/校验应统一 |
-| 5 步才做 plan | 由 **§IV 触发器** 决定轻量 plan，不以步数代替 |
-| 最小 diff 至上 | 最小 diff 应用于**已确认根因层**；在表现层用 diff 掩盖根因 = 技术债，须披露 |
+本文件是仓库级长期规则，只保留高频、稳定、必须遵守的工程底线。项目细节放入专题文档：
 
-### V.3 症状修复协议
+- `docs/architecture.md`：架构边界、模块职责
+- `docs/domain-glossary.md`：领域词、用户语言、禁用术语
+- `docs/uiux.md`：页面契约、信息架构、状态规范
+- `docs/api.md`：API 契约、错误码、分页、兼容性
+- `docs/security.md`：权限、安全、敏感数据、审计
+- `docs/testing.md`：测试策略与运行命令
+- `docs/ai-governance.md`：AI、Prompt、模型、工具调用治理
+- `docs/adr/`：架构决策记录
 
-允许先解阻塞，但必须：
+更深目录的 `AGENTS.md` 优先于本文件。若规则冲突，先说明冲突，再按“更具体规则优先、用户目标优先、安全与数据底线不可突破”执行。
 
-1. 标明是 **symptom fix** 还是 **contract fix**；
-2. 若为 symptom fix，说明**未触及的入口 / 层 / 旁路**；
-3. 若发现与症状同根的旁路，向用户给出 **A 仅缓解 / B 最小契约修复** 选项，默认说明 A 的风险，不静默选 A。
+## 1. 输出与协作
 
-### V.4 产出与沟通
+- 所有回复、计划、错误解释、交付说明默认使用中文。
+- 不输出无价值过程流水账；只给计划、关键发现、阻塞、结果和验证。
+- 不把内部思考、工具调用记录、模型局限当成交付内容。
+- 非阻塞不确定性：基于合理假设继续，并在交付说明标明假设。
+- 阻塞不确定性：提出最少必要问题。
+- 默认最小必要改动；禁止顺手重构无关代码。
+- 失败必须显眼；禁止吞异常、静默跳过、伪造成功。
 
-- 对外：结论、原因、影响、验证证据；少流水账。
-- 对内：可追溯（改了什么路径、测了什么）。
-- 不编造行号、API、未运行的测试结果。
+## 2. 工作模式
 
-### V.5 触发器 — 须提升关注度（非必须做大重构）
+- **Simple**：单文件、小改动、明确 bug、不涉及权限/状态/API/数据库/核心 UI。直接改，最小实现，说明验证。
+- **Standard**：普通功能或跨文件改动。先简短计划，读相关链路，明确成功标准，实现后验证。
+- **Team**：架构、大重构、复杂 bug、多模块/权限/数据/AI/测试联动，或用户要求多 agent。主 agent 负责决策和交付，子 agent 只做探索与复核，结论必须有代码证据。
 
-满足**任一**时，适用 §IV 与 §V.3，并优先查阅 L1/L2：
+复杂任务不得跳过计划、影响分析和验证。高风险任务不得直接执行破坏性操作。
 
-- 持久化实体生命周期（创建 / 状态迁移 / 归档）
-- 实时或长轮询连接的建立、重连、关闭语义
-- 鉴权 / 授权在多个传输方式间不一致
-- 新增或修改「用户可见入口」且背后有独立组装逻辑
-- 用户描述：连不上、反复重连、偶发、仅某入口失败
+## 3. CodeGraph First
 
----
+仓库根目录存在 `.codegraph/` 时，理解代码必须优先使用 CodeGraph：
 
-## VI. 实施与质量
+1. `codegraph_explore`：理解功能链路、业务流程、架构区域
+2. `codegraph_node`：查看 symbol 或文件源码与调用关系
+3. `codegraph_search`：定位 symbol
+4. `codegraph_callers`：查看调用点
+5. `codegraph impact / affected`：改动前后做影响分析和测试选择
 
-### 实施顺序（逻辑上）
+没有 `.codegraph/` 时跳过，不自行创建索引。禁止未读调用者就修改共享函数，禁止在已有同类实现旁新增重复实现。
 
-```
-意图与契约 → 权威模块 / 旁路登记 → HTTP/命令层校验 → 客户端预检（若有）→ 传输层 → 观测与测试
-```
+## 4. 开发前检查
 
-禁止长期停留在「只改传输层」而不触及创建/契约（除非 L4 明确授权且已披露）。
+写代码前快速确认：
 
-### 完成定义（证据导向）
+- 用户是谁，要完成什么任务，成功标准是什么。
+- 涉及哪些页面、API、状态、权限、数据结构。
+- 哪些是稳定代码逻辑，哪些是可配置业务规则。
+- 是否会泄露测试数据、工程字段、内部术语。
+- 如何验证、如何回滚或降级。
 
-仅在具备下列证据时宣称完成：
+若现有代码无法确认完整体系，优先复用现有结构；没有现有体系时，以最小侵入方式预留扩展点，避免规则散落。
 
-- 构建 / 类型检查 / 相关测试通过（或说明既有失败非本次引入）
-- 修改与 L3 模式一致
-- 至少一条与变更相关的**验证路径**已执行
-- Terminal / Transient 策略与 L2 一致（若适用）
+## 5. 产品与前端
 
-### Git
+前端按任务组织，不按数据库对象组织。页面必须让用户 3 秒内知道当前任务、主操作和下一步。
 
-- 无明确要求不提交；不 force-push 主分支；不跳过 hook，除非用户要求。
+新增或重构业务页面必须具备页面契约：目标用户、使用场景、用户任务、主操作、核心信息、数据来源、加载/空/错误/无权限/成功状态、禁止展示信息、埋点或审计事件。
 
----
+界面必须使用用户语言。普通用户界面不得默认展示：`E2E`、`test`、`mock`、`seed`、`Phase*`、`ToolExecutor`、`Prompt`、`traceId`、`workflow`、`raw JSON`、数据库主键、原始枚举、内部错误码。技术细节只能放在管理员调试、审计详情、开发者模式或日志系统。
 
-## VII. 反模式 — 禁止模仿
+API 数据进入页面前必须映射：`API DTO -> Domain Model -> ViewModel -> UI Component`。列表、风险、待办必须先去重、聚合、分组、排序、解释，再展示下一步动作。
 
-1. 在连接层用重试「修」鉴权或缺字段。  
-2. 为每个入口复制一套组装逻辑且无登记。  
-3. 把 HttpOnly / 环境变量 / seed 问题当代码 bug 盲改前端。  
-4. 调查范围 = 用户提到的文件名；忽略平行入口。  
-5. 文档与实现长期分叉且无 ADR。  
-6. AI 生成的 200 行「防御性」代码而无契约与测试。  
-7. 产品「不能弹窗」被解读为「不能失败」。
+业务系统必须遵守上下文内完成原则：用户在主流程中缺少数据、关联对象、角色、配置或上下文时，应优先在当前页面、弹窗、抽屉或内联区域完成选择、快速新建、自动关联、稍后补充、权限校验、去重、审计和失败反馈；不得要求用户离开当前任务去其他模块补资料后再回来。
 
----
+UI 必须覆盖：loading、empty、error、success、disabled、readonly、permission denied、partial/stale data、submitting、retrying。表单必须覆盖 label、helper text、校验错误、dirty、重复提交防护、服务端错误映射、未保存离开提醒。
 
-## VIII. 经典思想索引（温故）
+优先使用现有设计系统、组件库、token 和布局模式。禁止随机渐变、模板 dashboard、无业务意义大卡片、空泛营销文案、多个主操作抢焦点。新增 UI 至少满足基础可访问性：键盘可用、焦点可见、表单有 label、图标按钮有 accessible name、颜色不是唯一信息来源。
 
-- **Unix**：组合、文本接口、小工具。  
-- **SOLID**：职责、扩展点、依赖方向（按语言适度运用）。  
-- **十二要素 / 云原生**：配置与进程分离、无状态优先（有状态须显式建模）。  
-- **演进式架构**：可逆决策记录于 ADR；不可逆决策先 ADR 再代码。
+## 6. 后端与数据
 
----
+后端守住数据一致性、权限边界、状态流转、事务、审计、API 契约、配置治理和错误可定位。
 
-## IX. 本仓库 L3 路由（项目专有）
+推荐分层：`controller/route` 只处理协议；`application service` 编排用例、事务、权限和状态；`domain service` 放核心规则；`repository/dao` 负责数据访问；`policy/permission` 做对象级权限；`state machine` 集中状态；`rules/config/dictionary` 管理规则、配置和枚举；`audit/log/events` 记录关键行为。
 
-实施前先读本宪章；进入子目录时读对应 L3：
+禁止 controller 混合权限、状态、配置、文案和数据库操作。禁止只靠前端隐藏按钮做权限。禁止状态流转散落在多个函数。禁止业务阈值、评分、排序、开关、模板硬编码在深层业务代码。
 
-| 场景 | 文档 |
-|------|------|
-| 命令、环境、产品宪法 | [CLAUDE.md](CLAUDE.md) |
-| 系统架构 | [docs/architecture.md](docs/architecture.md) |
-| API / WS 契约 | [docs/api-contract/](docs/api-contract/) |
-| ADR | [docs/adr/](docs/adr/) |
-| 文档、ADR、契约、计划治理 | [docs/AGENTS.md](docs/AGENTS.md) |
-| 域语言 | `CONTEXT.md`、`docs/agents/domain.md` |
-| 后端 / 前端 / 测试 | [backend/AGENTS.md](backend/AGENTS.md)、[web/AGENTS.md](web/AGENTS.md) 等 |
-| 数据迁移 | [backend/alembic/AGENTS.md](backend/alembic/AGENTS.md) |
-| 本地开发、门禁、恢复脚本 | [scripts/AGENTS.md](scripts/AGENTS.md)、[backend/scripts/AGENTS.md](backend/scripts/AGENTS.md) |
-| 销售训练子域 | [backend/src/sales_trainer/AGENTS.md](backend/src/sales_trainer/AGENTS.md)、[web/src/app/admin/sales-trainer/AGENTS.md](web/src/app/admin/sales-trainer/AGENTS.md)、[docs/api-contract/sales-trainer.md](docs/api-contract/sales-trainer.md) |
-| Trellis 流程与 spec | [.trellis/workflow.md](.trellis/workflow.md)、[.trellis/spec/](.trellis/spec/) |
-| Issue | [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) |
+API 必须稳定、兼容、错误结构统一。新增字段保持向后兼容；删除或改变语义必须有废弃期。分页、排序、筛选规则统一。前端展示字段与内部工程字段隔离。
 
----
+涉及 schema、migration、批量修复时，必须考虑旧数据、影响条数、可重复执行、dry-run、锁表风险、回滚或补偿方案。不得默认手动改生产数据。
 
-<!-- TRELLIS:START -->
-# Trellis Instructions
+关键写入必须考虑事务、幂等、重复提交、并发、外部超时、重试安全、部分失败补偿和用户可见结果。
 
-These instructions are for AI assistants working in this project.
+## 7. 安全、权限、可观测性
 
-This project is managed by Trellis. The working knowledge you need lives under `.trellis/`:
+涉及登录、权限、文件上传、导出、Webhook、第三方接口、AI 工具调用、管理后台、隐私数据、批量操作时，必须做轻量安全分析。
 
-- `.trellis/workflow.md` — development phases, when to create tasks, skill routing
-- `.trellis/spec/` — package- and layer-scoped coding guidelines (read before writing code in a given layer)
-- `.trellis/workspace/` — per-developer journals and session traces
-- `.trellis/tasks/` — active and archived tasks (PRDs, research, jsonl context)
+底线：后端权限校验、对象级权限、输入校验、输出转义、敏感数据脱敏、密钥不入库/日志/前端、管理员操作留痕、高风险操作可预览/确认/回滚。
 
-If a Trellis command is available on your platform (e.g. `/trellis:finish-work`, `/trellis:continue`), prefer it over manual steps. Not every platform exposes every command.
+关键功能必须记录 requestId/traceId、结构化日志、业务事件、接口耗时、外部调用结果、失败原因、异常堆栈、审计记录和必要指标。日志不得输出密码、token、密钥、身份证、手机号等敏感信息。
 
-If you're using Codex or another agent-capable tool, additional project-scoped helpers may live in:
-- `.agents/skills/` — reusable Trellis skills
-- `.codex/agents/` — optional custom subagents
+## 8. AI 功能治理
 
-Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.
+凡涉及 AI 助手、评分、推荐、总结、工具调用，必须可控、可追踪、可降级。
 
-<!-- TRELLIS:END -->
+- Prompt 集中管理并版本化。
+- 模型、temperature、max tokens、timeout、retry、rate limit 配置化。
+- AI 输出必须有依据、不确定性、人工确认、可编辑和失败兜底。
+- 高风险建议不得自动执行。
+- AI 工具调用必须有 input schema、权限校验、对象范围校验、幂等键、dry-run、preview、confirm、audit log、timeout、rate limit、回滚或补偿。
+- 禁止把 AI 生成内容标记为已验证事实。
+
+## 9. 风险分级
+
+- **P0**：生产数据破坏、认证授权、支付资金、合同订单、大迁移、破坏性 API、大重构、AI 自动高风险动作。必须说明影响、回滚、验证、dry-run 或灰度。
+- **P1**：数据库结构、核心状态机、核心接口/页面、管理规则、多模块联动。必须说明兼容性、配置、权限、状态影响和回归路径。
+- **P2**：普通功能、页面、接口、非核心业务规则。标准实现和验证。
+- **P3**：文案、样式、小 bug。最小改动，不引入新抽象。
+
+## 10. 测试与验证
+
+不得只说“已测试”。必须说明覆盖场景、命令和结果。
+
+优先级：自动化测试、类型检查、lint、构建、单测、集成测试、E2E、手工关键路径、权限边界、状态流转、配置异常、回归风险。
+
+Bug 修复优先新增复现测试。核心流程至少覆盖一条关键路径。无法测试时必须说明原因和残余风险。
+
+## 11. ADR、依赖、发布
+
+以下情况必须新增或更新 ADR：新技术栈、核心数据模型、权限模型、状态机、配置中心、后台管理机制、部署方式、重大重构、影响长期维护成本的设计决策。
+
+不得为小问题引入新依赖。新增依赖必须说明解决的问题、替代方案、维护状态、安全/license 风险、包体积/构建/部署影响和移除路径。
+
+高风险功能必须支持 feature flag、灰度、快速关闭、回滚或补偿、失败降级和可观测指标。长期 feature flag 必须清理。
+
+## 12. 交付说明
+
+简单任务可精简，但不得只回复“已完成”。交付说明至少包含：
+
+- 本次完成
+- 主要改动
+- 验证结果
+- 未验证项及原因
+- 风险等级
+- 发布与回滚方式
+
+涉及 UI、权限、状态、API、数据、AI、配置、migration 时，必须补充对应影响、兼容性、审计和回归路径。
+
+## 13. Definition of Done
+
+完成必须同时满足：
+
+- 用户路径清晰，主操作明确，状态完整。
+- 普通用户界面不泄露测试数据、工程字段和内部术语。
+- API 契约稳定，权限以后端校验为准，对象级权限明确。
+- 状态流转集中管理，可调整规则不散落。
+- 配置有默认值、校验和兜底。
+- 关键写入有事务、幂等、并发处理和审计。
+- 日志和错误可定位且不泄露敏感信息。
+- 改动范围可解释，与现有风格一致。
+- 验证证据充分，风险和回滚路径明确。
+- 无必要新依赖，无无关重构，未完成事项已记录。

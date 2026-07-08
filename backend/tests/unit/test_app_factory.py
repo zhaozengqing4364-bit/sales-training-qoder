@@ -263,6 +263,36 @@ async def test_create_app_cors_wraps_error_handler_responses(monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
+async def test_create_app_cors_allows_public_ipv4_dev_frontend_origin(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("CORS_ORIGINS", raising=False)
+    monkeypatch.delenv("CORS_ALLOW_ORIGIN_REGEX", raising=False)
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.options(
+            "/api/v1/auth/providers",
+            headers={
+                "Origin": "http://203.0.113.42:3445",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+    assert response.status_code == 200
+    assert (
+        response.headers["access-control-allow-origin"]
+        == "http://203.0.113.42:3445"
+    )
+    assert response.headers["access-control-allow-credentials"] == "true"
+
+
+@pytest.mark.asyncio
 async def test_create_app_cors_wraps_csrf_rejection_responses(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "development")
     app = create_app()

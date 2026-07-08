@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -10,7 +10,9 @@ import {
     QuestionArchivedReadOnlyGuidance,
     QuestionPublishedRevisionGuidance,
 } from "@/components/admin/sales-trainer/question-form-governance";
+import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
+    AdminModelConfigListItem,
     QuestionDifficulty,
     SalesTrainerQuestion,
     SalesTrainerQuestionCategory,
@@ -36,6 +38,11 @@ const QUESTION_TYPES: Array<{ value: SalesTrainerQuestionType; label: string }> 
     { value: "true_false", label: "判断题" },
     { value: "short_answer", label: "简答题" },
 ];
+
+function modelConfigOptionLabel(config: AdminModelConfigListItem): string {
+    const defaultSuffix = config.is_default ? " · 默认" : "";
+    return `${config.name} · ${config.provider}/${config.model_name}${defaultSuffix}`;
+}
 
 function defaultOptions(question?: SalesTrainerQuestion | null): SalesTrainerQuestionOption[] {
     if (question?.options?.length) {
@@ -142,10 +149,68 @@ export function SalesTrainerQuestionForm({
     const [aiMaxTokens, setAiMaxTokens] = useState(configNumberText(initialAiScoring, "max_tokens"));
     const [aiSystemPrompt, setAiSystemPrompt] = useState(configString(initialAiScoring, "system_prompt"));
     const [aiPromptTemplate, setAiPromptTemplate] = useState(configString(initialAiScoring, "prompt_template"));
+    const [llmConfigs, setLlmConfigs] = useState<AdminModelConfigListItem[]>([]);
+    const [isLoadingModelConfigs, setIsLoadingModelConfigs] = useState(false);
+    const [modelConfigError, setModelConfigError] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const canEdit = canEditQuestionRevision(initialQuestion?.status);
     const isPublished = initialQuestion?.status === "published";
     const isArchived = initialQuestion?.status === "archived";
+
+    useEffect(() => {
+        let isMounted = true;
+
+        async function loadModelConfigs() {
+            setIsLoadingModelConfigs(true);
+            setModelConfigError(null);
+            try {
+                const response = await api.admin.getModelConfigs();
+                if (isMounted) {
+                    setLlmConfigs((response.llm ?? []).filter((item) => item.is_active));
+                }
+            } catch (loadError) {
+                if (isMounted) {
+                    setLlmConfigs([]);
+                    setModelConfigError(getApiErrorMessage(loadError));
+                }
+            } finally {
+                if (isMounted) {
+                    setIsLoadingModelConfigs(false);
+                }
+            }
+        }
+
+        void loadModelConfigs();
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    function renderLlmModelOptions() {
+        const normalized = aiModelConfigId.trim();
+        const hasExactId = normalized ? llmConfigs.some((item) => item.id === normalized) : true;
+        const matchedConfig = normalized
+            ? llmConfigs.find((item) => item.id === normalized || item.model_name === normalized)
+            : null;
+        return (
+            <>
+                <option value="">系统默认 LLM 配置</option>
+                {normalized && !hasExactId ? (
+                    <option value={normalized}>
+                        {matchedConfig
+                            ? `当前配置：${modelConfigOptionLabel(matchedConfig)}`
+                            : `当前配置：${normalized}（未在启用列表）`}
+                    </option>
+                ) : null}
+                {llmConfigs.map((config) => (
+                    <option key={config.id} value={config.id}>
+                        {modelConfigOptionLabel(config)}
+                    </option>
+                ))}
+            </>
+        );
+    }
 
     function updateOption(index: number, patch: Partial<SalesTrainerQuestionOption>) {
         setOptions((current) =>
@@ -445,14 +510,22 @@ export function SalesTrainerQuestionForm({
                             />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-question-ai-model-config">模型配置 ID</label>
-                            <Input
+                            <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-question-ai-model-config">LLM 模型配置</label>
+                            <select
                                 id="sales-trainer-question-ai-model-config"
                                 value={aiModelConfigId}
                                 onChange={(event) => setAiModelConfigId(event.target.value)}
-                                disabled={isSubmitting || !canEdit}
-                                placeholder="留空使用默认 LLM 配置"
-                            />
+                                disabled={isSubmitting || !canEdit || isLoadingModelConfigs}
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm"
+                            >
+                                {renderLlmModelOptions()}
+                            </select>
+                            {isLoadingModelConfigs ? (
+                                <p className="text-xs text-slate-500">正在加载模型配置...</p>
+                            ) : null}
+                            {modelConfigError ? (
+                                <p className="text-xs font-medium text-red-600">{modelConfigError}</p>
+                            ) : null}
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-2">

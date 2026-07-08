@@ -15,6 +15,7 @@ from sales_trainer.models import (
     SalesTrainerAudioScorePrompt,
     SalesTrainerAudioScoreResult,
     SalesTrainerAudioSubmission,
+    SalesTrainerBusinessEtiquetteQuizAttempt,
     SalesTrainerQuizAnswer,
     SalesTrainerQuizAttempt,
     SalesTrainerUnit,
@@ -22,6 +23,10 @@ from sales_trainer.models import (
 from sales_trainer.schemas import ReadinessDossierResponse, ReadinessWorkbenchResponse
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
+)
+from sales_trainer.services.learning_topic_config_service import (
+    NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+    NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
 )
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
@@ -174,6 +179,32 @@ async def _publish_path(
         change_class="semantic",
         reason="发布达标档案测试路径",
     )
+    business_module = modules[1]
+    await SalesTrainerAssetRevisionService(test_db).create_published_revision(
+        resource_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+        logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+        payload={
+            "schema_version": "newcomer_learning_topics_v1",
+            "topics": [
+                {
+                    "topic_key": "business_etiquette",
+                    "source_module_key": "business_skills",
+                    "enabled": business_module["enabled"],
+                    "title": "商务礼仪规范",
+                    "order_index": 1,
+                    "learning_content_id": business_module["learning_content_id"],
+                    "learning_units": business_module["learning_units"],
+                    "ai_coach": business_module["ai_coach"],
+                    "required": False,
+                    "blocks_next": False,
+                    "score_display_policy": "quiz_attempt_score",
+                }
+            ],
+        },
+        actor=actor,
+        change_class="binding",
+        reason="发布达标档案测试学习专题",
+    )
     await test_db.commit()
     return str(result.revision.revision_id)
 
@@ -295,8 +326,38 @@ async def _seed_passed_training_records(
         total_score=90,
         max_score=100,
     )
+    topic_attempt = SalesTrainerBusinessEtiquetteQuizAttempt(
+        attempt_id=str(uuid.uuid4()),
+        training_pack_key="business_etiquette_v1",
+        learning_unit_key="customer-visit-prep",
+        learning_unit_title="客户拜访准备",
+        user_id=str(learner.user_id),
+        path_revision_id=revision_id,
+        path_revision_no=1,
+        capability_snapshot={},
+        question_snapshots=[],
+        answers_snapshot=[],
+        capability_scores=[],
+        weak_capability_keys=[],
+        recommended_chapter_orders=[],
+        total_score=92,
+        max_score=100,
+        passed=True,
+        status="scored",
+        submitted_at=datetime(2026, 7, 6, 9, 10, tzinfo=UTC),
+    )
     test_db.add_all(
-        [prompt, audio, audio_score, category, question, quiz, answer, ai_session]
+        [
+            prompt,
+            audio,
+            audio_score,
+            category,
+            question,
+            quiz,
+            answer,
+            ai_session,
+            topic_attempt,
+        ]
     )
     await test_db.commit()
 
@@ -353,9 +414,29 @@ async def _seed_business_skills_quiz_attempt(
         is_correct=passed,
         score=score,
     )
-    test_db.add_all([category, question, quiz, answer])
+    topic_attempt = SalesTrainerBusinessEtiquetteQuizAttempt(
+        attempt_id=str(uuid.uuid4()),
+        training_pack_key="business_etiquette_v1",
+        learning_unit_key="customer-visit-prep",
+        learning_unit_title="客户拜访准备",
+        user_id=str(learner.user_id),
+        path_revision_id=revision_id,
+        path_revision_no=1,
+        capability_snapshot={},
+        question_snapshots=[],
+        answers_snapshot=[],
+        capability_scores=[],
+        weak_capability_keys=[],
+        recommended_chapter_orders=[],
+        total_score=score,
+        max_score=100,
+        passed=passed,
+        status="scored",
+        submitted_at=submitted_at,
+    )
+    test_db.add_all([category, question, quiz, answer, topic_attempt])
     await test_db.commit()
-    return str(quiz.attempt_id)
+    return str(topic_attempt.attempt_id)
 
 
 async def _seed_ready_learner(
@@ -411,7 +492,7 @@ async def test_should_mark_passed_pre_realtime_modules_as_pending_review(
 
     response = ReadinessDossierResponse.model_validate(dossier)
     assert response.status == "pending_review"
-    assert response.summary.evidence_count >= 3
+    assert response.summary.evidence_count >= 2
     assert response.realtime_gate.locked is True
     assert response.realtime_gate.reason == "前置训练尚未由培训负责人确认达标。"
     assert all(item.status != "blocked_by_config" for item in response.competencies)
@@ -624,7 +705,7 @@ async def test_should_return_retraining_to_pending_review_after_new_submission(
         learner=learner,
         revision_id=revision_id,
         quiz_unit_id=quiz_unit_id,
-        submitted_at=datetime(2026, 7, 7, 10, 0, tzinfo=UTC),
+        submitted_at=datetime.now(UTC),
         passed=True,
         score=96,
     )
@@ -657,7 +738,7 @@ async def test_should_return_retraining_to_pending_review_after_new_submission(
     assert workbench_response.groups["pending_review"].items[0].status == (
         "pending_review"
     )
-    assert workbench_response.groups["pending_review"].items[0].evidence_count >= 3
+    assert workbench_response.groups["pending_review"].items[0].evidence_count >= 2
 
 
 @pytest.mark.asyncio

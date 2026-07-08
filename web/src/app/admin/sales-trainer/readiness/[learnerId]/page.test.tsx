@@ -203,6 +203,35 @@ describe("SalesTrainerReadinessDossierPage", () => {
         expect(screen.queryByText(/active path revision/)).toBeNull();
     });
 
+    it("renders duplicate diagnostics without React key collisions", async () => {
+        const dossier = dossierFixture();
+        dossier.diagnostics = [
+            ...dossier.diagnostics,
+            { ...dossier.diagnostics[0] },
+        ];
+        getReadinessDossierMock.mockResolvedValue(dossier);
+        const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+        try {
+            render(<SalesTrainerReadinessDossierPage />);
+
+            await waitFor(() => {
+                expect(getReadinessDossierMock).toHaveBeenCalledWith("learner-1");
+            });
+            expect(
+                screen.getAllByText("真实语音对练后台接入配置缺失，请先处理训练路径配置。"),
+            ).toHaveLength(2);
+            const duplicateKeyWarnings = consoleErrorSpy.mock.calls.filter((call) =>
+                call.some((part) =>
+                    String(part).includes("Encountered two children with the same key"),
+                ),
+            );
+            expect(duplicateKeyWarnings).toHaveLength(0);
+        } finally {
+            consoleErrorSpy.mockRestore();
+        }
+    });
+
     it("submits review action with selected evidence and refreshes the dossier", async () => {
         render(<SalesTrainerReadinessDossierPage />);
 

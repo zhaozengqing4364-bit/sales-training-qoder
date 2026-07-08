@@ -43,6 +43,11 @@ from sales_trainer.services.learner_public_projection import (
 from sales_trainer.services.learner_unit_access import (
     LearnerUnitAccessError,
     require_learner_active_path_module_access,
+    require_learner_learning_topic_access,
+)
+from sales_trainer.services.learning_topic_config_service import (
+    BUSINESS_ETIQUETTE_TOPIC_KEY,
+    BUSINESS_SKILLS_SOURCE_MODULE_KEY,
 )
 
 router = APIRouter(
@@ -143,11 +148,18 @@ async def _require_ai_coach_module_access_response(
     module_key: str,
 ) -> JSONResponse | None:
     try:
-        await require_learner_active_path_module_access(
-            db,
-            actor=actor,
-            module_key=module_key,
-        )
+        if module_key == BUSINESS_SKILLS_SOURCE_MODULE_KEY:
+            await require_learner_learning_topic_access(
+                db,
+                actor=actor,
+                topic_key=BUSINESS_ETIQUETTE_TOPIC_KEY,
+            )
+        else:
+            await require_learner_active_path_module_access(
+                db,
+                actor=actor,
+                module_key=module_key,
+            )
     except LearnerUnitAccessError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
     return None

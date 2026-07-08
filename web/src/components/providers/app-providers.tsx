@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { authHandler } from "@/lib/auth-handler";
-import { currentUserQueryKey } from "@/lib/query/auth";
 import { createAppQueryClient } from "@/lib/query/client";
 
 function AuthQueryBridge() {

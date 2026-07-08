@@ -753,6 +753,7 @@ async def get_dev_user(db: AsyncSession) -> User:
             email="dev@example.com",
             name="Developer",
             department="Development",
+            role="admin",
         )
         db.add(user)
         await db.commit()
@@ -765,6 +766,11 @@ async def get_dev_user(db: AsyncSession) -> User:
         _set_user_field(user, "email", "dev@example.com")
     if not user.name:
         _set_user_field(user, "name", "Developer")
+    # Dev fallback account is the local administrator for seeding training
+    # paths and admin-only flows. Normalize legacy rows that were created
+    # before role was set here; production is gated by is_dev_login_enabled().
+    if _user_field(user, "role") != "admin":
+        _set_user_field(user, "role", "admin")
     await db.commit()
     await db.refresh(user)
 

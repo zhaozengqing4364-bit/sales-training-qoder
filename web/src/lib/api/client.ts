@@ -1541,8 +1541,87 @@ export function cancelAllRequests(): void {
 type ApiFetchOptions = RequestInit & {
     signal?: AbortSignal;
     skipSessionExpiredHandling?: boolean;
+    timeoutMs?: number;
+    timeoutMessage?: string;
 };
 
+function createRequestAbortContext(options: {
+    externalSignal?: AbortSignal;
+    timeoutMs?: number;
+}) {
+    const controller = new AbortController();
+    const { externalSignal, timeoutMs } = options;
+    let didTimeout = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const handleExternalAbort = () => {
+        controller.abort();
+    };
+
+    if (externalSignal) {
+        if (externalSignal.aborted) {
+            controller.abort();
+        } else {
+            externalSignal.addEventListener("abort", handleExternalAbort, { once: true });
+        }
+    }
+
+    if (typeof timeoutMs === "number" && timeoutMs > 0) {
+        timeoutId = setTimeout(() => {
+            didTimeout = true;
+            controller.abort();
+        }, timeoutMs);
+    }
+
+    return {
+        controller,
+        signal: controller.signal,
+        didTimeout: () => didTimeout,
+        cleanup: () => {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            externalSignal?.removeEventListener("abort", handleExternalAbort);
+        },
+    };
+}
+
+function createTimeoutError(message?: string): ApiRequestError {
+    return new ApiRequestError({
+        status: 0,
+        errorCode: "[REQUEST_TIMEOUT]",
+        message: message || "请求超时，请稍后重试。",
+    });
+}
+
+function isAbortError(error: unknown): boolean {
+    return typeof error === "object"
+        && error !== null
+        && "name" in error
+        && (error as { name?: unknown }).name === "AbortError";
+}
+
+type ApiJsonResponse<T> = {
+    success?: boolean;
+    data?: T;
+} & Record<string, unknown>;
+
+async function readJsonOrFallback<TFallback>(response: Response, fallback: TFallback): Promise<TFallback> {
+    try {
+        return await response.json() as TFallback;
+    } catch (error) {
+        if (isAbortError(error)) {
+            throw error;
+        }
+        return fallback;
+    }
+}
+
+function unwrapApiJsonResponse<T>(responseJson: ApiJsonResponse<T>): T {
+    if (responseJson.data !== undefined) {
+        return responseJson.data;
+    }
+    return responseJson as T;
+}
 
 function createHeaders(
     existingHeaders: HeadersInit | undefined,
@@ -1632,17 +1711,15 @@ async function apiFetch<T>(
 ): Promise<T> {
     const url = `${resolveApiBaseUrl()}${endpoint}`;
     const requestId = `req_${++requestCounter}`;
-    const { skipSessionExpiredHandling = false, ...requestOptions } = options;
-
-    // Create AbortController if caller didn't provide a signal
-    const controller = new AbortController();
-    const externalSignal = requestOptions.signal;
-    const signal = externalSignal || controller.signal;
-
-    // If caller provided their own signal, link it to our controller
-    if (externalSignal) {
-        externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
-    }
+    const {
+        skipSessionExpiredHandling = false,
+        timeoutMs,
+        timeoutMessage,
+        signal: externalSignal,
+        ...requestOptions
+    } = options;
+    const abortContext = createRequestAbortContext({ externalSignal, timeoutMs });
+    const { controller, signal } = abortContext;
 
     activeRequests.set(requestId, controller);
 
@@ -1662,7 +1739,7 @@ async function apiFetch<T>(
             headers,
         });
 
-        const responseJson = await response.json().catch(() => ({}));
+        const responseJson = await readJsonOrFallback<ApiJsonResponse<T>>(response, {});
 
         if (!response.ok) {
             const normalized = normalizeApiErrorPayload(response.status, responseJson);
@@ -1679,10 +1756,14 @@ async function apiFetch<T>(
             throw new ApiRequestError(normalized);
         }
 
-        return responseJson.data !== undefined ? responseJson.data : responseJson;
+        return unwrapApiJsonResponse(responseJson);
     } catch (error) {
         if (error instanceof ApiRequestError) {
             throw error;
+        }
+
+        if (abortContext.didTimeout()) {
+            throw createTimeoutError(timeoutMessage);
         }
 
         if (error instanceof Error && error.name === "AbortError") {
@@ -1699,6 +1780,7 @@ async function apiFetch<T>(
             message,
         });
     } finally {
+        abortContext.cleanup();
         activeRequests.delete(requestId);
     }
 }
@@ -1915,14 +1997,15 @@ async function apiFetchBlob(
 ): Promise<Blob> {
     const url = `${resolveApiBaseUrl()}${endpoint}`;
     const requestId = `blob_${++requestCounter}`;
-    const { skipSessionExpiredHandling = false, ...requestOptions } = options;
-    const controller = new AbortController();
-    const externalSignal = requestOptions.signal;
-    const signal = externalSignal || controller.signal;
-
-    if (externalSignal) {
-        externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
-    }
+    const {
+        skipSessionExpiredHandling = false,
+        timeoutMs,
+        timeoutMessage,
+        signal: externalSignal,
+        ...requestOptions
+    } = options;
+    const abortContext = createRequestAbortContext({ externalSignal, timeoutMs });
+    const { controller, signal } = abortContext;
 
     activeRequests.set(requestId, controller);
 
@@ -1943,17 +2026,21 @@ async function apiFetchBlob(
         });
 
         if (!response.ok) {
-            const responseJson = await response.json().catch(() => ({}));
+            const responseJson = await readJsonOrFallback<Record<string, unknown>>(response, {});
             if (response.status === 401 && !skipSessionExpiredHandling) {
                 triggerSessionExpired();
             }
             throw new ApiRequestError(normalizeApiErrorPayload(response.status, responseJson));
         }
 
-        return response.blob();
+        return await response.blob();
     } catch (error) {
         if (error instanceof ApiRequestError) {
             throw error;
+        }
+
+        if (abortContext.didTimeout()) {
+            throw createTimeoutError(timeoutMessage);
         }
 
         if (error instanceof Error && error.name === "AbortError") {
@@ -1968,6 +2055,7 @@ async function apiFetchBlob(
                 : "请求失败，请稍后重试。",
         });
     } finally {
+        abortContext.cleanup();
         activeRequests.delete(requestId);
     }
 }
@@ -2204,7 +2292,10 @@ export const api = {
                 role: string;
                 department?: string | null;
                 email?: string | null;
-            }>("/users/me");
+            }>("/users/me", {
+                timeoutMs: 8000,
+                timeoutMessage: "用户信息加载超时，请稍后重试。",
+            });
             return normalizeCurrentUser(profile);
         },
 
@@ -2313,15 +2404,24 @@ export const api = {
     // Dashboard
     dashboard: {
         getStats: async () => {
-            return apiFetch<DashboardStats>("/dashboard/stats");
+            return apiFetch<DashboardStats>("/dashboard/stats", {
+                timeoutMs: 8000,
+                timeoutMessage: "训练统计加载较慢，请稍后刷新。",
+            });
         },
 
         getRecommendation: async () => {
-            return apiFetch<Recommendation>("/recommendations/latest");
+            return apiFetch<Recommendation>("/recommendations/latest", {
+                timeoutMs: 8000,
+                timeoutMessage: "推荐入口加载较慢，请稍后刷新。",
+            });
         },
 
         getGrowth: async () => {
-            return apiFetch<GrowthDashboardResponse>("/growth/dashboard");
+            return apiFetch<GrowthDashboardResponse>("/growth/dashboard", {
+                timeoutMs: 8000,
+                timeoutMessage: "成长看板加载较慢，请稍后刷新。",
+            });
         },
 
         getAdaptiveDifficultyDryRun: async (limit = 10) => {
@@ -2339,7 +2439,10 @@ export const api = {
             const queryParams = new URLSearchParams({ page_size: String(limit) });
             if (scenarioType) queryParams.set("scenario_type", scenarioType);
 
-            const result = await apiFetch<{ items: HistoryApiItem[]; total: number }>(`/practice/history?${queryParams}`);
+            const result = await apiFetch<{ items: HistoryApiItem[]; total: number }>(`/practice/history?${queryParams}`, {
+                timeoutMs: 8000,
+                timeoutMessage: "最近记录加载较慢，请稍后刷新。",
+            });
 
             return (result.items || []).map<SessionItem>((item, index) => ({
                 id: item.session_id || item.id || `session-${index}`,

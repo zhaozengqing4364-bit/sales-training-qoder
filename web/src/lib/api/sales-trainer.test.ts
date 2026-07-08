@@ -529,6 +529,65 @@ describe("api.salesTrainer facade", () => {
         );
     });
 
+    it("lists my audio submissions through the learner facade", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    items: [
+                        {
+                            submission_id: "submission-1",
+                            unit_id: "unit-1",
+                            user_id: "user-1",
+                            user_name: "张三",
+                            user_email: "zhangsan@example.com",
+                            user_department: "销售一部",
+                            purpose: "ppt_pitch",
+                            original_filename: "pitch.wav",
+                            content_type: "audio/wav",
+                            size_bytes: 1024,
+                            storage_key: "private/audio/pitch.wav",
+                            file_hash: null,
+                            duration_seconds: null,
+                            source_page: null,
+                            confirmed_material_version_id: null,
+                            confirmed_material_at: null,
+                            material_snapshot: null,
+                            score_scheme_snapshot: null,
+                            task_brief_snapshot: null,
+                            path_key: null,
+                            path_revision_id: null,
+                            path_revision_no: null,
+                            module_key: null,
+                            legacy_snapshot_only: false,
+                            status: "scored",
+                            error_code: null,
+                            error_message: null,
+                            created_at: "2026-07-01T00:00:00Z",
+                            updated_at: "2026-07-01T00:05:00Z",
+                            transcript: null,
+                            score_result: null,
+                        },
+                    ],
+                    total: 1,
+                },
+            }),
+        });
+
+        const result = await api.salesTrainer.listMyAudioSubmissions({
+            limit: 20,
+            offset: 0,
+        });
+
+        expect(result.total).toBe(1);
+        expect(result.items[0].submission_id).toBe("submission-1");
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining("/sales-trainer/audio-submissions?limit=20&offset=0"),
+            expect.any(Object),
+        );
+    });
+
     it("loads admin quiz attempts through the central facade", async () => {
         fetchMock.mockResolvedValue({
             ok: true,

@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -140,7 +141,7 @@ class PromptTemplateLoader:
         db_template = result.scalar_one_or_none()
 
         if db_template:
-            return PromptTemplate.model_validate(db_template)
+            return PromptTemplate.model_validate(_runtime_template_payload(db_template))
         return None
 
     async def _add_to_cache(self, template: PromptTemplate) -> None:
@@ -227,3 +228,25 @@ def get_loader() -> PromptTemplateLoader:
     if _loader is None:
         _loader = PromptTemplateLoader()
     return _loader
+
+
+def _runtime_template_payload(db_template: Any) -> dict[str, Any]:
+    """Normalize legacy rows enough for runtime prompt compilation."""
+    created_at = getattr(db_template, "created_at", None) or datetime.now(UTC)
+    updated_at = getattr(db_template, "updated_at", None) or created_at
+    return {
+        "id": getattr(db_template, "id", None),
+        "name": getattr(db_template, "name", None),
+        "prompt_type": getattr(db_template, "prompt_type", None),
+        "business_purpose": getattr(db_template, "business_purpose", None),
+        "category": getattr(db_template, "category", "common"),
+        "template": getattr(db_template, "template", None),
+        "variables": getattr(db_template, "variables", None),
+        "is_active": getattr(db_template, "is_active", True),
+        "is_default": getattr(db_template, "is_default", False),
+        "is_system": getattr(db_template, "is_system", False),
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "governance_status": getattr(db_template, "governance_status", "valid"),
+        "governance_issues": getattr(db_template, "governance_issues", []),
+    }

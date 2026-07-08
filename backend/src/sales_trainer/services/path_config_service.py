@@ -767,9 +767,15 @@ class SalesTrainerPathConfigService:
         self,
         payload: NewcomerPathConfigPayload,
     ) -> None:
+        await self.validate_ai_coach_prompt_bindings_for_modules(payload.modules)
+
+    async def validate_ai_coach_prompt_bindings_for_modules(
+        self,
+        modules: list[NewcomerPathModuleConfig],
+    ) -> None:
         prompt_service = PromptTemplateService(self._db)
         resolver = PromptTemplateRevisionResolver(self._db, service=prompt_service)
-        for module in payload.modules:
+        for module in modules:
             if module.ai_coach is None:
                 continue
             await self._validate_ai_coach_prompt_binding(
@@ -1042,7 +1048,6 @@ class SalesTrainerPathConfigService:
         module: NewcomerPathModuleConfig,
         units: dict[str, SalesTrainerUnit],
     ) -> None:
-        self._validate_required_ai_coach_module(module)
         if not module.target_unit_id:
             raise SalesTrainerPathConfigError(
                 "[NEWCOMER_MODULE_BINDING_MISSING]",

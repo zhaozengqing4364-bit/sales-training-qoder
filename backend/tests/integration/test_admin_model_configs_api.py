@@ -120,6 +120,51 @@ async def test_create_model_config_normalizes_endpoint_and_encrypts_key(
 
 
 @pytest.mark.asyncio
+async def test_should_return_conflict_when_creating_duplicate_model_config(
+    async_client,
+    test_db: AsyncSession,
+    test_user,
+    monkeypatch,
+):
+    test_user.role = "admin"
+    await test_db.commit()
+    headers = _admin_headers(str(test_user.user_id))
+    _reset_encryption_key(monkeypatch)
+    monkeypatch.setattr(
+        model_configs_api,
+        "_refresh_runtime_services",
+        AsyncMock(return_value=None),
+    )
+    payload = {
+        "name": "DeepSeek Flash",
+        "model_type": "llm",
+        "provider": "openai",
+        "base_url": "https://api.deepseek.com/v1/",
+        "api_key": "test-openai-key-12345",
+        "model_name": "deepseek-v4-flash",
+        "extra_config": {},
+        "is_default": False,
+    }
+
+    created = await async_client.post(
+        "/api/v1/admin/model-configs",
+        headers=headers,
+        json=payload,
+    )
+    duplicate = await async_client.post(
+        "/api/v1/admin/model-configs",
+        headers=headers,
+        json={**payload, "name": "DeepSeek Flash duplicate"},
+    )
+
+    assert created.status_code == 201
+    assert duplicate.status_code == 409
+    body = duplicate.json()
+    assert body["success"] is False
+    assert body["error_code"] == "[MODEL_CONFIG_DUPLICATE]"
+
+
+@pytest.mark.asyncio
 async def test_model_config_crud_and_persisted_test_write_audit_logs(
     async_client,
     test_db: AsyncSession,

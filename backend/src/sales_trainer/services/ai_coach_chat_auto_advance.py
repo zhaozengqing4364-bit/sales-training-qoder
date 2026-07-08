@@ -10,12 +10,14 @@ from sales_trainer.ai_coach_chat_schemas import (
     AiCoachChatResponseInternalV1,
     AiCoachChatUiEventInternalV1,
     AiCoachFollowupPromptPayloadV1,
+    AiCoachQuizCardPayloadInternalV1,
     AiCoachSummaryCardPayloadV1,
 )
 from sales_trainer.models import SalesTrainerAiCoachSession
 from sales_trainer.schemas import (
     AiCoachAnswerPayloadV1,
     AiCoachConfig,
+    AiCoachInteractionInternalV1,
     AiCoachNextActionV1,
     AiCoachScoreResultV1,
 )
@@ -114,7 +116,12 @@ class AiCoachChatAutoAdvance:
                     )
                     await self._append_response(
                         session=session,
-                        response=self._fallback_response(exc.code, config),
+                        response=self._fallback_response(
+                            exc.code,
+                            config,
+                            session=session,
+                            action=action,
+                        ),
                         action=action,
                         reason=reason,
                         trigger_type="session_start",
@@ -220,7 +227,13 @@ class AiCoachChatAutoAdvance:
                     actor=actor,
                 )
                 raise
-            response = self._fallback_response(exc.code, config)
+            response = self._fallback_response(
+                exc.code,
+                config,
+                session=session,
+                action=decision.action,
+                answered_event_payload=event_payload,
+            )
             await self._append_response(
                 session=session,
                 response=response,
@@ -310,7 +323,12 @@ class AiCoachChatAutoAdvance:
                     actor=actor,
                 )
                 raise
-            response = self._fallback_response(exc.code, config)
+            response = self._fallback_response(
+                exc.code,
+                config,
+                session=session,
+                action=action,
+            )
             await self._append_response(
                 session=session,
                 response=response,
@@ -365,7 +383,12 @@ class AiCoachChatAutoAdvance:
         )
         await self._append_response(
             session=session,
-            response=self._fallback_response(AI_COACH_STREAM_TIMEOUT_CODE, config),
+            response=self._fallback_response(
+                AI_COACH_STREAM_TIMEOUT_CODE,
+                config,
+                session=session,
+                action=decision.action,
+            ),
             action=decision.action,
             reason=f"{decision.reason}; generation timed out",
             trigger_type="event_answer",
@@ -565,7 +588,33 @@ class AiCoachChatAutoAdvance:
     def _fallback_response(
         _error_code: str,
         config: AiCoachConfig,
+        *,
+        session: SalesTrainerAiCoachSession | None = None,
+        action: AiCoachNextActionV1 | None = None,
+        answered_event_payload: dict[str, object] | None = None,
     ) -> AiCoachChatResponseInternalV1:
+        fallback_card = AiCoachChatAutoAdvance._fallback_quiz_card_event(
+            config=config,
+            session=session,
+            action=action,
+            answered_event_payload=answered_event_payload,
+        )
+        if fallback_card is not None:
+            return AiCoachChatResponseInternalV1(
+                assistant_text=(
+                    "训练进度已保存。我先给你一张基础补练卡，完成后继续按当前小单元判断掌握情况。"
+                ),
+                ui_events=[
+                    fallback_card,
+                    AiCoachChatUiEventInternalV1(
+                        type="followup_prompt",
+                        payload=AiCoachFollowupPromptPayloadV1(
+                            prompts=["先做这张基础卡", "讲解一下", "总结本轮"],
+                        ),
+                    ),
+                ],
+                runtime_audit={"fallback_source": "deterministic_training_card"},
+            )
         return AiCoachChatResponseInternalV1(
             assistant_text=config.generation_failure_recovery_message,
             ui_events=[
@@ -577,6 +626,126 @@ class AiCoachChatAutoAdvance:
                 )
             ],
         )
+
+    @staticmethod
+    def _fallback_quiz_card_event(
+        *,
+        config: AiCoachConfig,
+        session: SalesTrainerAiCoachSession | None,
+        action: AiCoachNextActionV1 | None,
+        answered_event_payload: dict[str, object] | None,
+    ) -> AiCoachChatUiEventInternalV1 | None:
+        if action not in {
+            "continue_drill",
+            "increase_difficulty",
+            "remediate",
+            "switch_scenario",
+        }:
+            return None
+        if "quiz_card" not in config.allowed_ui_event_types:
+            return None
+        if "scenario_judgment" not in config.allowed_training_card_types:
+            return None
+        title, capability_keys, chapter_orders = (
+            AiCoachChatAutoAdvance._fallback_training_context(
+                session=session,
+                answered_event_payload=answered_event_payload,
+            )
+        )
+        interaction = AiCoachInteractionInternalV1.model_validate(
+            {
+                "schema_version": "ai_coach_interaction_v1",
+                "training_card_type": "scenario_judgment",
+                "interaction_type": "single_choice",
+                "stem": (
+                    f"{title}：客户第一次到访前，你最应该先做哪一步，"
+                    "才能显得专业且尊重对方？"
+                ),
+                "options": [
+                    {
+                        "option_id": "A",
+                        "text": "先确认对方到访目的、时间、人数和接待安排",
+                    },
+                    {
+                        "option_id": "B",
+                        "text": "先完整介绍产品卖点，让对方快速了解公司",
+                    },
+                ],
+                "answer_key": {"option_ids": ["A"], "reference_answer": None},
+                "scoring_rubric": {
+                    "max_score": 100,
+                    "points": [
+                        {
+                            "key": "visit-preparation",
+                            "score": 100,
+                            "description": "能先确认接待条件和对方需求。",
+                        }
+                    ],
+                    "partial_credit_policy": "all_or_nothing",
+                },
+                "feedback_guidance": {
+                    "correct": "处理得当。先确认到访目的、时间、人数和接待安排，能降低接待失误。",
+                    "incorrect": "这一步容易显得只顾介绍自己。先确认到访安排，再进入产品或方案介绍。",
+                },
+                "capability_keys": capability_keys,
+                "source_chapter_orders": chapter_orders,
+                "source_evidence": [
+                    {
+                        "reason": "AI 生成失败后的确定性基础补练卡。",
+                        "confidence": 1.0,
+                    }
+                ],
+            }
+        )
+        return AiCoachChatUiEventInternalV1(
+            type="quiz_card",
+            payload=AiCoachQuizCardPayloadInternalV1(
+                interaction=interaction,
+                explanation="先用一张基础场景题保持训练不中断。",
+            ),
+        )
+
+    @staticmethod
+    def _fallback_training_context(
+        *,
+        session: SalesTrainerAiCoachSession | None,
+        answered_event_payload: dict[str, object] | None,
+    ) -> tuple[str, list[str], list[int]]:
+        title = "商务礼仪基础练习"
+        capability_keys: list[str] = []
+        chapter_orders: list[int] = []
+
+        interaction = (
+            answered_event_payload.get("interaction_snapshot")
+            if answered_event_payload
+            else None
+        )
+        if isinstance(interaction, dict):
+            capability_keys = _string_list(interaction.get("capability_keys"))
+            chapter_orders = _positive_int_list(
+                interaction.get("source_chapter_orders")
+            )
+
+        raw_path_config = (
+            getattr(session, "path_config_snapshot", None)
+            if session is not None
+            else None
+        )
+        path_config = raw_path_config if isinstance(raw_path_config, dict) else {}
+        units = path_config.get("learning_units")
+        if isinstance(units, list):
+            first_enabled = _first_enabled_unit(units)
+            if first_enabled:
+                title = str(first_enabled.get("title") or title)
+                if not capability_keys:
+                    capability_keys = _string_list(
+                        first_enabled.get("ai_coach_required_capability_keys")
+                    ) or _string_list(first_enabled.get("capability_keys"))
+                if not chapter_orders:
+                    chapter_orders = _positive_int_list(
+                        first_enabled.get("ai_coach_remediation_chapter_orders")
+                    ) or _positive_int_list(first_enabled.get("source_chapter_orders"))
+        return title, capability_keys[:10], chapter_orders[:20]
 
     @staticmethod
     def _summary_response(
@@ -613,3 +782,31 @@ class AiCoachChatAutoAdvance:
                 )
             ],
         )
+
+
+def _first_enabled_unit(units: list[object]) -> dict[str, object] | None:
+    dict_units = [unit for unit in units if isinstance(unit, dict)]
+    for unit in dict_units:
+        if unit.get("enabled") is not False:
+            return unit
+    return dict_units[0] if dict_units else None
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _positive_int_list(value: object) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    result: list[int] = []
+    for item in value:
+        try:
+            parsed = int(item)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            result.append(parsed)
+    return result

@@ -29,15 +29,17 @@ backend/
 │   │   ├── error_handling/     # Result[T], middleware
 │   │   ├── monitoring/         # structlog, trace_id
 │   │   ├── websocket/          # BaseWebSocketHandler
+│   │   ├── roleplay_contracts.py  # Shared roleplay contract compliance engine (see realtime-roleplay-v1.md)
+│   │   ├── runtime_descriptor.py  # TrainingRuntimeDescriptor + TrainingRuntimeSubject (consumed by training_runtime)
 │   │   └── audio/, ai/, auth/, knowledge/, ...
 │   ├── sales_bot/              # Sales practice (independent scenario)
 │   │   ├── api/                # REST routers
-│   │   ├── services/           # BotService, voice policy, etc.
+│   │   ├── services/           # BotService, voice policy, roleplay_compliance_checker
 │   │   └── websocket/          # stepfun_realtime_handler, components/
-│   ├── presentation_coach/     # PPT practice (WS registered in websocket_routes.py)
+│   ├── presentation_coach/     # PPT practice (WS route declared in websocket_routes.py)
 │   ├── agent/                  # Agent / Persona platform
 │   ├── admin/                  # api/, services/, config_bundles/
-│   ├── training_runtime/       # Scenario plugin dispatch for WS handlers
+│   ├── training_runtime/       # Scenario plugin dispatch (consumes common/runtime_descriptor.py)
 │   └── evaluation/, curriculum_practice/, supervisor/, support/, ...
 ├── tests/
 │   ├── unit/                   # Fast, mocked
@@ -63,22 +65,32 @@ Example: `sales_bot/api/scenarios.py` + `sales_bot/services/bot_service.py` (no 
 
 ### Adding WebSocket behavior
 
-Two patterns exist:
+All three scenarios resolve their handler through `training_runtime` plugin dispatch (`dispatch_scenario_plugin(descriptor).select_runtime_handler(descriptor)`), where `descriptor` is a `TrainingRuntimeDescriptor` from `common/runtime_descriptor.py`. The difference is only **where the route is declared**:
 
 **A. Domain router module** (sales, curriculum):
 
 1. Handler in `{module}/websocket/*_handler.py`.
 2. Route in `{module}/websocket/router.py`.
-3. Register via `websocket_routes.py` (often through `training_runtime` plugin dispatch).
+3. Mounted via `register_websocket_routes()` in `websocket_routes.py` (`app.include_router(...)`).
+4. Handler selection inside the router goes through `training_runtime` plugin dispatch.
 
 **B. Inline root registration** (presentation):
 
 1. Handler in `presentation_coach/websocket/*_handler.py`.
 2. Route declared directly in `websocket_routes.py` (no `presentation_coach/websocket/router.py`).
+3. The inline handler still resolves the handler via `dispatch_scenario_plugin` (`websocket_routes.py`), and runs `RuntimeGate.admit_session(...)` admission before connecting.
+
+Every scenario exposes **two route shapes** — a query-param form and a path-param form — so clients can pass `session_id` either way:
+
+| Scenario | Routes | Declared in |
+|----------|--------|-------------|
+| Sales | `/ws/sales`, `/ws/sales/{session_id}` | `sales_bot/websocket/router.py` |
+| Curriculum examiner | `/ws/curriculum/examiner`, `/ws/curriculum/examiner/{session_id}` | `curriculum_practice/websocket/router.py` |
+| Presentation | `/ws/presentation`, `/ws/presentation/{session_id}` | `websocket_routes.py` (inline) |
 
 Split large handlers into `websocket/components/` (see `sales_bot/websocket/components/stepfun_*`).
 
-Examples: `sales_bot/websocket/stepfun_realtime_handler.py`, `common/websocket/base_handler.py`.
+Examples: `sales_bot/websocket/stepfun_realtime_handler.py`, `common/websocket/base_handler.py`, `common/services/runtime_gate.py` (`RuntimeGate.admit_session`).
 
 ### ORM models
 
@@ -103,7 +115,7 @@ Examples: `sales_bot/websocket/stepfun_realtime_handler.py`, `common/websocket/b
 | Constants | `UPPER_SNAKE_CASE` | `SALES_WS_AUTH_POLICY` |
 | Private | `_prefix` | `_handle_upstream_event` |
 | HTTP prefix | `/api/v1` | All REST routers |
-| WS paths | `/ws/{scenario}` | `/ws/sales`, `/ws/presentation`, `/ws/curriculum/examiner` |
+| WS paths | `/ws/{scenario}` (+ `/{session_id}` variant) | `/ws/sales`, `/ws/presentation`, `/ws/curriculum/examiner` |
 
 ---
 

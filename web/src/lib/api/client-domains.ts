@@ -164,6 +164,8 @@ export function createAuthDomain({ request }: AuthDomainDependencies) {
                 method: "GET",
                 cache: "no-store",
                 skipSessionExpiredHandling: true,
+                timeoutMs: 8000,
+                timeoutMessage: "登录配置加载超时，请刷新页面后重试。",
             });
         },
 
@@ -172,6 +174,8 @@ export function createAuthDomain({ request }: AuthDomainDependencies) {
                 method: "POST",
                 body: JSON.stringify(credentials),
                 skipSessionExpiredHandling: true,
+                timeoutMs: 8000,
+                timeoutMessage: "登录超时，请重试。",
             });
         },
 
@@ -179,6 +183,8 @@ export function createAuthDomain({ request }: AuthDomainDependencies) {
             return request<{ access_token: string; token_type: string; user: User }>("/auth/dev-login", {
                 method: "POST",
                 skipSessionExpiredHandling: true,
+                timeoutMs: 8000,
+                timeoutMessage: "登录超时，请重试。",
             });
         },
 

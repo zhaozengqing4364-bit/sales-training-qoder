@@ -138,6 +138,19 @@ describe("SettingsPage", () => {
         expect(getModelConfigsMock).toHaveBeenCalledTimes(1);
     });
 
+    it("offers DeepSeek presets through the OpenAI-compatible LLM provider", async () => {
+        render(<SettingsPage />);
+
+        fireEvent.click(screen.getByText("模型配置"));
+        fireEvent.click(await screen.findByRole("button", { name: /添加/ }));
+        fireEvent.click(await screen.findByRole("button", { name: "DeepSeek Flash" }));
+
+        expect(screen.getByDisplayValue("DeepSeek Flash 默认模型")).toBeTruthy();
+        expect(screen.getByDisplayValue("https://api.deepseek.com/v1")).toBeTruthy();
+        expect(screen.getByDisplayValue("deepseek-v4-flash")).toBeTruthy();
+        expect(screen.getByText(/provider 保持 openai/)).toBeTruthy();
+    });
+
     it("links governed settings to the dedicated governance matrix", () => {
         render(<SettingsPage />);
 

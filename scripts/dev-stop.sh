@@ -28,7 +28,15 @@ warn() {
 
 port_pids() {
   local port="$1"
-  lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true
+  {
+    lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true
+    if command -v ss >/dev/null 2>&1; then
+      ss -H -ltnp "sport = :${port}" 2>/dev/null | sed -nE 's/.*pid=([0-9]+).*/\1/p' || true
+    fi
+    if command -v fuser >/dev/null 2>&1; then
+      fuser -n tcp "${port}" 2>/dev/null | tr ' ' '\n' || true
+    fi
+  } | awk 'NF' | sort -u
 }
 
 port_cleanup_pids() {
@@ -38,7 +46,29 @@ port_cleanup_pids() {
     # uvicorn --reload can leave a parent process with a CLOSED fd on the
     # dev port. It is not LISTENing, but a new uvicorn bind can still fail.
     lsof -tiTCP:"${port}" -sTCP:CLOSED 2>/dev/null || true
-  } | sort -u
+    if command -v ss >/dev/null 2>&1; then
+      ss -H -ltnp "sport = :${port}" 2>/dev/null | sed -nE 's/.*pid=([0-9]+).*/\1/p' || true
+    fi
+    if command -v fuser >/dev/null 2>&1; then
+      fuser -n tcp "${port}" 2>/dev/null | tr ' ' '\n' || true
+    fi
+  } | awk 'NF' | sort -u
+}
+
+port_is_listening() {
+  local port="$1"
+
+  if command -v ss >/dev/null 2>&1; then
+    if [[ -n "$(ss -H -ltn "sport = :${port}" 2>/dev/null | awk 'NF { print; exit }')" ]]; then
+      return 0
+    fi
+  fi
+
+  if [[ -n "$(port_pids "${port}")" ]]; then
+    return 0
+  fi
+
+  return 1
 }
 
 wait_for_port_release() {
@@ -64,6 +94,9 @@ kill_port() {
   pids="$(port_cleanup_pids "${port}")"
 
   if [[ -z "${pids}" ]]; then
+    if port_is_listening "${port}"; then
+      warn "端口 ${port} 已被占用，但当前用户无法识别或停止占用进程"
+    fi
     return
   fi
 
@@ -77,6 +110,10 @@ kill_port() {
     warn "强制停止端口 ${port} 占用进程: ${remaining//$'\n'/, }"
     kill -9 ${remaining} >/dev/null 2>&1 || true
     wait_for_port_release "${port}" 2 || true
+  fi
+
+  if port_is_listening "${port}"; then
+    warn "端口 ${port} 仍被占用，请手动停止占用进程"
   fi
 }
 

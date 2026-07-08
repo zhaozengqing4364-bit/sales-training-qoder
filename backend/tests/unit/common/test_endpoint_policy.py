@@ -66,6 +66,21 @@ def test_validate_provider_base_url_allows_mimo_openai_compatible_endpoint(monke
     )
 
 
+def test_validate_provider_base_url_allows_deepseek_openai_compatible_endpoint(
+    monkeypatch,
+):
+    monkeypatch.setattr(socket, "getaddrinfo", _public_getaddrinfo)
+
+    endpoint = validate_provider_base_url(
+        ModelProvider.OPENAI,
+        "https://api.deepseek.com/v1/",
+        resolve_dns=True,
+    )
+
+    assert endpoint.base_url == "https://api.deepseek.com/v1"
+    assert endpoint.host == "api.deepseek.com"
+
+
 def test_validate_provider_base_url_rejects_private_dns_resolution(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", _private_getaddrinfo)
 

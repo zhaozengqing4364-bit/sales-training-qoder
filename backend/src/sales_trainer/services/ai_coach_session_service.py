@@ -48,6 +48,11 @@ from sales_trainer.services.article_binding_service import (
     ArticleBindingService,
     ArticleBindingServiceError,
 )
+from sales_trainer.services.learning_topic_config_service import (
+    BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+    LearningTopicConfigError,
+    NewcomerLearningTopicConfigService,
+)
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
@@ -498,6 +503,33 @@ class AiCoachSessionService:
         self,
         module_key: str,
     ) -> tuple[str, int, dict[str, Any], AiCoachConfig]:
+        if module_key == BUSINESS_SKILLS_SOURCE_MODULE_KEY:
+            try:
+                (
+                    path_revision_id,
+                    path_revision_no,
+                    module,
+                ) = await NewcomerLearningTopicConfigService(
+                    self._db
+                ).active_business_etiquette_module_config()
+            except LearningTopicConfigError as exc:
+                raise AiCoachSessionServiceError(
+                    exc.code,
+                    exc.message,
+                    exc.status_code,
+                ) from exc
+            if module.ai_coach is None:
+                raise AiCoachSessionServiceError(
+                    "[AI_COACH_NOT_CONFIGURED]",
+                    "商务礼仪规范学习专题未配置 AI 教练。",
+                    status_code=409,
+                )
+            return (
+                path_revision_id,
+                path_revision_no,
+                module.model_dump(mode="json"),
+                module.ai_coach,
+            )
         path_response = await SalesTrainerPathConfigService(self._db).get_config()
         path_payload = path_response.get("path")
         path_revision_id = path_response.get("active_revision_id")

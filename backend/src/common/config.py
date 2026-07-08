@@ -11,6 +11,13 @@ from dotenv import load_dotenv
 load_dotenv()
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
+DEFAULT_LLM_PROVIDER = "openai"
+DEFAULT_LLM_BASE_URL = "https://api.deepseek.com/v1"
+DEFAULT_LLM_MODEL = "deepseek-chat"
+DEFAULT_LLM_TEMPERATURE = 0.7
+DEFAULT_LLM_MAX_TOKENS = 2000
+DEFAULT_LLM_TIMEOUT_SECONDS = 10
+
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
     """Read a bounded integer env config with safe fallback."""
@@ -112,13 +119,17 @@ class Settings:
     TTS_VOICE: str = os.getenv("TTS_VOICE", "zh-CN-XiaoxiaoNeural")
     TTS_RATE: str = os.getenv("TTS_RATE", "+0%")
 
-    # LLM Service (DeepSeek / Qwen)
+    # LLM Service (database-backed admin config is primary; env is fallback)
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
-    LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "deepseek-chat")
-    LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.7"))
-    LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "2000"))
-    LLM_TIMEOUT_SECONDS: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "10"))
+    LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL)
+    LLM_MODEL: str = os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
+    LLM_TEMPERATURE: float = float(
+        os.getenv("LLM_TEMPERATURE", str(DEFAULT_LLM_TEMPERATURE))
+    )
+    LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", str(DEFAULT_LLM_MAX_TOKENS)))
+    LLM_TIMEOUT_SECONDS: int = int(
+        os.getenv("LLM_TIMEOUT_SECONDS", str(DEFAULT_LLM_TIMEOUT_SECONDS))
+    )
 
     # ChromaDB
     CHROMA_PERSIST_DIRECTORY: str = os.getenv(

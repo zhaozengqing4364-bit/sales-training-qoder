@@ -46,7 +46,7 @@ class ValidatedEndpoint:
 _PROVIDER_POLICIES: dict[ModelProvider, EndpointPolicy] = {
     ModelProvider.OPENAI: EndpointPolicy(
         provider=ModelProvider.OPENAI,
-        allowed_hosts=("api.openai.com", "api.xiaomimimo.com"),
+        allowed_hosts=("api.openai.com", "api.xiaomimimo.com", "api.deepseek.com"),
     ),
     ModelProvider.AZURE: EndpointPolicy(
         provider=ModelProvider.AZURE,

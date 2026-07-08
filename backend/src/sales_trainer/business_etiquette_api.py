@@ -41,6 +41,14 @@ from sales_trainer.schemas import (
     BusinessEtiquetteUnitQuizAttemptListResponse,
     BusinessEtiquetteUnitQuizAttemptResponse,
     BusinessEtiquetteUnitQuizResponse,
+    NewcomerArticleBinding,
+    NewcomerArticleProgressRequest,
+    NewcomerArticleProgressResponse,
+    NewcomerArticleResponse,
+)
+from sales_trainer.services.article_binding_service import (
+    ArticleBindingService,
+    ArticleBindingServiceError,
 )
 from sales_trainer.services.business_etiquette_ai_coach_progress_service import (
     BusinessEtiquetteAiCoachProgressService,
@@ -71,9 +79,17 @@ from sales_trainer.services.business_etiquette_release_service import (
     BusinessEtiquetteReleaseService,
     BusinessEtiquetteReleaseServiceError,
 )
+from sales_trainer.services.curriculum_practice_adapter import (
+    LearningProgressAdapter,
+)
 from sales_trainer.services.learner_unit_access import (
     LearnerUnitAccessError,
-    require_learner_active_path_module_access,
+    require_learner_learning_topic_access,
+)
+from sales_trainer.services.learning_topic_config_service import (
+    BUSINESS_ETIQUETTE_TOPIC_KEY,
+    LearningTopicConfigError,
+    NewcomerLearningTopicConfigService,
 )
 
 business_etiquette_router = APIRouter(
@@ -121,14 +137,93 @@ async def _require_business_etiquette_module_access(
     current_user: User,
 ) -> JSONResponse | None:
     try:
-        await require_learner_active_path_module_access(
+        await require_learner_learning_topic_access(
             db,
             actor=current_user,
-            module_key=BUSINESS_SKILLS_MODULE_KEY,
+            topic_key=BUSINESS_ETIQUETTE_TOPIC_KEY,
         )
     except LearnerUnitAccessError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
     return None
+
+
+async def _resolve_business_etiquette_article(
+    db: AsyncSession,
+) -> dict[str, Any]:
+    topic, _ = await NewcomerLearningTopicConfigService(
+        db
+    ).active_business_etiquette_topic()
+    if not topic.learning_content_id:
+        raise ArticleBindingServiceError(
+            "[BUSINESS_ETIQUETTE_ARTICLE_BINDING_MISSING]",
+            "商务礼仪规范未绑定已发布学习文章。",
+            409,
+        )
+    return await ArticleBindingService(db).resolve_module_article(
+        NewcomerArticleBinding(
+            module_key=BUSINESS_SKILLS_MODULE_KEY,
+            learning_content_id=topic.learning_content_id,
+        )
+    )
+
+
+@business_etiquette_router.get("/article", response_model=None)
+async def get_business_etiquette_article(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if error := await _require_business_etiquette_module_access(db, current_user):
+        return error
+    try:
+        article = await _resolve_business_etiquette_article(db)
+    except (LearningTopicConfigError, ArticleBindingServiceError) as exc:
+        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
+    return success_response(NewcomerArticleResponse.model_validate(article).model_dump())
+
+
+@business_etiquette_router.post("/article-progress", response_model=None)
+async def complete_business_etiquette_article_chapter(
+    payload: NewcomerArticleProgressRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if error := await _require_business_etiquette_module_access(db, current_user):
+        return error
+    try:
+        article = await _resolve_business_etiquette_article(db)
+    except (LearningTopicConfigError, ArticleBindingServiceError) as exc:
+        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
+    learning_content_id = str(article["learning_content_id"])
+    if (
+        payload.learning_content_id is not None
+        and str(payload.learning_content_id) != learning_content_id
+    ):
+        return _api_error(
+            "[LEARNING_CONTENT_MISMATCH]",
+            status_code=409,
+            message="请求的 learning_content_id 与学习专题当前绑定的学习内容不一致。",
+        )
+    complete_result = await LearningProgressAdapter(db).complete_chapter(
+        user_id=str(current_user.user_id),
+        content_id=learning_content_id,
+        chapter_id=payload.chapter_id,
+    )
+    if not complete_result.is_success or complete_result.value is None:
+        return _api_error(
+            "[BUSINESS_ETIQUETTE_PROGRESS_UNAVAILABLE]",
+            status_code=500,
+            message="记录商务礼仪阅读进度失败。",
+        )
+    completed = complete_result.value
+    return success_response(
+        NewcomerArticleProgressResponse(
+            module_key=BUSINESS_SKILLS_MODULE_KEY,
+            learning_content_id=learning_content_id,
+            completed_chapter_ids=completed.progress.completed_chapter_ids,
+            total_chapters=completed.progress.total_chapters,
+            is_completed=completed.progress.is_completed,
+        ).model_dump()
+    )
 
 
 @business_etiquette_router.get("/learning-units", response_model=None)

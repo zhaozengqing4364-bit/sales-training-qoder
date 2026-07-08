@@ -89,14 +89,14 @@ export function GenerativeCard({
         case "followup_prompt":
             return (
                 <section className={cardShellClass(presentation)}>
-                    <CardBadge>追问</CardBadge>
+                    <p className="text-xs font-semibold text-slate-500">针对当前回复的可选方向</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                         {event.payload.prompts.map((prompt) => (
                             <button
                                 key={prompt}
                                 type="button"
                                 onClick={() => onFollowupPrompt(prompt)}
-                                className="rounded-full border border-violet-100 bg-violet-50 px-3 py-1.5 text-sm text-violet-700"
+                                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
                             >
                                 {prompt}
                             </button>
@@ -182,7 +182,7 @@ function QuizCard({
                     disabled={!isActive || scored || isSubmitting}
                     onChange={(changeEvent) => onDraftChange(draftForText(changeEvent.target.value))}
                     rows={4}
-                    className="mt-4 w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed text-slate-900 outline-none focus:border-violet-300"
+                    className="mt-4 w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                 />
             ) : (
                 <div className="mt-4 space-y-2">
@@ -219,7 +219,7 @@ function QuizCard({
                 </div>
             )}
             {event.payload.explanation && scored ? (
-                <p className="mt-4 rounded-xl bg-violet-50 px-4 py-3 text-sm leading-relaxed text-violet-800">
+                <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-700">
                     {event.payload.explanation}
                 </p>
             ) : null}
@@ -227,7 +227,7 @@ function QuizCard({
             {!scored ? (
                 <div className="mt-4 flex justify-end">
                     <Button
-                        className="rounded-full bg-violet-600 hover:bg-violet-700"
+                        className="rounded-full"
                         disabled={!canSubmit || isSubmitting}
                         onClick={onSubmit}
                     >
@@ -424,16 +424,16 @@ function optionStateClass(
         return "border-red-200 bg-red-50";
     }
     if (isSelected) {
-        return "border-violet-300 bg-violet-50";
+        return "border-slate-900 bg-slate-50";
     }
-    return "border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/60";
+    return "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50";
 }
 
 function cardShellClass(presentation: "compact" | "primary"): string {
     if (presentation === "primary") {
         return "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6";
     }
-    return "rounded-2xl border border-violet-100 bg-white p-5 shadow-sm";
+    return "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
 }
 
 function CardBadge({
@@ -444,7 +444,7 @@ function CardBadge({
     readonly tone?: "brand" | "neutral";
 }) {
     const className = tone === "brand"
-        ? "bg-violet-100 text-violet-700"
+        ? "bg-slate-100 text-slate-700"
         : "bg-slate-100 text-slate-600";
     return (
         <span className={`rounded-full px-3 py-1 text-xs font-bold ${className}`}>

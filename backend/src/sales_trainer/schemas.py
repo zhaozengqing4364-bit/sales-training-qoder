@@ -1626,6 +1626,154 @@ class NewcomerPathRevisionListResponse(BaseModel):
     total: int
 
 
+LearningTopicScoreDisplayPolicy = Literal["quiz_attempt_score"]
+NewcomerLearningTopicKey = Literal["business_etiquette"]
+
+
+class NewcomerLearningTopicConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    topic_key: NewcomerLearningTopicKey = "business_etiquette"
+    source_module_key: Literal["business_skills"] = "business_skills"
+    enabled: bool = True
+    title: str = Field("商务礼仪规范", min_length=1, max_length=120)
+    description: str | None = Field(None, max_length=1000)
+    order_index: int = Field(1, ge=1)
+    learning_content_id: str | None = Field(None, min_length=1, max_length=36)
+    learning_units: list[BusinessEtiquetteTrainingUnitConfig] = Field(
+        default_factory=list
+    )
+    ai_coach: AiCoachConfig | None = None
+    required: Literal[False] = False
+    blocks_next: Literal[False] = False
+    score_display_policy: LearningTopicScoreDisplayPolicy = "quiz_attempt_score"
+
+    @model_validator(mode="after")
+    def validate_learning_topic(self) -> NewcomerLearningTopicConfig:
+        unit_keys = [unit.unit_key for unit in self.learning_units]
+        if len(set(unit_keys)) != len(unit_keys):
+            raise ValueError("learning_units cannot contain duplicate unit_key values")
+        order_indexes = [unit.order_index for unit in self.learning_units]
+        if len(set(order_indexes)) != len(order_indexes):
+            raise ValueError("learning_units cannot contain duplicate order_index values")
+        return self
+
+
+class NewcomerLearningTopicsPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["newcomer_learning_topics_v1"] = (
+        "newcomer_learning_topics_v1"
+    )
+    topics: list[NewcomerLearningTopicConfig] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_topics(self) -> NewcomerLearningTopicsPayload:
+        keys = [topic.topic_key for topic in self.topics]
+        if len(set(keys)) != len(keys):
+            raise ValueError("topics cannot contain duplicate topic_key values")
+        unsupported = sorted(set(keys) - {"business_etiquette"})
+        if unsupported:
+            raise ValueError("only business_etiquette is supported in the first version")
+        return self
+
+
+class NewcomerLearningTopicsSaveRequest(NewcomerLearningTopicsPayload):
+    reason: str | None = Field(None, max_length=500)
+
+
+class NewcomerLearningTopicsActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(..., min_length=1, max_length=500)
+    revision_id: str | None = Field(None, min_length=1, max_length=36)
+
+
+class NewcomerLearningTopicsRollbackPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    revision_id: str = Field(..., min_length=1, max_length=36)
+
+
+class NewcomerLearningTopicsGenerateDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    overwrite_working: bool = False
+    reason: str | None = Field(None, max_length=500)
+
+
+class NewcomerLearningTopicRevisionSummary(BaseModel):
+    revision_id: str
+    revision_no: int
+    status: Literal["working", "published", "archived"]
+    change_class: Literal[
+        "non_semantic",
+        "semantic",
+        "binding",
+        "scoring_high_risk",
+    ]
+    title: str
+    topic_count: int
+    is_active: bool
+    is_working: bool
+    source_revision_id: str | None = None
+    payload_hash: str
+    reason: str | None = None
+    trace_id: str | None = None
+    created_by: str | None = None
+    published_by: str | None = None
+    created_at: object
+    published_at: object | None = None
+
+
+class NewcomerLearningTopicsRevisionListResponse(BaseModel):
+    items: list[NewcomerLearningTopicRevisionSummary] = Field(default_factory=list)
+    total: int
+
+
+class NewcomerLearningTopicsConfigResponse(BaseModel):
+    source: Literal["active_revision", "not_configured"]
+    fallback_reason: str | None = None
+    legacy_snapshot_only: Literal[False] = False
+    management_entry: Literal["/admin/sales-trainer/articles"]
+    permission: Literal["sales_trainer.manage_modules"]
+    payload: NewcomerLearningTopicsPayload
+    active_revision_id: str | None = None
+    active_revision_no: int | None = None
+    active_revision_snapshot: dict[str, Any] | None = None
+    working_revision_id: str | None = None
+    working_revision_no: int | None = None
+    has_unpublished_revision: bool
+    diagnostics: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class NewcomerLearningTopicsPreviewResponse(BaseModel):
+    action: Literal[
+        "newcomer_learning_topics.publish",
+        "newcomer_learning_topics.rollback",
+    ]
+    permission: Literal["sales_trainer.manage_modules"]
+    requires_reason: bool
+    requires_trace_id: bool
+    future_only: bool
+    risk_level: Literal["low", "medium", "high"]
+    risk_reasons: list[str] = Field(default_factory=list)
+    change_class: Literal[
+        "non_semantic",
+        "semantic",
+        "binding",
+        "scoring_high_risk",
+    ]
+    target_revision_id: str
+    target_revision_no: int
+    target_revision_status: Literal["working", "published", "archived"]
+    impact_scope: dict[str, Any]
+    before_snapshot: dict[str, Any] | None = None
+    after_snapshot: dict[str, Any]
+    audit_event: dict[str, Any]
+    rollback_hint: dict[str, Any]
+
+
 class NewcomerDeadDataDiagnosticIssue(BaseModel):
     severity: Literal["info", "warning", "error"]
     code: str
@@ -2075,6 +2223,7 @@ class BusinessEtiquetteLearningUnitResponse(BaseModel):
 
 class BusinessEtiquetteLearningUnitsResponse(BaseModel):
     module_key: str
+    topic_key: str | None = None
     learning_content_id: str
     path_revision_id: str | None = None
     path_revision_no: int | None = None
@@ -3018,6 +3167,39 @@ class TrainingJourneyRetrainingRequest(BaseModel):
     created_at: object
 
 
+class TrainingJourneyLearningTopicUnitProgress(BaseModel):
+    unit_key: str
+    title: str
+    order_index: int
+    enabled: bool
+    capability_keys: list[str] = Field(default_factory=list)
+    require_quiz: bool
+    quiz_question_count: int
+    quiz_pass_threshold: float | None = None
+    score: float | None = None
+    max_score: float | None = None
+    passed: bool | None = None
+    status: Literal["not_started", "submitted", "scored", "passed", "failed"]
+    latest_attempt_id: str | None = None
+    latest_attempt_submitted_at: object | None = None
+
+
+class TrainingJourneyLearningTopicProgress(BaseModel):
+    topic_key: str
+    source_module_key: str
+    title: str
+    description: str | None = None
+    order_index: int
+    learning_content_id: str | None = None
+    required: Literal[False] = False
+    blocks_next: Literal[False] = False
+    score_display_policy: LearningTopicScoreDisplayPolicy
+    status: Literal["not_started", "in_progress", "passed", "needs_remediation"]
+    units: list[TrainingJourneyLearningTopicUnitProgress] = Field(default_factory=list)
+    ai_coach: SalesTrainerAiCoachAvailabilityResponse | None = None
+    source: dict[str, Any]
+
+
 class TrainingJourneyResponse(BaseModel):
     journey_id: str
     learner_id: str
@@ -3033,6 +3215,9 @@ class TrainingJourneyResponse(BaseModel):
     role_level: TrainingJourneyLearnerLevel
     training_stage: TrainingJourneyStage
     modules: list[TrainingJourneyModuleProgress] = Field(default_factory=list)
+    learning_topics: list[TrainingJourneyLearningTopicProgress] = Field(
+        default_factory=list
+    )
     overall_progress: TrainingJourneyOverallProgress
     retraining_requests: list[TrainingJourneyRetrainingRequest] = Field(
         default_factory=list
@@ -3079,6 +3264,21 @@ class TrainingJourneyAnalyticsModuleSummary(BaseModel):
     status_counts: dict[str, int] = Field(default_factory=dict)
     pass_rate: float | None = None
     average_score: float | None = None
+
+
+class TrainingJourneyAnalyticsLearningTopicSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    topic_key: str
+    source_module_key: str | None = None
+    title: str
+    learner_count: int
+    completed_count: int
+    needs_remediation_count: int
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    completion_rate: float | None = None
+    average_unit_score: float | None = None
+    blocking_required_path: bool = False
 
 
 class TrainingJourneyAnalyticsWeaknessHeatmapEntry(BaseModel):
@@ -3175,6 +3375,9 @@ class TrainingJourneyAnalyticsResponse(BaseModel):
     module_summaries: list[TrainingJourneyAnalyticsModuleSummary] = Field(
         default_factory=list
     )
+    learning_topic_summaries: list[
+        TrainingJourneyAnalyticsLearningTopicSummary
+    ] = Field(default_factory=list)
     weakness_heatmap: list[TrainingJourneyAnalyticsWeaknessHeatmapEntry] = Field(
         default_factory=list
     )

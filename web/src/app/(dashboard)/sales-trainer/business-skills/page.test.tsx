@@ -405,7 +405,7 @@ describe("BusinessSkillsPage", () => {
                 {
                     chapter_id: "chapter-1",
                     title: "准备动作",
-                    content: "![商务礼仪图](https://example.com/business.png)\n\n拜访前确认客户背景。",
+                    content: "![商务礼仪图](https://example.com/business.png)\n\n拜访前确认客户背景。\n\n55387定律告诉我们，客户会在短时间内形成第一印象。",
                     order_index: 1,
                 },
                 {
@@ -433,6 +433,9 @@ describe("BusinessSkillsPage", () => {
         expect(screen.getByText("见客户前商务礼仪")).toBeTruthy();
         expect(screen.getByRole("button", { name: /第一节 准备动作/ })).toBeTruthy();
         expect(screen.getByText("拜访前确认客户背景。")).toBeTruthy();
+        expect(screen.getByText(/55387定律/).closest("blockquote")).toBeTruthy();
+        expect(screen.queryByText("当前阅读")).toBeNull();
+        expect(screen.getByRole("heading", { name: "训练路径" })).toBeTruthy();
         expect(screen.getByRole("img", { name: "商务礼仪图" }).getAttribute("src")).toBe(
             "https://example.com/business.png",
         );
@@ -472,7 +475,7 @@ describe("BusinessSkillsPage", () => {
         render(<BusinessSkillsPage />);
 
         expect(await screen.findByText("见客户前商务礼仪")).toBeTruthy();
-        expect(screen.getByText((_, element) => element?.textContent === "0/1 已完成")).toBeTruthy();
+        expect(screen.getAllByText("阅读 0/1").length).toBeGreaterThan(0);
         expect(screen.getByText("完成要求阅读的小单元后开放考试入口。")).toBeTruthy();
         expect(screen.queryByRole("link", { name: /进入考试/ })).toBeNull();
     });
@@ -577,7 +580,7 @@ describe("BusinessSkillsPage", () => {
             );
         });
 
-        fireEvent.click(screen.getByLabelText("A. 提前说明并表达歉意"));
+        fireEvent.click(screen.getByLabelText(/提前说明并表达歉意/));
         fireEvent.click(screen.getByRole("button", { name: "提交小测" }));
 
         await waitFor(() => {
@@ -604,6 +607,24 @@ describe("BusinessSkillsPage", () => {
         expect(screen.getByText("规则判分 · 题库标准答案")).toBeTruthy();
         expect(screen.getByText(/题目解析：/)).toBeTruthy();
         expect(screen.getByText(/提前说明并表达歉意，能给客户预期并保留信任。/)).toBeTruthy();
+    });
+
+    it("switches to a dedicated quiz workspace instead of rendering the quiz under the article", async () => {
+        getBusinessUnitsMock.mockResolvedValueOnce(learningUnitsResponse(["chapter-1"]));
+
+        render(<BusinessSkillsPage />);
+
+        expect(await screen.findByText("拜访前确认客户背景。")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "开始小测" }));
+
+        expect(await screen.findByText("独立小测工作区")).toBeTruthy();
+        expect(screen.getByText("小单元测验")).toBeTruthy();
+        expect(screen.queryByText("拜访前确认客户背景。")).toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: "返回文章" }));
+
+        expect(screen.getByText("拜访前确认客户背景。")).toBeTruthy();
+        expect(screen.queryByText("独立小测工作区")).toBeNull();
     });
 
     it("shows AI scoring provenance for short-answer quiz review", async () => {
@@ -636,7 +657,7 @@ describe("BusinessSkillsPage", () => {
         expect(await screen.findByText("见客户前商务礼仪")).toBeTruthy();
         fireEvent.click(screen.getByRole("button", { name: "开始小测" }));
         expect(await screen.findByText("商务拜访即将迟到时，最合适的做法是什么？")).toBeTruthy();
-        fireEvent.click(screen.getByLabelText("A. 提前说明并表达歉意"));
+        fireEvent.click(screen.getByLabelText(/提前说明并表达歉意/));
         fireEvent.click(screen.getByRole("button", { name: "提交小测" }));
 
         expect(await screen.findByText("本节诊断")).toBeTruthy();
@@ -707,7 +728,7 @@ describe("BusinessSkillsPage", () => {
         expect(await screen.findByText("见客户前商务礼仪")).toBeTruthy();
         fireEvent.click(screen.getByRole("button", { name: "开始小测" }));
         expect(await screen.findByText("商务拜访即将迟到时，最合适的做法是什么？")).toBeTruthy();
-        fireEvent.click(screen.getByLabelText("A. 提前说明并表达歉意"));
+        fireEvent.click(screen.getByLabelText(/提前说明并表达歉意/));
         fireEvent.click(screen.getByRole("button", { name: "提交小测" }));
 
         expect(await screen.findByText("等待评分结果")).toBeTruthy();
@@ -729,7 +750,7 @@ describe("BusinessSkillsPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "开始小测" }));
         expect(await screen.findByText("商务拜访即将迟到时，最合适的做法是什么？")).toBeTruthy();
 
-        const answer = screen.getByLabelText("A. 提前说明并表达歉意") as HTMLInputElement;
+        const answer = screen.getByLabelText(/提前说明并表达歉意/) as HTMLInputElement;
         fireEvent.click(answer);
         fireEvent.click(screen.getByRole("button", { name: "提交小测" }));
 

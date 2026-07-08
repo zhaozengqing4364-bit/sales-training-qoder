@@ -59,6 +59,10 @@ async function* streamSession<T extends ChatSession>(session: T) {
     };
 }
 
+async function* emptyCoachStream() {
+    return;
+}
+
 function createDeferred() {
     let resolve!: () => void;
     const promise = new Promise<void>((promiseResolve) => {
@@ -160,7 +164,7 @@ async function* streamSessionWithAssistantMarkdownDelta(
     };
 }
 
-async function* streamSessionWithTwoReasoningDeltas(
+async function* streamSessionWithTwoAssistantDeltas(
     sessionId: string,
     completedSession: ChatSession,
     gate: { readonly promise: Promise<void> },
@@ -173,21 +177,21 @@ async function* streamSessionWithTwoReasoningDeltas(
         session_id: sessionId,
     };
     yield {
-        type: "reasoning_text_delta" as const,
+        type: "assistant_text_delta" as const,
         phase: "generating_next_card" as const,
         session_id: sessionId,
-        delta_id: `${sessionId}:reasoning_text`,
+        delta_id: `${sessionId}:assistant_text`,
         status: "streaming" as const,
-        text: "先判断接待目标。",
+        text: "先确认客户到访目标。",
     };
     await gate.promise;
     yield {
-        type: "reasoning_text_delta" as const,
+        type: "assistant_text_delta" as const,
         phase: "generating_next_card" as const,
         session_id: sessionId,
-        delta_id: `${sessionId}:reasoning_text`,
+        delta_id: `${sessionId}:assistant_text`,
         status: "streaming" as const,
-        text: "再判断称呼边界。",
+        text: "先确认客户到访目标，再判断称呼边界。",
     };
     await snapshotGate.promise;
     yield {
@@ -725,14 +729,19 @@ describe("AiCoachPage", () => {
             );
         });
         expect(await screen.findByText("商务技巧 AI 教练")).toBeTruthy();
+        expect(screen.queryByText("返回新人训练路径")).toBeNull();
+        expect(screen.getByRole("link", { name: "返回" }).getAttribute("href")).toBe("/sales-trainer");
+        expect(screen.getByText("对话陪练")).toBeTruthy();
+        expect(screen.getByText("当前训练状态")).toBeTruthy();
+        expect(screen.getByText("教练对话与记录")).toBeTruthy();
         expect(screen.queryByText("训练卡工作台")).toBeNull();
-        expect(screen.getByText("接待与拜访执行")).toBeTruthy();
+        expect(screen.getAllByText("接待与拜访执行").length).toBeGreaterThan(0);
         expect(screen.getAllByText(/接待拜访准备与执行/).length).toBeGreaterThan(0);
         await waitFor(() => {
             expect(screen.getAllByText("AI 教练达标").length).toBeGreaterThan(0);
         });
         expect(screen.getAllByText("未开始").length).toBeGreaterThan(0);
-        expect(screen.getByText(/作答中/)).toBeTruthy();
+        expect(screen.getAllByText(/作答中/).length).toBeGreaterThan(0);
         expect(screen.getByText("我想练一下客户接待。")).toBeTruthy();
         expect(screen.getByText("可以，我们先聊接待准备；需要验证时我会给你一张练习卡。")).toBeTruthy();
         expect(screen.getAllByText("场景判断卡").length).toBeGreaterThan(0);
@@ -740,6 +749,18 @@ describe("AiCoachPage", () => {
         expect(screen.queryByText("第 2 题：客户到访前应该先确认什么？")).toBeNull();
         expect(screen.queryByText("拜访前先确认接待条件。")).toBeNull();
         expect(screen.getByPlaceholderText("可以问教练，也可以先提交当前练习卡")).toBeTruthy();
+    });
+
+    it("shows a retryable empty-stream error when the coach returns no events", async () => {
+        const user = userEvent.setup();
+        mockStartChatStream.mockImplementation(() => emptyCoachStream());
+
+        render(<AiCoachPage />);
+        await startCurrentTraining(user);
+
+        expect(await screen.findByText("商务技巧 AI 教练暂不可用")).toBeTruthy();
+        expect(screen.getByText("训练请求没有返回有效结果，请稍后重试。")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "重试" })).toBeTruthy();
     });
 
     it("renders disabled streamed card deltas before the generated card snapshot arrives", async () => {
@@ -752,7 +773,7 @@ describe("AiCoachPage", () => {
         render(<AiCoachPage />);
         await startCurrentTraining(user);
 
-        expect(await screen.findByText("训练卡生成中")).toBeTruthy();
+        expect((await screen.findAllByText("训练卡生成中")).length).toBeGreaterThan(0);
         expect(
             screen.getByText(
                 "题干、选项和评分规则还在生成；你可以先看到卡片结构，生成完成前不能作答。",
@@ -889,7 +910,7 @@ describe("AiCoachPage", () => {
         expect(screen.getAllByText("单选")).toHaveLength(1);
     });
 
-    it("streams reasoning text before the final snapshot", async () => {
+    it("renders streamed assistant text as the latest coach message before the final snapshot", async () => {
         const user = userEvent.setup();
         const gate = createDeferred();
         mockStartChatStream.mockImplementation(() => streamSession(welcomeSession));
@@ -907,11 +928,11 @@ describe("AiCoachPage", () => {
         expect((await screen.findAllByText("正在组织教练回复。")).length).toBeGreaterThan(0);
         expect(screen.queryByText("思考中")).toBeNull();
         expect(screen.queryByText("正在理解你的回答")).toBeNull();
-        expect(screen.getByText("思考过程")).toBeTruthy();
-        expect(screen.getByText("先判断接待目标。")).toBeTruthy();
+        expect(screen.queryByText("思考过程")).toBeNull();
+        expect(screen.queryByText("先判断接待目标。")).toBeNull();
         expect(screen.queryByText("生成中")).toBeNull();
-        expect(screen.queryByText("建议")).toBeNull();
-        expect(screen.queryByText("先确认客户到访目标")).toBeNull();
+        expect(screen.getByText("建议")).toBeTruthy();
+        expect(screen.getByText("先确认客户到访目标")).toBeTruthy();
         expect(screen.queryByText(/\*\*建议\*\*/)).toBeNull();
 
         gate.resolve();
@@ -922,7 +943,7 @@ describe("AiCoachPage", () => {
         expect(screen.getByText("再安排接待动作")).toBeTruthy();
     });
 
-    it("keeps the conversation pinned while reasoning text grows", async () => {
+    it("keeps the conversation pinned while streamed assistant text grows", async () => {
         const user = userEvent.setup();
         const gate = createDeferred();
         const snapshotGate = createDeferred();
@@ -951,7 +972,7 @@ describe("AiCoachPage", () => {
         });
         mockStartChatStream.mockImplementation(() => streamSession(welcomeSession));
         mockSendChatStream.mockImplementation(() =>
-            streamSessionWithTwoReasoningDeltas("s1", markdownReplySession, gate, snapshotGate),
+            streamSessionWithTwoAssistantDeltas("s1", markdownReplySession, gate, snapshotGate),
         );
 
         try {
@@ -962,12 +983,12 @@ describe("AiCoachPage", () => {
             await user.type(input, "讲一下接待准备。");
             await user.click(screen.getByRole("button", { name: "发送" }));
 
-            expect(await screen.findByText(/先判断接待目标/)).toBeTruthy();
+            expect(await screen.findByText(/先确认客户到访目标/)).toBeTruthy();
             scrollTo.mockClear();
 
             gate.resolve();
 
-            expect(await screen.findByText(/先判断接待目标。再判断称呼边界。/)).toBeTruthy();
+            expect(await screen.findByText(/先确认客户到访目标，再判断称呼边界。/)).toBeTruthy();
             await waitFor(() => {
                 expect(scrollTo).toHaveBeenCalled();
             });
@@ -1027,8 +1048,8 @@ describe("AiCoachPage", () => {
         expect((await screen.findAllByText("正在生成下一步教练回复。")).length)
             .toBeGreaterThan(0);
         expect(screen.queryByText("生成中")).toBeNull();
-        expect(screen.queryByText("下一步")).toBeNull();
-        expect(screen.queryByText(/继续练现场引导/)).toBeNull();
+        expect(screen.getByText("下一步")).toBeTruthy();
+        expect(screen.getByText(/继续练现场引导/)).toBeTruthy();
 
         gate.resolve();
 
@@ -1133,9 +1154,8 @@ describe("AiCoachPage", () => {
         render(<AiCoachPage />);
         await startCurrentTraining(userEvent.setup());
 
-        expect(await screen.findByText(/本轮总结/)).toBeTruthy();
+        expect((await screen.findAllByText(/本轮总结/)).length).toBeGreaterThan(0);
         expect(screen.getByText("本轮训练总结")).toBeTruthy();
-        expect(screen.getByText("结束面板")).toBeTruthy();
         expect(screen.getByText("本轮已达标")).toBeTruthy();
         expect(screen.getAllByText("继续做一题新场景。").length).toBeGreaterThan(0);
         expect(screen.queryByText("第 1 题：客户到访前应该先确认什么？")).toBeNull();

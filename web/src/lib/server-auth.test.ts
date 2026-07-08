@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const headersMock = vi.fn();
 const redirectMock = vi.fn((path: string) => {
@@ -20,6 +20,10 @@ describe("server auth boundary", () => {
         vi.unstubAllGlobals();
         headersMock.mockReset();
         redirectMock.mockClear();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it("forwards the incoming cookie header when fetching the current user", async () => {
@@ -125,5 +129,65 @@ describe("server auth boundary", () => {
             requireServerSession({ requiredRoles: ["admin"], unauthorizedRedirectTo: "/" }),
         ).rejects.toThrow("redirect:/");
         expect(redirectMock).toHaveBeenCalledWith("/");
+    });
+
+    it("returns null when the server session lookup times out", async () => {
+        vi.useFakeTimers();
+        headersMock.mockResolvedValue(
+            new Headers({
+                cookie: "session=slow-cookie",
+            }),
+        );
+
+        vi.stubGlobal(
+            "fetch",
+            vi.fn((_url: string, options?: RequestInit) => {
+                return new Promise((_resolve, reject) => {
+                    options?.signal?.addEventListener("abort", () => {
+                        reject(new DOMException("The operation was aborted.", "AbortError"));
+                    });
+                });
+            }),
+        );
+
+        const { getServerSessionUser } = await import("./server-auth");
+        const sessionPromise = getServerSessionUser();
+
+        await vi.advanceTimersByTimeAsync(8_000);
+
+        await expect(sessionPromise).resolves.toBeNull();
+    });
+
+    it("returns null when the server session response body times out", async () => {
+        vi.useFakeTimers();
+        headersMock.mockResolvedValue(
+            new Headers({
+                cookie: "session=slow-body-cookie",
+            }),
+        );
+
+        vi.stubGlobal(
+            "fetch",
+            vi.fn((_url: string, options?: RequestInit) => {
+                return Promise.resolve({
+                    status: 200,
+                    ok: true,
+                    json: () => {
+                        return new Promise((_resolve, reject) => {
+                            options?.signal?.addEventListener("abort", () => {
+                                reject(new DOMException("The operation was aborted.", "AbortError"));
+                            });
+                        });
+                    },
+                } as Response);
+            }),
+        );
+
+        const { getServerSessionUser } = await import("./server-auth");
+        const sessionPromise = getServerSessionUser();
+
+        await vi.advanceTimersByTimeAsync(8_000);
+
+        await expect(sessionPromise).resolves.toBeNull();
     });
 });

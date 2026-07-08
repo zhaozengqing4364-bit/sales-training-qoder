@@ -118,3 +118,40 @@ async def require_learner_active_path_module_access(
             raise LearnerUnitAccessError()
         return
     raise LearnerUnitAccessError()
+
+
+async def require_learner_learning_topic_access(
+    db: AsyncSession,
+    *,
+    actor: User,
+    topic_key: str,
+) -> None:
+    require_sales_trainer_learner(actor)
+
+    from sales_trainer.services.training_journey_service import (
+        TrainingJourneyError,
+        TrainingJourneyService,
+    )
+
+    try:
+        journey = await TrainingJourneyService(db).get_learner_journey(
+            str(actor.user_id),
+            viewer=actor,
+        )
+    except TrainingJourneyError as exc:
+        if exc.code == "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]":
+            raise LearnerUnitAccessError() from exc
+        raise LearnerUnitAccessError(
+            exc.code,
+            exc.message,
+            exc.status_code,
+        ) from exc
+    for topic in journey.get("learning_topics") or []:
+        if not isinstance(topic, dict):
+            continue
+        if str(topic.get("topic_key") or "") != topic_key:
+            continue
+        if bool(topic.get("blocks_next")):
+            raise LearnerUnitAccessError()
+        return
+    raise LearnerUnitAccessError()

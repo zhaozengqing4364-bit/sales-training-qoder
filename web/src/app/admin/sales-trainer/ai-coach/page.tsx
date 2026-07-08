@@ -11,7 +11,11 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
-import type { AiCoachAdminConfigLike, SalesTrainerAdminCapabilities } from "@/lib/api/types";
+import type {
+    AdminModelConfigListItem,
+    AiCoachAdminConfigLike,
+    SalesTrainerAdminCapabilities,
+} from "@/lib/api/types";
 
 type CoachMode = "single_choice_drill" | "multiple_choice_drill" | "short_answer_drill" | "mixed_drill";
 type InteractionType = "single_choice" | "multiple_choice" | "short_answer";
@@ -144,6 +148,8 @@ interface AiCoachAdminConfig {
     min_turns: number;
     max_turns: number;
     mastery_threshold: number;
+    generation_model: string | null;
+    scoring_model: string | null;
     prompt_template_id: string | null;
     prompt_revision_id: string | null;
     prompt_contract_hash: string | null;
@@ -196,6 +202,8 @@ const DEFAULT_CONFIG: AiCoachAdminConfig = {
     min_turns: 3,
     max_turns: 10,
     mastery_threshold: 80,
+    generation_model: null,
+    scoring_model: null,
     prompt_template_id: null,
     prompt_revision_id: null,
     prompt_contract_hash: null,
@@ -219,6 +227,11 @@ const GENERATION_TIMEOUT_MIN = 5;
 const GENERATION_TIMEOUT_MAX = 120;
 const RECOVERY_PROMPT_MIN = 1;
 const RECOVERY_PROMPT_MAX = 4;
+
+function modelConfigOptionLabel(config: AdminModelConfigListItem): string {
+    const defaultSuffix = config.is_default ? " · 默认" : "";
+    return `${config.name} · ${config.provider}/${config.model_name}${defaultSuffix}`;
+}
 
 function validate(config: AiCoachAdminConfig): string | null {
     if (!isCoachMode(config.coach_mode)) {
@@ -513,6 +526,12 @@ function normalize(raw: unknown): AiCoachAdminConfig {
         mastery_threshold: Number.isFinite(record.mastery_threshold)
             ? Number(record.mastery_threshold)
             : DEFAULT_CONFIG.mastery_threshold,
+        generation_model: typeof record.generation_model === "string" && record.generation_model.trim()
+            ? record.generation_model.trim()
+            : null,
+        scoring_model: typeof record.scoring_model === "string" && record.scoring_model.trim()
+            ? record.scoring_model.trim()
+            : null,
         prompt_template_id: typeof record.prompt_template_id === "string" && record.prompt_template_id.trim()
             ? record.prompt_template_id.trim()
             : null,
@@ -551,6 +570,9 @@ export default function AdminAiCoachConfigPage() {
     const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
     const [capabilityError, setCapabilityError] = useState<string | null>(null);
     const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const [llmConfigs, setLlmConfigs] = useState<AdminModelConfigListItem[]>([]);
+    const [isLoadingModelConfigs, setIsLoadingModelConfigs] = useState(false);
+    const [modelConfigError, setModelConfigError] = useState<string | null>(null);
     const canAccessAiCoach = isSalesTrainerAdminPathAllowedForCapabilities(pathname, adminCapabilities);
 
     const loadCapabilities = useCallback(async () => {
@@ -588,6 +610,20 @@ export default function AdminAiCoachConfigPage() {
         }
     }, [canAccessAiCoach, moduleKey]);
 
+    const loadModelConfigs = useCallback(async () => {
+        setIsLoadingModelConfigs(true);
+        setModelConfigError(null);
+        try {
+            const response = await api.admin.getModelConfigs();
+            setLlmConfigs((response.llm ?? []).filter((item) => item.is_active));
+        } catch (loadError) {
+            setLlmConfigs([]);
+            setModelConfigError(getApiErrorMessage(loadError));
+        } finally {
+            setIsLoadingModelConfigs(false);
+        }
+    }, []);
+
     useEffect(() => {
         void loadCapabilities();
     }, [loadCapabilities]);
@@ -606,11 +642,45 @@ export default function AdminAiCoachConfigPage() {
         void load();
     }, [canAccessAiCoach, isCapabilityLoading, load]);
 
+    useEffect(() => {
+        if (isCapabilityLoading || !canAccessAiCoach) {
+            return;
+        }
+        void loadModelConfigs();
+    }, [canAccessAiCoach, isCapabilityLoading, loadModelConfigs]);
+
     const validationError = useMemo(() => validate(config), [config]);
     const hasRemediation = remediation !== null;
 
     function updateField<K extends keyof AiCoachAdminConfig>(key: K, value: AiCoachAdminConfig[K]) {
         setConfig((current) => ({ ...current, [key]: value }));
+    }
+
+    function renderLlmModelOptions(currentValue: string | null) {
+        const normalized = currentValue?.trim() ?? "";
+        const matchedConfig = normalized
+            ? llmConfigs.find((item) => item.id === normalized || item.model_name === normalized)
+            : null;
+        const hasExactId = normalized
+            ? llmConfigs.some((item) => item.id === normalized)
+            : true;
+        return (
+            <>
+                <option value="">系统默认 LLM 配置</option>
+                {normalized && !hasExactId ? (
+                    <option value={normalized}>
+                        {matchedConfig
+                            ? `当前配置：${modelConfigOptionLabel(matchedConfig)}`
+                            : `当前配置：${normalized}（未在启用列表）`}
+                    </option>
+                ) : null}
+                {llmConfigs.map((item) => (
+                    <option key={item.id} value={item.id}>
+                        {modelConfigOptionLabel(item)}
+                    </option>
+                ))}
+            </>
+        );
     }
 
     function toggleInteractionType(value: InteractionType) {
@@ -808,6 +878,40 @@ export default function AdminAiCoachConfigPage() {
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2">
+                        <fieldset className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 md:col-span-2">
+                            <legend className="px-1 text-sm font-semibold text-slate-900">LLM 模型</legend>
+                            <div className="mt-2 grid gap-4 md:grid-cols-2">
+                                <label className="flex flex-col gap-1 text-sm">
+                                    <span className="font-medium text-slate-700">对话生成模型</span>
+                                    <select
+                                        className="h-10 rounded-xl border border-slate-200 bg-white px-3"
+                                        value={config.generation_model ?? ""}
+                                        disabled={isLoadingModelConfigs}
+                                        onChange={(event) => updateField("generation_model", event.target.value || null)}
+                                    >
+                                        {renderLlmModelOptions(config.generation_model)}
+                                    </select>
+                                </label>
+                                <label className="flex flex-col gap-1 text-sm">
+                                    <span className="font-medium text-slate-700">简答评分模型</span>
+                                    <select
+                                        className="h-10 rounded-xl border border-slate-200 bg-white px-3"
+                                        value={config.scoring_model ?? ""}
+                                        disabled={isLoadingModelConfigs}
+                                        onChange={(event) => updateField("scoring_model", event.target.value || null)}
+                                    >
+                                        {renderLlmModelOptions(config.scoring_model)}
+                                    </select>
+                                </label>
+                            </div>
+                            {isLoadingModelConfigs ? (
+                                <p className="mt-2 text-xs text-slate-500">正在加载模型配置...</p>
+                            ) : null}
+                            {modelConfigError ? (
+                                <p className="mt-2 text-xs font-medium text-red-600">{modelConfigError}</p>
+                            ) : null}
+                        </fieldset>
+
                         <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 p-3">
                             <div>
                                 <p className="text-sm font-semibold text-slate-900">启用 AI 教练</p>

@@ -7,6 +7,7 @@ import {
     AlertTriangle,
     ArrowLeft,
     ArrowRight,
+    BookOpen,
     CheckCircle2,
     Layers,
     Play,
@@ -552,6 +553,80 @@ export default function SalesTrainerPage() {
                                         )}
                                     </GlassCard>
                                 ))}
+                            </div>
+                        </section>
+                    ) : null}
+
+                    {(journey.learning_topics ?? []).length > 0 ? (
+                        <section className="space-y-4">
+                            <div>
+                                <h2 className="text-xl font-black text-slate-900">学习专题</h2>
+                                <p className="mt-1 text-sm text-slate-500">
+                                    这些内容用于补充学习和记录小测得分，不影响后续必修训练。
+                                </p>
+                            </div>
+                            <div className="grid gap-4 xl:grid-cols-2">
+                                {(journey.learning_topics ?? [])
+                                    .slice()
+                                    .sort((left, right) => left.order_index - right.order_index)
+                                    .map((topic) => {
+                                        const scoredUnits = topic.units.filter((unit) => unit.score !== null && unit.max_score !== null);
+                                        const passedUnits = topic.units.filter((unit) => unit.passed === true).length;
+                                        const latestScoredUnit = scoredUnits[0] ?? null;
+                                        return (
+                                            <GlassCard key={topic.topic_key} className="space-y-4 p-5">
+                                                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                                    <div className="space-y-2">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                                                                <BookOpen className="h-5 w-5" />
+                                                            </div>
+                                                            <Badge variant="outline">非阻塞学习</Badge>
+                                                            <Badge variant={topic.status === "passed" ? "green" : topic.status === "needs_remediation" ? "orange" : "gray"}>
+                                                                {topic.status === "passed"
+                                                                    ? "已完成"
+                                                                    : topic.status === "needs_remediation"
+                                                                      ? "需复盘"
+                                                                      : topic.status === "in_progress"
+                                                                        ? "学习中"
+                                                                        : "未开始"}
+                                                            </Badge>
+                                                        </div>
+                                                        <h3 className="text-lg font-black text-slate-900">{topic.title}</h3>
+                                                        <p className="text-sm leading-6 text-slate-500">
+                                                            {topic.description || "完成文章阅读和小单元测验后，这里会显示最新得分。"}
+                                                        </p>
+                                                    </div>
+                                                    <div className="rounded-2xl bg-slate-50 px-4 py-3 text-right">
+                                                        <p className="text-xs text-slate-500">小单元通过</p>
+                                                        <p className="mt-1 text-lg font-black text-slate-900">
+                                                            {passedUnits} / {topic.units.length}
+                                                        </p>
+                                                        {latestScoredUnit ? (
+                                                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                                                                最近得分 {latestScoredUnit.score} / {latestScoredUnit.max_score}
+                                                            </p>
+                                                        ) : null}
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Button asChild variant="primary">
+                                                        <Link href="/sales-trainer/learning-topics/business-etiquette">
+                                                            <ArrowRight className="mr-2 h-4 w-4" />
+                                                            进入学习
+                                                        </Link>
+                                                    </Button>
+                                                    {topic.ai_coach?.available && topic.ai_coach.coach_path ? (
+                                                        <Button asChild variant="outline">
+                                                            <Link href={topic.ai_coach.coach_path}>
+                                                                AI 教练
+                                                            </Link>
+                                                        </Button>
+                                                    ) : null}
+                                                </div>
+                                            </GlassCard>
+                                        );
+                                    })}
                             </div>
                         </section>
                     ) : null}

@@ -207,6 +207,32 @@ export default function SalesTrainerAudioUploadPage() {
         && Boolean(selectedFile)
         && passThreshold !== null
         && (!requiredMaterial || confirmedMaterialVersionId === requiredMaterial.current_version.version_id);
+    const requiredMaterialConfirmationLabel = requiredMaterial
+        ? `我已下载并确认使用 ${requiredMaterial.current_version.version_label} 版本进行本次录音。`
+        : null;
+    const uploadReadiness = (() => {
+        if (!selectedFile) {
+            return null;
+        }
+        if (passThreshold === null) {
+            return {
+                tone: "warning",
+                message: "当前评分标准配置缺失，请联系管理员补齐后再上传。",
+            } as const;
+        }
+        if (requiredMaterial && confirmedMaterialVersionId !== requiredMaterial.current_version.version_id) {
+            return {
+                tone: "warning",
+                message: `下一步：勾选上方“${requiredMaterialConfirmationLabel}”，然后上传评分。`,
+            } as const;
+        }
+        return {
+            tone: "success",
+            message: requiredMaterial
+                ? "录音与材料版本已确认，可以上传并开始评分。"
+                : "录音已选择，可以上传并开始评分。",
+        } as const;
+    })();
 
     async function handleUpload() {
         if (!selectedFile || !unit) {
@@ -528,6 +554,21 @@ export default function SalesTrainerAudioUploadPage() {
                     </div>
                 ) : null}
 
+                {uploadReadiness ? (
+                    <div
+                        id="sales-trainer-audio-upload-readiness"
+                        aria-live="polite"
+                        className={cn(
+                            "rounded-2xl border px-4 py-3 text-sm",
+                            uploadReadiness.tone === "success"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-amber-200 bg-amber-50 text-amber-800",
+                        )}
+                    >
+                        {uploadReadiness.message}
+                    </div>
+                ) : null}
+
                 {error ? (
                     <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                         {error}
@@ -544,6 +585,8 @@ export default function SalesTrainerAudioUploadPage() {
                         onClick={() => void handleUpload()}
                         disabled={!canUpload}
                         isLoading={isUploading}
+                        aria-describedby={uploadReadiness ? "sales-trainer-audio-upload-readiness" : undefined}
+                        title={!canUpload && uploadReadiness ? uploadReadiness.message : undefined}
                     >
                         <Upload className="mr-2 h-4 w-4" />
                         {isUploading ? "上传中..." : "上传并开始评分"}

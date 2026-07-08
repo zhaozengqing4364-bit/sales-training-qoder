@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from types import SimpleNamespace
 from typing import cast
 
@@ -10,6 +11,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.monitoring.logger import get_logger
 from sales_trainer.ai_coach_chat_schemas import (
     AiCoachChatEventAnswerSubmit,
     AiCoachChatMessageCreate,
@@ -40,6 +42,8 @@ AiCoachChatStreamDeltaEventV1 = (
     | AiCoachChatStreamAssistantTextDeltaEventV1
     | AiCoachChatStreamUiEventDeltaEventV1
 )
+
+logger = get_logger(__name__)
 
 
 class AiCoachChatStreamService:
@@ -308,6 +312,22 @@ class AiCoachChatStreamService:
                 self._error(
                     AI_COACH_STREAM_TIMEOUT_CODE,
                     AI_COACH_STREAM_TIMEOUT_MESSAGE,
+                )
+            )
+        except Exception as exc:
+            rollback = getattr(self._service, "rollback_cancelled_generation", None)
+            if callable(rollback):
+                with suppress(Exception):
+                    await rollback()
+            logger.error(
+                "Unexpected AI coach stream failure",
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+            yield self._encode(
+                self._error(
+                    "[AI_COACH_STREAM_FAILED]",
+                    "AI 教练生成失败，请稍后重试或新开一局。",
                 )
             )
 

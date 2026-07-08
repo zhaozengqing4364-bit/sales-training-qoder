@@ -32,6 +32,11 @@ from sales_trainer.services.ai_coach_chat_generation_streaming import (
     prompt_for_attempt,
 )
 from sales_trainer.services.ai_coach_chat_next_action import AiCoachNextActionDecision
+from sales_trainer.services.ai_coach_model_config import (
+    AiCoachModelConfigError,
+    model_config_contract_payload,
+    resolve_ai_coach_llm_model_config_from_db,
+)
 from sales_trainer.services.ai_coach_session_service import AiCoachSessionService
 from sales_trainer.services.prompt_template_revision_resolver import (
     RESULT_AUDIT_HISTORY_UNAVAILABLE,
@@ -59,6 +64,13 @@ class AiCoachChatNextActionGenerator:
         history: list[SalesTrainerAiCoachChatMessage],
         on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> AiCoachChatResponseInternalV1:
+        try:
+            model_config = await resolve_ai_coach_llm_model_config_from_db(
+                self._db,
+                config.generation_model,
+            )
+        except AiCoachModelConfigError as exc:
+            raise AiCoachChatGenerationError(exc.code, exc.message, 409) from exc
         contract = await self._compile_contract(
             session=session,
             config=config,
@@ -68,9 +80,14 @@ class AiCoachChatNextActionGenerator:
             answer_payload=answer_payload,
             answered_event_payload=answered_event_payload,
             history=history,
+            model_config=model_config,
         )
         max_attempts = config.retry_policy.max_retries + 1
-        llm_service = LLMService()
+        llm_service = (
+            LLMService(config=model_config)
+            if model_config is not None
+            else LLMService()
+        )
         if on_generation_delta is not None:
             streamed = await emit_streamed_response(
                 llm=llm_service,
@@ -88,7 +105,7 @@ class AiCoachChatNextActionGenerator:
             )
             streamed.response.runtime_audit = AiCoachChatGenerator._llm_runtime_audit(
                 llm_service,
-                None,
+                model_config,
                 session_id=str(session.session_id),
             )
             return streamed.response
@@ -114,7 +131,7 @@ class AiCoachChatNextActionGenerator:
                 self._validate_response_for_action(parsed, decision.action)
                 parsed.runtime_audit = AiCoachChatGenerator._llm_runtime_audit(
                     llm_service,
-                    None,
+                    model_config,
                     session_id=str(session.session_id),
                 )
                 return parsed
@@ -140,6 +157,7 @@ class AiCoachChatNextActionGenerator:
         answer_payload: AiCoachAnswerPayloadV1,
         answered_event_payload: dict[str, Any],
         history: list[SalesTrainerAiCoachChatMessage],
+        model_config: object | None,
     ) -> CompiledPromptContract:
         resolver = PromptTemplateRevisionResolver(self._db)
         try:
@@ -159,7 +177,9 @@ class AiCoachChatNextActionGenerator:
                 if resolution.status == RESULT_AUDIT_HISTORY_UNAVAILABLE
                 else "[AI_COACH_PROMPT_REVISION_FALLBACK]"
             )
-            raise AiCoachChatGenerationError(code, "AI 教练 Prompt revision 不可用。", 409)
+            raise AiCoachChatGenerationError(
+                code, "AI 教练 Prompt revision 不可用。", 409
+            )
         compile_result = PromptTemplateService(
             self._db
         ).compile_runtime_prompt_contract(
@@ -176,7 +196,7 @@ class AiCoachChatNextActionGenerator:
             ),
             runtime_consumer="ai_coach.chat.next_action",
             system_message=self._system_message(config, decision),
-            model_config=None,
+            model_config=model_config_contract_payload(model_config),
         )
         if not compile_result.is_success or compile_result.value is None:
             raise AiCoachChatGenerationError(
@@ -220,7 +240,9 @@ class AiCoachChatNextActionGenerator:
                 "interaction_snapshot"
             ),
             "user_answer_payload": answer_payload.model_dump(mode="json"),
-            "allowed_ui_event_types": list(AiCoachChatGenerator.allowed_ui_event_types(config)),
+            "allowed_ui_event_types": list(
+                AiCoachChatGenerator.allowed_ui_event_types(config)
+            ),
             "allowed_interaction_types": list(config.allowed_interaction_types),
             "allowed_training_card_types": list(
                 AiCoachChatPromptCompiler.compatible_training_card_types(config)
@@ -233,7 +255,9 @@ class AiCoachChatNextActionGenerator:
             "current_focus": state.current_focus,
             "difficulty": state.difficulty,
             "article_title": article.get("title") if isinstance(article, dict) else "",
-            "article_summary": article.get("summary") if isinstance(article, dict) else "",
+            "article_summary": article.get("summary")
+            if isinstance(article, dict)
+            else "",
             "article_snapshot": session.article_snapshot or {},
             "chapter_titles": self._chapter_titles(chapters),
             "business_etiquette_learning_units": learning_units,
@@ -266,7 +290,7 @@ class AiCoachChatNextActionGenerator:
             AiCoachChatPromptCompiler.compatible_training_card_types(config)
         )
         action_rule = (
-            "continue_drill 与 increase_difficulty 必须生成且只能生成 1 张 quiz_card；"
+            "continue_drill 与 increase_difficulty 最多生成 1 张 quiz_card，也可以只解释或追问；"
             "remediate 可生成 1 张 explanation_card，并在需要巩固时生成 1 张 quiz_card；"
             "switch_scenario 可生成 1 张 explanation_card 和 1 张 quiz_card；"
             "ask_user_choice 只能生成 1 个 followup_prompt；"
@@ -306,12 +330,14 @@ class AiCoachChatNextActionGenerator:
         match action:
             case "continue_drill" | "increase_difficulty":
                 if (
-                    counts["quiz_card"] != 1
+                    counts["quiz_card"] > 1
                     or counts["explanation_card"] != 0
                     or counts["summary_card"] != 0
                     or counts["followup_prompt"] > 1
                 ):
-                    invalid("该 next_coach_action 必须生成且只能生成 1 张 quiz_card，可附 1 个 followup_prompt。")
+                    invalid(
+                        "该 next_coach_action 最多生成 1 张 quiz_card，可附 1 个 followup_prompt。"
+                    )
             case "remediate":
                 if (
                     counts["quiz_card"] > 1
@@ -319,7 +345,9 @@ class AiCoachChatNextActionGenerator:
                     or counts["summary_card"] != 0
                     or counts["followup_prompt"] > 1
                 ):
-                    invalid("remediate 最多生成 1 张 explanation_card 和 1 张 quiz_card。")
+                    invalid(
+                        "remediate 最多生成 1 张 explanation_card 和 1 张 quiz_card。"
+                    )
             case "switch_scenario":
                 if (
                     counts["quiz_card"] > 1
@@ -327,7 +355,9 @@ class AiCoachChatNextActionGenerator:
                     or counts["summary_card"] != 0
                     or counts["followup_prompt"] > 1
                 ):
-                    invalid("switch_scenario 最多生成 1 张 quiz_card，可附 1 个 followup_prompt。")
+                    invalid(
+                        "switch_scenario 最多生成 1 张 quiz_card，可附 1 个 followup_prompt。"
+                    )
             case "summarize":
                 if (
                     counts["summary_card"] != 1
@@ -335,7 +365,9 @@ class AiCoachChatNextActionGenerator:
                     or counts["explanation_card"] != 0
                     or counts["followup_prompt"] > 1
                 ):
-                    invalid("summarize 必须生成 1 张 summary_card，可附 1 个 followup_prompt。")
+                    invalid(
+                        "summarize 必须生成 1 张 summary_card，可附 1 个 followup_prompt。"
+                    )
             case "ask_user_choice":
                 if counts != {
                     "quiz_card": 0,

@@ -533,6 +533,61 @@ class ReadinessDossierService:
                         "result_summary": _record_result_summary(record, outcome),
                     }
                 )
+        for topic in journey.get("learning_topics") or []:
+            if not isinstance(topic, dict):
+                continue
+            topic_capabilities = module_capability_keys(
+                {
+                    "module_key": topic.get("source_module_key")
+                    or topic.get("topic_key"),
+                    "title": topic.get("title"),
+                    "kind": "learning_topic",
+                    "module_type": "learning_topic",
+                }
+            )
+            for unit in topic.get("units") or []:
+                if not isinstance(unit, dict) or not unit.get("latest_attempt_id"):
+                    continue
+                record_id = str(unit["latest_attempt_id"])
+                record_type = "business_etiquette_quiz_attempt"
+                unit_capabilities = unique_non_empty(
+                    [
+                        str(value)
+                        for value in unit.get("capability_keys") or []
+                        if value
+                    ]
+                    + topic_capabilities
+                )
+                evidence.append(
+                    {
+                        "evidence_id": f"{record_type}:{record_id}",
+                        "evidence_type": record_type,
+                        "source_record_id": record_id,
+                        "record_type": record_type,
+                        "module_key": topic.get("source_module_key")
+                        or topic.get("topic_key"),
+                        "module_title": topic.get("title"),
+                        "module_type": "learning_topic",
+                        "capability_keys": unit_capabilities or topic_capabilities,
+                        "status": unit.get("status"),
+                        "score": unit.get("score"),
+                        "max_score": unit.get("max_score"),
+                        "passed": unit.get("passed"),
+                        "submitted_at": unit.get("latest_attempt_submitted_at"),
+                        "completed_at": unit.get("latest_attempt_submitted_at"),
+                        "target_path": _learning_topic_detail_path(
+                            str(topic.get("topic_key") or "")
+                        ),
+                        "material_snapshot": None,
+                        "scoring_snapshot": None,
+                        "task_brief_snapshot": {
+                            "title": unit.get("title"),
+                            "purpose": topic.get("title"),
+                        },
+                        "snapshot_ref": topic.get("source"),
+                        "result_summary": _learning_topic_result_summary(unit),
+                    }
+                )
         evidence.sort(
             key=lambda item: str(item.get("submitted_at") or ""), reverse=True
         )
@@ -1087,6 +1142,12 @@ def _record_detail_path(record_type: str, record_id: str) -> str | None:
     return f"/admin/sales-trainer/training-records/{record_type}/{record_id}"
 
 
+def _learning_topic_detail_path(topic_key: str) -> str | None:
+    if topic_key == "business_etiquette":
+        return "/sales-trainer/learning-topics/business-etiquette"
+    return None
+
+
 def _compact_snapshot(
     value: Any,
     *,
@@ -1145,6 +1206,18 @@ def _record_result_summary(
     if status:
         return f"状态 {status}。"
     return None
+
+
+def _learning_topic_result_summary(unit: dict[str, Any]) -> str | None:
+    title = str(unit.get("title") or "学习单元")
+    status = str(unit.get("status") or "")
+    score = unit.get("score")
+    max_score = unit.get("max_score")
+    if score is not None and max_score is not None:
+        return f"{title}：状态 {status}，得分 {score}/{max_score}。"
+    if status:
+        return f"{title}：状态 {status}。"
+    return title
 
 
 def _retraining_task_status(action: dict[str, Any] | None) -> str | None:

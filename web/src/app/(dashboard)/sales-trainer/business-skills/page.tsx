@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -27,6 +27,7 @@ import type {
     BusinessEtiquetteUnitQuiz,
     BusinessEtiquetteUnitQuizAttempt,
 } from "@/lib/api/types";
+import { cn } from "@/lib/utils";
 
 import {
     BUSINESS_SKILLS_COACH_ACTION_LABEL,
@@ -34,7 +35,49 @@ import {
 } from "./config";
 import { useBusinessSkillsWorkbench } from "./use-business-skills-workbench";
 
-function LearningUnitList({
+type LearningUnitVisualState = "completed" | "in_progress" | "not_started";
+
+function learningUnitVisualState(unit: BusinessEtiquetteLearningUnit): LearningUnitVisualState {
+    if (unit.progress.is_completed) {
+        return "completed";
+    }
+    if (unit.progress.completed_chapters > 0) {
+        return "in_progress";
+    }
+    return "not_started";
+}
+
+function learningUnitStatusLabel(state: LearningUnitVisualState): string {
+    if (state === "completed") {
+        return "已完成";
+    }
+    if (state === "in_progress") {
+        return "进行中";
+    }
+    return "未开始";
+}
+
+function learningUnitStatusClassName(state: LearningUnitVisualState): string {
+    if (state === "completed") {
+        return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+    }
+    if (state === "in_progress") {
+        return "bg-amber-50 text-amber-700 ring-amber-200";
+    }
+    return "bg-slate-100 text-slate-500 ring-slate-200";
+}
+
+function learningUnitProgressClassName(state: LearningUnitVisualState): string {
+    if (state === "completed") {
+        return "bg-emerald-500";
+    }
+    if (state === "in_progress") {
+        return "bg-amber-500";
+    }
+    return "bg-slate-300";
+}
+
+function LearningPathBar({
     selectedUnitKey,
     units,
     onSelect,
@@ -43,56 +86,73 @@ function LearningUnitList({
     readonly units: readonly BusinessEtiquetteLearningUnit[];
     readonly onSelect: (unitKey: string) => void;
 }) {
+    const completedCount = units.filter((unit) => unit.progress.is_completed).length;
+
     return (
-        <section className="space-y-2" aria-label="商务礼仪训练小单元">
-            {units.map((unit) => {
-                const isSelected = selectedUnitKey === unit.unit_key;
-                const progressText = `${unit.progress.completed_chapters}/${unit.progress.total_chapters}`;
-                const capabilityNames = unit.capabilities.map((capability) => capability.display_name);
-                return (
-                    <button
-                        key={unit.unit_key}
-                        type="button"
-                        disabled={!unit.enabled}
-                        onClick={() => onSelect(unit.unit_key)}
-                        className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
-                            isSelected
-                                ? "border-slate-900 bg-slate-900 text-white"
-                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
-                        } ${unit.enabled ? "" : "opacity-60"}`}
-                    >
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="text-[11px] font-bold uppercase opacity-70">
-                                小单元 {unit.order_index}
-                            </span>
-                            {unit.progress.is_completed ? <CheckCircle2 className="h-4 w-4" /> : null}
-                        </div>
-                        <p className="mt-1 text-sm font-black">{unit.title}</p>
-                        <p className={`mt-1 line-clamp-2 text-xs leading-relaxed ${isSelected ? "text-slate-200" : "text-slate-500"}`}>
-                            {unit.description || unit.empty_state_message || "暂无小单元说明。"}
-                        </p>
-                        {capabilityNames.length ? (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                                {capabilityNames.slice(0, 2).map((name) => (
-                                    <span
-                                        key={name}
-                                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                                            isSelected
-                                                ? "bg-white/15 text-white"
-                                                : "bg-slate-100 text-slate-600"
-                                        }`}
-                                    >
-                                        {name}
+        <section className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm" aria-label="商务礼仪训练路径">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-slate-400" />
+                    <h2 className="text-sm font-black text-slate-900">训练路径</h2>
+                    <span className="rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500 ring-1 ring-slate-100">
+                        {completedCount}/{units.length} 小单元
+                    </span>
+                </div>
+                <p className="text-xs text-slate-500">完成阅读后再进入测验，进度以最新记录为准。</p>
+            </div>
+            <div className="-mx-1 overflow-x-auto px-1 pb-1">
+                <div className="flex min-w-max gap-2">
+                    {units.map((unit) => {
+                        const isSelected = selectedUnitKey === unit.unit_key;
+                        const progressText = `${unit.progress.completed_chapters}/${unit.progress.total_chapters}`;
+                        const progressPercent = Math.round(
+                            (unit.progress.completed_chapters / Math.max(unit.progress.total_chapters, 1)) * 100,
+                        );
+                        const state = learningUnitVisualState(unit);
+                        return (
+                            <button
+                                key={unit.unit_key}
+                                type="button"
+                                disabled={!unit.enabled}
+                                onClick={() => onSelect(unit.unit_key)}
+                                className={cn(
+                                    "w-[11.75rem] shrink-0 rounded-2xl border bg-white px-3.5 py-3 text-left transition-colors",
+                                    isSelected
+                                        ? "border-slate-950 shadow-md shadow-slate-900/10"
+                                        : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+                                    unit.enabled ? "" : "opacity-60",
+                                )}
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[11px] font-bold text-slate-400">
+                                        第 {unit.order_index} 单元
                                     </span>
-                                ))}
-                            </div>
-                        ) : null}
-                        <p className={`mt-2 text-xs font-bold ${isSelected ? "text-slate-200" : "text-slate-400"}`}>
-                            阅读 {progressText}
-                        </p>
-                    </button>
-                );
-            })}
+                                    <span className={cn(
+                                        "rounded-full px-2 py-0.5 text-[11px] font-bold ring-1",
+                                        learningUnitStatusClassName(state),
+                                    )}
+                                    >
+                                        {learningUnitStatusLabel(state)}
+                                    </span>
+                                </div>
+                                <p className="mt-2 truncate text-sm font-black text-slate-900">{unit.title}</p>
+                                <p className="mt-1 line-clamp-1 text-xs leading-relaxed text-slate-500">
+                                    {unit.description || unit.empty_state_message || "暂无小单元说明。"}
+                                </p>
+                                <div className="mt-3 flex items-center gap-2">
+                                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                                        <div
+                                            className={cn("h-full rounded-full", learningUnitProgressClassName(state))}
+                                            style={{ width: `${progressPercent}%` }}
+                                        />
+                                    </div>
+                                    <span className="shrink-0 text-xs font-bold text-slate-500">阅读 {progressText}</span>
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
         </section>
     );
 }
@@ -117,8 +177,8 @@ function ChapterList({
                         onClick={() => onSelect(chapter.chapter_id)}
                         className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${
                             isSelected
-                                ? "border-slate-900 bg-slate-900 text-white"
-                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                                ? "border-slate-950 bg-slate-950 text-white"
+                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                         }`}
                     >
                         <span className="flex items-center gap-2 text-sm font-bold leading-relaxed">
@@ -130,6 +190,60 @@ function ChapterList({
             })}
         </nav>
     );
+}
+
+const businessSkillsMarkdownComponents = {
+    ...markdownComponents,
+    h2: ({ children }: { readonly children?: ReactNode }) => (
+        <h2 className="mb-4 mt-9 text-2xl font-black leading-snug text-slate-950 first:mt-0">{children}</h2>
+    ),
+    h3: ({ children }: { readonly children?: ReactNode }) => (
+        <h3 className="mb-3 mt-7 text-xl font-bold leading-snug text-slate-900 first:mt-0">{children}</h3>
+    ),
+    p: ({ children }: { readonly children?: ReactNode }) => (
+        <p className="mb-5 text-[15px] leading-8 text-slate-700 [text-wrap:pretty] last:mb-0">{children}</p>
+    ),
+    blockquote: ({ children }: { readonly children?: ReactNode }) => (
+        <blockquote className="my-7 rounded-2xl border border-emerald-100 border-l-4 border-l-emerald-400 bg-emerald-50/70 px-5 py-4 text-[15px] leading-8 text-slate-700 [&_p]:mb-0">
+            {children}
+        </blockquote>
+    ),
+    strong: ({ children }: { readonly children?: ReactNode }) => (
+        <strong className="font-black text-slate-950">{children}</strong>
+    ),
+};
+
+const BUSINESS_SKILLS_CASE_PATTERNS = [
+    /^55387/,
+    /松下幸之助/,
+    /(?:邱|丘)吉尔/,
+];
+
+function enhanceBusinessSkillsArticleMarkdown(content: string): string {
+    return content
+        .split(/\n{2,}/)
+        .map((block) => {
+            const trimmed = block.trim();
+            if (
+                !trimmed
+                || trimmed.startsWith(">")
+                || trimmed.startsWith("#")
+                || trimmed.startsWith("!")
+                || trimmed.startsWith("|")
+                || trimmed.startsWith("- ")
+                || /^\d+\./.test(trimmed)
+            ) {
+                return block;
+            }
+            if (!BUSINESS_SKILLS_CASE_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+                return block;
+            }
+            return trimmed
+                .split("\n")
+                .map((line) => `> ${line}`)
+                .join("\n");
+        })
+        .join("\n\n");
 }
 
 function formatScoreValue(value: number | null): string {
@@ -418,7 +532,7 @@ function QuizAttemptDiagnosis({
                         <div className="flex flex-col gap-2">
                             {!isPending && isPassed && nextLearningUnitTitle ? (
                                 <Button
-                                    className="rounded-full bg-slate-900 text-white"
+                                    variant="primary"
                                     onClick={onContinueLearningUnit}
                                 >
                                     进入下一小单元
@@ -426,7 +540,7 @@ function QuizAttemptDiagnosis({
                                 </Button>
                             ) : null}
                             {!isPending && isPassed && allUnitsCompleted ? (
-                                <Button asChild className="rounded-full bg-slate-900 text-white">
+                                <Button asChild variant="primary">
                                     <Link href={examHref}>
                                         进入考试
                                         <ArrowRight className="ml-2 h-4 w-4" />
@@ -434,7 +548,7 @@ function QuizAttemptDiagnosis({
                                 </Button>
                             ) : null}
                             {!isPending && !isPassed && coachHref ? (
-                                <Button asChild className="rounded-full bg-slate-900 text-white">
+                                <Button asChild variant="primary">
                                     <Link href={coachHref}>去 AI 教练补练</Link>
                                 </Button>
                             ) : null}
@@ -627,6 +741,7 @@ function QuizPanel({
     onAnswerChange,
     onContinueLearningUnit,
     onRetry,
+    onReturnToReading,
     onReviewRecommendedChapter,
     onSelectAttempt,
     onSubmit,
@@ -650,6 +765,7 @@ function QuizPanel({
     readonly onAnswerChange: (question: BusinessEtiquetteQuizQuestion, value: string, checked?: boolean) => void;
     readonly onContinueLearningUnit: () => void;
     readonly onRetry: () => void;
+    readonly onReturnToReading: () => void;
     readonly onReviewRecommendedChapter: () => void;
     readonly onSelectAttempt: (attempt: BusinessEtiquetteUnitQuizAttempt) => void;
     readonly onSubmit: () => void;
@@ -667,19 +783,33 @@ function QuizPanel({
     const isLatestAttempt = selectedAttemptIndex <= 0;
 
     return (
-        <div className="mt-6 space-y-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-5 rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+            <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                    <h3 className="text-lg font-black text-slate-900">小单元测验</h3>
-                    <p className="text-sm text-slate-500">
+                    <p className="text-xs font-bold text-slate-400">
+                        独立小测工作区
+                    </p>
+                    <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">小单元测验</h3>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-500">
                         {quiz.question_count} 题 · {quiz.capabilities.map((item) => item.display_name).join("、")}
                     </p>
                 </div>
-                {quiz.pass_threshold !== null ? (
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
-                        通过线 {quiz.pass_threshold}
-                    </span>
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                    {quiz.pass_threshold !== null ? (
+                        <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                            通过线 {quiz.pass_threshold}
+                        </span>
+                    ) : null}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-slate-200"
+                        onClick={onReturnToReading}
+                    >
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        返回文章
+                    </Button>
+                </div>
             </div>
             {errorMessage ? (
                 <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-800">
@@ -707,16 +837,16 @@ function QuizPanel({
                 />
             ) : hasQuestions ? (
                 <>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                         {quiz.questions.map((question) => (
-                            <div key={question.question_id} className="rounded-xl bg-white p-4">
-                                <p className="text-sm font-semibold text-slate-400">
+                            <div key={question.question_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <p className="text-xs font-semibold text-slate-400">
                                     {question.order_index}. {questionTypeLabel(question.question_type)}
                                 </p>
-                                <p className="mt-1 font-semibold text-slate-900">{question.stem}</p>
+                                <p className="mt-2 font-semibold leading-7 text-slate-950">{question.stem}</p>
                                 {question.question_type === "short_answer" ? (
                                     <textarea
-                                        className="mt-3 min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                                        className="mt-3 min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 outline-none transition-colors focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                                         value={String(answers[question.question_id] ?? "")}
                                         onChange={(event) => onAnswerChange(question, event.target.value)}
                                     />
@@ -730,15 +860,24 @@ function QuizPanel({
                                             return (
                                                 <label
                                                     key={option.value}
-                                                    className="flex items-center gap-2 rounded-lg border border-slate-100 px-3 py-2 text-sm text-slate-700"
+                                                    className={cn(
+                                                        "flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm transition-colors",
+                                                        checked
+                                                            ? "border-slate-900 bg-slate-50 text-slate-900"
+                                                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50/50",
+                                                    )}
                                                 >
                                                     <input
                                                         type={question.question_type === "multiple_choice" ? "checkbox" : "radio"}
                                                         checked={checked}
                                                         name={question.question_id}
                                                         onChange={(event) => onAnswerChange(question, option.value, event.target.checked)}
+                                                        className="h-4 w-4 shrink-0 accent-slate-900"
                                                     />
-                                                    <span>{option.value}. {option.label}</span>
+                                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-current text-xs font-bold opacity-70">
+                                                        {option.value}
+                                                    </span>
+                                                    <span className="flex-1">{option.label}</span>
                                                 </label>
                                             );
                                         })}
@@ -748,7 +887,8 @@ function QuizPanel({
                         ))}
                     </div>
                     <Button
-                        className="rounded-full bg-slate-900 text-white"
+                        variant="primary"
+                        className="w-full sm:w-auto"
                         disabled={isSubmitting}
                         onClick={onSubmit}
                     >
@@ -801,6 +941,7 @@ export default function BusinessSkillsPage() {
         quizResultRef,
         quizWorkflowError,
         retryCurrentQuiz,
+        returnToCurrentReading,
         reviewRecommendedChapter,
         selectLearningUnit,
         selectQuizAttempt,
@@ -816,31 +957,48 @@ export default function BusinessSkillsPage() {
         requestedLearningUnitKey,
         unitId,
     });
+    const completedLearningUnitCount = sortedLearningUnits.filter((unit) => unit.progress.is_completed).length;
+    const totalLearningUnitCount = sortedLearningUnits.length;
+    const learningProgressPercent = totalLearningUnitCount
+        ? Math.round((completedLearningUnitCount / totalLearningUnitCount) * 100)
+        : 0;
+    const isSelectedChapterCompleted = Boolean(selectedChapter?.completed);
+    const shouldEmphasizeQuizAction = Boolean(
+        selectedLearningUnit?.require_quiz && canStartSelectedUnitQuiz,
+    );
 
     return (
-        <div className="mx-auto max-w-7xl space-y-6 pb-20">
+        <div className="mx-auto max-w-[92rem] space-y-5 pb-20">
             <Link href="/sales-trainer" className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900">
                 <ArrowLeft className="h-4 w-4" />
                 返回新人训练路径
             </Link>
 
-            <div className="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white px-6 py-6 shadow-sm md:px-7">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                     <div>
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                        <p className="text-xs font-bold text-slate-400">
                             新人训练路径 · 商务技巧
                         </p>
-                        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">商务礼仪训练</h1>
-                        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-                            先按小单元读原文章节，再进入小测和 AI 教练。正文区域按 Markdown 文章渲染，目录只负责定位。
+                        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">商务礼仪训练</h1>
+                        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                            按小单元完成阅读、小测和 AI 教练练习，系统保留最新训练进度。
                         </p>
                     </div>
                     {sortedLearningUnits.length ? (
-                        <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                            <span className="font-black text-slate-900">
-                                {sortedLearningUnits.filter((unit) => unit.progress.is_completed).length}
-                            </span>
-                            /{sortedLearningUnits.length} 小单元阅读完成
+                        <div className="min-w-56 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-100">
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="font-semibold text-slate-500">阅读进度</span>
+                                <span className="font-black text-slate-900">
+                                    {completedLearningUnitCount}/{totalLearningUnitCount}
+                                </span>
+                            </div>
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                                <div
+                                    className="h-full rounded-full bg-slate-950"
+                                    style={{ width: `${learningProgressPercent}%` }}
+                                />
+                            </div>
                         </div>
                     ) : null}
                 </div>
@@ -856,174 +1014,187 @@ export default function BusinessSkillsPage() {
             {isLoading ? (
                 <div className="h-64 animate-pulse rounded-3xl border border-white/60 bg-white/60" />
             ) : article && selectedLearningUnit && selectedChapter ? (
-                <div className="grid gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]">
-                    <aside className="contents lg:block lg:space-y-4 lg:sticky lg:top-4 lg:self-start">
-                        <section className="order-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:order-none">
-                            <div className="mb-3 flex items-center justify-between gap-3">
-                                <div>
-                                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                                        训练路径
-                                    </p>
-                                    <h2 className="mt-1 text-base font-black text-slate-900">
-                                        7 个小单元
-                                    </h2>
-                                </div>
-                                <BookOpen className="h-5 w-5 text-slate-400" />
-                            </div>
-                            <div className="max-h-56 overflow-y-auto pr-1 lg:max-h-none lg:overflow-visible lg:pr-0">
-                                <LearningUnitList
-                                    units={sortedLearningUnits}
-                                    selectedUnitKey={selectedLearningUnit.unit_key}
-                                    onSelect={selectLearningUnit}
-                                />
-                            </div>
-                        </section>
-                        <section className="order-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:order-none">
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                                当前阅读
-                            </p>
-                            <h2 className="mt-1 text-lg font-black text-slate-900">
-                                {selectedLearningUnit.title}
-                            </h2>
-                            <p className="mt-1 text-sm text-slate-500">
-                                {selectedLearningUnit.progress.completed_chapters}/{selectedLearningUnit.progress.total_chapters} 已完成
-                            </p>
-                            {selectedLearningUnit.capabilities.length ? (
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                    {selectedLearningUnit.capabilities.map((capability) => (
-                                        <span
-                                            key={capability.capability_key}
-                                            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+                <div className="space-y-5">
+                    <LearningPathBar
+                        units={sortedLearningUnits}
+                        selectedUnitKey={selectedLearningUnit.unit_key}
+                        onSelect={selectLearningUnit}
+                    />
+
+                    {quiz ? (
+                        <main className="mx-auto max-w-5xl">
+                            <QuizPanel
+                                allUnitsCompleted={allUnitsCompleted}
+                                answers={quizAnswers}
+                                attempt={quizAttempt}
+                                attempts={quizAttempts}
+                                attemptsErrorMessage={quizAttemptsError}
+                                coachHref={coachHref}
+                                coachHrefError={coachHrefError}
+                                errorMessage={quizWorkflowError}
+                                examHref={examHref}
+                                isAttemptsLoading={isQuizAttemptsLoading}
+                                isReviewExpanded={isQuizReviewExpanded}
+                                isSubmitting={isQuizSubmitting}
+                                nextLearningUnitTitle={nextLearningUnit?.title ?? null}
+                                onAnswerChange={updateQuizAnswer}
+                                onContinueLearningUnit={continueToNextLearningUnit}
+                                onRetry={retryCurrentQuiz}
+                                onReturnToReading={returnToCurrentReading}
+                                onReviewRecommendedChapter={reviewRecommendedChapter}
+                                onSelectAttempt={selectQuizAttempt}
+                                onSubmit={() => void submitCurrentQuiz()}
+                                onToggleReview={() => setIsQuizReviewExpanded((current) => !current)}
+                                quiz={quiz}
+                                resultRef={quizResultRef}
+                            />
+                        </main>
+                    ) : (
+                        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
+                            <main className="min-w-0">
+                                <article className="rounded-[1.75rem] border border-slate-200 bg-white px-5 py-7 shadow-sm md:px-10 md:py-10">
+                                    <div className="mx-auto max-w-[42rem]">
+                                        <div className="border-b border-slate-100 pb-6">
+                                            <p className="text-sm font-bold text-slate-400">{article.title}</p>
+                                            <h2 className="mt-2 text-2xl font-black leading-tight text-slate-950 md:text-3xl">
+                                                {selectedChapter.title}
+                                            </h2>
+                                        </div>
+                                        <div className="mt-8 max-w-none [&_img]:my-7 [&_img]:max-h-[30rem] [&_img]:w-full [&_img]:rounded-2xl [&_img]:border [&_img]:border-slate-200 [&_img]:object-cover [&_img]:shadow-sm">
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkGfm]}
+                                                components={businessSkillsMarkdownComponents}
+                                            >
+                                                {enhanceBusinessSkillsArticleMarkdown(selectedArticleChapter?.content || "暂无文章内容。")}
+                                            </ReactMarkdown>
+                                        </div>
+                                    </div>
+                                </article>
+                            </main>
+
+                            <aside className="space-y-4 xl:sticky xl:top-4">
+                                <section className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <p className="text-sm font-black text-slate-900">本节任务</p>
+                                        <span className={cn(
+                                            "rounded-full px-2.5 py-1 text-xs font-bold ring-1",
+                                            isSelectedChapterCompleted
+                                                ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                                                : "bg-amber-50 text-amber-700 ring-amber-200",
+                                        )}
                                         >
-                                            {capability.display_name}
+                                            {isSelectedChapterCompleted ? "本节已读" : "阅读中"}
                                         </span>
-                                    ))}
-                                </div>
-                            ) : null}
-                            <div className="mt-4">
-                                <ChapterList
-                                    chapters={selectedLearningUnit.chapters}
-                                    selectedId={selectedChapter.chapter_id}
-                                    onSelect={setSelectedChapterId}
-                                />
-                            </div>
-                        </section>
-                    </aside>
-
-                    <main className="order-2 min-w-0 space-y-4 lg:order-none">
-                        <article className="rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm md:px-10 md:py-9">
-                            <div className="mx-auto max-w-3xl">
-                                <div className="border-b border-slate-100 pb-5">
-                                    <p className="text-sm font-bold text-slate-400">{article.title}</p>
-                                    <h2 className="mt-2 text-2xl font-black leading-tight text-slate-950 md:text-3xl">
-                                        {selectedChapter.title}
+                                    </div>
+                                    <h2 className="mt-3 text-lg font-black leading-snug text-slate-950">
+                                        {selectedLearningUnit.title}
                                     </h2>
-                                </div>
-                                <div className="mt-6 max-w-none [&_img]:my-6 [&_img]:max-h-[32rem] [&_img]:w-full [&_img]:rounded-2xl [&_img]:border [&_img]:border-slate-200 [&_img]:object-cover [&_img]:shadow-sm">
-                                    <ReactMarkdown
-                                        remarkPlugins={[remarkGfm]}
-                                        components={markdownComponents}
-                                    >
-                                        {selectedArticleChapter?.content || "暂无文章内容。"}
-                                    </ReactMarkdown>
-                                </div>
-                            </div>
-                        </article>
-
-                        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                <div>
-                                    <p className="text-sm font-bold text-slate-900">
-                                        下一步
+                                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                                        <div
+                                            className={cn(
+                                                "h-full rounded-full",
+                                                selectedLearningUnit.progress.is_completed ? "bg-emerald-500" : "bg-amber-500",
+                                            )}
+                                            style={{
+                                                width: `${Math.round((selectedLearningUnit.progress.completed_chapters / Math.max(selectedLearningUnit.progress.total_chapters, 1)) * 100)}%`,
+                                            }}
+                                        />
+                                    </div>
+                                    <p className="mt-2 text-xs font-semibold text-slate-500">
+                                        阅读 {selectedLearningUnit.progress.completed_chapters}/{selectedLearningUnit.progress.total_chapters}
                                     </p>
-                                    <p className="mt-1 text-sm text-slate-500">
-                                        标记本节后，继续阅读、小测或进入 AI 教练练习。
-                                    </p>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <Button
-                                        className="rounded-full bg-slate-900 text-white"
-                                        disabled={completingChapterId === selectedChapter.chapter_id}
-                                        onClick={() => void completeCurrentChapter()}
-                                    >
-                                        {completingChapterId === selectedChapter.chapter_id ? "正在标记本节" : "完成本节"}
-                                    </Button>
-                                    {selectedLearningUnit.require_quiz ? (
-                                        <Button
-                                            variant="outline"
-                                            className="rounded-full border-slate-200"
-                                            disabled={isQuizLoading || !canStartSelectedUnitQuiz}
-                                            onClick={() => void loadCurrentQuiz()}
-                                        >
-                                            {isQuizLoading
-                                                ? "正在加载小测"
-                                                : canStartSelectedUnitQuiz ? "开始小测" : "读完后小测"}
-                                        </Button>
+                                    {selectedLearningUnit.capabilities.length ? (
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            {selectedLearningUnit.capabilities.map((capability) => (
+                                                <span
+                                                    key={capability.capability_key}
+                                                    className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+                                                >
+                                                    {capability.display_name}
+                                                </span>
+                                            ))}
+                                        </div>
                                     ) : null}
-                                    {coachHref && selectedLearningUnit.require_ai_coach ? (
-                                        <Button asChild variant="outline" className="rounded-full border-slate-200">
-                                            <Link href={coachHref}>
-                                                {BUSINESS_SKILLS_COACH_ACTION_LABEL}
-                                            </Link>
-                                        </Button>
+                                    <div className="mt-4 border-t border-slate-100 pt-4">
+                                        <p className="mb-2 text-xs font-bold text-slate-400">章节</p>
+                                        <ChapterList
+                                            chapters={selectedLearningUnit.chapters}
+                                            selectedId={selectedChapter.chapter_id}
+                                            onSelect={setSelectedChapterId}
+                                        />
+                                    </div>
+                                </section>
+
+                                <section className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
+                                    <p className="text-sm font-black text-slate-900">下一步</p>
+                                    <p className="mt-1 text-sm leading-6 text-slate-500">
+                                        {isSelectedChapterCompleted
+                                            ? "本节已标记完成，可以进入小测或继续后续训练。"
+                                            : "先完成本节阅读标记，再进入小测和 AI 教练。"}
+                                    </p>
+                                    <div className="mt-4 grid gap-2">
+                                        {!isSelectedChapterCompleted ? (
+                                            <Button
+                                                variant="primary"
+                                                disabled={completingChapterId === selectedChapter.chapter_id}
+                                                onClick={() => void completeCurrentChapter()}
+                                            >
+                                                {completingChapterId === selectedChapter.chapter_id ? "正在标记本节" : "完成本节"}
+                                            </Button>
+                                        ) : null}
+                                        {selectedLearningUnit.require_quiz ? (
+                                            <Button
+                                                variant={shouldEmphasizeQuizAction ? "primary" : "outline"}
+                                                className="rounded-full border-slate-200"
+                                                disabled={isQuizLoading || !canStartSelectedUnitQuiz}
+                                                onClick={() => void loadCurrentQuiz()}
+                                            >
+                                                {isQuizLoading
+                                                    ? "正在加载小测"
+                                                    : canStartSelectedUnitQuiz ? "开始小测" : "读完后小测"}
+                                            </Button>
+                                        ) : null}
+                                        {coachHref && selectedLearningUnit.require_ai_coach ? (
+                                            <Button asChild variant="outline" className="rounded-full border-slate-200">
+                                                <Link href={coachHref}>
+                                                    {BUSINESS_SKILLS_COACH_ACTION_LABEL}
+                                                </Link>
+                                            </Button>
+                                        ) : null}
+                                        {allUnitsCompleted ? (
+                                            <Button asChild variant={shouldEmphasizeQuizAction ? "outline" : "primary"} className="rounded-full border-slate-200">
+                                                <Link href={examHref}>
+                                                    完成学习，进入考试
+                                                    <ArrowRight className="ml-2 h-4 w-4" />
+                                                </Link>
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                    {!allUnitsCompleted ? (
+                                        <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                                            完成要求阅读的小单元后开放考试入口。
+                                        </p>
+                                    ) : null}
+                                    {selectedLearningUnit.require_quiz && !canStartSelectedUnitQuiz ? (
+                                        <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                                            先完成当前小单元的要求阅读，再进入小测。
+                                        </p>
                                     ) : null}
                                     {!coachHref && coachHrefError && selectedLearningUnit.require_ai_coach ? (
-                                        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-800">
+                                        <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-800">
                                             AI 教练入口暂不可用：{coachHrefError}
                                         </p>
                                     ) : null}
-                                    {allUnitsCompleted ? (
-                                        <Button asChild className="rounded-full bg-slate-900 text-white">
-                                            <Link href={examHref}>
-                                                完成学习，进入考试
-                                                <ArrowRight className="ml-2 h-4 w-4" />
-                                            </Link>
-                                        </Button>
+                                    {quizWorkflowError ? (
+                                        <div role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-800">
+                                            <p className="font-semibold text-amber-900">小测暂不可用</p>
+                                            <p className="mt-1">{quizWorkflowError}</p>
+                                        </div>
                                     ) : null}
-                                </div>
-                            </div>
-                            {!allUnitsCompleted ? (
-                                <p className="mt-3 text-sm text-slate-500">完成要求阅读的小单元后开放考试入口。</p>
-                            ) : null}
-                            {selectedLearningUnit.require_quiz && !canStartSelectedUnitQuiz ? (
-                                <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-500">
-                                    先完成当前小单元的要求阅读，再进入小测。
-                                </p>
-                            ) : null}
-                            {quizWorkflowError && !quiz ? (
-                                <div role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-800">
-                                    <p className="font-semibold text-amber-900">小测暂不可用</p>
-                                    <p className="mt-1">{quizWorkflowError}</p>
-                                </div>
-                            ) : null}
-                            {quiz ? (
-                                <QuizPanel
-                                    allUnitsCompleted={allUnitsCompleted}
-                                    answers={quizAnswers}
-                                    attempt={quizAttempt}
-                                    attempts={quizAttempts}
-                                    attemptsErrorMessage={quizAttemptsError}
-                                    coachHref={coachHref}
-                                    coachHrefError={coachHrefError}
-                                    errorMessage={quizWorkflowError}
-                                    examHref={examHref}
-                                    isAttemptsLoading={isQuizAttemptsLoading}
-                                    isReviewExpanded={isQuizReviewExpanded}
-                                    isSubmitting={isQuizSubmitting}
-                                    nextLearningUnitTitle={nextLearningUnit?.title ?? null}
-                                    onAnswerChange={updateQuizAnswer}
-                                    onContinueLearningUnit={continueToNextLearningUnit}
-                                    onRetry={retryCurrentQuiz}
-                                    onReviewRecommendedChapter={reviewRecommendedChapter}
-                                    onSelectAttempt={selectQuizAttempt}
-                                    onSubmit={() => void submitCurrentQuiz()}
-                                    onToggleReview={() => setIsQuizReviewExpanded((current) => !current)}
-                                    quiz={quiz}
-                                    resultRef={quizResultRef}
-                                />
-                            ) : null}
-                        </section>
-                    </main>
+                                </section>
+                            </aside>
+                        </div>
+                    )}
                 </div>
             ) : error ? null : (
                 <GlassCard className="p-6 text-sm text-slate-500">当前商务礼仪训练包没有可用小单元，请管理员检查路径配置。</GlassCard>

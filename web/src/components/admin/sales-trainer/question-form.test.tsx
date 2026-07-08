@@ -1,6 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const mockGetModelConfigs = vi.fn();
+
+vi.mock("@/lib/api/client", () => ({
+    api: {
+        admin: {
+            getModelConfigs: (...args: unknown[]) => mockGetModelConfigs(...args),
+        },
+    },
+    getApiErrorMessage: (error: unknown) =>
+        error instanceof Error ? error.message : String(error),
+}));
+
 import { SalesTrainerQuestionForm } from "./question-form";
 
 describe("SalesTrainerQuestionForm", () => {
@@ -20,6 +32,35 @@ describe("SalesTrainerQuestionForm", () => {
 
     beforeEach(() => {
         onSubmit.mockReset();
+        mockGetModelConfigs.mockReset();
+        mockGetModelConfigs.mockResolvedValue({
+            llm: [
+                {
+                    id: "model-config-1",
+                    name: "DeepSeek Flash",
+                    model_type: "llm",
+                    provider: "openai",
+                    model_name: "deepseek-v4-flash",
+                    is_default: true,
+                    is_active: true,
+                    last_test_status: "success",
+                },
+                {
+                    id: "model-config-disabled",
+                    name: "停用模型",
+                    model_type: "llm",
+                    provider: "openai",
+                    model_name: "disabled-model",
+                    is_default: false,
+                    is_active: false,
+                    last_test_status: null,
+                },
+            ],
+            embedding: [],
+            asr: [],
+            tts: [],
+            total: 2,
+        });
     });
 
     it("submits answer explanation and short-answer AI scoring config", async () => {
@@ -55,7 +96,11 @@ describe("SalesTrainerQuestionForm", () => {
         fireEvent.change(screen.getByLabelText("简答通过线"), {
             target: { value: "75" },
         });
-        fireEvent.change(screen.getByLabelText("模型配置 ID"), {
+        await waitFor(() => {
+            expect(screen.getByText("DeepSeek Flash · openai/deepseek-v4-flash · 默认")).toBeTruthy();
+        });
+        expect(screen.queryByText("停用模型 · openai/disabled-model")).toBeNull();
+        fireEvent.change(screen.getByLabelText("LLM 模型配置"), {
             target: { value: "model-config-1" },
         });
         fireEvent.change(screen.getByLabelText("温度"), {

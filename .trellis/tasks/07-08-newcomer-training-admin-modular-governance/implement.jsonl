@@ -1,0 +1,17 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端服务/API/治理实现入口规范"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增后端 service/api/schema 文件放置规范"}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "学习专题配置发布、校验、回滚、审计治理规范"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "API 错误与 fail-closed 规范"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "trace_id、结构化日志和敏感信息规范"}
+{"file": ".trellis/spec/backend/prompt-template-governance.md", "reason": "AI Coach prompt/model/output contract 治理规范"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试、lint、type-check 规范"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端实现入口规范"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "后台管理页信息架构与状态规范"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "前端组件与 UI 状态规范"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "前端数据获取与状态管理规范"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "API DTO 到 UI 类型映射规范"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试、lint、可访问性规范"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨后端、API、前端、Journey 影响分析"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "避免重复实现与常量分叉"}
+{"file": ".trellis/tasks/07-08-newcomer-training-admin-modular-governance/research/repo-constraints.md", "reason": "当前仓库约束、耦合点和可复用基础"}
+{"file": ".trellis/tasks/07-08-newcomer-training-admin-modular-governance/prd.md", "reason": "用户确认的全量 PR1-PR6 范围与验收标准"}

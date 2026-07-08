@@ -134,7 +134,17 @@ def can_view_sales_trainer_settings(user: User) -> bool:
 
 
 def can_enter_sales_trainer_learning_path(user: User) -> bool:
-    return bool(getattr(user, "is_active", True)) and _role(user) in SALES_TRAINER_LEARNER_ROLES
+    # getattr returns None for unset Column defaults on transient objects;
+    # treat None as active so unit-constructed users behave as expected.
+    is_active = getattr(user, "is_active", True)
+    if is_active is False:
+        return False
+    # Platform admins may enter the learner path for development, debugging,
+    # and product acceptance without needing a separate learner account.
+    # They remain subject to per-user progress isolation in the journey.
+    if is_sales_trainer_admin(user):
+        return True
+    return _role(user) in SALES_TRAINER_LEARNER_ROLES
 
 
 def can_enter_sales_trainer_realtime(user: User) -> bool:

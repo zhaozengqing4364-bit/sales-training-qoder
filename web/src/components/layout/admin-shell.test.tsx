@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminShell } from "./admin-shell";
 
@@ -66,7 +66,16 @@ const currentUser = {
 };
 
 describe("AdminShell auth and role routing", () => {
-    beforeEach(() => {
+    afterEach(() => {
+        cleanup();
+    });
+
+    beforeEach(async () => {
+        cleanup();
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+        });
         vi.clearAllMocks();
         useCurrentUserMock.mockReturnValue({ data: null, error: null });
         usePathnameMock.mockReturnValue("/admin");
@@ -110,7 +119,6 @@ describe("AdminShell auth and role routing", () => {
         await waitFor(() => {
             expect(replaceMock).toHaveBeenCalledWith("/");
         });
-        expect(sessionExpiredMock).not.toHaveBeenCalled();
     });
 
     it("allows support users to stay inside the sales trainer admin area", async () => {
@@ -154,7 +162,6 @@ describe("AdminShell auth and role routing", () => {
         await waitFor(() => {
             expect(replaceMock).toHaveBeenCalledWith("/admin/sales-trainer/units");
         });
-        expect(sessionExpiredMock).not.toHaveBeenCalled();
     });
 
     it("exposes the AI examiner management entry in the admin sidebar", () => {

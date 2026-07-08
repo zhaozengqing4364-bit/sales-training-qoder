@@ -82,7 +82,7 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
     },
     articles: {
         key: "articles",
-        label: "商务技巧文章",
+        label: "学习文章",
         icon: BookOpen,
         href: "/admin/sales-trainer/articles",
     },
@@ -357,12 +357,12 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
     },
     {
         root: "/admin/sales-trainer/articles",
-        label: "商务技巧文章",
+        label: "学习文章",
         items: [
             {
                 key: "articleBindings",
                 href: "/admin/sales-trainer/articles",
-                label: "文章绑定",
+                label: "专题列表",
                 icon: FileText,
             },
             {

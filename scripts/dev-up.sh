@@ -8,6 +8,7 @@ LOG_DIR="${DEV_DIR}/logs"
 PID_DIR="${DEV_DIR}/pids"
 
 BACKEND_PORT="${BACKEND_PORT:-3444}"
+BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 # 0 = 稳定模式（推荐，避免 WebSocket 1006）；1 = uvicorn --reload
 BACKEND_UVICORN_RELOAD="${BACKEND_UVICORN_RELOAD:-0}"
 LOG_LEVEL="${LOG_LEVEL:-}"
@@ -93,7 +94,15 @@ dotenv_get() {
 
 port_pids() {
   local port="$1"
-  lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true
+  {
+    lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true
+    if command -v ss >/dev/null 2>&1; then
+      ss -H -ltnp "sport = :${port}" 2>/dev/null | sed -nE 's/.*pid=([0-9]+).*/\1/p' || true
+    fi
+    if command -v fuser >/dev/null 2>&1; then
+      fuser -n tcp "${port}" 2>/dev/null | tr ' ' '\n' || true
+    fi
+  } | awk 'NF' | sort -u
 }
 
 port_cleanup_pids() {
@@ -103,12 +112,34 @@ port_cleanup_pids() {
     # uvicorn --reload can leave a parent process with a CLOSED fd on the
     # dev port. It is not LISTENing, but a new uvicorn bind can still fail.
     lsof -tiTCP:"${port}" -sTCP:CLOSED 2>/dev/null || true
-  } | sort -u
+    if command -v ss >/dev/null 2>&1; then
+      ss -H -ltnp "sport = :${port}" 2>/dev/null | sed -nE 's/.*pid=([0-9]+).*/\1/p' || true
+    fi
+    if command -v fuser >/dev/null 2>&1; then
+      fuser -n tcp "${port}" 2>/dev/null | tr ' ' '\n' || true
+    fi
+  } | awk 'NF' | sort -u
+}
+
+port_is_listening() {
+  local port="$1"
+
+  if command -v ss >/dev/null 2>&1; then
+    if [[ -n "$(ss -H -ltn "sport = :${port}" 2>/dev/null | awk 'NF { print; exit }')" ]]; then
+      return 0
+    fi
+  fi
+
+  if [[ -n "$(port_pids "${port}")" ]]; then
+    return 0
+  fi
+
+  return 1
 }
 
 is_port_busy() {
   local port="$1"
-  [[ -n "$(port_pids "${port}")" ]]
+  port_is_listening "${port}"
 }
 
 wait_for_port() {
@@ -173,6 +204,9 @@ kill_port() {
   pids="$(port_cleanup_pids "${port}")"
 
   if [[ -z "${pids}" ]]; then
+    if is_port_busy "${port}"; then
+      die "端口 ${port} 已被占用，但当前用户无法识别或停止占用进程。请先手动释放该端口。"
+    fi
     return
   fi
 
@@ -186,6 +220,10 @@ kill_port() {
     warn "端口 ${port} 仍被占用，强制结束 PID: ${remaining//$'\n'/, }"
     kill -9 ${remaining} >/dev/null 2>&1 || true
     wait_for_port_release "${port}" 2 || true
+  fi
+
+  if is_port_busy "${port}"; then
+    die "端口 ${port} 仍被占用，无法释放。请先手动停止占用进程。"
   fi
 }
 
@@ -307,6 +345,77 @@ start_redis_brew() {
   wait_for_port "${REDIS_PORT}" 20 && log "Redis 就绪：127.0.0.1:${REDIS_PORT}"
 }
 
+run_service_command() {
+  if "$@"; then
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    sudo -n "$@"
+    return
+  fi
+
+  return 1
+}
+
+start_postgres_linux() {
+  if [[ "${MANAGE_POSTGRES}" != "1" ]]; then
+    return
+  fi
+
+  if is_port_busy "${POSTGRES_PORT}"; then
+    log "PostgreSQL 端口 ${POSTGRES_PORT} 已可用。"
+    return
+  fi
+
+  if ! command -v pg_lsclusters >/dev/null 2>&1 || ! command -v pg_ctlcluster >/dev/null 2>&1; then
+    warn "未检测到 pg_lsclusters/pg_ctlcluster，无法自动启动 PostgreSQL"
+    return
+  fi
+
+  local cluster
+  cluster="$(pg_lsclusters 2>/dev/null | awk -v port="${POSTGRES_PORT}" '$1 ~ /^[0-9]+$/ && $3 == port { print $1 " " $2; exit }')"
+  if [[ -z "${cluster}" ]]; then
+    warn "未找到端口 ${POSTGRES_PORT} 对应的 PostgreSQL cluster"
+    return
+  fi
+
+  local version
+  local name
+  read -r version name <<< "${cluster}"
+
+  log "使用 pg_ctlcluster 启动 PostgreSQL ${version}/${name}..."
+  run_service_command pg_ctlcluster "${version}" "${name}" start || warn "pg_ctlcluster 启动 PostgreSQL ${version}/${name} 失败"
+  wait_for_port "${POSTGRES_PORT}" 30 && log "PostgreSQL 就绪：127.0.0.1:${POSTGRES_PORT}"
+}
+
+start_redis_linux() {
+  if [[ "${MANAGE_REDIS}" != "1" ]]; then
+    return
+  fi
+
+  if is_port_busy "${REDIS_PORT}"; then
+    log "Redis 端口 ${REDIS_PORT} 已可用。"
+    return
+  fi
+
+  if command -v service >/dev/null 2>&1; then
+    log "使用 service 启动 redis-server..."
+    run_service_command service redis-server start || warn "service 启动 redis-server 失败"
+    wait_for_port "${REDIS_PORT}" 20 && log "Redis 就绪：127.0.0.1:${REDIS_PORT}"
+    return
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    log "使用 systemctl 启动 redis-server..."
+    run_service_command systemctl start redis-server || warn "systemctl 启动 redis-server 失败"
+    wait_for_port "${REDIS_PORT}" 20 && log "Redis 就绪：127.0.0.1:${REDIS_PORT}"
+    return
+  fi
+
+  warn "未检测到 service/systemctl，无法自动启动 Redis"
+}
+
 start_infra_services() {
   if [[ "${AUTO_START_INFRA}" != "1" ]]; then
     warn "AUTO_START_INFRA=${AUTO_START_INFRA}，跳过 PostgreSQL/Redis 自动启动"
@@ -318,13 +427,13 @@ start_infra_services() {
     return
   fi
 
-  if ! command -v brew >/dev/null 2>&1; then
-    warn "未检测到 brew，无法自动启动 PostgreSQL/Redis"
-    return
+  if command -v brew >/dev/null 2>&1; then
+    start_postgres_brew
+    start_redis_brew
+  else
+    start_postgres_linux
+    start_redis_linux
   fi
-
-  start_postgres_brew
-  start_redis_brew
 }
 
 verify_infra_ports() {
@@ -398,6 +507,7 @@ start_backend() {
 
   local uvicorn_args=(
     src.main:app
+    --host "${BACKEND_HOST}"
     --port "${BACKEND_PORT}"
     --log-level "$(printf '%s' "${LOG_LEVEL}" | tr '[:upper:]' '[:lower:]')"
     --no-access-log
@@ -408,16 +518,16 @@ start_backend() {
     reload_mode="热重载（--reload）"
   fi
 
-  log "启动 Backend (端口 ${BACKEND_PORT})，Python: ${python_bin}，${reload_mode}，LOG_LEVEL=${LOG_LEVEL}"
+  log "启动 Backend (${BACKEND_HOST}:${BACKEND_PORT})，Python: ${python_bin}，${reload_mode}，LOG_LEVEL=${LOG_LEVEL}"
   (
     cd "${ROOT_DIR}/backend"
-    nohup env \
+    nohup setsid env \
       DATABASE_URL="${EFFECTIVE_DATABASE_URL}" \
       REDIS_URL="${EFFECTIVE_REDIS_URL}" \
       LOG_LEVEL="${LOG_LEVEL}" \
       PYTHONPATH="${ROOT_DIR}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
       "${python_bin}" -m uvicorn "${uvicorn_args[@]}" \
-      >"${LOG_DIR}/backend.log" 2>&1 &
+      >"${LOG_DIR}/backend.log" 2>&1 < /dev/null &
     echo $! > "${PID_DIR}/backend.pid"
   )
 
@@ -435,15 +545,15 @@ start_frontend() {
   log "启动 Frontend (端口 ${FRONTEND_PORT})..."
   (
     cd "${ROOT_DIR}/web"
-    nohup env \
+    nohup setsid env \
       NEXT_PUBLIC_API_URL="${EFFECTIVE_FRONTEND_API_URL}" \
       NEXT_PUBLIC_WS_URL="${EFFECTIVE_FRONTEND_WS_URL}" \
       npm exec -- next dev -p "${FRONTEND_PORT}" \
-      >"${LOG_DIR}/frontend.log" 2>&1 &
+      >"${LOG_DIR}/frontend.log" 2>&1 < /dev/null &
     echo $! > "${PID_DIR}/frontend.pid"
   )
 
-  wait_for_port "${FRONTEND_PORT}" 60 || {
+  wait_for_port "${FRONTEND_PORT}" 60 && wait_for_http_ok "http://127.0.0.1:${FRONTEND_PORT}/login" 60 || {
     tail -n 80 "${LOG_DIR}/frontend.log" >&2 || true
     die "Frontend 启动失败，请查看日志 ${LOG_DIR}/frontend.log"
   }
@@ -458,6 +568,7 @@ print_summary() {
 
 - Frontend: http://localhost:${FRONTEND_PORT}
 - Backend API: http://localhost:${BACKEND_PORT}/api/v1
+- Backend listen: ${BACKEND_HOST}:${BACKEND_PORT}
 - Backend Docs: http://localhost:${BACKEND_PORT}/docs
 - Backend reload: $([[ "${BACKEND_UVICORN_RELOAD}" == "1" ]] && echo "开启（--reload）" || echo "关闭（稳定模式，适合语音 WebSocket）")
 - DATABASE_URL: ${EFFECTIVE_DATABASE_URL}
@@ -500,4 +611,6 @@ main() {
   print_summary
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

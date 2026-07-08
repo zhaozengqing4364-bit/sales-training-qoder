@@ -29,6 +29,10 @@ class AiCoachChatResponseParser:
         try:
             parsed = AiCoachChatResponseInternalV1.model_validate(raw)
         except ValidationError as exc:
+            recovered = self._recover_text_only_response(raw)
+            if recovered is not None:
+                self.validate_response_against_config(recovered, config)
+                return recovered
             first = exc.errors()[0]
             raise AiCoachChatGenerationError(
                 f"[AI_COACH_INTERACTION_INVALID:{first['type']}]",
@@ -87,6 +91,20 @@ class AiCoachChatResponseParser:
     @staticmethod
     def allowed_ui_event_types(config: AiCoachConfig) -> tuple[str, ...]:
         return tuple(str(item) for item in config.allowed_ui_event_types)
+
+    @staticmethod
+    def _recover_text_only_response(
+        raw: dict[str, Any],
+    ) -> AiCoachChatResponseInternalV1 | None:
+        assistant_text = raw.get("assistant_text")
+        if not isinstance(assistant_text, str) or not assistant_text.strip():
+            return None
+        runtime_audit = raw.get("runtime_audit")
+        return AiCoachChatResponseInternalV1(
+            assistant_text=assistant_text.strip(),
+            ui_events=[],
+            runtime_audit=runtime_audit if isinstance(runtime_audit, dict) else {},
+        )
 
     @staticmethod
     def extract_json(text: str) -> dict[str, Any] | None:

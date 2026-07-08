@@ -25,7 +25,6 @@ from sales_trainer.schemas import (
     BusinessEtiquetteUnitQuizAttemptListResponse,
     BusinessEtiquetteUnitQuizAttemptResponse,
     BusinessEtiquetteUnitQuizResponse,
-    NewcomerPathConfigPayload,
 )
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
@@ -44,8 +43,15 @@ from sales_trainer.services.curriculum_practice_adapter import (
     QuestionItem,
     list_published_sales_trainer_questions,
 )
+from sales_trainer.services.learning_topic_config_service import (
+    LearningTopicConfigError,
+    NewcomerLearningTopicConfigService,
+)
 from sales_trainer.services.operation_log_service import OperationLogService
-from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
+from sales_trainer.services.path_config_models import (
+    NEWCOMER_PATH_LOGICAL_ID,
+    NEWCOMER_PATH_RESOURCE_TYPE,
+)
 from sales_trainer.services.question_bank.adapter import QuestionBankAdapter
 from sales_trainer.services.short_answer_scoring_service import (
     ShortAnswerQuestion,
@@ -314,24 +320,24 @@ class BusinessEtiquetteQuizService:
         )
 
     async def _quiz_context(self, unit_key: str) -> _QuizContext:
-        path_response = await SalesTrainerPathConfigService(self._db).get_config()
-        path_payload = NewcomerPathConfigPayload.model_validate(path_response["path"])
-        module = next(
-            (
-                item
-                for item in path_payload.modules
-                if item.module_key == BUSINESS_SKILLS_MODULE_KEY
-            ),
-            None,
-        )
-        if module is None or not module.enabled:
+        try:
+            topic, _ = await NewcomerLearningTopicConfigService(
+                self._db
+            ).active_business_etiquette_topic()
+        except LearningTopicConfigError as exc:
+            raise BusinessEtiquetteQuizServiceError(
+                exc.code,
+                exc.message,
+                exc.status_code,
+            ) from exc
+        if topic.source_module_key != BUSINESS_SKILLS_MODULE_KEY or not topic.enabled:
             raise BusinessEtiquetteQuizServiceError(
                 "[BUSINESS_ETIQUETTE_MODULE_CONFIG_MISSING]",
-                "商务礼仪学习模块配置不存在或未启用。",
+                "商务礼仪学习专题配置不存在或未启用。",
                 404,
             )
         unit_config = next(
-            (item for item in module.learning_units if item.unit_key == unit_key),
+            (item for item in topic.learning_units if item.unit_key == unit_key),
             None,
         )
         if unit_config is None or not unit_config.enabled:
@@ -356,6 +362,10 @@ class BusinessEtiquetteQuizService:
                 "商务礼仪训练包尚未发布，无法开始小测。",
                 409,
             )
+        path_revision = await self._asset_revisions.active_revision(
+            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+            logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        )
         capabilities, chapter_bindings = _capability_snapshot_from_revision(
             training_pack_revision
         )
@@ -374,8 +384,8 @@ class BusinessEtiquetteQuizService:
         return _QuizContext(
             training_pack_key=DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
             unit_config=unit_config,
-            path_revision_id=path_response["active_revision_id"],
-            path_revision_no=path_response["active_revision_no"],
+            path_revision_id=str(path_revision.revision_id) if path_revision else None,
+            path_revision_no=int(path_revision.revision_no) if path_revision else None,
             training_pack_revision=training_pack_revision,
             capabilities=[capability_map[key] for key in unit_config.capability_keys],
             capability_map=capability_map,

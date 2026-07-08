@@ -1,537 +1,273 @@
----
-description: 
-alwaysApply: true
----
+最多使用1个agent
+所有的回复到要使用中文！！！！
+优先级：
+1. codegraph_explore：理解功能链路、业务流程、架构区域
+2. codegraph_node：查看某个 symbol 或文件的源码和调用关系
+3. codegraph_search：定位 symbol
+4. codegraph_callers：查调用点
+5. codegraph impact / affected：改动前后做影响分析和测试选择
+禁止只以“当前能跑”为完成标准。
+### 上下文内完成原则（In-Flow Completion）
 
-# CLAUDE.md
+业务系统不应为了数据模型完整而打断用户当前任务。
 
-本文件是 **本仓库的 L3 操作手册**（命令、目录、产品宪法、Issue 流程）。
-**工程原则与 AI 协作宪章**见 [AGENTS.md](AGENTS.md)（L0，优先适用）。
+当用户在完成主流程时遇到缺失数据、缺失关联对象、缺失角色、缺失配置或缺失上下文，系统应优先在当前页面、弹窗、抽屉或内联区域提供就地处理能力，而不是要求用户跳转到另一个模块。
 
----
+默认交互模式：
 
-## Agent 协作（本仓库偏好）
+- 从已有数据中选择；
+- 快速新建最小必要对象；
+- 自动关联到当前上下文；
+- 后台同步到标准数据模型；
+- 支持稍后补充或指派他人补充；
+- 保留权限校验、去重检查、审计记录和失败反馈。
 
-- 解释与汇报使用**简体中文**。
-- 回答宜简洁；复杂任务可用「概述 + What / Where / Risks / Next / Open」。
-- 写代码前已读 [AGENTS.md](AGENTS.md)；触及会话、实时连接、多入口创建时，遵守宪章 §IV、§V（探索宽、交付窄、症状修复须披露）。
-- 工具与验证：并行检索；改后跑相关测试与 lint；完成时给出证据，不编造未执行的检查。
+前台体验要轻，后台治理要稳。
 
----
-## Agent skills
+禁止为了维护数据表，让用户离开当前任务流程去另一个页面补资料后再回来。
 
-### Issue tracker
+<!-- CODEGRAPH_START -->
+## CodeGraph
 
-Issues and PRDs are tracked in GitHub Issues for `zhaozengqing4364-bit/sales-training-qoder` using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
 
-### Triage labels
+- **MCP tools** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them. `codegraph_node` returns one symbol's source + callers, or reads a whole file with line numbers. If the tools are listed but deferred, load them by name via tool search.
+- **Shell** (always works): `codegraph explore "<symbol names or question>"` and `codegraph node <symbol-or-file>` print the same output.
 
-Use the canonical triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
+<!-- CODEGRAPH_END -->
+# Finding Your Unknowns — Working Guidelines
 
-### Domain docs
+> Derived from [A Field Guide to Fable: Finding Your Unknowns](https://x.com/trq212/article/2073100352921215386) by Thariq (Anthropic).
+> Core insight: **the map is not the territory.** The map is the user's prompt, rules, and acceptance criteria; the territory is the real codebase and its actual constraints. The gap between them is made of *unknowns*. Every unknown forces you to guess, and accumulated wrong guesses are how long tasks go badly off course.
 
-This repo uses a single-context domain-doc layout: root `CONTEXT.md` when present, with architectural decisions in `docs/adr/`. See `docs/agents/domain.md`.
----
+**Tradeoff:** These guidelines bias toward discovery over speed. For trivial tasks (typo-level fixes), use judgment and skip the ceremony.
 
-## Project Overview
+## The Four Kinds of Unknowns
 
-**项目名称**: Enterprise AI Intelligent Practice System (企业级 AI 智能演练系统)
-**项目描述**: 基于 Web(H5)端的企业级 AI 员工陪练平台，集成于企业微信工作台。通过全双工语音交互技术，提供 PPT 演讲复盘和高压销售对练两种核心场景，并支持通过 Agent 平台动态配置演练场景。
-**开发模式**: Spec-Driven Development with .kiro steering system
+Every task the user gives you contains four kinds of information:
 
-## Project Principles (Constitution)
+1. **Known knowns** — what the prompt explicitly states.
+2. **Known unknowns** — what the user knows they haven't figured out yet.
+3. **Unknown knowns** — standards the user holds but never wrote down because they felt obvious. They will only recognize them when they see your output ("no, not like that").
+4. **Unknown unknowns** — options, risks, and possibilities the user hasn't considered at all.
 
-### I. 用户体验永不中断 (NON-NEGOTIABLE)
-演练进行中：**禁止** `alert` / `confirm` / 阻塞式弹窗。可恢复故障用状态条、故障面板等非阻塞反馈；**不可恢复**（鉴权、契约不满足、未配置）须明确、稳定地失败，**禁止**无限重连掩盖（与 [AGENTS.md](AGENTS.md) §IV 一致）。
+Your job is not to take the prompt and grind. Your job is to surface types 2, 3, and 4 — before, during, and after implementation. **Every blindspot pass, brainstorm, interview, and prototype is a cheap way to find a problem before it becomes expensive to fix.**
 
-### II. 实时性优先
-端到端延迟目标：<300ms（从用户停止说话到 AI 开始回应）
+## Pre-implementation
 
-### III. 模块化场景独立
-多轨演练场景（PPT 演练 `presentation_coach/`、销售对练 `sales_bot/`、新人训练路径 `sales_trainer/`、课程考核 `curriculum_practice/`、运行时主语 `training_runtime/`）必须**独立演进、互不引用**；共享逻辑下沉到 `common/`，跨域访问需通过 `common/api/` 或 `common/db/models.py` 中转。详见 [docs/architecture.md](docs/architecture.md) §17 模块边界 与 [backend/src/*/AGENTS.md](backend/src/) 各子域契约。
+### 1. Blindspot Pass
 
-### IV. 容错与恢复
-区分可恢复与不可恢复错误；单一依赖故障不得拖垮全站。可恢复：有限重试与降级；不可恢复：快速失败 + 可操作提示，不在连接层盲目重试。
+When the user enters unfamiliar territory (a new module, an unfamiliar technology, a type of work they haven't done):
 
-### V. 成本控制
-单次演练成本 <¥1（包含所有 API 调用）
-
-### VI. 数据隐私与合规
-演练记录只能被本人和管理员访问
+- Quickly survey the codebase/domain and list what the user likely doesn't know they don't know.
+- Tell them what "good" looks like in this domain, what the historical potholes are, and what questions they should be asking.
+- The goal is to teach the user to prompt you better — not to make decisions for them.
 
-### VII. 可观测性
-结构化日志，所有日志包含 trace_id
-
-## Commands
-
-### 环境配置
-```bash
-# 后端环境变量
-cp backend/.env.example backend/.env
-# 编辑 backend/.env 配置必要的环境变量
+### 2. Brainstorm & Prototype
 
-# 前端环境变量
-cp web/.env.example web/.env.local
-# 编辑 web/.env.local 配置 API 地址等
-```
+When the task involves "I'll know it when I see it" criteria (visual design, interaction, direction):
 
-**关键环境变量** (完整配置见 `backend/.env.example`):
-
-```bash
-# ============================================
-# 阿里云配置 (TTS/ASR)
-# ============================================
-DASHSCOPE_API_KEY=replace-with-dashscope-api-key
-MODEL_CONFIG_ENCRYPTION_KEY=replace-with-fernet-key
-
-# TTS 提供商选择: aliyun | edge | browser
-TTS_PROVIDER=aliyun
-TTS_VOICE=longxiaochun              # 龙小春 (温柔女声)
-TTS_SAMPLE_RATE=16000
-
-# TTS 降级配置
-TTS_ENABLE_FALLBACK=true
-TTS_FALLBACK_CHAIN=aliyun,edge,browser
-TTS_TIMEOUT=10
-TTS_CONNECTION_POOL_SIZE=10
-TTS_ENABLE_WARMUP=true
-
-# ============================================
-# StepFun Realtime（双轨语音模式）
-# ============================================
-STEPFUN_API_KEY=replace-with-stepfun-api-key
-STEPFUN_REALTIME_URL=wss://api.stepfun.com/v1/realtime
-STEPFUN_REALTIME_MODEL=stepaudio-2.5-realtime  # 默认推荐 stepaudio-2.5-realtime；可按需切换 step-1o-audio | step-audio-2 | step-audio-2-mini
-DEFAULT_VOICE_MODE=stepfun_realtime  # legacy | stepfun_realtime
-STEPFUN_REALTIME_VOICE=qingchunshaonv
-STEPFUN_REALTIME_OUTPUT_SAMPLE_RATE=24000
-
-# ============================================
-# 数据库与缓存
-# ============================================
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost/db
-REDIS_URL=redis://localhost:6379/0
-CHROMADB_PERSIST_DIR=./data/chromadb
-
-# ============================================
-# Auth（受控登录）
-# ============================================
-AUTH_SHARED_PASSWORD=change-me
-AUTH_USER_PASSWORDS_JSON={}         # 可选：按账号覆盖口令
-
-# ============================================
-# 日志与调试
-# ============================================
-LOG_LEVEL=INFO
-WEBSOCKET_DEBUG=false
-ENABLE_TRACING=true
-```
-
-### Backend
-```bash
-cd backend
-
-# 环境设置
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-pip install -r requirements.txt
-
-# 数据库迁移 (Alembic)
-alembic upgrade head       # 应用所有迁移
-alembic revision --autogenerate -m "描述"  # 创建新迁移
-
-# 开发 (端口 3444)
-python -m uvicorn src.main:app --reload --port 3444
-
-# 测试
-pytest                           # 运行所有测试
-pytest tests/unit/              # 单元测试
-pytest tests/integration/       # 集成测试
-pytest tests/performance/       # 性能测试 (50 并发)
-pytest tests/unit/test_asr.py   # 运行单个测试文件
-pytest tests/unit/test_asr.py -v -k "test_transcribe"  # 运行特定测试
-pytest -cov=src --cov-report=html  # 生成覆盖率报告
-
-# 代码质量
-ruff check src/                 # 检查代码规范
-ruff format src/                # 格式化代码
-mypy src/                       # 类型检查
-```
-
-### Frontend
-```bash
-cd web
-
-# 开发 (端口 3445)
-npm run dev
-
-# 生产构建
-npm run build
-npm run start
-
-# 测试
-npm run test                    # 运行所有测试
-npm run test:watch              # 监视模式
-npm run test:coverage           # 生成覆盖率报告
-
-# 代码检查
-npm run lint                    # 运行 ESLint
-```
-
-### Docker
-```bash
-# 启动所有服务 (后端 3444, 前端 3445)
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f backend
-docker-compose logs -f frontend
-
-# 停止服务
-docker-compose down
-
-# 重建并启动
-docker-compose up -d --build
-```
-
-### 服务端口
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| Backend API | 3444 | FastAPI 后端服务 |
-| Frontend Dev | 3445 | Next.js 开发服务器 |
-| PostgreSQL | 5432 | 数据库 (Docker) |
-
-## Project Structure & Architecture
-
-```
-backend/src/
-├── main.py                    # FastAPI 应用入口 (75 行兼容 shim, 实际装配见下)
-├── app_factory.py             # create_app() 工厂: middleware + 路由 + lifespan 装配
-├── app_lifespan.py            # lifespan 上下文: DB/Redis/Chroma/SessionManager/ConfigManager 初始化
-├── http_routes.py             # HTTP 顶层注册 (health / metrics / dev-login)
-├── websocket_routes.py        # WebSocket 顶层注册 (3+ 通道统一挂载)
-├── router_registry.py         # 30+ HTTP APIRouter 集中挂载 + knowledge-bases 别名镜像
-├── agent/                     # Agent 平台核心
-│   ├── api/                   # Agent, Persona 管理 API
-│   ├── capabilities/          # 能力模块 (ASR, TTS, LLM, Scoring)
-│   │   ├── base.py                  # Capability 抽象基类
-│   │   ├── registry.py              # 能力注册表
-│   │   ├── runner.py                # 链式编排执行器
-│   │   ├── knowledge_retrieval.py
-│   │   ├── fuzzy_detection.py
-│   │   ├── realtime_scoring.py
-│   │   └── sales_stage.py
-│   ├── models.py
-│   ├── context.py
-│   └── services/              # Agent 业务逻辑
-│       ├── agent_service.py
-│       ├── agent_persona_service.py
-│       ├── persona_service.py
-│       ├── persona_policy.py
-│       └── industry_pack_contract.py
-├── prompt_templates/          # 提示词模板系统 (含 api/routes.py + scenario 绑定)
-├── evaluation/                # 分阶段评估系统 (含 triggers/ 与 staged_evaluation)
-├── sales_trainer/             # 【新人训练路径】异步学习/录音/考卷 (与 sales_bot 实时对练**分离**)
-│   ├── api.py                 # Router surface (含 user/admin_router)
-│   ├── article_api.py / paper_api.py / regrade_api.py / unit_api.py
-│   ├── models.py / schemas.py / permissions.py / rules.py
-│   ├── router_registration.py # 12 子路由集中注册
-│   ├── services/              # 56 个 service (含 audio_submission, paper_revision, material_publish)
-│   └── tasks/                 # 异步评分/转写入口
-├── curriculum_practice/       # 【课程闭环】templates / 考官 WS / test bank
-│   ├── api.py                 # 9 router 在 2542 行文件中
-│   ├── models.py / schemas.py
-│   ├── services/              # practice_templates / examiner_agents / publishing_gates / snapshots / ...
-│   └── websocket/             # /ws/curriculum/examiner/{session_id}
-├── training_runtime/          # 【运行时主语】TrainingRuntimeDescriptor + plugin dispatch
-│   ├── models.py / service.py
-│   ├── plugins.py             # dispatch_scenario_plugin (含 LEGACY_SALES_HANDLER_MODULES 禁单)
-│   └── stepfun_transport.py
-├── supervisor/                # 【主管审核】TrainingReportViewModel + 复训任务
-├── curriculum_analytics/      # 课程数据聚合 (与 admin/api/analytics_curriculum.py 配合)
-├── support/                   # 运维支撑 (runtime_status_service 等)
-├── admin/                     # 管理后台 API (governance / config_center / config_bundles / voice_runtime / ...)
-├── presentation_coach/        # PPT 演练场景 (独立)
-│   ├── api/                   # PPT 上传、会话管理 API
-│   ├── services/              # Coach, PointTracker, InterruptionDetector (13 文件)
-│   │   ├── coach_service.py
-│   │   ├── feedback_service.py
-│   │   ├── ppt_parser.py
-│   │   ├── presentation_ai_policy_service.py
-│   │   ├── presentation_report_service.py
-│   │   ├── prompt_role_resolver.py
-│   │   ├── point_tracker.py
-│   │   ├── point_extraction.py
-│   │   ├── semantic_point_tracker.py
-│   │   ├── user_presentation_progress.py
-│   │   ├── interruption_detector.py
-│   │   ├── aho_matcher.py
-│   │   └── forbidden_matcher.py
-│   └── websocket/             # PPT 演练 WebSocket
-│       ├── presentation_handler.py            # legacy 模式入口
-│       └── presentation_stepfun_realtime_handler.py  # StepFun 变体 (复用 sales transport + PPT 上下文)
-├── sales_bot/                 # 销售对练场景 (独立) — **仅 StepFun-Realtime** 模式
-│   ├── api/                   # 场景管理 API (scenarios / bot_service)
-│   ├── services/              # BotService, ContextManager, SummaryService (9 文件)
-│   │   ├── bot_service.py             # (内含 _build_legacy_langchain_chain 残留, 确认无人调用后可清)
-│   │   ├── context_manager.py
-│   │   ├── roleplay_compliance_checker.py
-│   │   ├── summary_service.py
-│   │   ├── transcript_normalization.py
-│   │   ├── vagueness_detector.py
-│   │   ├── voice_instruction_compiler.py
-│   │   ├── voice_policy_monitor.py
-│   │   └── voice_runtime_policy.py
-│   └── websocket/             # 销售对练 WebSocket (StepFun Realtime 单一权威)
-│       ├── router.py                       # /ws/sales/{session_id} 入口
-│       ├── stepfun_realtime_handler.py     # 1157 行主 handler, 6 mixin 组合 (复杂度热点)
-│       ├── stepfun_realtime_state.py       # 类型边界 (typed state base)
-│       ├── stepfun_realtime_connection.py  # transport mixin
-│       ├── stepfun_realtime_policy.py      # 语音策略 + 客户端消息分发 (60KB)
-│       ├── stepfun_realtime_upstream.py    # 上游事件路由/函数调用/响应生命周期 (115KB)
-│       ├── stepfun_realtime_feedback.py    # 实时反馈仲裁 (53KB)
-│       ├── stepfun_realtime_sales_stage.py # sales stage capability (17KB)
-│       ├── stepfun_realtime_constants.py
-│       ├── stepfun_runtime_types.py
-│       ├── stepfun_tool_execution.py
-│       ├── voice_runtime_profile.py
-│       ├── session_control_adapter.py
-│       ├── grounding_decision_pipeline.py
-│       ├── phase4_local_provider.py        # phase4 local fallback
-│       ├── realtime_audio_flow.py
-│       ├── realtime_feedback_arbiter.py
-│       ├── realtime_turn_coordinator.py
-│       ├── sales_handler.py.deprecated     # ⚠️ 已弃用, training_runtime/plugins.py 显式禁用
-│       └── components/                     # 解耦组件 (22 个 stepfun_* / capability_* helper)
-│           ├── capability_processor.py
-│           ├── curriculum_stage_runtime.py
-│           ├── message_persistence.py
-│           ├── objection_ledger_helpers.py
-│           ├── score_processor.py
-│           ├── stepfun_asr_fallback.py
-│           ├── stepfun_emotion_analyzer.py
-│           ├── stepfun_event_payloads.py
-│           ├── stepfun_function_call_helpers.py
-│           ├── stepfun_helpers.py
-│           ├── stepfun_internal_knowledge_searcher.py
-│           ├── stepfun_knowledge_helpers.py
-│           ├── stepfun_message_helpers.py
-│           ├── stepfun_runtime_metrics_helpers.py
-│           ├── stepfun_thinking_capture.py
-│           ├── stepfun_tool_helpers.py
-│           ├── stepfun_tts_contracts.py
-│           ├── stepfun_upstream_router.py
-│           ├── stepfun_voice_errors.py
-│           ├── stepfun_voice_selection.py
-│           └── tts_component.py
-├── common/                    # 共享模块 (27 子包 + config.py)
-│   ├── ai/                    # LLM, Embedding, ConfigManager, encryption
-│   ├── analytics/             # 公共分析 (与 admin/analytics 区分)
-│   ├── api/                   # 公共 REST 路由 (training, practice, dashboard, ...)
-│   ├── audio/                 # ASR/TTS 服务 (10 文件)
-│   │   ├── asr_service.py / asr_with_fallback.py
-│   │   ├── asr_alibaba.py / asr_base.py / asr_local.py / asr_streaming.py
-│   │   ├── pcm_duration.py
-│   │   ├── tts_service.py / tts_factory.py
-│   │   └── aliyun_streaming_tts.py
-│   ├── auth/                  # JWT + shared password + WeCom SSO
-│   ├── business_rules/        # 业务规则引擎
-│   ├── cache/                 # Redis 封装
-│   ├── config.py              # 全局配置常量
-│   ├── conversation/          # 对话消息存储/回放/证据
-│   ├── cos/                   # 阿里云 OSS 兼容层
-│   ├── db/                    # SQLAlchemy session + models
-│   ├── e2e/                   # 端到端测试 fixture
-│   ├── effectiveness/         # Canonical 评估内核
-│   ├── error_handling/        # Result[T] + middleware
-│   ├── growth/                # 成长中心
-│   ├── jobs/                  # 异步任务 (RQ/Celery 包装)
-│   ├── knowledge/             # ChromaDB 封装 + KB Lock guard
-│   ├── knowledge_engine/      # Haystack 知识问答引擎
-│   ├── logging/               # 日志脱敏
-│   ├── middleware/            # 通用中间件
-│   ├── monitoring/            # Prometheus + structlog 配置
-│   ├── oss/                   # 通用 OSS 抽象
-│   ├── ppt/                   # PPT 解析共享
-│   ├── rate_limit/            # api_limiter / session_limiter
-│   ├── recommendations/       # 推荐算法
-│   ├── resilience/            # circuit_breaker / backoff
-│   ├── services/              # runtime_gate / practice_session / session_runtime_* 等高阶 service
-│   ├── storage/               # 存储 (document / audio / presentation)
-│   ├── training_tasks/        # 训练任务 (TrainingTask 状态机)
-│   ├── validation/            # input_validator / file_validator / html_sanitizer
-│   └── websocket/             # BaseWebSocketHandler + SessionManager + SessionStateService
-└── tests/
-
-web/src/app/
-├── (auth)/                    # 登录页面
-├── (dashboard)/               # 用户仪表板
-├── (user)/                    # 练习页面
-│   └── practice/[sessionId]/
-│       ├── page.tsx           # 练习主页
-│       └── report/page.tsx    # 练习报告
-└── admin/                     # 管理后台 (22+ 路由族)
-    ├── page.tsx               # 管理首页
-    ├── agents/                # Agent 管理
-    ├── personas/              # Persona 管理
-    ├── presentations/         # PPT 管理
-    ├── presentation-ai/       # PPT AI 策略管理
-    ├── prompts/               # 提示词管理
-    ├── voice-runtime/         # 语音运行时配置
-    ├── knowledge/             # 知识库管理
-    ├── users/                 # 用户管理
-    ├── records/               # 演练记录
-    ├── analytics/             # 数据分析
-    ├── settings/              # 系统设置
-    ├── business-rules/        # 业务规则配置
-    ├── curriculum-practice/   # 课程考核管理
-    ├── governance/            # AI 治理
-    ├── learning-contents/     # 学习内容管理
-    ├── logs/                  # 系统日志
-    ├── rag-profiles/          # RAG 配置画像
-    ├── retrieval-strategies/  # 检索策略
-    ├── sales-trainer/         # 新人训练路径管理
-    ├── scoring-rulesets/      # 评分规则集
-    ├── supervisor-training/   # 主管培训/复训
-    └── test-bank/             # 题库管理
-```
-
-## Active Technologies
-
-### 后端
-- Python 3.11+ with async/await
-- FastAPI, SQLAlchemy 2.0+, Pydantic 2.0+
-- FunASR / 阿里云 ASR, Edge-TTS / 阿里云流式 TTS
-- StepFun Realtime API (双轨语音)
-- ChromaDB, PostgreSQL, Redis
-- structlog, tenacity, aiohttp, dashscope
-
-### 前端
-- Next.js 16.2.3, React 19.2.3, TypeScript 5+
-- Tailwind CSS 4+, Radix UI, Zustand, Vitest
-
-## Code Style
-
-### Python (Ruff)
-- 88 字符行宽, 4 空格缩进, 双引号优先
-- 类型提示必需, 使用 `ruff format`
-
-### TypeScript
-- 2 空格缩进, 单引号优先, 分号必需
-
-## 禁止事项
-
-```
-后端:
-❌ print() → logger.info()
-❌ session.query(Model) → select(Model)
-❌ orm_mode = True → from_attributes = True
-❌ @app.on_event("startup") → lifespan
-❌ raise HTTPException(500) → Result.fail()
-
-前端:
-❌ bg-white（全页背景）→ bg-slate-50
-❌ text-black → text-slate-900
-❌ 猜测 API → 查 docs/api-contract/
-❌ alert/popup → 状态指示器
-```
-
-## 核心架构模式
-
-### 错误处理: Result[T]
-```python
-from common.error_handling.result import Result
-
-async def process() -> Result[str]:
-    try:
-        return Result.ok(await do_work())
-    except SomeError:
-        return Result.fail("[ERROR_CODE]")
-```
-
-### WebSocket: BaseWebSocketHandler
-```python
-class MyHandler(BaseWebSocketHandler):
-    async def handle_message(self, message: dict):
-        pass
-```
-
-### 前端 API 客户端
-```typescript
-import { api } from '@/lib/api/client';
-const data = await api.module.getEndpoint();
-```
-
-## 开发前必读文档
-
-| 系统架构 | `docs/architecture.md` |
-| API 接口规范 | `docs/api-contract/` |
-| 后端编码原则 | `.kiro/steering/backend-principles.md` |
-| 前端编码原则 | `.kiro/steering/frontend-principles.md` |
-| 架构决策 | `docs/adr/` |
-| 快速参考 | `.kiro/steering/QUICK-REFERENCE.md` |
-
-## 提交前检查
-
-```
-□ ruff check 通过
-□ ruff format 已执行
-□ mypy 类型检查通过
-□ 无 print() 语句
-□ 使用 Result[T] 包装错误
-□ 前端无 alert/popup
-□ 单元测试通过
-```
-
-## 最近更新
-
-- **2026-02-16**: CLAUDE.md 更新
-  - 销售对练 WebSocket 组件化 (stepfun_* 模块拆分)
-  - PPT 演练增强 (presentation_ai_policy, prompt_role_resolver)
-  - TTS 服务工厂化 (tts_factory, aliyun_streaming_tts)
-  - 前端新增 presentation-ai 管理页面
-
-- **2026-05 ~ 2026-06**: 多模块增量
-  - 新人训练路径 `sales_trainer/` 落地（异步学习/录音/考卷/重判，与销售实时对练**分离**）
-  - 课程闭环 `curriculum_practice/` + 考官 WS + test bank + publish gate
-  - 训练运行时主语 `training_runtime/`（`TrainingRuntimeDescriptor` + `dispatch_scenario_plugin`）
-  - 主管审核 `supervisor/`（TrainingReportViewModel + 复训任务）
-  - 课程分析 `curriculum_analytics/` + `admin/analytics_curriculum/`
-  - 运维支撑 `support/`
-  - `app_factory.py` / `app_lifespan.py` / `http_routes.py` / `websocket_routes.py` 装配入口分离
-  - `BaseWebSocketHandler` 收敛 + `RuntimeGate.admit_session` 统一 admission
-  - Config Asset B2 HITL 治理 ADR（2026-05-27）
-  - routing audit 闭环 (Phase 1.2)
-
-- **2026-02-15**: Claude Code 钩子系统 V2 优化
-
----
-
-## 自生长记录区
-
-### 架构决策
-
-| 日期 | 决策 | 影响 |
-|------|------|------|
-| 2026-05-27 | Config Asset B2 HITL 治理 | 配置变更审批边界（AFK / HITL-Notify / HITL-Approve / HITL-Block） |
-| 2026-05-26 | Roleplay Contract 治理 | Situation Pack 不得脱离统一配置治理 |
-| 2026-05-12 | Case Item + Role Profile 试点契约 | 最小内容资产 (Proposed, 待 HITL 批准) |
-| 2026-05-11 | 领域边界与契约锁定 (PRD #23) | TrainingTask / PracticeSession / EvaluationRun / ConfigBundle 边界 |
-| 2026-05-11 | curriculum_practice 边界契约 | 内容资产 + RuntimeSnapshotService + 统一 *_ref JSON |
-| 2026-04-24 | 评分规则集治理 | versioned ruleset + 报告口径固化 + dry-run + 发布审计 |
-| 2026-04-21 | 成长中心延迟切片 | G-04 / G-08 / G-10 推迟到 Lane E |
-| 2026-03-14 | 训练运行时主语收敛 | `training_scenario_runtime` 单一主语, 避免场景分支 |
-| 2026-02-16 | 销售 WebSocket 组件化 | 解耦事件/消息/工具处理逻辑 |
-| 2026-02-15 | V2 钩子系统 | 精确工具计数 + 自动反思 |
-| 2026-02-13 | StepFun 事件解耦 | 降低 handler 复杂度 |
-| 2026-02-06 | TTS 降级链 | 阿里云→Edge→浏览器 |
-| 2026-02-04 | 分阶段评估 | 触发器模式 |
-| 2026-01-20 | StepFun Realtime | 双轨语音模式 |
-
-> 完整 ADR 见 [docs/adr/](docs/adr/)（10 个 ADR, 2026-03-14 ~ 2026-05-27）。
-
----
-
-<!-- MANUAL ADDITIONS START -->
-<!-- 手动添加的内容放在这里 -->
-<!-- MANUAL ADDITIONS END -->
+- Produce several clearly different options or mock prototypes first (single HTML file, fake data). **Do not touch real code.**
+- Let the user react to something concrete instead of imagining from a description.
+- Why: reversing a wrong direction later costs far more than reviewing a mock now. Small spec changes can cause drastically different implementations.
+
+### 3. Interview
+
+When ambiguity remains after brainstorming, interview the user:
+
+- One question at a time.
+- Prioritize questions whose answers would change the architecture. Don't spend the question budget on trivia.
+
+### 4. References
+
+When the user struggles to describe what they want, proactively ask: "Is there an existing implementation/component/library that looks like what you want? Point me at it." Source code is the best reference, even in a different language.
+
+### 5. Implementation Plan
+
+Before executing a complex task, present an implementation plan for review:
+
+- Lead with the parts the user is most likely to change: data models, type interfaces, user-facing behavior.
+- Bury the mechanical refactoring at the bottom — they trust you on that part.
+
+## During implementation
+
+### 6. Implementation Notes
+
+While executing a long task, maintain a temporary `implementation-notes.md`:
+
+- When an edge case forces you off the plan: pick the conservative option, log it under "Deviations", and keep going.
+- Never silently change direction — every deviation must leave a trace so the user can fix the map next time.
+
+## Post-implementation
+
+### 7. Explainer & Quiz
+
+After a large change, when the user asks (or the change is far bigger than they expected), produce a change report:
+
+- Include the context, the intuition, what was done, and why.
+- End with a quiz about the change. The user truly understands it only when they pass.
+- Why: a diff gives only shallow understanding — much of the behavior depends on existing code paths. Merging without understanding is how future unknowns accumulate.
+
+## Reminders
+
+- Too-specific instructions make you follow orders when a pivot is warranted; too-vague instructions make you guess with "industry best practices" that may not fit this project. When you feel this tension, stop and ask instead of pushing through.
+- When a long-horizon task comes back wrong, the likely cause is not model capability — it's undefined unknowns. Instead of retrying, bring the user back through the unknown-discovery process.
+- # AGENTS.md — AI 开发协作规范
+
+## 0. 适用范围
+
+本文件是仓库级长期规则，只保留高频、稳定、必须遵守的工程底线。项目细节放入专题文档：
+
+- `docs/architecture.md`：架构边界、模块职责
+- `docs/domain-glossary.md`：领域词、用户语言、禁用术语
+- `docs/uiux.md`：页面契约、信息架构、状态规范
+- `docs/api.md`：API 契约、错误码、分页、兼容性
+- `docs/security.md`：权限、安全、敏感数据、审计
+- `docs/testing.md`：测试策略与运行命令
+- `docs/ai-governance.md`：AI、Prompt、模型、工具调用治理
+- `docs/adr/`：架构决策记录
+
+更深目录的 `AGENTS.md` 优先于本文件。若规则冲突，先说明冲突，再按“更具体规则优先、用户目标优先、安全与数据底线不可突破”执行。
+
+## 1. 输出与协作
+
+- 所有回复、计划、错误解释、交付说明默认使用中文。
+- 不输出无价值过程流水账；只给计划、关键发现、阻塞、结果和验证。
+- 不把内部思考、工具调用记录、模型局限当成交付内容。
+- 非阻塞不确定性：基于合理假设继续，并在交付说明标明假设。
+- 阻塞不确定性：提出最少必要问题。
+- 默认最小必要改动；禁止顺手重构无关代码。
+- 失败必须显眼；禁止吞异常、静默跳过、伪造成功。
+
+## 2. 工作模式
+
+- **Simple**：单文件、小改动、明确 bug、不涉及权限/状态/API/数据库/核心 UI。直接改，最小实现，说明验证。
+- **Standard**：普通功能或跨文件改动。先简短计划，读相关链路，明确成功标准，实现后验证。
+- **Team**：架构、大重构、复杂 bug、多模块/权限/数据/AI/测试联动，或用户要求多 agent。主 agent 负责决策和交付，子 agent 只做探索与复核，结论必须有代码证据。
+
+复杂任务不得跳过计划、影响分析和验证。高风险任务不得直接执行破坏性操作。
+
+## 3. CodeGraph First
+
+仓库根目录存在 `.codegraph/` 时，理解代码必须优先使用 CodeGraph：
+
+1. `codegraph_explore`：理解功能链路、业务流程、架构区域
+2. `codegraph_node`：查看 symbol 或文件源码与调用关系
+3. `codegraph_search`：定位 symbol
+4. `codegraph_callers`：查看调用点
+5. `codegraph impact / affected`：改动前后做影响分析和测试选择
+
+没有 `.codegraph/` 时跳过，不自行创建索引。禁止未读调用者就修改共享函数，禁止在已有同类实现旁新增重复实现。
+
+## 4. 开发前检查
+
+写代码前快速确认：
+
+- 用户是谁，要完成什么任务，成功标准是什么。
+- 涉及哪些页面、API、状态、权限、数据结构。
+- 哪些是稳定代码逻辑，哪些是可配置业务规则。
+- 是否会泄露测试数据、工程字段、内部术语。
+- 如何验证、如何回滚或降级。
+
+若现有代码无法确认完整体系，优先复用现有结构；没有现有体系时，以最小侵入方式预留扩展点，避免规则散落。
+
+## 5. 产品与前端
+
+前端按任务组织，不按数据库对象组织。页面必须让用户 3 秒内知道当前任务、主操作和下一步。
+
+新增或重构业务页面必须具备页面契约：目标用户、使用场景、用户任务、主操作、核心信息、数据来源、加载/空/错误/无权限/成功状态、禁止展示信息、埋点或审计事件。
+
+界面必须使用用户语言。普通用户界面不得默认展示：`E2E`、`test`、`mock`、`seed`、`Phase*`、`ToolExecutor`、`Prompt`、`traceId`、`workflow`、`raw JSON`、数据库主键、原始枚举、内部错误码。技术细节只能放在管理员调试、审计详情、开发者模式或日志系统。
+
+API 数据进入页面前必须映射：`API DTO -> Domain Model -> ViewModel -> UI Component`。列表、风险、待办必须先去重、聚合、分组、排序、解释，再展示下一步动作。
+
+业务系统必须遵守上下文内完成原则：用户在主流程中缺少数据、关联对象、角色、配置或上下文时，应优先在当前页面、弹窗、抽屉或内联区域完成选择、快速新建、自动关联、稍后补充、权限校验、去重、审计和失败反馈；不得要求用户离开当前任务去其他模块补资料后再回来。
+
+UI 必须覆盖：loading、empty、error、success、disabled、readonly、permission denied、partial/stale data、submitting、retrying。表单必须覆盖 label、helper text、校验错误、dirty、重复提交防护、服务端错误映射、未保存离开提醒。
+
+优先使用现有设计系统、组件库、token 和布局模式。禁止随机渐变、模板 dashboard、无业务意义大卡片、空泛营销文案、多个主操作抢焦点。新增 UI 至少满足基础可访问性：键盘可用、焦点可见、表单有 label、图标按钮有 accessible name、颜色不是唯一信息来源。
+
+## 6. 后端与数据
+
+后端守住数据一致性、权限边界、状态流转、事务、审计、API 契约、配置治理和错误可定位。
+
+推荐分层：`controller/route` 只处理协议；`application service` 编排用例、事务、权限和状态；`domain service` 放核心规则；`repository/dao` 负责数据访问；`policy/permission` 做对象级权限；`state machine` 集中状态；`rules/config/dictionary` 管理规则、配置和枚举；`audit/log/events` 记录关键行为。
+
+禁止 controller 混合权限、状态、配置、文案和数据库操作。禁止只靠前端隐藏按钮做权限。禁止状态流转散落在多个函数。禁止业务阈值、评分、排序、开关、模板硬编码在深层业务代码。
+
+API 必须稳定、兼容、错误结构统一。新增字段保持向后兼容；删除或改变语义必须有废弃期。分页、排序、筛选规则统一。前端展示字段与内部工程字段隔离。
+
+涉及 schema、migration、批量修复时，必须考虑旧数据、影响条数、可重复执行、dry-run、锁表风险、回滚或补偿方案。不得默认手动改生产数据。
+
+关键写入必须考虑事务、幂等、重复提交、并发、外部超时、重试安全、部分失败补偿和用户可见结果。
+
+## 7. 安全、权限、可观测性
+
+涉及登录、权限、文件上传、导出、Webhook、第三方接口、AI 工具调用、管理后台、隐私数据、批量操作时，必须做轻量安全分析。
+
+底线：后端权限校验、对象级权限、输入校验、输出转义、敏感数据脱敏、密钥不入库/日志/前端、管理员操作留痕、高风险操作可预览/确认/回滚。
+
+关键功能必须记录 requestId/traceId、结构化日志、业务事件、接口耗时、外部调用结果、失败原因、异常堆栈、审计记录和必要指标。日志不得输出密码、token、密钥、身份证、手机号等敏感信息。
+
+## 8. AI 功能治理
+
+凡涉及 AI 助手、评分、推荐、总结、工具调用，必须可控、可追踪、可降级。
+
+- Prompt 集中管理并版本化。
+- 模型、temperature、max tokens、timeout、retry、rate limit 配置化。
+- AI 输出必须有依据、不确定性、人工确认、可编辑和失败兜底。
+- 高风险建议不得自动执行。
+- AI 工具调用必须有 input schema、权限校验、对象范围校验、幂等键、dry-run、preview、confirm、audit log、timeout、rate limit、回滚或补偿。
+- 禁止把 AI 生成内容标记为已验证事实。
+
+## 9. 风险分级
+
+- **P0**：生产数据破坏、认证授权、支付资金、合同订单、大迁移、破坏性 API、大重构、AI 自动高风险动作。必须说明影响、回滚、验证、dry-run 或灰度。
+- **P1**：数据库结构、核心状态机、核心接口/页面、管理规则、多模块联动。必须说明兼容性、配置、权限、状态影响和回归路径。
+- **P2**：普通功能、页面、接口、非核心业务规则。标准实现和验证。
+- **P3**：文案、样式、小 bug。最小改动，不引入新抽象。
+
+## 10. 测试与验证
+
+不得只说“已测试”。必须说明覆盖场景、命令和结果。
+
+优先级：自动化测试、类型检查、lint、构建、单测、集成测试、E2E、手工关键路径、权限边界、状态流转、配置异常、回归风险。
+
+Bug 修复优先新增复现测试。核心流程至少覆盖一条关键路径。无法测试时必须说明原因和残余风险。
+
+## 11. ADR、依赖、发布
+
+以下情况必须新增或更新 ADR：新技术栈、核心数据模型、权限模型、状态机、配置中心、后台管理机制、部署方式、重大重构、影响长期维护成本的设计决策。
+
+不得为小问题引入新依赖。新增依赖必须说明解决的问题、替代方案、维护状态、安全/license 风险、包体积/构建/部署影响和移除路径。
+
+高风险功能必须支持 feature flag、灰度、快速关闭、回滚或补偿、失败降级和可观测指标。长期 feature flag 必须清理。
+
+## 12. 交付说明
+
+简单任务可精简，但不得只回复“已完成”。交付说明至少包含：
+
+- 本次完成
+- 主要改动
+- 验证结果
+- 未验证项及原因
+- 风险等级
+- 发布与回滚方式
+
+涉及 UI、权限、状态、API、数据、AI、配置、migration 时，必须补充对应影响、兼容性、审计和回归路径。
+
+## 13. Definition of Done
+
+完成必须同时满足：
+
+- 用户路径清晰，主操作明确，状态完整。
+- 普通用户界面不泄露测试数据、工程字段和内部术语。
+- API 契约稳定，权限以后端校验为准，对象级权限明确。
+- 状态流转集中管理，可调整规则不散落。
+- 配置有默认值、校验和兜底。
+- 关键写入有事务、幂等、并发处理和审计。
+- 日志和错误可定位且不泄露敏感信息。
+- 改动范围可解释，与现有风格一致。
+- 验证证据充分，风险和回滚路径明确。
+- 无必要新依赖，无无关重构，未完成事项已记录。

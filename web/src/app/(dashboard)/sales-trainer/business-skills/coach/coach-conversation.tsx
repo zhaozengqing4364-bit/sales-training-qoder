@@ -1,7 +1,9 @@
 "use client";
 
-import type { FormEvent, ReactNode } from "react";
+import Link from "next/link";
+import { useEffect, useRef, type FormEvent, type ReactNode } from "react";
 import {
+    ArrowLeft,
     BookOpenCheck,
     Bot,
     CheckCircle2,
@@ -28,15 +30,11 @@ import type {
 
 import { CoachMessageList } from "./coach-message-list";
 import {
-    activeEventIdForSession,
-    activeQuizEventForSession,
-    latestScoredQuizEventForSession,
-    latestSummaryEventForSession,
-    resolveCurrentLearningUnit,
-    trainingReferenceEventForSession,
+    buildCoachConversationViewModel,
     type CoachCommand,
     type DraftByEventId,
     type QuizCardEvent,
+    type StreamingAssistantText,
     type SummaryCardEvent,
 } from "./coach-session";
 import {
@@ -65,7 +63,7 @@ interface AiCoachChatSurfaceProps {
     readonly submittingEventIds: ReadonlySet<string>;
     readonly streamActivityLabel: string | null;
     readonly streamPhase: AiCoachChatStreamPhase | null;
-    readonly streamingReasoningText: Extract<AiCoachChatStreamEvent, { type: "reasoning_text_delta" }> | null;
+    readonly streamingAssistantText: StreamingAssistantText | null;
     readonly streamingCardDelta: Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }> | null;
     readonly error: string | null;
     readonly onInputChange: (value: string) => void;
@@ -93,7 +91,7 @@ export function AiCoachChatSurface({
     submittingEventIds,
     streamActivityLabel,
     streamPhase,
-    streamingReasoningText,
+    streamingAssistantText,
     streamingCardDelta,
     error,
     onInputChange,
@@ -107,107 +105,110 @@ export function AiCoachChatSurface({
 }: AiCoachChatSurfaceProps) {
     const isAdvancing = submittingEventIds.size > 0;
     const isBusy = isStarting || isSending || isAdvancing;
-    const activeEventId = activeEventIdForSession(session);
-    const activeQuiz = activeQuizEventForSession(session);
-    const latestScoredQuiz = latestScoredQuizEventForSession(session);
-    const referenceQuiz = trainingReferenceEventForSession(session);
-    const summaryEvent = latestSummaryEventForSession(session);
-    const progressUnit = coachProgress
-        ? learningUnits.find((unit) => unit.unit_key === coachProgress.learning_unit_key)
-        : null;
-    const currentUnit = progressUnit ?? resolveCurrentLearningUnit(learningUnits, referenceQuiz);
+    const viewModel = buildCoachConversationViewModel({
+        session,
+        learningUnits,
+        coachProgress,
+        pendingUserMessage,
+        streamingAssistantText,
+    });
     const activityLabel = streamActivityLabel
         ?? activityLabelFor(pendingCommand, isSending, isAdvancing, isStarting);
-    const shouldShowStreamingResponse = shouldShowStreamingCoachResponse({
+    const hasStreamingAssistantText = Boolean(streamingAssistantText?.text.trim());
+    const showStreamingResponse = shouldShowStreamingCoachResponse({
         isStarting,
         isSending,
         isAdvancing,
         streamPhase,
-        streamingReasoningText,
+        streamingAssistantText,
         streamingCardDelta,
-        activeQuiz,
+        activeQuiz: viewModel.activeQuiz,
     });
-    const streamingPreview = shouldShowStreamingResponse ? (
+    const streamingCardAttachment = streamingCardDelta ? (
+        <StreamingTrainingCard
+            activityLabel={activityLabel}
+            currentUnit={viewModel.currentUnit}
+            delta={streamingCardDelta}
+        />
+    ) : null;
+    const streamingPreview = showStreamingResponse && !hasStreamingAssistantText ? (
         <StreamingCoachResponse
             activityLabel={activityLabel}
-            currentUnit={currentUnit}
-            reasoningText={streamingReasoningText?.text ?? ""}
+            currentUnit={viewModel.currentUnit}
             cardDelta={streamingCardDelta}
         />
     ) : null;
     const streamingInteraction = streamingCardDelta?.payload.interaction ?? null;
     const streamingScrollKey = [
         streamPhase ?? "",
-        streamingReasoningText?.text.length ?? 0,
+        streamingAssistantText?.text.length ?? 0,
         streamingCardDelta?.delta_id ?? "",
         streamingInteraction?.stem?.length ?? 0,
         streamingInteraction?.options?.length ?? 0,
         activityLabel ?? "",
     ].join(":");
+
     return (
-        <section className="mx-auto flex h-[calc(100dvh-6rem)] min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/80 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.24)]">
+        <section className="mx-auto flex h-[calc(100dvh-4rem)] min-h-0 w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-stone-50/80 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.24)]">
             <WorkbenchHeader
                 session={session}
                 isBusy={isBusy}
                 isStarting={isStarting}
                 onResume={onResume}
                 onNewSession={onNewSession}
-                onEnd={() => onCoachCommand("end")}
             />
-            <main className="flex min-h-0 flex-1 flex-col px-3 py-3 md:px-4 lg:px-5">
-                <TrainingContextPanel
-                    session={session}
-                    currentUnit={currentUnit}
-                    referenceQuiz={referenceQuiz}
-                    coachProgress={coachProgress}
-                    coachProgressError={coachProgressError}
-                    learningUnitsError={learningUnitsError}
-                />
-                <CoachErrorBanner message={error} />
-                <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100/60">
+            <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 lg:grid lg:grid-cols-[minmax(0,1fr)_21rem] lg:p-4">
+                <section className="order-1 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm lg:order-none">
+                    <ConversationHeader
+                        currentUnit={viewModel.currentUnit}
+                        activityLabel={activityLabel}
+                        isBusy={isBusy}
+                    />
+                    <CoachErrorBanner message={error} />
                     <CoachMessageList
-                        session={session}
-                        pendingUserMessage={pendingUserMessage}
+                        viewModel={viewModel}
                         drafts={drafts}
                         submittingEventIds={submittingEventIds}
                         isStarting={isStarting}
                         isSending={isSending}
                         isAdvancing={isAdvancing}
                         activityLabel={activityLabel}
-                        activeEventId={activeEventId}
-                        error={error}
+                        error={null}
                         autoScrollKey={streamingScrollKey}
                         trailingNode={streamingPreview}
-                        className="h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 md:px-4"
+                        streamingMetaNode={<StreamingStatusLine activityLabel={activityLabel} />}
+                        streamingAttachmentNode={hasStreamingAssistantText ? streamingCardAttachment : null}
+                        commandBar={
+                            <CoachInlineCommandBar
+                                disabled={!session || isBusy}
+                                hasActiveQuiz={viewModel.activeQuiz !== null}
+                                pendingCommand={pendingCommand}
+                                onCommand={onCoachCommand}
+                            />
+                        }
+                        className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-4 md:px-6"
                         onFollowupPrompt={onFollowupPrompt}
                         onDraftChange={onDraftChange}
                         onSubmitEvent={onSubmitEvent}
                     />
-                </div>
-                {summaryEvent ? (
-                    <CoachGuidancePanel
-                        latestScoredQuiz={latestScoredQuiz}
-                        summaryEvent={summaryEvent}
-                        coachProgress={coachProgress}
-                        coachProgressError={coachProgressError}
-                    />
-                ) : null}
-            </main>
-            <CoachCommandBar
-                disabled={!session || isBusy}
-                hasActiveQuiz={activeQuiz !== null}
-                pendingCommand={pendingCommand}
-                onCommand={onCoachCommand}
-            />
-            {BUSINESS_SKILLS_COACH_WORKBENCH_RULES.showFreeFollowup ? (
-                <Composer
-                    value={input}
-                    disabled={!session || isBusy}
-                    hasActiveQuiz={activeQuiz !== null}
-                    onChange={onInputChange}
-                    onSubmit={onSend}
+                    {BUSINESS_SKILLS_COACH_WORKBENCH_RULES.showFreeFollowup ? (
+                        <Composer
+                            value={input}
+                            disabled={!session || isBusy}
+                            hasActiveQuiz={viewModel.activeQuiz !== null}
+                            onChange={onInputChange}
+                            onSubmit={onSend}
+                        />
+                    ) : null}
+                </section>
+                <TrainingStatusSidebar
+                    session={session}
+                    viewModel={viewModel}
+                    learningUnitsError={learningUnitsError}
+                    coachProgress={coachProgress}
+                    coachProgressError={coachProgressError}
                 />
-            ) : null}
+            </main>
         </section>
     );
 }
@@ -218,27 +219,32 @@ function WorkbenchHeader({
     isStarting,
     onResume,
     onNewSession,
-    onEnd,
 }: {
     readonly session: AiCoachChatSessionPublicV1 | null;
     readonly isBusy: boolean;
     readonly isStarting: boolean;
     readonly onResume: () => void;
     readonly onNewSession: () => void;
-    readonly onEnd: () => void;
 }) {
     return (
-        <header className="shrink-0 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+        <header className="shrink-0 border-b border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
+                <div className="flex min-w-0 items-center gap-3">
+                    <Link
+                        href="/sales-trainer"
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                    >
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                        返回
+                    </Link>
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
                         <Bot className="h-5 w-5" />
                     </div>
-                    <div>
-                        <h1 className="text-lg font-semibold text-slate-950">
+                    <div className="min-w-0">
+                        <h1 className="truncate text-base font-black text-slate-950">
                             {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.pageTitle}
                         </h1>
-                        <p className="text-xs text-slate-500">
+                        <p className="truncate text-xs text-slate-500">
                             {session
                                 ? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.activeSessionSubtitle
                                 : BUSINESS_SKILLS_COACH_WORKBENCH_COPY.startingSessionSubtitle}
@@ -247,9 +253,9 @@ function WorkbenchHeader({
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <Button
-                        variant="outline"
+                        variant="primary"
                         size="sm"
-                        className="rounded-xl"
+                        className="rounded-full"
                         disabled={isBusy}
                         onClick={onResume}
                     >
@@ -259,9 +265,9 @@ function WorkbenchHeader({
                             : BUSINESS_SKILLS_COACH_WORKBENCH_COPY.resumeButton}
                     </Button>
                     <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        className="rounded-xl"
+                        className="rounded-full"
                         disabled={isBusy}
                         onClick={onNewSession}
                     >
@@ -270,98 +276,41 @@ function WorkbenchHeader({
                             ? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.newSessionBusyButton
                             : BUSINESS_SKILLS_COACH_WORKBENCH_COPY.newSessionButton}
                     </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl border-amber-200 text-amber-700 hover:bg-amber-50"
-                        disabled={!session || isBusy}
-                        onClick={onEnd}
-                    >
-                        <ClipboardList className="mr-2 h-4 w-4" />
-                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.endButton}
-                    </Button>
                 </div>
             </div>
         </header>
     );
 }
 
-function TrainingContextPanel({
-    session,
+function ConversationHeader({
     currentUnit,
-    referenceQuiz,
-    coachProgress,
-    coachProgressError,
-    learningUnitsError,
+    activityLabel,
+    isBusy,
 }: {
-    readonly session: AiCoachChatSessionPublicV1 | null;
     readonly currentUnit: BusinessEtiquetteLearningUnit | null;
-    readonly referenceQuiz: QuizCardEvent | null;
-    readonly coachProgress: BusinessEtiquetteAiCoachProgress | null;
-    readonly coachProgressError: string | null;
-    readonly learningUnitsError: string | null;
+    readonly activityLabel: string | null;
+    readonly isBusy: boolean;
 }) {
-    const state = session?.coach_state;
-    const phaseLabel = state
-        ? BUSINESS_SKILLS_COACH_PHASE_LABELS[state.session_phase]
-        : "准备中";
-    const difficultyLabel = state
-        ? BUSINESS_SKILLS_COACH_DIFFICULTY_LABELS[state.difficulty]
-        : "热身";
-    const nextActionLabel = state?.last_action
-        ? BUSINESS_SKILLS_COACH_NEXT_ACTION_LABELS[state.last_action]
-        : "准备第一题";
-    const capabilityLabels = capabilityLabelsFor(currentUnit, referenceQuiz);
-    const masteryLabel = coachProgress
-        ? BUSINESS_SKILLS_COACH_PROGRESS_LABELS[coachProgress.status]
-        : masteryLabelFor(referenceQuiz);
-    const unitWarning = learningUnitsError
-        ?? (currentUnit ? null : BUSINESS_SKILLS_COACH_WORKBENCH_COPY.learningUnitsUnavailable);
-    const chapters = referenceQuiz?.payload.interaction.source_chapter_orders
-        ?? currentUnit?.source_chapter_orders
-        ?? [];
-    const contextMeta = [
-        capabilityLabels.length
-            ? capabilityLabels.join("、")
-            : BUSINESS_SKILLS_COACH_WORKBENCH_COPY.fallbackUnitDescription,
-        chapters.length ? `关联第 ${chapters.join("、")} 章` : null,
-        `${difficultyLabel} · ${nextActionLabel}`,
-        state?.current_focus ?? null,
-        coachProgressError
-            ? coachProgressError
-            : progressDetail(coachProgress) ?? `已完成 ${state?.answered_card_count ?? 0} 张卡`,
-    ].filter((item): item is string => typeof item === "string" && item.length > 0);
     return (
-        <section className="rounded-xl border border-slate-200 bg-white/90 px-4 py-2.5 shadow-sm">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="shrink-0 border-b border-slate-200 bg-white/80 px-4 py-3 md:px-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-500">
-                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.currentUnitLabel}
-                    </p>
-                    <h2 className="mt-0.5 truncate text-base font-semibold tracking-tight text-slate-950">
+                    <p className="text-xs font-semibold text-slate-500">对话陪练</p>
+                    <h2 className="mt-1 truncate text-sm font-black text-slate-950">
                         {currentUnit?.title ?? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.fallbackUnitTitle}
                     </h2>
-                    <p className="mt-0.5 line-clamp-1 text-xs leading-5 text-slate-500">
-                        {contextMeta.join(" / ")}
-                    </p>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:w-[21rem]">
-                    <ContextChip
-                        label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.activityLabel}
-                        value={phaseLabel}
-                    />
-                    <ContextChip
-                        label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachProgressLabel}
-                        value={masteryLabel}
-                    />
-                </div>
+                {isBusy && activityLabel ? (
+                    <span
+                        aria-live="polite"
+                        className="inline-flex shrink-0 items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700"
+                    >
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
+                        {activityLabel}
+                    </span>
+                ) : null}
             </div>
-            {unitWarning ? (
-                <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
-                    {unitWarning}
-                </p>
-            ) : null}
-        </section>
+        </div>
     );
 }
 
@@ -374,7 +323,7 @@ function CoachErrorBanner({
         return null;
     }
     return (
-        <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-800">
+        <section className="mx-4 mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-800 md:mx-5">
             <p className="font-semibold text-amber-900">
                 {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.streamErrorTitle}
             </p>
@@ -386,33 +335,19 @@ function CoachErrorBanner({
 function StreamingCoachResponse({
     activityLabel,
     currentUnit,
-    reasoningText,
     cardDelta,
 }: {
     readonly activityLabel: string | null;
     readonly currentUnit: BusinessEtiquetteLearningUnit | null;
-    readonly reasoningText: string;
     readonly cardDelta: Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }> | null;
 }) {
     return (
-        <div
-            aria-live="polite"
-            className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
-        >
-            <StreamingStatusLine activityLabel={activityLabel} />
-            {reasoningText.trim() ? (
-                <details
-                    open
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600"
-                >
-                    <summary className="cursor-pointer select-none text-xs font-semibold text-slate-700">
-                        思考过程
-                    </summary>
-                    <p className="mt-2 max-h-36 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5">
-                        {reasoningText.trim()}
-                    </p>
-                </details>
-            ) : null}
+        <div aria-live="polite" className="max-w-[72ch] space-y-3">
+            <div className="rounded-2xl rounded-tl-md border border-slate-200 bg-white px-4 py-3 text-sm leading-7 text-slate-800 shadow-sm">
+                <p className="text-sm leading-7 text-slate-500">
+                    {activityLabel ?? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.defaultThinkingLabel}
+                </p>
+            </div>
             {cardDelta ? (
                 <StreamingTrainingCard
                     activityLabel={activityLabel}
@@ -433,7 +368,7 @@ function StreamingStatusLine({
         return null;
     }
     return (
-        <p className="text-xs font-medium leading-5 text-slate-500">
+        <p className="mt-2 text-xs font-medium leading-5 text-slate-500">
             {activityLabel}
         </p>
     );
@@ -448,16 +383,16 @@ function StreamingTrainingCard({
     readonly currentUnit: BusinessEtiquetteLearningUnit | null;
     readonly delta: Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }>;
 }) {
-    const interaction = delta?.payload.interaction ?? null;
-    const options = interaction?.options ?? [];
-    const interactionType = interaction?.interaction_type ?? null;
-    const trainingCardType = interaction?.training_card_type ?? null;
-    const chapters = interaction?.source_chapter_orders ?? currentUnit?.source_chapter_orders ?? [];
-    const capabilityKeys = interaction?.capability_keys ?? currentUnit?.capability_keys ?? [];
+    const interaction = delta.payload.interaction;
+    const options = interaction.options ?? [];
+    const interactionType = interaction.interaction_type ?? null;
+    const trainingCardType = interaction.training_card_type ?? null;
+    const chapters = interaction.source_chapter_orders ?? currentUnit?.source_chapter_orders ?? [];
+    const capabilityKeys = interaction.capability_keys ?? currentUnit?.capability_keys ?? [];
     return (
         <section
             aria-live="polite"
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6"
+            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
         >
             <div className="flex items-start justify-between gap-4">
                 <div className="flex flex-wrap gap-2">
@@ -504,7 +439,7 @@ function StreamingTrainingCard({
                 </div>
             </div>
             <h3 className="mt-5 text-lg font-semibold leading-snug text-slate-950">
-                {interaction?.stem?.trim()
+                {interaction.stem?.trim()
                     || BUSINESS_SKILLS_COACH_WORKBENCH_COPY.streamingCardStemPlaceholder}
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
@@ -547,64 +482,138 @@ function StreamingTrainingCard({
     );
 }
 
-function CoachGuidancePanel({
-    latestScoredQuiz,
-    summaryEvent,
+function TrainingStatusSidebar({
+    session,
+    viewModel,
+    learningUnitsError,
     coachProgress,
     coachProgressError,
 }: {
-    readonly latestScoredQuiz: QuizCardEvent | null;
-    readonly summaryEvent: SummaryCardEvent | null;
+    readonly session: AiCoachChatSessionPublicV1 | null;
+    readonly viewModel: ReturnType<typeof buildCoachConversationViewModel>;
+    readonly learningUnitsError: string | null;
     readonly coachProgress: BusinessEtiquetteAiCoachProgress | null;
     readonly coachProgressError: string | null;
 }) {
+    const sidebarDetailsRef = useRef<HTMLDetailsElement | null>(null);
+    const state = session?.coach_state;
+    const phaseLabel = state
+        ? BUSINESS_SKILLS_COACH_PHASE_LABELS[state.session_phase]
+        : "准备中";
+    const difficultyLabel = state
+        ? BUSINESS_SKILLS_COACH_DIFFICULTY_LABELS[state.difficulty]
+        : "热身";
+    const nextActionLabel = state?.last_action
+        ? BUSINESS_SKILLS_COACH_NEXT_ACTION_LABELS[state.last_action]
+        : "准备第一题";
+    const masteryLabel = coachProgress
+        ? BUSINESS_SKILLS_COACH_PROGRESS_LABELS[coachProgress.status]
+        : masteryLabelFor(viewModel.referenceQuiz);
+    const unitWarning = learningUnitsError
+        ?? (viewModel.currentUnit ? null : BUSINESS_SKILLS_COACH_WORKBENCH_COPY.learningUnitsUnavailable);
+
+    useEffect(() => {
+        if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+            return;
+        }
+        const query = window.matchMedia("(min-width: 1024px)");
+        const applyDefaultOpen = () => {
+            if (sidebarDetailsRef.current) {
+                sidebarDetailsRef.current.open = query.matches;
+            }
+        };
+        applyDefaultOpen();
+        query.addEventListener("change", applyDefaultOpen);
+        return () => {
+            query.removeEventListener("change", applyDefaultOpen);
+        };
+    }, []);
+
     return (
-        <aside className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm xl:sticky xl:top-4">
-            <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
-                    <Lightbulb className="h-4 w-4" />
+        <aside className="order-2 max-h-[42dvh] shrink-0 overflow-y-auto overscroll-contain lg:order-none lg:max-h-none lg:min-h-0">
+            <details
+                ref={sidebarDetailsRef}
+                className="rounded-2xl border border-slate-200 bg-white/85 shadow-sm"
+            >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:hidden">
+                    <span className="flex min-w-0 items-center gap-2">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                            <ListChecks className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0">
+                            <span className="block text-sm font-black text-slate-950">
+                                当前训练状态
+                            </span>
+                            <span className="block truncate text-xs text-slate-500">
+                                {phaseLabel} · {nextActionLabel}
+                            </span>
+                        </span>
+                    </span>
+                    <span className="text-xs font-semibold text-slate-400">展开/收起</span>
+                </summary>
+                <div className="space-y-4 border-t border-slate-200 px-4 py-4">
+                    <SidebarBlock
+                        icon={<BookOpenCheck className="h-4 w-4" />}
+                        title={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.roundGoalLabel}
+                    >
+                        <p className="text-sm font-semibold leading-relaxed text-slate-950">
+                            {viewModel.currentUnit?.title ?? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.fallbackUnitTitle}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                            {viewModel.currentUnit?.description
+                                ?? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.fallbackUnitDescription}
+                        </p>
+                    </SidebarBlock>
+
+                    <div className="flex flex-wrap gap-2">
+                        <StatusPill label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.activityLabel} value={phaseLabel} />
+                        <StatusPill label="难度" value={difficultyLabel} />
+                        <StatusPill label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachProgressLabel} value={masteryLabel} />
+                    </div>
+
+                    {unitWarning ? (
+                        <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
+                            {unitWarning}
+                        </p>
+                    ) : null}
+
+                    <SidebarBlock
+                        icon={<MessageSquareText className="h-4 w-4" />}
+                        title={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.currentCapabilitiesLabel}
+                    >
+                        <CapabilityList
+                            currentUnit={viewModel.currentUnit}
+                            referenceQuiz={viewModel.referenceQuiz}
+                        />
+                    </SidebarBlock>
+
+                    <SidebarBlock
+                        icon={<CheckCircle2 className="h-4 w-4" />}
+                        title={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachProgressLabel}
+                    >
+                        <ProgressPanel
+                            coachProgress={coachProgress}
+                            coachProgressError={coachProgressError}
+                        />
+                    </SidebarBlock>
+
+                    <SidebarBlock
+                        icon={<ClipboardList className="h-4 w-4" />}
+                        title={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.conversationEvidenceTitle}
+                    >
+                        <EvidenceSummary
+                            viewModel={viewModel}
+                            latestScoredQuiz={viewModel.latestScoredQuiz}
+                            summaryEvent={viewModel.latestSummary}
+                        />
+                    </SidebarBlock>
                 </div>
-                <div>
-                    <h2 className="text-sm font-semibold text-slate-950">
-                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.coachGuidanceTitle}
-                    </h2>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.coachGuidanceDescription}
-                    </p>
-                </div>
-            </div>
-            <div className="mt-4 space-y-4">
-                <GuidanceBlock
-                    icon={<MessageSquareText className="h-4 w-4" />}
-                    title={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.feedbackTitle}
-                >
-                    <FeedbackPanel latestScoredQuiz={latestScoredQuiz} />
-                </GuidanceBlock>
-                <GuidanceBlock
-                    icon={<ListChecks className="h-4 w-4" />}
-                    title={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachProgressLabel}
-                >
-                    <ProgressPanel
-                        coachProgress={coachProgress}
-                        coachProgressError={coachProgressError}
-                    />
-                </GuidanceBlock>
-                <GuidanceBlock
-                    icon={<BookOpenCheck className="h-4 w-4" />}
-                    title={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.endPanelTitle}
-                >
-                    <EndPanel
-                        summaryEvent={summaryEvent}
-                        latestScoredQuiz={latestScoredQuiz}
-                        coachProgress={coachProgress}
-                    />
-                </GuidanceBlock>
-            </div>
+            </details>
         </aside>
     );
 }
 
-function GuidanceBlock({
+function SidebarBlock({
     icon,
     title,
     children,
@@ -614,50 +623,52 @@ function GuidanceBlock({
     readonly children: ReactNode;
 }) {
     return (
-        <section className="rounded-xl bg-slate-50 px-3 py-3">
+        <section>
             <div className="flex items-center gap-2 text-slate-700">
-                <span className="text-slate-500">{icon}</span>
+                <span className="text-violet-600">{icon}</span>
                 <h3 className="text-sm font-semibold text-slate-950">{title}</h3>
             </div>
-            <div className="mt-3">
-                {children}
-            </div>
+            <div className="mt-2">{children}</div>
         </section>
     );
 }
 
-function FeedbackPanel({
-    latestScoredQuiz,
+function StatusPill({
+    label,
+    value,
 }: {
-    readonly latestScoredQuiz: QuizCardEvent | null;
+    readonly label: string;
+    readonly value: string;
 }) {
-    const scoreResult = latestScoredQuiz?.score_result ?? null;
     return (
-        <div>
-            {scoreResult ? (
-                <div className="space-y-3">
-                    <ScoreSummary scoreResult={scoreResult} />
-                    <p className="text-sm leading-relaxed text-slate-700">
-                        {scoreResult.feedback}
-                    </p>
-                    <StructuredFeedback result={scoreResult.structured_feedback} />
-                    {scoreResult.missed_points.length > 0 ? (
-                        <FeedbackList
-                            label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.missedPointsLabel}
-                            items={scoreResult.missed_points}
-                        />
-                    ) : null}
-                </div>
-            ) : (
-                <div className="rounded-xl bg-white px-3 py-3">
-                    <p className="font-semibold text-slate-900">
-                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.feedbackEmptyTitle}
-                    </p>
-                    <p className="mt-1 text-sm leading-relaxed text-slate-500">
-                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.feedbackEmptyDescription}
-                    </p>
-                </div>
-            )}
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+            {label}：{value}
+        </span>
+    );
+}
+
+function CapabilityList({
+    currentUnit,
+    referenceQuiz,
+}: {
+    readonly currentUnit: BusinessEtiquetteLearningUnit | null;
+    readonly referenceQuiz: QuizCardEvent | null;
+}) {
+    const labels = capabilityLabelsFor(currentUnit, referenceQuiz);
+    if (labels.length === 0) {
+        return (
+            <p className="text-sm leading-relaxed text-slate-500">
+                {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.fallbackUnitDescription}
+            </p>
+        );
+    }
+    return (
+        <div className="flex flex-wrap gap-2">
+            {labels.map((label) => (
+                <span key={label} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    {label}
+                </span>
+            ))}
         </div>
     );
 }
@@ -669,70 +680,67 @@ function ProgressPanel({
     readonly coachProgress: BusinessEtiquetteAiCoachProgress | null;
     readonly coachProgressError: string | null;
 }) {
+    if (!coachProgress) {
+        return (
+            <div className="rounded-xl bg-slate-50 px-3 py-3">
+                <p className="font-semibold text-slate-900">
+                    {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachProgressUnavailable}
+                </p>
+                {coachProgressError ? (
+                    <p className="mt-1 text-sm leading-relaxed text-amber-700">
+                        {coachProgressError}
+                    </p>
+                ) : null}
+            </div>
+        );
+    }
     return (
-        <div>
-            {coachProgress ? (
-                <div className="space-y-3">
-                    <div className="flex flex-wrap gap-2 text-xs">
-                        <span className={`rounded-full px-3 py-1 font-semibold ${
-                            coachProgress.passed
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-amber-100 text-amber-700"
-                        }`}>
-                            {BUSINESS_SKILLS_COACH_PROGRESS_LABELS[coachProgress.status]}
-                        </span>
-                        <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-600">
-                            {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachProgressCards}
-                            ：{coachProgress.scored_card_count}
-                        </span>
-                        <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-600">
-                            {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachProgressRemediation}
-                            ：{coachProgress.remediation_attempt_count}
-                            /{coachProgress.max_remediation_attempts}
-                        </span>
-                    </div>
-                    <p className="text-sm leading-relaxed text-slate-700">
-                        {coachProgress.next_step}
-                    </p>
-                    <CapabilityScoreList progress={coachProgress} />
-                    {coachProgress.weak_capability_keys.length > 0 ? (
-                        <FeedbackList
-                            label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachWeakCapabilities}
-                            items={capabilityDisplayNames(
-                                coachProgress,
-                                coachProgress.weak_capability_keys,
-                            )}
-                        />
-                    ) : null}
-                    {coachProgress.recommended_chapter_orders.length > 0 ? (
-                        <FeedbackList
-                            label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachRecommendedChapters}
-                            items={coachProgress.recommended_chapter_orders.map((order) => (
-                                `第 ${order} 章`
-                            ))}
-                        />
-                    ) : null}
-                    {coachProgress.recommended_training_card_types.length > 0 ? (
-                        <FeedbackList
-                            label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachRecommendedCards}
-                            items={coachProgress.recommended_training_card_types.map((type) => (
-                                BUSINESS_SKILLS_COACH_CARD_TYPE_LABELS[type]
-                            ))}
-                        />
-                    ) : null}
-                </div>
-            ) : (
-                <div className="rounded-xl bg-white px-3 py-3">
-                    <p className="font-semibold text-slate-900">
-                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachProgressUnavailable}
-                    </p>
-                    {coachProgressError ? (
-                        <p className="mt-1 text-sm leading-relaxed text-amber-700">
-                            {coachProgressError}
-                        </p>
-                    ) : null}
-                </div>
-            )}
+        <div className="space-y-3">
+            <div className="flex flex-wrap gap-2 text-xs">
+                <span className={`rounded-full px-3 py-1 font-semibold ${
+                    coachProgress.passed
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-amber-100 text-amber-700"
+                }`}>
+                    {BUSINESS_SKILLS_COACH_PROGRESS_LABELS[coachProgress.status]}
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-600">
+                    {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachProgressCards}
+                    ：{coachProgress.scored_card_count}
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-600">
+                    {coachProgress.remediation_attempt_count}/{coachProgress.max_remediation_attempts} 次补救
+                </span>
+            </div>
+            <p className="text-sm leading-relaxed text-slate-700">
+                {coachProgress.next_step}
+            </p>
+            <CapabilityScoreList progress={coachProgress} />
+            {coachProgress.weak_capability_keys.length > 0 ? (
+                <FeedbackList
+                    label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachWeakCapabilities}
+                    items={capabilityDisplayNames(
+                        coachProgress,
+                        coachProgress.weak_capability_keys,
+                    )}
+                />
+            ) : null}
+            {coachProgress.recommended_chapter_orders.length > 0 ? (
+                <FeedbackList
+                    label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachRecommendedChapters}
+                    items={coachProgress.recommended_chapter_orders.map((order) => (
+                        `第 ${order} 章`
+                    ))}
+                />
+            ) : null}
+            {coachProgress.recommended_training_card_types.length > 0 ? (
+                <FeedbackList
+                    label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.aiCoachRecommendedCards}
+                    items={coachProgress.recommended_training_card_types.map((type) => (
+                        BUSINESS_SKILLS_COACH_CARD_TYPE_LABELS[type]
+                    ))}
+                />
+            ) : null}
         </div>
     );
 }
@@ -748,7 +756,7 @@ function CapabilityScoreList({
     return (
         <div className="space-y-2">
             {progress.capability_scores.map((score) => (
-                <div key={score.capability_key} className="rounded-lg bg-white px-3 py-2">
+                <div key={score.capability_key} className="rounded-lg bg-slate-50 px-3 py-2">
                     <div className="flex items-center justify-between gap-2 text-xs">
                         <span className="font-semibold text-slate-700">
                             {score.display_name}
@@ -768,68 +776,72 @@ function CapabilityScoreList({
     );
 }
 
+function EvidenceSummary({
+    viewModel,
+    latestScoredQuiz,
+    summaryEvent,
+}: {
+    readonly viewModel: ReturnType<typeof buildCoachConversationViewModel>;
+    readonly latestScoredQuiz: QuizCardEvent | null;
+    readonly summaryEvent: SummaryCardEvent | null;
+}) {
+    const latestScore = latestScoredQuiz?.score_result ?? null;
+    return (
+        <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <EvidenceMetric label="消息" value={viewModel.timeline.length} />
+                <EvidenceMetric label="训练卡" value={viewModel.quizCardCount} />
+                <EvidenceMetric label="已评分" value={viewModel.scoredQuizCardCount} />
+            </div>
+            {latestScore ? <ScoreSummary scoreResult={latestScore} /> : null}
+            {summaryEvent ? <EndPanel summaryEvent={summaryEvent} latestScoredQuiz={latestScoredQuiz} /> : null}
+        </div>
+    );
+}
+
+function EvidenceMetric({
+    label,
+    value,
+}: {
+    readonly label: string;
+    readonly value: number;
+}) {
+    return (
+        <div className="rounded-xl bg-slate-50 px-2 py-2">
+            <p className="font-black text-slate-950">{value}</p>
+            <p className="mt-0.5 text-slate-500">{label}</p>
+        </div>
+    );
+}
+
 function EndPanel({
     summaryEvent,
     latestScoredQuiz,
-    coachProgress,
 }: {
     readonly summaryEvent: SummaryCardEvent | null;
     readonly latestScoredQuiz: QuizCardEvent | null;
-    readonly coachProgress: BusinessEtiquetteAiCoachProgress | null;
 }) {
     const summary = summaryEvent?.payload ?? null;
-    const mastered = coachProgress?.passed
-        ?? summary?.mastered
-        ?? latestScoredQuiz?.score_result?.mastered
-        ?? null;
-    const feedbackNextStep = latestScoredQuiz?.score_result?.structured_feedback?.next_step;
-    const whyItems = summary?.weaknesses?.length
-        ? summary.weaknesses
-        : latestScoredQuiz?.score_result?.missed_points ?? [];
-    const nextItems = summary?.next_steps?.length
-        ? summary.next_steps
-        : coachProgress?.next_step
-            ? [coachProgress.next_step]
-            : feedbackNextStep
-            ? [feedbackNextStep]
-            : [];
+    const mastered = summary?.mastered ?? latestScoredQuiz?.score_result?.mastered ?? null;
+    if (!summary) {
+        return null;
+    }
     return (
-        <div>
-            <div className="space-y-3">
-                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    mastered ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                }`}>
-                    {mastered
-                        ? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.endPanelMastered
-                        : BUSINESS_SKILLS_COACH_WORKBENCH_COPY.endPanelNotMastered}
-                </span>
-                {typeof summary?.score_percent === "number" ? (
-                    <p className="mt-3 text-sm font-semibold text-slate-900">
-                        {Math.round(summary.score_percent)}%
-                    </p>
-                ) : null}
-                {summary?.items.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-slate-700">
-                        {summary.items.map((item) => (
-                            <li key={item} className="rounded-lg bg-white px-3 py-2">
-                                {item}
-                            </li>
-                        ))}
-                    </ul>
-                ) : null}
-                {whyItems.length > 0 ? (
-                    <FeedbackList
-                        label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.endPanelWhy}
-                        items={whyItems}
-                    />
-                ) : null}
-                {nextItems.length > 0 ? (
-                    <FeedbackList
-                        label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.endPanelNext}
-                        items={nextItems}
-                    />
-                ) : null}
-            </div>
+        <div className="rounded-xl bg-slate-50 px-3 py-3">
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                mastered ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+            }`}>
+                {mastered
+                    ? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.endPanelMastered
+                    : BUSINESS_SKILLS_COACH_WORKBENCH_COPY.endPanelNotMastered}
+            </span>
+            {summary.items.length > 0 ? (
+                <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                    {summary.items.map((item) => (
+                        <li key={item}>{item}</li>
+                    ))}
+                </ul>
+            ) : null}
         </div>
     );
 }
@@ -863,60 +875,6 @@ function ScoreSummary({
     );
 }
 
-function StructuredFeedback({
-    result,
-}: {
-    readonly result: AiCoachScoreResultV1["structured_feedback"];
-}) {
-    if (!result) {
-        return null;
-    }
-    return (
-        <div className="space-y-2">
-            {result.did_well.length > 0 ? (
-                <FeedbackBlock
-                    label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.didWellLabel}
-                    body={result.did_well.join("；")}
-                />
-            ) : null}
-            <FeedbackBlock
-                label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.mainIssueLabel}
-                body={result.main_issue}
-            />
-            <FeedbackBlock
-                label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.whyInappropriateLabel}
-                body={result.why_inappropriate}
-            />
-            <FeedbackBlock
-                label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.suggestedResponseLabel}
-                body={result.suggested_response}
-            />
-            <FeedbackBlock
-                label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.nextStepLabel}
-                body={result.next_step}
-            />
-        </div>
-    );
-}
-
-function FeedbackBlock({
-    label,
-    body,
-}: {
-    readonly label: string;
-    readonly body: string;
-}) {
-    if (!body) {
-        return null;
-    }
-    return (
-        <div className="rounded-lg bg-white px-3 py-2 text-sm">
-            <p className="text-[11px] font-semibold text-slate-400">{label}</p>
-            <p className="mt-1 leading-relaxed text-slate-700">{body}</p>
-        </div>
-    );
-}
-
 function FeedbackList({
     label,
     items,
@@ -932,7 +890,7 @@ function FeedbackList({
             <p className="text-xs font-semibold text-slate-500">{label}</p>
             <ul className="mt-2 space-y-1 text-sm text-slate-700">
                 {items.map((item) => (
-                    <li key={item} className="rounded-lg bg-white px-3 py-2">
+                    <li key={item} className="rounded-lg bg-slate-50 px-3 py-2">
                         {item}
                     </li>
                 ))}
@@ -941,24 +899,7 @@ function FeedbackList({
     );
 }
 
-function ContextChip({
-    label,
-    value,
-}: {
-    readonly label: string;
-    readonly value: string;
-}) {
-    return (
-        <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-            <p className="text-[11px] font-semibold text-slate-400">{label}</p>
-            <p className="mt-1 truncate text-sm font-semibold leading-relaxed text-slate-900">
-                {value}
-            </p>
-        </div>
-    );
-}
-
-function CoachCommandBar({
+function CoachInlineCommandBar({
     disabled,
     hasActiveQuiz,
     pendingCommand,
@@ -972,38 +913,37 @@ function CoachCommandBar({
     const commands: readonly {
         readonly command: CoachCommand;
         readonly disabled?: boolean;
+        readonly icon: ReactNode;
     }[] = [
         {
             command: "continue",
             disabled: hasActiveQuiz && !BUSINESS_SKILLS_COACH_WORKBENCH_RULES.allowSkipActiveCard,
+            icon: <CheckCircle2 className="h-4 w-4" />,
         },
-        { command: "explain" },
-        { command: "switch_scenario" },
-        { command: "summarize" },
+        { command: "explain", icon: <Lightbulb className="h-4 w-4" /> },
+        { command: "switch_scenario", icon: <RotateCcw className="h-4 w-4" /> },
+        { command: "summarize", icon: <ClipboardList className="h-4 w-4" /> },
     ];
     return (
-        <div className="shrink-0 border-t border-slate-200 bg-white/90 px-4 py-2 md:px-5">
-            <div className="flex items-center gap-2 overflow-x-auto">
-                <span className="mr-1 inline-flex shrink-0 items-center text-xs font-semibold text-slate-500">
-                    <CheckCircle2 className="mr-1 h-4 w-4 text-emerald-600" />
-                    {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.commandBarLabel}
-                </span>
-                {commands.map((item) => (
-                    <Button
-                        key={item.command}
-                        type="button"
-                        variant={item.command === "continue" ? "primary" : "outline"}
-                        size="sm"
-                        className="shrink-0 rounded-xl"
-                        disabled={disabled || item.disabled === true}
-                        onClick={() => onCommand(item.command)}
-                    >
+        <div className="flex flex-wrap items-center gap-2">
+            {commands.map((item) => (
+                <Button
+                    key={item.command}
+                    type="button"
+                    variant={item.command === "continue" ? "primary" : "ghost"}
+                    size="sm"
+                    className="rounded-full"
+                    disabled={disabled || item.disabled === true}
+                    onClick={() => onCommand(item.command)}
+                >
+                    {item.icon}
+                    <span className="ml-1.5">
                         {pendingCommand === item.command
                             ? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.busyButton
                             : BUSINESS_SKILLS_COACH_COMMAND_LABELS[item.command]}
-                    </Button>
-                ))}
-            </div>
+                    </span>
+                </Button>
+            ))}
         </div>
     );
 }
@@ -1030,7 +970,7 @@ function Composer({
             onSubmit={submit}
             className="shrink-0 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:px-5"
         >
-            <div className="flex items-end gap-3 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+            <div className="flex items-end gap-3 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
                 <textarea
                     value={value}
                     disabled={disabled}
@@ -1045,8 +985,9 @@ function Composer({
                 />
                 <Button
                     type="submit"
+                    variant="primary"
                     disabled={disabled || !value.trim()}
-                    className="h-10 rounded-xl bg-slate-950 px-4 hover:bg-slate-800"
+                    className="h-10 rounded-xl px-4"
                     aria-label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.sendAriaLabel}
                 >
                     <Send className="h-4 w-4" />
@@ -1089,16 +1030,6 @@ function capabilityDisplayNames(
     return capabilityKeys.map((key) => displayByKey.get(key) ?? key);
 }
 
-function progressDetail(
-    progress: BusinessEtiquetteAiCoachProgress | null,
-): string | null {
-    if (!progress) {
-        return null;
-    }
-    const blockLabel = progress.block_next ? "阻断后续" : "不阻断后续";
-    return `${progress.scored_card_count} 张卡 · ${progress.remediation_attempt_count}/${progress.max_remediation_attempts} 次补救 · ${blockLabel}`;
-}
-
 function masteryLabelFor(referenceQuiz: QuizCardEvent | null): string {
     const result = referenceQuiz?.score_result;
     if (!result) {
@@ -1120,7 +1051,7 @@ function activityLabelFor(
     isStarting: boolean,
 ): string | null {
     if (isStarting) {
-        return "正在准备训练局";
+        return "教练正在组织下一步训练";
     }
     if (isAdvancing) {
         return "正在批改，并判断下一步训练";
@@ -1140,7 +1071,7 @@ function activityLabelFor(
         case "retry":
             return "正在准备下一题";
         case null:
-            return "正在回应你的问题";
+            return "教练正在组织下一步训练";
     }
 }
 
@@ -1157,7 +1088,7 @@ function shouldShowStreamingCoachResponse({
     isSending,
     isAdvancing,
     streamPhase,
-    streamingReasoningText,
+    streamingAssistantText,
     streamingCardDelta,
     activeQuiz,
 }: {
@@ -1165,14 +1096,11 @@ function shouldShowStreamingCoachResponse({
     readonly isSending: boolean;
     readonly isAdvancing: boolean;
     readonly streamPhase: AiCoachChatStreamPhase | null;
-    readonly streamingReasoningText: Extract<AiCoachChatStreamEvent, { type: "reasoning_text_delta" }> | null;
+    readonly streamingAssistantText: StreamingAssistantText | null;
     readonly streamingCardDelta: Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }> | null;
     readonly activeQuiz: QuizCardEvent | null;
 }): boolean {
-    if (
-        streamingReasoningText?.text.trim()
-        || streamingCardDelta !== null
-    ) {
+    if (streamingAssistantText?.text.trim() || streamingCardDelta !== null) {
         return true;
     }
     if (!isStarting && !isSending && !isAdvancing) {

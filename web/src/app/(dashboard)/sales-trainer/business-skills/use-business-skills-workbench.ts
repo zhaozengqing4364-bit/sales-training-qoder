@@ -10,20 +10,11 @@ import type {
     BusinessEtiquetteUnitQuizAttempt,
     NewcomerArticle,
     NewcomerArticleChapter,
-    SalesTrainerUnit,
-    TrainingJourneyModuleProgress,
 } from "@/lib/api/types";
 
 import {
-    BUSINESS_SKILLS_ACTIVE_UNIT_MISSING_MESSAGE,
-    BUSINESS_SKILLS_ACTIVE_UNIT_NOT_FOUND_MESSAGE,
-    BUSINESS_SKILLS_MODULE_KEY,
     businessSkillsArticleErrorMessage,
     businessSkillsExamHref,
-    findBusinessSkillsModuleFromJourney,
-    learningContentIdFromJourneyModule,
-    resolveBusinessSkillsUnit,
-    unitIdFromJourneyModule,
 } from "./config";
 
 type BusinessSkillsWorkbenchInput = {
@@ -41,26 +32,12 @@ function sortLearningUnits(
     return [...units].sort((left, right) => left.order_index - right.order_index);
 }
 
-function isBusinessSkillsCoachAction(moduleProgress: TrainingJourneyModuleProgress): boolean {
-    const action = moduleProgress.next_action;
-    return moduleProgress.module_key === BUSINESS_SKILLS_MODULE_KEY
-        && Boolean(action && !action.disabled && action.target_path)
-        && Boolean(action?.action_key.includes("coach") || action?.target_path?.includes("/coach"));
-}
-
-function resolveBusinessSkillsCoachHrefFromJourney(
-    modules: readonly TrainingJourneyModuleProgress[],
-): string | null {
-    return modules.find(isBusinessSkillsCoachAction)?.next_action?.target_path ?? null;
-}
-
 export function useBusinessSkillsWorkbench({
     requestedLearningUnitKey,
     unitId,
 }: BusinessSkillsWorkbenchInput) {
     const quizResultRef = useRef<HTMLDivElement | null>(null);
     const [activeUnitId, setActiveUnitId] = useState<string | null>(unitId);
-    const [units, setUnits] = useState<SalesTrainerUnit[]>([]);
     const [article, setArticle] = useState<NewcomerArticle | null>(null);
     const [learningUnits, setLearningUnits] = useState<BusinessEtiquetteLearningUnit[]>([]);
     const [selectedLearningUnitKey, setSelectedLearningUnitKey] = useState<string | null>(null);
@@ -81,8 +58,7 @@ export function useBusinessSkillsWorkbench({
     const [quizWorkflowError, setQuizWorkflowError] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const selectedUnit = useMemo(() => resolveBusinessSkillsUnit(units, activeUnitId), [activeUnitId, units]);
-    const examHref = businessSkillsExamHref(selectedUnit?.unit_id ?? activeUnitId);
+    const examHref = businessSkillsExamHref(activeUnitId);
     const sortedArticleChapters = useMemo(
         () => article ? sortArticleChapters(article.chapters) : [],
         [article],
@@ -122,34 +98,29 @@ export function useBusinessSkillsWorkbench({
 
     useEffect(() => {
         let isActive = true;
-        void Promise.all([
-            api.salesTrainer.listUnits(),
-            api.salesTrainer.getJourney(),
-        ])
-            .then(async ([unitResponse, journeyResponse]) => {
-                const activeModule = findBusinessSkillsModuleFromJourney(journeyResponse.modules, unitId);
-                const nextActiveUnitId = unitIdFromJourneyModule(activeModule);
-                if (!nextActiveUnitId) {
-                    throw new Error(BUSINESS_SKILLS_ACTIVE_UNIT_MISSING_MESSAGE);
+        void api.salesTrainer.getJourney()
+            .then(async (journeyResponse) => {
+                const learningTopic = (journeyResponse.learning_topics ?? []).find(
+                    (topic) => topic.topic_key === "business_etiquette"
+                        || topic.source_module_key === "business_skills",
+                );
+                if (!learningTopic) {
+                    throw new Error("商务礼仪规范学习专题尚未发布，请联系管理员在学习文章中发布后再进入。");
                 }
-                const nextSelectedUnit = resolveBusinessSkillsUnit(unitResponse.items, nextActiveUnitId);
-                if (!nextSelectedUnit) {
-                    throw new Error(BUSINESS_SKILLS_ACTIVE_UNIT_NOT_FOUND_MESSAGE);
-                }
-                const learningContentId = learningContentIdFromJourneyModule(activeModule);
                 const [nextArticle, learningUnitResponse, coachResolution] = await Promise.all([
-                    api.newcomerTraining.getModuleArticle(
-                        BUSINESS_SKILLS_MODULE_KEY,
-                        learningContentId ? { learning_content_id: learningContentId } : undefined,
-                    ),
+                    api.newcomerTraining.getBusinessEtiquetteArticle(),
                     api.newcomerTraining.getBusinessEtiquetteLearningUnits(),
                     Promise.resolve({
-                        error: null,
-                        href: resolveBusinessSkillsCoachHrefFromJourney(journeyResponse.modules),
+                        error: learningTopic.ai_coach?.enabled && !learningTopic.ai_coach.available
+                            ? learningTopic.ai_coach.disabled_reason ?? "AI 教练尚未完成配置。"
+                            : null,
+                        href: learningTopic.ai_coach?.available
+                            ? learningTopic.ai_coach.coach_path
+                            : null,
                     }),
                 ]);
-                return { coachResolution, learningUnitResponse, nextActiveUnitId, nextArticle, unitResponse };
-            }).then(({ coachResolution, learningUnitResponse, nextActiveUnitId, nextArticle, unitResponse }) => {
+                return { coachResolution, learningUnitResponse, nextActiveUnitId: unitId, nextArticle };
+            }).then(({ coachResolution, learningUnitResponse, nextActiveUnitId, nextArticle }) => {
                 if (!isActive) {
                     return;
                 }
@@ -159,7 +130,6 @@ export function useBusinessSkillsWorkbench({
                     ?? nextLearningUnits[0]
                     ?? null;
                 setActiveUnitId(nextActiveUnitId);
-                setUnits(unitResponse.items);
                 setArticle(nextArticle);
                 setLearningUnits(nextLearningUnits);
                 setCoachHref(coachResolution.href);
@@ -202,6 +172,14 @@ export function useBusinessSkillsWorkbench({
         setQuizWorkflowError(null);
     }
 
+    function returnToCurrentReading() {
+        setQuiz(null);
+        setQuizAttempt(null);
+        setQuizAnswers({});
+        setIsQuizReviewExpanded(false);
+        setQuizWorkflowError(null);
+    }
+
     function continueToNextLearningUnit() {
         if (!nextLearningUnit) {
             return;
@@ -217,6 +195,11 @@ export function useBusinessSkillsWorkbench({
         const targetChapter = selectedLearningUnit.chapters.find((chapter) => chapter.order_index === chapterOrder);
         if (targetChapter) {
             setSelectedChapterId(targetChapter.chapter_id);
+            setQuiz(null);
+            setQuizAttempt(null);
+            setQuizAnswers({});
+            setIsQuizReviewExpanded(false);
+            setQuizWorkflowError(null);
         }
     }
 
@@ -250,8 +233,7 @@ export function useBusinessSkillsWorkbench({
         }
         setCompletingChapterId(selectedChapter.chapter_id);
         try {
-            await api.newcomerTraining.completeModuleArticleChapter(
-                BUSINESS_SKILLS_MODULE_KEY,
+            await api.newcomerTraining.completeBusinessEtiquetteArticleChapter(
                 selectedChapter.chapter_id,
                 { learning_content_id: article.learning_content_id },
             );
@@ -376,6 +358,7 @@ export function useBusinessSkillsWorkbench({
         quizResultRef,
         quizWorkflowError,
         retryCurrentQuiz,
+        returnToCurrentReading,
         reviewRecommendedChapter,
         selectLearningUnit,
         selectQuizAttempt,

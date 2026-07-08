@@ -41,6 +41,9 @@ from sales_trainer.services import (
     ai_coach_chat_generation_prompt as chat_generation_prompt_module,
 )
 from sales_trainer.services import (
+    ai_coach_chat_next_action_generation as next_action_generation_module,
+)
+from sales_trainer.services import (
     ai_coach_chat_service as chat_service_module,
 )
 from sales_trainer.services import (
@@ -65,7 +68,10 @@ from sales_trainer.services.ai_coach_chat_generation_streaming import (
     AiCoachQuizCardDraftExtractor,
     emit_streamed_response,
 )
-from sales_trainer.services.ai_coach_chat_next_action import AiCoachNextActionDecider
+from sales_trainer.services.ai_coach_chat_next_action import (
+    AiCoachNextActionDecider,
+    AiCoachNextActionDecision,
+)
 from sales_trainer.services.ai_coach_chat_next_action_generation import (
     AiCoachChatNextActionGenerator,
 )
@@ -79,6 +85,9 @@ from sales_trainer.services.ai_coach_chat_session_creator import (
     AiCoachChatSessionCreator,
 )
 from sales_trainer.services.ai_coach_chat_stream_service import AiCoachChatStreamService
+from sales_trainer.services.learning_topic_config_service import (
+    LearningTopicConfigError,
+)
 from sales_trainer.services.prompt_template_revision_resolver import (
     RESULT_OK,
     PromptRevisionResolution,
@@ -108,6 +117,55 @@ class _FakeDb:
 
     async def refresh(self, _instance: object) -> None:
         return None
+
+
+def _patch_business_etiquette_learning_topic_for_chat(
+    monkeypatch: pytest.MonkeyPatch,
+    config: AiCoachConfig | None,
+) -> None:
+    class FakeLearningTopicConfigService:
+        def __init__(self, _db: object) -> None:
+            return None
+
+        async def active_business_etiquette_module_config(
+            self,
+        ) -> tuple[str, int, SimpleNamespace]:
+            return (
+                "revision-1",
+                1,
+                SimpleNamespace(
+                    module_key="business_skills",
+                    ai_coach=config,
+                    model_dump=lambda mode="json": {"module_key": "business_skills"},
+                ),
+            )
+
+    monkeypatch.setattr(
+        chat_session_creator_module,
+        "NewcomerLearningTopicConfigService",
+        FakeLearningTopicConfigService,
+    )
+
+
+def _patch_missing_business_etiquette_learning_topic_for_chat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeLearningTopicConfigService:
+        def __init__(self, _db: object) -> None:
+            return None
+
+        async def active_business_etiquette_module_config(self) -> object:
+            raise LearningTopicConfigError(
+                "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
+                "新人训练路径尚未发布 active revision，学习专题不能启动训练。",
+                409,
+            )
+
+    monkeypatch.setattr(
+        chat_session_creator_module,
+        "NewcomerLearningTopicConfigService",
+        FakeLearningTopicConfigService,
+    )
 
 
 def _sse_payload(chunk: str) -> dict[str, object]:
@@ -266,11 +324,19 @@ def test_ai_coach_proactive_config_defaults_are_safe() -> None:
     assert config.entry_resume_policy == "latest_active_or_new"
     assert config.generation_timeout_seconds == 120
     assert config.retry_policy.max_retries == 1
-    assert config.empty_response_recovery_prompts == ["继续下一题", "换个场景", "总结本轮"]
+    assert config.empty_response_recovery_prompts == [
+        "继续下一题",
+        "换个场景",
+        "总结本轮",
+    ]
     assert config.generation_failure_recovery_message == (
         "我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。"
     )
-    assert config.generation_failure_recovery_prompts == ["重试下一题", "换主题", "总结一下"]
+    assert config.generation_failure_recovery_prompts == [
+        "重试下一题",
+        "换主题",
+        "总结一下",
+    ]
 
 
 def test_streaming_quiz_card_draft_exposes_only_public_fields() -> None:
@@ -322,7 +388,9 @@ def test_streaming_assistant_text_delta_exposes_partial_markdown() -> None:
     extractor = AiCoachAssistantTextDraftExtractor()
     first = extractor.extract_changed('{"assistant_text":"**先判断**客户')
     duplicate = extractor.extract_changed('{"assistant_text":"**先判断**客户')
-    second = extractor.extract_changed('{"assistant_text":"**先判断**客户意图\\n- 再给建议')
+    second = extractor.extract_changed(
+        '{"assistant_text":"**先判断**客户意图\\n- 再给建议'
+    )
 
     assert first == "**先判断**客户"
     assert duplicate is None
@@ -371,13 +439,15 @@ def test_prompt_variables_include_business_etiquette_training_card_context() -> 
         module_key="business_skills",
         article_snapshot={"title": "商务礼仪", "summary": "摘要", "chapters": []},
         path_config_snapshot={
-            "learning_units": [{
-                "unit_key": "trust_foundation",
-                "title": "职业信任底座",
-                "source_chapter_orders": [1, 2],
-                "capability_keys": ["respect_boundaries"],
-                "require_ai_coach": True,
-            }],
+            "learning_units": [
+                {
+                    "unit_key": "trust_foundation",
+                    "title": "职业信任底座",
+                    "source_chapter_orders": [1, 2],
+                    "capability_keys": ["respect_boundaries"],
+                    "require_ai_coach": True,
+                }
+            ],
         },
     )
 
@@ -388,16 +458,16 @@ def test_prompt_variables_include_business_etiquette_training_card_context() -> 
         history=[],
     )
 
-    assert variables["business_etiquette_capability_keys"] == [
-        "respect_boundaries"
+    assert variables["business_etiquette_capability_keys"] == ["respect_boundaries"]
+    assert variables["business_etiquette_learning_units"] == [
+        {
+            "unit_key": "trust_foundation",
+            "title": "职业信任底座",
+            "source_chapter_orders": [1, 2],
+            "capability_keys": ["respect_boundaries"],
+            "require_ai_coach": True,
+        }
     ]
-    assert variables["business_etiquette_learning_units"] == [{
-        "unit_key": "trust_foundation",
-        "title": "职业信任底座",
-        "source_chapter_orders": [1, 2],
-        "capability_keys": ["respect_boundaries"],
-        "require_ai_coach": True,
-    }]
     assert variables["allowed_training_card_types"] == [
         "scenario_judgment",
         "expression_rewrite",
@@ -406,7 +476,9 @@ def test_prompt_variables_include_business_etiquette_training_card_context() -> 
 
 
 def test_chat_prompt_system_message_names_scoring_policy_values() -> None:
-    system_message = AiCoachChatPromptCompiler.system_message(AiCoachConfig(enabled=True))
+    system_message = AiCoachChatPromptCompiler.system_message(
+        AiCoachConfig(enabled=True)
+    )
 
     assert "all_or_nothing" in system_message
     assert "proportional" in system_message
@@ -645,8 +717,12 @@ def test_next_action_falls_back_to_allowed_action() -> None:
     assert decision.should_generate is True
 
 
-def test_next_action_generation_rejects_multiple_quiz_cards_for_chat_first_action() -> None:
-    response = AiCoachChatResponseInternalV1.model_validate(_chat_response(card_count=2))
+def test_next_action_generation_rejects_multiple_quiz_cards_for_chat_first_action() -> (
+    None
+):
+    response = AiCoachChatResponseInternalV1.model_validate(
+        _chat_response(card_count=2)
+    )
 
     with pytest.raises(AiCoachChatGenerationError) as exc_info:
         AiCoachChatNextActionGenerator._validate_response_for_action(
@@ -657,22 +733,19 @@ def test_next_action_generation_rejects_multiple_quiz_cards_for_chat_first_actio
     assert exc_info.value.code == "[AI_COACH_NEXT_ACTION_UI_EVENT_INVALID]"
 
 
-def test_next_action_generation_rejects_chat_only_continue_drill() -> None:
+def test_next_action_generation_accepts_chat_only_continue_drill() -> None:
     response = AiCoachChatResponseInternalV1(
         assistant_text="你先把客户第一次来访的准备动作说一遍，我再决定是否给你一张练习卡。",
         ui_events=[],
     )
 
-    with pytest.raises(AiCoachChatGenerationError) as exc_info:
-        AiCoachChatNextActionGenerator._validate_response_for_action(
-            response,
-            "continue_drill",
-        )
-
-    assert exc_info.value.code == "[AI_COACH_NEXT_ACTION_UI_EVENT_INVALID]"
+    AiCoachChatNextActionGenerator._validate_response_for_action(
+        response,
+        "continue_drill",
+    )
 
 
-def test_next_action_generation_requires_quiz_card_for_continue_drill() -> None:
+def test_next_action_generation_accepts_quiz_card_for_continue_drill() -> None:
     response = AiCoachChatResponseInternalV1(
         assistant_text="我们直接做一道商务礼仪判断题。",
         ui_events=[
@@ -736,9 +809,31 @@ def test_chat_response_rejects_unknown_ui_event_type() -> None:
         AiCoachChatResponseInternalV1.model_validate(payload)
 
 
+def test_chat_parser_recovers_text_when_ui_event_payload_is_malformed() -> None:
+    payload = {
+        "schema_version": AI_COACH_CHAT_RESPONSE_SCHEMA_VERSION,
+        "assistant_text": "很好，我们先选择一个商务礼仪训练方向。",
+        "ui_events": [
+            {
+                "type": "followup_prompt",
+            }
+        ],
+    }
+
+    parsed = AiCoachChatResponseParser().parse_model_response(
+        json.dumps(payload, ensure_ascii=False),
+        AiCoachConfig(enabled=True),
+    )
+
+    assert parsed.assistant_text == "很好，我们先选择一个商务礼仪训练方向。"
+    assert parsed.ui_events == []
+
+
 def test_public_quiz_card_projection_drops_internal_answer_key() -> None:
     service = AiCoachChatService(_FakeDb())  # type: ignore[arg-type]
-    internal = AiCoachChatResponseInternalV1.model_validate(_chat_response(card_count=1))
+    internal = AiCoachChatResponseInternalV1.model_validate(
+        _chat_response(card_count=1)
+    )
     session = SalesTrainerAiCoachSession(
         session_id="session-1",
         user_id="user-1",
@@ -889,6 +984,129 @@ def test_generate_chat_response_retries_when_model_output_breaks_contract(
     assert "[AI_COACH_INTERACTION_INVALID]" not in FakeLLMService.prompts[1]
 
 
+def test_next_action_generation_uses_configured_llm_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_compile_kwargs: dict[str, object] = {}
+    captured_llm_configs: list[object | None] = []
+
+    class FakeResolver:
+        def __init__(self, _db: object) -> None:
+            return None
+
+        async def resolve(
+            self,
+            *,
+            template_id: str,
+            prompt_revision_id: str | None,
+        ) -> PromptRevisionResolution:
+            assert template_id == "11111111-1111-1111-1111-111111111111"
+            assert prompt_revision_id is None
+            return _prompt_resolution()
+
+    class FakePromptTemplateService:
+        def __init__(self, _db: object) -> None:
+            return None
+
+        def compile_runtime_prompt_contract(self, **kwargs: object) -> Result:
+            captured_compile_kwargs.update(kwargs)
+            return Result.ok(_compiled_chat_contract())
+
+    class FakeLLMService:
+        provider = "openai"
+        model_name = "coach-generation-model"
+        is_configured = True
+
+        def __init__(self, config: object | None = None) -> None:
+            captured_llm_configs.append(config)
+
+        async def generate(self, **kwargs: object) -> Result:
+            assert kwargs["response_format"] == AI_COACH_JSON_RESPONSE_FORMAT
+            return Result.ok(json.dumps(_chat_response(card_count=1)))
+
+    model_config = SimpleNamespace(
+        id="model-config-1",
+        provider="openai",
+        base_url="https://llm.example/v1",
+        model_name="coach-generation-model",
+        extra_config={"temperature": 0.2},
+    )
+
+    async def fake_resolve_model(_db: object, model_name: str | None) -> object | None:
+        assert model_name == "model-config-1"
+        return model_config
+
+    monkeypatch.setattr(
+        next_action_generation_module,
+        "PromptTemplateRevisionResolver",
+        FakeResolver,
+    )
+    monkeypatch.setattr(
+        next_action_generation_module,
+        "PromptTemplateService",
+        FakePromptTemplateService,
+    )
+    monkeypatch.setattr(next_action_generation_module, "LLMService", FakeLLMService)
+    monkeypatch.setattr(
+        next_action_generation_module,
+        "resolve_ai_coach_llm_model_config_from_db",
+        fake_resolve_model,
+    )
+
+    config = AiCoachConfig(
+        enabled=True,
+        prompt_template_id="11111111-1111-1111-1111-111111111111",
+        generation_model="model-config-1",
+    )
+    session = SimpleNamespace(
+        session_id="session-1",
+        module_key="business_skills",
+        prompt_template_id="11111111-1111-1111-1111-111111111111",
+        prompt_revision_id=None,
+        prompt_contract_hash=None,
+        article_snapshot={"title": "商务技巧", "summary": "摘要", "chapters": []},
+        path_config_snapshot={},
+    )
+
+    parsed = asyncio.run(
+        AiCoachChatNextActionGenerator(_FakeDb()).generate(
+            session=session,  # pyright: ignore[reportArgumentType]
+            config=config,
+            decision=AiCoachNextActionDecision(
+                action="continue_drill",
+                reason="答对后继续训练",
+            ),
+            state=AiCoachCoachStateV1(answered_card_count=1),
+            score_result=AiCoachScoreResultV1(score=100, max_score=100, feedback="ok"),
+            answer_payload=AiCoachAnswerPayloadV1.model_validate(
+                {"variant": "choice", "option_ids": ["A"]}
+            ),
+            answered_event_payload={
+                "interaction_snapshot": _choice_interaction("第一题")
+            },
+            history=[],
+        )
+    )
+
+    assert parsed.assistant_text == "可以，我们先做一组商务礼仪情境卡。"
+    assert captured_llm_configs == [model_config]
+    assert captured_compile_kwargs["model_config"] == {
+        "provider": "openai",
+        "base_url": "https://llm.example/v1",
+        "model_name": "coach-generation-model",
+        "extra_config": {"temperature": 0.2},
+    }
+    assert parsed.runtime_audit == {
+        "provider": "openai",
+        "model_name": "coach-generation-model",
+        "base_url": "",
+        "base_url_configured": False,
+        "model_config_id": "model-config-1",
+        "source": "model_config",
+        "is_configured": True,
+    }
+
+
 def test_streamed_chat_generation_requests_json_response_format() -> None:
     captured: dict[str, object] = {}
     model_json = json.dumps(_chat_response(card_count=0), ensure_ascii=False)
@@ -1022,27 +1240,41 @@ def test_streamed_chat_generation_hides_retry_reasoning() -> None:
 
 
 def test_llm_chunk_extracts_deepseek_reasoning_shapes() -> None:
-    assert LLMService._chunk_reasoning_to_text(
-        SimpleNamespace(additional_kwargs={"reasoning_content": "先分析。"})
-    ) == "先分析。"
-    assert LLMService._chunk_reasoning_to_text(
-        SimpleNamespace(content=[{"type": "reasoning", "text": "再判断。"}])
-    ) == "再判断。"
-    assert LLMService._chunk_reasoning_to_text(
-        SimpleNamespace(response_metadata={"delta": {"reasoning_content": "后输出。"}})
-    ) == "后输出。"
-    assert LLMService._openai_stream_chunk_to_llm_chunk(
-        SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    delta=SimpleNamespace(
-                        content=None,
-                        reasoning_content="官方流式思考。",
-                    )
-                )
-            ]
+    assert (
+        LLMService._chunk_reasoning_to_text(
+            SimpleNamespace(additional_kwargs={"reasoning_content": "先分析。"})
         )
-    ).reasoning_text == "官方流式思考。"
+        == "先分析。"
+    )
+    assert (
+        LLMService._chunk_reasoning_to_text(
+            SimpleNamespace(content=[{"type": "reasoning", "text": "再判断。"}])
+        )
+        == "再判断。"
+    )
+    assert (
+        LLMService._chunk_reasoning_to_text(
+            SimpleNamespace(
+                response_metadata={"delta": {"reasoning_content": "后输出。"}}
+            )
+        )
+        == "后输出。"
+    )
+    assert (
+        LLMService._openai_stream_chunk_to_llm_chunk(
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content=None,
+                            reasoning_content="官方流式思考。",
+                        )
+                    )
+                ]
+            )
+        ).reasoning_text
+        == "官方流式思考。"
+    )
 
 
 def test_score_event_rejects_duplicate_submission() -> None:
@@ -1116,13 +1348,18 @@ def test_score_text_quiz_event_calls_ai_short_answer_scoring(
     result = asyncio.run(
         scorer.score_quiz_event(
             event,  # pyright: ignore[reportArgumentType]
-            answer_payload={"variant": "text", "text": "我会先确认来访目的和人数，再安排接待。"},
+            answer_payload={
+                "variant": "text",
+                "text": "我会先确认来访目的和人数，再安排接待。",
+            },
         )
     )
 
     assert result.score == 82
     assert captured["answer_text"] == "我会先确认来访目的和人数，再安排接待。"
-    assert captured["scoring_prompt_template_id"] == "22222222-2222-2222-2222-222222222222"
+    assert (
+        captured["scoring_prompt_template_id"] == "22222222-2222-2222-2222-222222222222"
+    )
     assert captured["scoring_prompt_revision_id"] == "rev-1"
     assert captured["scoring_contract_hash"] == "hash-score-1"
     assert "runtime_metadata_out" in captured
@@ -1381,31 +1618,7 @@ def test_create_session_stores_ai_coach_config_snapshot_without_runtime_marker(
     )
     fake_db = _FakeDb()
 
-    class FakePathConfigService:
-        def __init__(self, _db: object) -> None:
-            return None
-
-        async def get_config(self) -> dict[str, object]:
-            return {
-                "path": {"modules": []},
-                "active_revision_id": "revision-1",
-                "active_revision_no": 1,
-            }
-
     class FakeRuntime:
-        def module_ai_coach_config(
-            self,
-            _raw_path: object,
-            module_key: str,
-        ) -> tuple[SimpleNamespace, AiCoachConfig]:
-            return (
-                SimpleNamespace(
-                    module_key=module_key,
-                    model_dump=lambda mode="json": {"module_key": module_key},
-                ),
-                config,
-            )
-
         def validate_chat_config(self, _config: AiCoachConfig) -> None:
             return None
 
@@ -1432,11 +1645,7 @@ def test_create_session_stores_ai_coach_config_snapshot_without_runtime_marker(
         async def next_card_number(self, _session_id: str) -> int:
             return 1
 
-    monkeypatch.setattr(
-        chat_session_creator_module,
-        "SalesTrainerPathConfigService",
-        FakePathConfigService,
-    )
+    _patch_business_etiquette_learning_topic_for_chat(monkeypatch, config)
     creator = AiCoachChatSessionCreator(
         fake_db,  # type: ignore[arg-type]
         FakeRuntime(),  # type: ignore[arg-type]
@@ -1471,17 +1680,6 @@ def test_create_session_rejects_missing_active_path_revision(
 ) -> None:
     fake_db = _FakeDb()
 
-    class FakePathConfigService:
-        def __init__(self, _db: object) -> None:
-            return None
-
-        async def get_config(self) -> dict[str, object]:
-            return {
-                "path": {"modules": []},
-                "active_revision_id": None,
-                "active_revision_no": None,
-            }
-
     class FailingRuntime:
         def module_ai_coach_config(self, *_args: object) -> object:
             raise AssertionError("runtime must not receive a draft-only path")
@@ -1497,11 +1695,7 @@ def test_create_session_rejects_missing_active_path_revision(
         async def events(self, _session_id: str) -> list[object]:
             return []
 
-    monkeypatch.setattr(
-        chat_session_creator_module,
-        "SalesTrainerPathConfigService",
-        FakePathConfigService,
-    )
+    _patch_missing_business_etiquette_learning_topic_for_chat(monkeypatch)
     creator = AiCoachChatSessionCreator(
         fake_db,  # type: ignore[arg-type]
         FailingRuntime(),  # type: ignore[arg-type]
@@ -1762,7 +1956,8 @@ def test_session_start_first_card_failure_returns_safe_followup(
         for item in fake_db.added
     )
     assert any(
-        getattr(item, "content", "") == "我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。"
+        getattr(item, "content", "")
+        == "训练进度已保存。我先给你一张基础补练卡，完成后继续按当前小单元判断掌握情况。"
         for item in fake_db.added
     )
 
@@ -1864,7 +2059,9 @@ def test_send_message_adds_recovery_prompt_when_model_returns_no_events() -> Non
         def config_from_session(self, _session: object) -> AiCoachConfig:
             return config
 
-        async def generate_chat_response(self, **_kwargs: object) -> AiCoachChatResponseInternalV1:
+        async def generate_chat_response(
+            self, **_kwargs: object
+        ) -> AiCoachChatResponseInternalV1:
             return AiCoachChatResponseInternalV1(
                 assistant_text="好的，我们开始一道题目。",
                 ui_events=[],
@@ -1979,7 +2176,9 @@ def test_stream_submit_answer_manual_pace_skips_next_generation_statuses() -> No
             assert user_id == "user-1"
             return SimpleNamespace(config_snapshot=config.model_dump(mode="json"))
 
-        async def score_and_persist_event_answer(self, **_kwargs: object) -> tuple[dict[str, object], AiCoachScoreResultV1]:
+        async def score_and_persist_event_answer(
+            self, **_kwargs: object
+        ) -> tuple[dict[str, object], AiCoachScoreResultV1]:
             calls.append("score")
             return {}, AiCoachScoreResultV1(score=100, max_score=100, feedback="ok")
 
@@ -2076,7 +2275,9 @@ def test_stream_submit_answer_auto_advance_emits_next_generation_statuses() -> N
             assert user_id == "user-1"
             return SimpleNamespace(config_snapshot=config.model_dump(mode="json"))
 
-        async def score_and_persist_event_answer(self, **_kwargs: object) -> tuple[dict[str, object], AiCoachScoreResultV1]:
+        async def score_and_persist_event_answer(
+            self, **_kwargs: object
+        ) -> tuple[dict[str, object], AiCoachScoreResultV1]:
             calls.append("score")
             return {}, AiCoachScoreResultV1(score=100, max_score=100, feedback="ok")
 
@@ -2195,7 +2396,9 @@ def test_stream_submit_answer_timeout_records_recoverable_fallback_snapshot() ->
             assert user_id == "user-1"
             return SimpleNamespace(config_snapshot={})
 
-        async def score_and_persist_event_answer(self, **_kwargs: object) -> tuple[dict[str, object], AiCoachScoreResultV1]:
+        async def score_and_persist_event_answer(
+            self, **_kwargs: object
+        ) -> tuple[dict[str, object], AiCoachScoreResultV1]:
             calls.append("score")
             return {}, AiCoachScoreResultV1(score=100, max_score=100, feedback="ok")
 
@@ -2214,7 +2417,9 @@ def test_stream_submit_answer_timeout_records_recoverable_fallback_snapshot() ->
             calls.append("rollback")
             actor.expire()
 
-        async def record_advance_timeout_after_scored_event(self, **kwargs: object) -> None:
+        async def record_advance_timeout_after_scored_event(
+            self, **kwargs: object
+        ) -> None:
             calls.append("timeout_fallback")
             fallback_actor = kwargs["actor"]
             assert fallback_actor is not actor
@@ -2308,6 +2513,41 @@ def test_guarded_converts_timeout_to_sse_error_event() -> None:
     assert payloads[-1]["recoverable"] is True
 
 
+def test_guarded_converts_unexpected_exception_to_sse_error_event() -> None:
+    calls: list[str] = []
+
+    async def events() -> AsyncIterator[AiCoachChatStreamStatusEventV1]:
+        yield AiCoachChatStreamStatusEventV1(
+            phase="generating_next_card",
+            message="正在生成教练回复和下一步训练内容。",
+            session_id="session-1",
+        )
+        raise RuntimeError("prompt template validation failed")
+
+    class FakeService:
+        async def rollback_cancelled_generation(self) -> None:
+            calls.append("rollback")
+
+    async def collect_events() -> list[dict[str, object]]:
+        service = AiCoachChatStreamService(  # type: ignore[arg-type]
+            _FakeDb(),
+            service=FakeService(),
+        )
+        return [_sse_payload(chunk) async for chunk in service._guarded(events())]  # noqa: SLF001
+
+    payloads = asyncio.run(collect_events())
+
+    assert [payload["type"] for payload in payloads] == ["status", "error"]
+    assert payloads[-1] == {
+        "type": "error",
+        "phase": "failed",
+        "error_code": "[AI_COACH_STREAM_FAILED]",
+        "message": "AI 教练生成失败，请稍后重试或新开一局。",
+        "recoverable": True,
+    }
+    assert calls == ["rollback"]
+
+
 def test_stream_send_message_streaming_disabled_emits_sse_error_event() -> None:
     class FakeRuntime:
         def config_from_session(self, _session: object) -> object:
@@ -2330,7 +2570,9 @@ def test_stream_send_message_streaming_disabled_emits_sse_error_event() -> None:
             _sse_payload(chunk)
             async for chunk in service.stream_send_message(
                 session_id="session-1",
-                payload=AiCoachChatMessageCreate.model_validate({"content": "继续训练"}),
+                payload=AiCoachChatMessageCreate.model_validate(
+                    {"content": "继续训练"}
+                ),
                 actor=SimpleNamespace(user_id="user-1"),  # type: ignore[arg-type]
             )
         ]
@@ -2489,8 +2731,7 @@ def test_summarize_command_uses_deterministic_summary_without_llm(
         for item in fake_db.added
     )
     assert any(
-        getattr(item, "event_type", "") == "summary_card"
-        for item in fake_db.added
+        getattr(item, "event_type", "") == "summary_card" for item in fake_db.added
     )
 
 
@@ -2608,7 +2849,9 @@ def test_auto_advance_after_answer_appends_next_quiz_card(
                     AiCoachChatUiEventInternalV1(
                         type="quiz_card",
                         payload=AiCoachQuizCardPayloadInternalV1(
-                            interaction=_choice_interaction("客户开始质疑价值时怎么回应？"),
+                            interaction=_choice_interaction(
+                                "客户开始质疑价值时怎么回应？"
+                            ),
                             explanation="先确认真实顾虑。",
                         ),
                     )
@@ -2721,7 +2964,7 @@ def test_auto_advance_after_answer_appends_next_quiz_card(
     assert "api_key" not in str(metadata)
 
 
-def test_auto_advance_records_failed_action_with_safe_followup(
+def test_auto_advance_records_failed_action_with_deterministic_fallback_card(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config = AiCoachConfig(
@@ -2818,8 +3061,7 @@ def test_auto_advance_records_failed_action_with_safe_followup(
     failed_actions = [
         item
         for item in fake_db.added
-        if isinstance(item, SalesTrainerAiCoachCoachAction)
-        and item.status == "failed"
+        if isinstance(item, SalesTrainerAiCoachCoachAction) and item.status == "failed"
     ]
     assert len(failed_actions) == 1
     assert failed_actions[0].error_code == "[AI_COACH_NEXT_ACTION_UI_EVENT_INVALID]"
@@ -2828,9 +3070,19 @@ def test_auto_advance_records_failed_action_with_safe_followup(
     )
     assert session.coach_state["can_auto_advance"] is False
     assert any(
-        getattr(item, "content", "") == "我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。"
+        getattr(item, "content", "")
+        == "训练进度已保存。我先给你一张基础补练卡，完成后继续按当前小单元判断掌握情况。"
         for item in fake_db.added
     )
+    fallback_cards = [
+        item for item in fake_db.added if getattr(item, "event_type", "") == "quiz_card"
+    ]
+    assert len(fallback_cards) == 1
+    fallback_payload = fallback_cards[0].payload_json
+    assert fallback_payload["public_interaction"]["training_card_type"] == (
+        "scenario_judgment"
+    )
+    assert "answer_key" not in str(fallback_payload["public_interaction"])
 
 
 def test_auto_advance_timeout_fallback_updates_scored_state_and_audit() -> None:
@@ -2896,8 +3148,7 @@ def test_auto_advance_timeout_fallback_updates_scored_state_and_audit() -> None:
     failed_actions = [
         item
         for item in fake_db.added
-        if isinstance(item, SalesTrainerAiCoachCoachAction)
-        and item.status == "failed"
+        if isinstance(item, SalesTrainerAiCoachCoachAction) and item.status == "failed"
     ]
     assert len(failed_actions) == 1
     assert failed_actions[0].error_code == "[AI_COACH_STREAM_TIMEOUT]"
@@ -2906,9 +3157,11 @@ def test_auto_advance_timeout_fallback_updates_scored_state_and_audit() -> None:
     assert session.coach_state["stopped_reason"] == "[AI_COACH_STREAM_TIMEOUT]"
     assert session.coach_state["can_auto_advance"] is False
     assert any(
-        getattr(item, "content", "") == "我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。"
+        getattr(item, "content", "")
+        == "训练进度已保存。我先给你一张基础补练卡，完成后继续按当前小单元判断掌握情况。"
         for item in fake_db.added
     )
+    assert any(getattr(item, "event_type", "") == "quiz_card" for item in fake_db.added)
 
 
 def test_auto_advance_abort_failure_surfaces_typed_error(
