@@ -27,6 +27,7 @@
 - `web/.env.local` 指向远端 API，导致本地 Playwright 登录 cookie 与前端 host 不一致；在 E2E `global-setup` 中显式给本地栈设置 `NEXT_PUBLIC_API_URL=http://localhost:3444/api/v1`。
 - 未发现可调用的 multi-agent spawn 工具；按三条审计轨道由主 agent 完成。
 - 归档后再次运行专项 Playwright 会按 helper 默认选择 archive evidence root，避免重新生成 `.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/` 活动目录；如需新一轮审计，可显式设置 `NEWCOMER_TRAINING_AUDIT_ROOT`。
+- `playwright-audit-route-manifest.md` 已补齐每个 URL 的页面类型、角色、关键主操作、旧路由兼容、seed 依赖和 smoke/闭环审计方式；代码清单继续作为可执行 URL/断言来源。
 
 ## 未验证项
 
