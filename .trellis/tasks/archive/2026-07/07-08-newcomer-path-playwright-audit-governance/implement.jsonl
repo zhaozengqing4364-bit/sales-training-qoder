@@ -1,0 +1,8 @@
+{"file":".trellis/tasks/07-08-newcomer-path-playwright-audit-governance/prd.md","reason":"本任务的产品边界、页面范围、验收标准和风险分级。"}
+{"file":".trellis/tasks/07-08-newcomer-path-playwright-audit-governance/audit-matrix.md","reason":"Playwright 全量审计 URL 清单、检查项、预期证据和排除范围。"}
+{"file":".trellis/tasks/07-08-newcomer-path-playwright-audit-governance/findings.md","reason":"按 P0/P1/P2/P3 记录页面问题、截图、根因、修复和回归验证。"}
+{"file":".trellis/tasks/07-08-newcomer-path-playwright-audit-governance/implementation-notes.md","reason":"长任务实施过程中的偏离、保守决策、未验证项和回滚备注。"}
+{"file":"web/tests/e2e/newcomer-training-admin.spec.ts","reason":"后台新人训练路径管理页面 Playwright 审计规格。"}
+{"file":"web/tests/e2e/newcomer-training-learner.spec.ts","reason":"前台新人训练学习路径 Playwright 审计规格。"}
+{"file":"web/src/lib/sales-trainer/routes.ts","reason":"新人训练后台导航、旧路由兼容、模块分组和权限可见性的核心清单。"}
+{"file":"web/src/lib/sales-trainer/use-admin-route-access.ts","reason":"后台新人训练管理路由访问、旧入口重定向和无权限状态的判断来源。"}

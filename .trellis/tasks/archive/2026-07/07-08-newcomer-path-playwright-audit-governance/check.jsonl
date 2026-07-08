@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/admin-console-patterns.md","reason":"后台治理页面必须遵守列表、配置、内联完成、错误和权限状态规范。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"审计和修复新人训练前后台页面时用于校验组件复用、交互和可访问性。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Playwright 审计发现的数据映射、DTO、ViewModel 和 UI 展示问题需要按类型安全规则验证。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"作为最终 Trellis check、lint、测试、构建和截图证据的质量门禁。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"新人训练涉及前台、后台、API、权限、AI 评分和审计，需要跨层影响分析。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"避免在现有新人训练模块旁边新增重复路由、重复表单或重复治理逻辑。"}
+{"file":"docs/api-contract/sales-trainer.md","reason":"新人训练 API、路径配置、录音评分和历史兼容契约的回归依据。"}
+{"file":"AGENTS.md","reason":"仓库级中文输出、CodeGraph First、上下文内完成、权限、AI 治理和 Definition of Done 规则。"}

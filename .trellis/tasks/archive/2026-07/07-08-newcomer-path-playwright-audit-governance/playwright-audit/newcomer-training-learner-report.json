@@ -1,0 +1,575 @@
+{
+  "generated_at": "2026-07-08T18:45:44.060Z",
+  "scope": "newcomer-training-learner",
+  "setupIssues": [],
+  "routes": [
+    {
+      "id": "L-01",
+      "label": "新人训练入口",
+      "path": "/sales-trainer",
+      "critical": true,
+      "expectText": [
+        "新人训练路径"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "L-02",
+      "label": "学习中心",
+      "path": "/sales-trainer/learn/hub",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "L-03",
+      "label": "商务礼仪学习专题",
+      "path": "/sales-trainer/learning-topics/business-etiquette",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "L-09",
+      "label": "旧商务技巧入口",
+      "path": "/sales-trainer/business-skills",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "L-10",
+      "label": "旧商务技巧考试入口",
+      "path": "/sales-trainer/business-skills/exam",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "L-11",
+      "label": "旧商务技巧 AI 教练入口",
+      "path": "/sales-trainer/business-skills/coach",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "L-04",
+      "label": "单元学习",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ],
+      "path": "/sales-trainer/learn/e398177e-2f76-4345-93e4-c37391cfd3c7"
+    },
+    {
+      "id": "L-05",
+      "label": "单元考试",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ],
+      "path": "/sales-trainer/quiz/e398177e-2f76-4345-93e4-c37391cfd3c7"
+    },
+    {
+      "id": "L-06",
+      "label": "考试结果",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ],
+      "path": "/sales-trainer/quiz/result/66fbbca9-743a-4608-a3da-4a705f612eb2"
+    },
+    {
+      "id": "L-07",
+      "label": "录音上传",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ],
+      "path": "/sales-trainer/audio/15f62bff-b06c-411f-bf26-26a13c3bd304"
+    },
+    {
+      "id": "L-08",
+      "label": "录音评分结果",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ],
+      "path": "/sales-trainer/audio/result/1cf39cb5-7b31-44c7-b6a4-f8c11e06de43"
+    }
+  ],
+  "results": [
+    {
+      "id": "L-01",
+      "label": "新人训练入口",
+      "path": "/sales-trainer",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/sales-trainer",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 908,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-01-desktop-sales-trainer.png"
+    },
+    {
+      "id": "L-01",
+      "label": "新人训练入口",
+      "path": "/sales-trainer",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/sales-trainer",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 848,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-01-mobile-sales-trainer.png"
+    },
+    {
+      "id": "L-02",
+      "label": "学习中心",
+      "path": "/sales-trainer/learn/hub",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/sales-trainer/learn/hub",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 184,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-02-desktop-sales-trainer-learn-hub.png"
+    },
+    {
+      "id": "L-02",
+      "label": "学习中心",
+      "path": "/sales-trainer/learn/hub",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/sales-trainer/learn/hub",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 124,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-02-mobile-sales-trainer-learn-hub.png"
+    },
+    {
+      "id": "L-03",
+      "label": "商务礼仪学习专题",
+      "path": "/sales-trainer/learning-topics/business-etiquette",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/sales-trainer/learning-topics/business-etiquette",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 5288,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-03-desktop-sales-trainer-learning-topics-business-etiquette.png"
+    },
+    {
+      "id": "L-03",
+      "label": "商务礼仪学习专题",
+      "path": "/sales-trainer/learning-topics/business-etiquette",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/sales-trainer/learning-topics/business-etiquette",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 5228,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-03-mobile-sales-trainer-learning-topics-business-etiquette.png"
+    },
+    {
+      "id": "L-09",
+      "label": "旧商务技巧入口",
+      "path": "/sales-trainer/business-skills",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/sales-trainer/business-skills",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 5288,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-09-desktop-sales-trainer-business-skills.png"
+    },
+    {
+      "id": "L-09",
+      "label": "旧商务技巧入口",
+      "path": "/sales-trainer/business-skills",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/sales-trainer/business-skills",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 5228,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-09-mobile-sales-trainer-business-skills.png"
+    },
+    {
+      "id": "L-10",
+      "label": "旧商务技巧考试入口",
+      "path": "/sales-trainer/business-skills/exam",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/sales-trainer/business-skills/exam",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 145,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-10-desktop-sales-trainer-business-skills-exam.png"
+    },
+    {
+      "id": "L-10",
+      "label": "旧商务技巧考试入口",
+      "path": "/sales-trainer/business-skills/exam",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/sales-trainer/business-skills/exam",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 85,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-10-mobile-sales-trainer-business-skills-exam.png"
+    },
+    {
+      "id": "L-11",
+      "label": "旧商务技巧 AI 教练入口",
+      "path": "/sales-trainer/business-skills/coach",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/sales-trainer/business-skills/coach",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 216,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-11-desktop-sales-trainer-business-skills-coach.png"
+    },
+    {
+      "id": "L-11",
+      "label": "旧商务技巧 AI 教练入口",
+      "path": "/sales-trainer/business-skills/coach",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/sales-trainer/business-skills/coach",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 156,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-11-mobile-sales-trainer-business-skills-coach.png"
+    },
+    {
+      "id": "L-04",
+      "label": "单元学习",
+      "path": "/sales-trainer/learn/e398177e-2f76-4345-93e4-c37391cfd3c7",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/sales-trainer/learn/e398177e-2f76-4345-93e4-c37391cfd3c7",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 4732,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-04-desktop-sales-trainer-learn-e398177e-2f76-4345-93e4-c37391cfd3c7.png"
+    },
+    {
+      "id": "L-04",
+      "label": "单元学习",
+      "path": "/sales-trainer/learn/e398177e-2f76-4345-93e4-c37391cfd3c7",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/sales-trainer/learn/e398177e-2f76-4345-93e4-c37391cfd3c7",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 4672,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-04-mobile-sales-trainer-learn-e398177e-2f76-4345-93e4-c37391cfd3c7.png"
+    },
+    {
+      "id": "L-05",
+      "label": "单元考试",
+      "path": "/sales-trainer/quiz/e398177e-2f76-4345-93e4-c37391cfd3c7",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/sales-trainer/quiz/e398177e-2f76-4345-93e4-c37391cfd3c7",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 352,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-05-desktop-sales-trainer-quiz-e398177e-2f76-4345-93e4-c37391cfd3c7.png"
+    },
+    {
+      "id": "L-05",
+      "label": "单元考试",
+      "path": "/sales-trainer/quiz/e398177e-2f76-4345-93e4-c37391cfd3c7",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/sales-trainer/quiz/e398177e-2f76-4345-93e4-c37391cfd3c7",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 292,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-05-mobile-sales-trainer-quiz-e398177e-2f76-4345-93e4-c37391cfd3c7.png"
+    },
+    {
+      "id": "L-06",
+      "label": "考试结果",
+      "path": "/sales-trainer/quiz/result/66fbbca9-743a-4608-a3da-4a705f612eb2",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/sales-trainer/quiz/result/66fbbca9-743a-4608-a3da-4a705f612eb2",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 705,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-06-desktop-sales-trainer-quiz-result-66fbbca9-743a-4608-a3da-4a705f612eb2.png"
+    },
+    {
+      "id": "L-06",
+      "label": "考试结果",
+      "path": "/sales-trainer/quiz/result/66fbbca9-743a-4608-a3da-4a705f612eb2",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/sales-trainer/quiz/result/66fbbca9-743a-4608-a3da-4a705f612eb2",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 645,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-06-mobile-sales-trainer-quiz-result-66fbbca9-743a-4608-a3da-4a705f612eb2.png"
+    },
+    {
+      "id": "L-07",
+      "label": "录音上传",
+      "path": "/sales-trainer/audio/15f62bff-b06c-411f-bf26-26a13c3bd304",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/sales-trainer/audio/15f62bff-b06c-411f-bf26-26a13c3bd304",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 975,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-07-desktop-sales-trainer-audio-15f62bff-b06c-411f-bf26-26a13c3bd304.png"
+    },
+    {
+      "id": "L-07",
+      "label": "录音上传",
+      "path": "/sales-trainer/audio/15f62bff-b06c-411f-bf26-26a13c3bd304",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/sales-trainer/audio/15f62bff-b06c-411f-bf26-26a13c3bd304",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 915,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-07-mobile-sales-trainer-audio-15f62bff-b06c-411f-bf26-26a13c3bd304.png"
+    },
+    {
+      "id": "L-08",
+      "label": "录音评分结果",
+      "path": "/sales-trainer/audio/result/1cf39cb5-7b31-44c7-b6a4-f8c11e06de43",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/sales-trainer/audio/result/1cf39cb5-7b31-44c7-b6a4-f8c11e06de43",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 933,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-08-desktop-sales-trainer-audio-result-1cf39cb5-7b31-44c7-b6a4-f8c11e06de43.png"
+    },
+    {
+      "id": "L-08",
+      "label": "录音评分结果",
+      "path": "/sales-trainer/audio/result/1cf39cb5-7b31-44c7-b6a4-f8c11e06de43",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/sales-trainer/audio/result/1cf39cb5-7b31-44c7-b6a4-f8c11e06de43",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 873,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-08-mobile-sales-trainer-audio-result-1cf39cb5-7b31-44c7-b6a4-f8c11e06de43.png"
+    }
+  ],
+  "excluded": [
+    "/training/sales",
+    "/practice/*",
+    "/admin/business-rules/sales-trainer-phase2"
+  ]
+}
