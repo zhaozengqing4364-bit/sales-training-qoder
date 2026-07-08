@@ -1,6 +1,6 @@
 # Playwright 审计矩阵
 
-证据目录：`.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/`
+证据目录：`.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/`
 
 ## 通用检查项
 

@@ -100,6 +100,16 @@ interface SalesTrainerAdminCapabilities {
 - 本文按本轮约定端点定义基础闭环契约，主线程后续按实际实现校对。
 - 已对齐: learner/admin `/file` 文件读取语义、`source_page`、评分记录 `transcript_snapshot`，以及 multipart 上传时的 `duration_seconds`/`source_page` 表单字段。
 
+## TrainingJourney 展示身份与审计契约
+
+`TrainingJourney.modules[]` 允许同一个 `module_key` 投影出不同 `kind` 的训练项。例如 `business_skills` 可同时包含非阻塞学习专题小测和必修 AI Coach。客户端、分析聚合、React key、筛选项和审计报表必须使用 `module_key + kind` 作为展示身份；`module_key` 只作为兼容筛选和资源绑定线索，不得单独作为唯一 UI key 或分析桶 key。
+
+- `required=false` 的学习专题、小测或兼容模块只展示状态、得分和下一步，不参与 `training_stage`、达标验收阻塞和 `required path` 通过计算。
+- `required=true` 的录音、AI Coach、实时对练等必修模块才参与 `training_stage`；若存在必修模块，则阶段计算只看必修模块。
+- learner 页面不得展示 seed/e2e/mock、内部 scorer/model 名、`system_prompt`、raw JSON、`trace_id`、数据库主键或原始枚举；这些信息只允许出现在管理员高级配置、审计详情或日志系统。
+- learner 录音回放只暴露业务文件名、评分方式、评分结果和可解释证据，不暴露本地 `storage_key`、内部模型名或转写/评分任务实现细节。
+- 新人训练专项 Playwright 审计必须覆盖前台学习端、后台新人训练管理端和旧入口兼容路由；审计证据归档到 `.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/`。归档后再次运行审计不得重新生成同名 active task 目录，除非显式设置新的 `NEWCOMER_TRAINING_AUDIT_ROOT`。
+
 ## 录音上传边界
 
 - 业务上不设置固定录音时长限制。
@@ -4630,6 +4640,7 @@ interface OperationLogListResponse {
 
 | 日期 | 变更 | 说明 |
 |---|---|---|
+| 2026-07-08 | 新增 TrainingJourney 展示身份与 Playwright 审计归档契约 | 同一 `module_key` 的不同 `kind` 必须按 `module_key + kind` 展示和聚合；非阻塞学习专题不参与 required path；专项审计证据归档后不再生成 active task 目录 |
 | 2026-07-08 | 新增录音评测场景治理契约 | `AudioEvaluationScenario` registry 管理 PPT 讲解、公司产品 Demo、金字塔演讲；path module additive `scenario_key`；材料门禁从 PPT 特判改为场景策略 |
 | 2026-07-08 | 新增学习专题独立治理契约 | `newcomer_learning_topics_v1` 复用 asset revision；`TrainingJourney.learning_topics` 非阻塞展示；商务礼仪规范从旧 `business_skills` 生成草稿并独立发布 |
 | 2026-07-06 | 收紧达标档案确认与模块能力映射契约 | `approve` 只能在 `pending_review` 且有证据时提交；`newcomer_path.modules[].capability_keys` 成为达标档案能力映射配置源 |
