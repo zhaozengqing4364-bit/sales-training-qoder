@@ -212,3 +212,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: 新人训练后台一页式配置闭环
+
+**Date**: 2026-07-08
+**Task**: 新人训练后台一页式配置闭环
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+完成录音管理和学习专题的一页式配置闭环：就地新建并绑定录音单元、材料、评分标准，专题内创建文章章节与小测绑定，补充测试、契约文档和验证记录。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2e2fb720` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
