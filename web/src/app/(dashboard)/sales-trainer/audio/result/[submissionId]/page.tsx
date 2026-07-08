@@ -598,9 +598,13 @@ export default function SalesTrainerAudioResultPage() {
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-xs text-slate-500">评分模型</p>
+                                        <p className="text-xs text-slate-500">
+                                            {isAdminContext ? "评分模型" : "评分方式"}
+                                        </p>
                                         <p className="mt-1 text-sm font-bold text-slate-900">
-                                            {submission.score_result.deucate_model || "--"}
+                                            {isAdminContext
+                                                ? submission.score_result.deucate_model || "--"
+                                                : "AI 评分"}
                                         </p>
                                     </div>
                                 </div>

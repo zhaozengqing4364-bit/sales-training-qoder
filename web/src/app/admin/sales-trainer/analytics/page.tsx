@@ -103,6 +103,15 @@ function getModuleKindLabel(
     }
 }
 
+function getModuleSummaryIdentity(summary: TrainingJourneyAnalyticsModuleSummary): string {
+    return [
+        summary.module_key,
+        summary.kind ?? "unknown_kind",
+        summary.module_type ?? "unknown_type",
+        summary.title,
+    ].join(":");
+}
+
 function formatPercent(value: number | null | undefined): string {
     if (typeof value !== "number") {
         return "--";
@@ -459,6 +468,7 @@ function ModuleSummaryCard({
     summary: TrainingJourneyAnalyticsModuleSummary;
 }) {
     const moduleKind = summary.module_type ?? summary.kind;
+    const moduleIdentity = getModuleSummaryIdentity(summary);
     const statusEntries = Object.entries(summary.status_counts).sort((left, right) => right[1] - left[1]);
 
     return (
@@ -492,7 +502,7 @@ function ModuleSummaryCard({
                 <div className="flex flex-wrap gap-2">
                     {statusEntries.length > 0 ? statusEntries.map(([status, count]) => (
                         <Badge
-                            key={`${summary.module_key}-${status}`}
+                            key={`${moduleIdentity}-${status}`}
                             className={`${getStageToneClass(status)} border-0`}
                         >
                             {getStageLabel(status)} {count}
@@ -965,7 +975,7 @@ export default function SalesTrainerJourneyAnalyticsPage() {
                                 >
                                     <option value="">全部模块</option>
                                     {moduleOptions.map((item) => (
-                                        <option key={item.module_key} value={item.module_key}>
+                                        <option key={getModuleSummaryIdentity(item)} value={item.module_key}>
                                             {item.title || item.module_key}
                                         </option>
                                     ))}
@@ -1187,7 +1197,7 @@ export default function SalesTrainerJourneyAnalyticsPage() {
                             <div className="grid gap-4 xl:grid-cols-2">
                                 {analytics.module_summaries.map((summary) => (
                                     <ModuleSummaryCard
-                                        key={summary.module_key}
+                                        key={getModuleSummaryIdentity(summary)}
                                         summary={summary}
                                     />
                                 ))}

@@ -474,15 +474,23 @@ class TrainingJourneyService:
     ) -> list[JourneyModule]:
         modules: list[JourneyModule] = []
         for module in sorted(path_modules, key=lambda item: item.order_index):
-            if module.module_key == "business_skills":
-                continue
-            modules.append(self._base_module(module))
+            modules.append(
+                self._base_module(
+                    module,
+                    required=module.module_key != "business_skills",
+                )
+            )
             ai_module = self._ai_coach_module(module)
             if ai_module is not None:
                 modules.append(ai_module)
         return modules
 
-    def _base_module(self, module: NewcomerPathModuleConfig) -> JourneyModule:
+    def _base_module(
+        self,
+        module: NewcomerPathModuleConfig,
+        *,
+        required: bool = True,
+    ) -> JourneyModule:
         kind = self._kind_for_module_type(module.module_type)
         diagnostics: list[dict[str, Any]] = []
         locked = not module.enabled
@@ -547,7 +555,7 @@ class TrainingJourneyService:
             kind=kind,
             module_type=module.module_type,
             order_index=module.order_index,
-            required=True,
+            required=required,
             enabled=module.enabled,
             completion_rule=module.completion_rule,
             target_unit_id=module.target_unit_id,
@@ -1581,16 +1589,17 @@ class TrainingJourneyService:
     ) -> TrainingStage:
         if not path_enabled:
             return "disabled"
-        if any(module["status"] == "error_terminal" for module in modules):
-            return "error_terminal"
-        if any(module["passed"] is False for module in modules):
-            return "needs_remediation"
         required = [module for module in modules if module["required"]]
+        stage_modules = required or modules
+        if any(module["status"] == "error_terminal" for module in stage_modules):
+            return "error_terminal"
+        if any(module["passed"] is False for module in stage_modules):
+            return "needs_remediation"
         if required and all(
             module["completion_satisfied"] is True for module in required
         ):
             return "passed"
-        if any(module["latest_outcome"] is not None for module in modules):
+        if any(module["latest_outcome"] is not None for module in stage_modules):
             return "in_progress"
         return "not_started"
 
@@ -1686,11 +1695,13 @@ class TrainingJourneyService:
         buckets: dict[str, dict[str, Any]] = {}
         for journey in journeys:
             for module in journey.get("modules") or []:
-                key = str(module.get("module_key") or "unknown")
+                module_key = str(module.get("module_key") or "unknown")
+                kind = str(module.get("kind") or module.get("module_type") or "unknown")
+                key = f"{module_key}:{kind}"
                 bucket = buckets.setdefault(
                     key,
                     {
-                        "module_key": key,
+                        "module_key": module_key,
                         "title": module.get("title") or key,
                         "kind": module.get("kind"),
                         "learner_count": 0,
@@ -1732,7 +1743,11 @@ class TrainingJourneyService:
             }
             for bucket in sorted(
                 buckets.values(),
-                key=lambda item: (-int(item["learner_count"]), str(item["module_key"])),
+                key=lambda item: (
+                    -int(item["learner_count"]),
+                    str(item["module_key"]),
+                    str(item["kind"]),
+                ),
             )
         ]
 

@@ -258,9 +258,9 @@ BUSINESS_SKILLS_QUESTION_TITLES = [
 ]
 PPT_PROMPT_VERSION = 2
 OWNER_EMAIL = "newcomer.training.seed.admin@example.com"
-LEARNER_EMAIL = "newcomer.training.seed.learner@example.com"
-MANAGER_EMAIL = "newcomer.training.seed.manager@example.com"
-PPT_E2E_AUDIO_FILENAME = "newcomer-ppt-explanation-e2e.wav"
+LEARNER_EMAIL = "newcomer.training.learner@example.com"
+MANAGER_EMAIL = "newcomer.training.manager@example.com"
+PPT_E2E_AUDIO_FILENAME = "ppt-explanation-sample.wav"
 PPT_E2E_AUDIO_SOURCE_PAGE = "newcomer_closed_loop_e2e_seed"
 PPT_E2E_AUDIO_TRANSCRIPT_PROVIDER = "seed-asr-process-submission"
 PPT_E2E_AUDIO_SCORING_MODEL = "seed-deterministic-scorer"
@@ -271,7 +271,7 @@ PPT_E2E_AUDIO_TRANSCRIPT_TEXT = (
     "客户可以先做旁路扫描，再基于分类分级、API 风险监测、"
     "一键防护和溯源审计形成可落地的试点方案。"
 )
-PYRAMID_E2E_AUDIO_FILENAME = "newcomer-pyramid-speech-e2e.wav"
+PYRAMID_E2E_AUDIO_FILENAME = "pyramid-speech-sample.wav"
 PYRAMID_E2E_AUDIO_SOURCE_PAGE = "newcomer_pyramid_speech_e2e_seed"
 AI_COACH_E2E_TRACE_ID = "newcomer_closed_loop_e2e_ai_coach_seed_v1"
 AI_COACH_REAL_PROVIDER_MODEL_CONFIG_NAME = "新人训练路径 AI Coach 真实 Provider"
@@ -399,6 +399,44 @@ def _now() -> datetime:
 
 def _uuid() -> str:
     return str(uuid.uuid4())
+
+
+def _seed_wav_bytes() -> bytes:
+    sample_rate = 8000
+    frames = b"\x00\x00" * sample_rate
+    data_size = len(frames)
+    return (
+        b"RIFF"
+        + (36 + data_size).to_bytes(4, "little")
+        + b"WAVEfmt "
+        + (16).to_bytes(4, "little")
+        + (1).to_bytes(2, "little")
+        + (1).to_bytes(2, "little")
+        + sample_rate.to_bytes(4, "little")
+        + (sample_rate * 2).to_bytes(4, "little")
+        + (2).to_bytes(2, "little")
+        + (16).to_bytes(2, "little")
+        + b"data"
+        + data_size.to_bytes(4, "little")
+        + frames
+    )
+
+
+def _ensure_seed_audio_file(filename: str) -> tuple[str, int, str]:
+    configured_root = Path(
+        os.getenv("SALES_TRAINER_AUDIO_STORAGE_PATH", "./data/sales_trainer_audio")
+    )
+    storage_root = (
+        configured_root
+        if configured_root.is_absolute()
+        else (REPO_ROOT / "backend" / configured_root)
+    )
+    storage_path = storage_root / "newcomer_training" / filename
+    storage_path.parent.mkdir(parents=True, exist_ok=True)
+    raw = _seed_wav_bytes()
+    if not storage_path.exists() or storage_path.stat().st_size != len(raw):
+        storage_path.write_bytes(raw)
+    return str(storage_path), len(raw), hashlib.sha256(raw).hexdigest()
 
 
 def _env_enabled(name: str) -> bool:
@@ -2175,6 +2213,36 @@ async def _record_seed_log_once(
     )
 
 
+async def _normalize_seed_audio_submission_files(
+    db: AsyncSession,
+    *,
+    learner: User,
+    unit: SalesTrainerUnit,
+    source_page: str,
+    filename: str,
+    storage_key: str,
+    size_bytes: int,
+    file_hash: str,
+) -> None:
+    legacy_rows = (
+        await db.execute(
+            select(SalesTrainerAudioSubmission).where(
+                SalesTrainerAudioSubmission.user_id == str(learner.user_id),
+                SalesTrainerAudioSubmission.unit_id == str(unit.unit_id),
+                SalesTrainerAudioSubmission.source_page == source_page,
+                SalesTrainerAudioSubmission.original_filename != filename,
+            )
+        )
+    ).scalars()
+    for submission in legacy_rows:
+        submission.original_filename = filename
+        submission.content_type = "audio/wav"
+        submission.size_bytes = size_bytes
+        submission.storage_key = storage_key
+        submission.file_hash = file_hash
+        submission.updated_at = _now()
+
+
 async def _upsert_e2e_audio_result(
     db: AsyncSession,
     summary: SeedSummary,
@@ -2197,6 +2265,19 @@ async def _upsert_e2e_audio_result(
             path_revision_no=context.path_revision_no,
         ),
     )
+    storage_key, size_bytes, file_hash = _ensure_seed_audio_file(
+        PPT_E2E_AUDIO_FILENAME
+    )
+    await _normalize_seed_audio_submission_files(
+        db,
+        learner=learner,
+        unit=ppt_unit,
+        source_page=PPT_E2E_AUDIO_SOURCE_PAGE,
+        filename=PPT_E2E_AUDIO_FILENAME,
+        storage_key=storage_key,
+        size_bytes=size_bytes,
+        file_hash=file_hash,
+    )
     submission = await _first(
         db,
         select(SalesTrainerAudioSubmission).where(
@@ -2213,9 +2294,9 @@ async def _upsert_e2e_audio_result(
                 purpose="ppt_pitch",
                 original_filename=PPT_E2E_AUDIO_FILENAME,
                 content_type="audio/wav",
-                size_bytes=4096,
-                storage_key="/tmp/newcomer-ppt-explanation-e2e.wav",
-                file_hash=hashlib.sha256(PPT_E2E_AUDIO_FILENAME.encode()).hexdigest(),
+                size_bytes=size_bytes,
+                storage_key=storage_key,
+                file_hash=file_hash,
                 duration_seconds=118,
                 source_page=PPT_E2E_AUDIO_SOURCE_PAGE,
                 confirmed_material_version_id=current_version_id,
@@ -2237,11 +2318,9 @@ async def _upsert_e2e_audio_result(
         summary.updated += 1
         submission.purpose = "ppt_pitch"
         submission.content_type = "audio/wav"
-        submission.size_bytes = 4096
-        submission.storage_key = "/tmp/newcomer-ppt-explanation-e2e.wav"
-        submission.file_hash = hashlib.sha256(
-            PPT_E2E_AUDIO_FILENAME.encode()
-        ).hexdigest()
+        submission.size_bytes = size_bytes
+        submission.storage_key = storage_key
+        submission.file_hash = file_hash
         submission.duration_seconds = 118
         baseline_refreshed_at = _now()
         submission.created_at = baseline_refreshed_at
@@ -2305,6 +2384,19 @@ async def _upsert_e2e_pyramid_speech_result(
             path_revision_no=context.path_revision_no,
         ),
     )
+    storage_key, size_bytes, file_hash = _ensure_seed_audio_file(
+        PYRAMID_E2E_AUDIO_FILENAME
+    )
+    await _normalize_seed_audio_submission_files(
+        db,
+        learner=learner,
+        unit=speech_unit,
+        source_page=PYRAMID_E2E_AUDIO_SOURCE_PAGE,
+        filename=PYRAMID_E2E_AUDIO_FILENAME,
+        storage_key=storage_key,
+        size_bytes=size_bytes,
+        file_hash=file_hash,
+    )
     submission = await _first(
         db,
         select(SalesTrainerAudioSubmission).where(
@@ -2321,11 +2413,9 @@ async def _upsert_e2e_pyramid_speech_result(
                 purpose="elevator_pitch",
                 original_filename=PYRAMID_E2E_AUDIO_FILENAME,
                 content_type="audio/wav",
-                size_bytes=4096,
-                storage_key="/tmp/newcomer-pyramid-speech-e2e.wav",
-                file_hash=hashlib.sha256(
-                    PYRAMID_E2E_AUDIO_FILENAME.encode()
-                ).hexdigest(),
+                size_bytes=size_bytes,
+                storage_key=storage_key,
+                file_hash=file_hash,
                 duration_seconds=180,
                 source_page=PYRAMID_E2E_AUDIO_SOURCE_PAGE,
                 auto_process=True,
@@ -2346,11 +2436,9 @@ async def _upsert_e2e_pyramid_speech_result(
         summary.updated += 1
         submission.purpose = "elevator_pitch"
         submission.content_type = "audio/wav"
-        submission.size_bytes = 4096
-        submission.storage_key = "/tmp/newcomer-pyramid-speech-e2e.wav"
-        submission.file_hash = hashlib.sha256(
-            PYRAMID_E2E_AUDIO_FILENAME.encode()
-        ).hexdigest()
+        submission.size_bytes = size_bytes
+        submission.storage_key = storage_key
+        submission.file_hash = file_hash
         submission.duration_seconds = 180
         baseline_refreshed_at = _now()
         submission.created_at = baseline_refreshed_at
@@ -3412,6 +3500,7 @@ async def seed(db: AsyncSession) -> SeedSummary:
             "learner": {
                 "learning_content_id": str(content.learning_content_id),
                 "article_title": content.title,
+                "chapter_order_index": 1,
             },
         },
     )
@@ -3606,6 +3695,7 @@ async def seed(db: AsyncSession) -> SeedSummary:
         "learner": {
             "learning_content_id": str(content.learning_content_id),
             "article_title": content.title,
+            "chapter_order_index": 1,
         },
     }
     paper_unit.status = "published"

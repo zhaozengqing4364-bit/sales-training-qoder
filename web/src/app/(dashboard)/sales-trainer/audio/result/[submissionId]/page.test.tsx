@@ -171,6 +171,9 @@ describe("SalesTrainerAudioResultPage", () => {
         expect(downloadLink.getAttribute("href")).toContain("/sales-trainer/audio-submissions/submission-1/file");
         expect(screen.queryByText("private/audio/pitch.wav")).toBeNull();
         expect(screen.queryByText(/storage_key/)).toBeNull();
+        expect(await screen.findByText("评分方式")).toBeTruthy();
+        expect(screen.getByText("AI 评分")).toBeTruthy();
+        expect(screen.queryByText("model")).toBeNull();
         expect(await screen.findByText("语音作业反馈")).toBeTruthy();
         expect(screen.getAllByText("评分完成").length).toBeGreaterThanOrEqual(1);
         expect(await screen.findByText("练完下一步")).toBeTruthy();

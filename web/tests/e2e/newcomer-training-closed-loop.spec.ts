@@ -32,11 +32,12 @@ const aiCoachRuntimeAuditFile =
 const adminEmail = process.env.SMOKE_ADMIN_EMAIL || "admin@qoder.ai";
 const learnerEmail =
   process.env.NEWCOMER_E2E_LEARNER_EMAIL ||
-  "newcomer.training.seed.learner@example.com";
+  "newcomer.training.learner@example.com";
 const managerEmail =
   process.env.NEWCOMER_E2E_MANAGER_EMAIL ||
-  "newcomer.training.seed.manager@example.com";
+  "newcomer.training.manager@example.com";
 const sharedPassword = process.env.SMOKE_ADMIN_PASSWORD || "change-me";
+const pptLearnerAudioFilename = "ppt-explanation-sample.wav";
 const pptPromptSnapshotMarker = "历史回放快照基线：PPT 讲解评分 v2";
 const pptPromptDriftMarker = "当前 Prompt 漂移哨兵：不应出现在历史训练记录回放";
 const freshRunId = (process.env.NEWCOMER_E2E_FRESH_RUN_ID || "").trim();
@@ -1583,7 +1584,7 @@ test.describe("newcomer training closed-loop smoke", () => {
         adminToken,
         recordList.items || [],
         "audio_submission",
-        "newcomer-ppt-explanation-e2e.wav",
+        pptLearnerAudioFilename,
       );
       const aiCoachRecord = await findAdminTrainingRecordContaining(
         apiContext,
@@ -1643,7 +1644,7 @@ test.describe("newcomer training closed-loop smoke", () => {
       expect(JSON.stringify(audioRecord.audio_submission)).not.toContain(pptPromptDriftMarker);
       expect(JSON.stringify(audioRecord)).toContain(pptPromptSnapshotMarker);
       expect(JSON.stringify(audioRecord)).not.toContain(pptPromptDriftMarker);
-      expect(JSON.stringify(audioRecord.audio_submission)).toContain("newcomer-ppt-explanation-e2e.wav");
+      expect(JSON.stringify(audioRecord.audio_submission)).toContain(pptLearnerAudioFilename);
       expect(audioRecord.operation_logs?.some((log) => log.action === "audio_result.seed_closed_loop")).toBe(true);
       const audioLogActions = new Set((audioRecord.operation_logs || []).map((log) => log.action));
       expect(audioLogActions.has("audio_transcription_started"), "audio pipeline should start transcription").toBe(true);
@@ -1666,8 +1667,10 @@ test.describe("newcomer training closed-loop smoke", () => {
       await loginFromUi(page, learnerEmail);
       await page.goto(`/sales-trainer/audio/result/${audioRecordId}`);
       await expect(page.getByRole("heading", { name: "语音作业反馈" })).toBeVisible();
-      await expect(page.getByText("newcomer-ppt-explanation-e2e.wav")).toBeVisible();
-      await expect(page.getByText("seed-deterministic-scorer")).toBeVisible();
+      await expect(page.getByText(pptLearnerAudioFilename)).toBeVisible();
+      await expect(page.getByText("评分方式")).toBeVisible();
+      await expect(page.getByText("AI 评分")).toBeVisible();
+      await expect(page.getByText("seed-deterministic-scorer")).not.toBeVisible();
       await expect(page.getByText("本次训练快照")).toBeVisible();
       await expect(page.getByText("第 1 关 PPT 讲解任务与评分标准")).toBeVisible();
 
