@@ -98,6 +98,7 @@ function capabilities(
         manage_questions: false,
         manage_modules: false,
         manage_prompts: false,
+        review_readiness: false,
         view_records: false,
         view_global_records: false,
         retry_jobs: false,

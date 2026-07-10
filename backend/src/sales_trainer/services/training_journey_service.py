@@ -42,16 +42,16 @@ from sales_trainer.services.audio_submission_service import AudioSubmissionServi
 from sales_trainer.services.learning_topic_projection_service import (
     LearningTopicProjectionService,
 )
-from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
     NEWCOMER_PATH_RESOURCE_TYPE,
     payload_from_revision,
 )
 from sales_trainer.services.quiz_service import QuizService
+from sales_trainer.services.readiness_review_action_service import (
+    ReadinessReviewActionService,
+)
 from sales_trainer.services.readiness_state import (
-    READINESS_DOSSIER_TARGET_TYPE,
-    REVIEW_ACTION_CREATED,
     capability_label,
     module_capability_keys,
     unique_non_empty,
@@ -1431,29 +1431,25 @@ class TrainingJourneyService:
         modules: list[dict[str, Any]],
         learning_topics: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        logs, _ = await OperationLogService(self._db).list_logs(
-            target_type=READINESS_DOSSIER_TARGET_TYPE,
-            target_id=learner_id,
+        actions = await ReadinessReviewActionService(
+            self._db,
+        ).list_merged_for_learner(
+            learner_id,
             limit=20,
         )
         requests: list[dict[str, Any]] = []
-        for log in logs:
-            if log.action != REVIEW_ACTION_CREATED:
-                continue
-            metadata: dict[str, Any] = (
-                log.metadata_json if isinstance(log.metadata_json, dict) else {}
-            )
-            decision = str(metadata.get("decision") or "")
+        for action in actions:
+            decision = action.decision
             if decision != "require_retraining":
                 if requests:
                     break
                 return []
-            task_value = metadata.get("retraining_task")
+            task_value = action.retraining_task
             if not isinstance(task_value, dict):
                 continue
             task: dict[str, Any] = task_value
-            capability_keys = unique_non_empty(metadata.get("capability_keys") or [])
-            evidence_ids = unique_non_empty(metadata.get("source_evidence_ids") or [])
+            capability_keys = unique_non_empty(action.capability_keys)
+            evidence_ids = unique_non_empty(action.source_evidence_ids)
             target_modules = _retraining_target_modules(
                 modules,
                 learning_topics,
@@ -1470,10 +1466,10 @@ class TrainingJourneyService:
             )
             requests.append(
                 {
-                    "request_id": str(log.log_id),
-                    "task_id": str(task.get("task_id") or log.log_id),
+                    "request_id": action.action_id,
+                    "task_id": str(task.get("task_id") or action.action_id),
                     "status": str(task.get("status") or "pending"),
-                    "reason": metadata.get("reason"),
+                    "reason": action.reason,
                     "capability_keys": capability_keys,
                     "capability_labels": [
                         capability_label(capability_key)
@@ -1482,7 +1478,7 @@ class TrainingJourneyService:
                     "source_evidence_count": len(evidence_ids),
                     "target_modules": target_modules,
                     "primary_target_path": primary_target_path,
-                    "created_at": log.created_at,
+                    "created_at": action.created_at,
                 }
             )
         return requests

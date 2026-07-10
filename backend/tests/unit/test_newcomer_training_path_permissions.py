@@ -12,6 +12,7 @@ from sales_trainer.permissions import (
     can_manage_sales_trainer_prompts,
     can_regrade_sales_trainer_history,
     can_retry_sales_trainer_jobs,
+    can_review_sales_trainer_readiness,
     can_view_sales_trainer_logs,
     can_view_sales_trainer_records,
     can_view_sales_trainer_settings,
@@ -74,6 +75,19 @@ def test_should_allow_ops_to_diagnose_and_retry_without_content_management() -> 
     assert can_view_sales_trainer_logs(user)
 
 
+def test_readiness_review_permission_is_not_record_view_permission() -> None:
+    assert can_review_sales_trainer_readiness(_user("admin"))
+    assert can_review_sales_trainer_readiness(_user("super_admin"))
+    assert can_review_sales_trainer_readiness(_user("support"))
+    assert can_review_sales_trainer_readiness(_user("training_lead"))
+    assert can_review_sales_trainer_readiness(_user("training_manager"))
+    assert not can_review_sales_trainer_readiness(_user("operations"))
+    assert not can_review_sales_trainer_readiness(_user("ops"))
+    assert not can_review_sales_trainer_readiness(_user("content_admin"))
+    assert not can_review_sales_trainer_readiness(_user("user"))
+    assert can_view_sales_trainer_records(_user("operations"))
+
+
 def test_should_keep_support_as_training_lead_compatibility_alias() -> None:
     user = _user("support", department="北区")
 
@@ -120,6 +134,7 @@ def test_should_fail_closed_when_manager_roles_env_has_no_allowlisted_role(
     assert not is_sales_trainer_manager(_user("training_lead"))
     assert not is_sales_trainer_manager(_user("training_manager"))
     assert not is_sales_trainer_manager(_user("user"))
+    assert not can_review_sales_trainer_readiness(_user("training_manager"))
 
 
 def test_should_use_granular_route_guards_for_admin_surfaces() -> None:
@@ -133,6 +148,11 @@ def test_should_use_granular_route_guards_for_admin_surfaces() -> None:
     assert training_error is not None
     assert training_error.status_code == 403
     assert sales_trainer_api._require_records_viewer(training_lead) is None
+    assert sales_trainer_api._require_readiness_reviewer(training_lead) is None
+    readiness_error = sales_trainer_api._require_readiness_reviewer(ops)
+    assert readiness_error is not None
+    assert readiness_error.status_code == 403
+    assert b"READINESS_REVIEW_ROLE_REQUIRED" in readiness_error.body
     assert retry_error is not None
     assert retry_error.status_code == 403
     assert sales_trainer_api._require_job_retry(ops) is None
@@ -145,14 +165,17 @@ def test_admin_capability_projection_uses_permission_authority() -> None:
     ops = sales_trainer_admin_capability_projection(_user("operations"))
 
     assert admin["capabilities"]["manage_prompts"] is True
+    assert admin["capabilities"]["review_readiness"] is True
 
     assert content_admin["role_label"] == "内容管理员"
     assert content_admin["capabilities"]["manage_content"] is True
     assert content_admin["capabilities"]["manage_prompts"] is False
     assert content_admin["capabilities"]["view_records"] is False
+    assert content_admin["capabilities"]["review_readiness"] is False
 
     assert training_lead["role_label"] == "培训负责人"
     assert training_lead["capabilities"]["view_records"] is True
+    assert training_lead["capabilities"]["review_readiness"] is True
     assert training_lead["capabilities"]["view_logs"] is False
     assert training_lead["capabilities"]["view_settings"] is False
     assert training_lead["capabilities"]["manage_content"] is False
@@ -163,6 +186,7 @@ def test_admin_capability_projection_uses_permission_authority() -> None:
     assert ops["capabilities"]["regrade_history"] is True
     assert ops["capabilities"]["view_logs"] is True
     assert ops["capabilities"]["view_settings"] is True
+    assert ops["capabilities"]["review_readiness"] is False
     assert ops["capabilities"]["manage_content"] is False
     assert ops["capabilities"]["manage_prompts"] is False
 

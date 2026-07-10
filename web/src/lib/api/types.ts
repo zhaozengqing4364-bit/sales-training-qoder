@@ -5209,7 +5209,7 @@ export interface ReadinessDossierReviewAction {
     reviewer_role: string | null;
     created_at: string;
     retraining_task: ReadinessDossierRetrainingTask | null;
-    state_storage: "operation_log";
+    state_storage: "readiness_review_action" | "operation_log";
 }
 
 export interface ReadinessDossierReviewActionCreateRequest {
@@ -5217,6 +5217,8 @@ export interface ReadinessDossierReviewActionCreateRequest {
     reason: string;
     capability_keys: string[];
     source_evidence_ids: string[];
+    idempotency_key: string;
+    expected_latest_review_action_id: string | null;
 }
 
 export interface ReadinessDossierRealtimeGate {
@@ -5247,7 +5249,7 @@ export interface ReadinessDossierSummary {
     weak_capability_count: number;
     retraining_task_count: number;
     completed_retraining_task_count: number;
-    review_state_source: "operation_log";
+    review_state_source: "readiness_review_action" | "operation_log";
     [key: string]: unknown;
 }
 
@@ -7248,6 +7250,7 @@ export type SalesTrainerAdminCapabilityKey =
     | "manage_questions"
     | "manage_modules"
     | "manage_prompts"
+    | "review_readiness"
     | "view_records"
     | "view_global_records"
     | "retry_jobs"

@@ -182,6 +182,7 @@ VITEST_GATE_TARGETS=(
   "src/app/admin/sales-trainer/ai-coach/page.test.tsx"
   "src/app/admin/sales-trainer/training-records/page.test.tsx"
   "src/app/admin/sales-trainer/training-records/[recordType]/[recordId]/page.test.tsx"
+  "src/app/admin/sales-trainer/readiness/[learnerId]/page.test.tsx"
   "src/app/admin/business-rules/_components/governed-business-rule-page.test.tsx"
   "src/app/admin/business-rules/sales-combinations/page.test.tsx"
   "src/app/admin/governance/page.test.tsx"
@@ -196,6 +197,7 @@ VITEST_GATE_TARGETS=(
   "src/lib/auth-handler.test.ts"
   "src/lib/sales-trainer/roleplay-observation.test.ts"
   "src/lib/sales-trainer/module-path.test.ts"
+  "src/lib/sales-trainer/routes.test.ts"
 )
 
 BACKEND_GATE_TARGETS=(
@@ -218,6 +220,7 @@ BACKEND_GATE_TARGETS=(
   "tests/integration/test_newcomer_training_path_config_api.py"
   "tests/integration/test_newcomer_training_path_material_api.py"
   "tests/integration/test_newcomer_training_path_rbac_api.py"
+  "tests/integration/test_sales_trainer_readiness_api.py"
   "tests/integration/test_practice_session_object_permissions.py"
   "tests/unit/admin/test_model_config_security.py"
   "tests/unit/common/auth/test_roles.py"
@@ -229,6 +232,8 @@ BACKEND_GATE_TARGETS=(
   "tests/unit/test_newcomer_dead_data_diagnostics_export.py"
   "tests/unit/test_newcomer_training_path_material_governance.py"
   "tests/unit/test_newcomer_training_path_permissions.py"
+  "tests/unit/test_readiness_review_action_service.py"
+  "tests/unit/test_sales_trainer_readiness_dossier_service.py"
   "tests/unit/test_observability_metrics.py"
   "tests/unit/test_p0_fixes.py"
   "tests/unit/test_presentation_event_emitter.py"

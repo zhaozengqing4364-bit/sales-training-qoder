@@ -858,6 +858,55 @@ describe("api.salesTrainer facade", () => {
         );
     });
 
+    it("submits readiness review preconditions unchanged through the admin facade", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    action_id: "review-action-1",
+                    audit_log_id: "audit-1",
+                    decision: "require_retraining",
+                    decision_label: "要求重练",
+                    reason: "表达结构仍需重练。",
+                    capability_keys: ["expression_clarity"],
+                    source_evidence_ids: ["audio_submission:submission-1"],
+                    reviewer_id: "manager-1",
+                    reviewer_role: "training_manager",
+                    created_at: "2026-07-10T00:00:00Z",
+                    retraining_task: null,
+                    state_storage: "readiness_review_action",
+                },
+            }),
+        });
+
+        await api.admin.salesTrainer.createReadinessReviewAction("learner/1", {
+            decision: "require_retraining",
+            reason: "表达结构仍需重练。",
+            capability_keys: ["expression_clarity"],
+            source_evidence_ids: ["audio_submission:submission-1"],
+            idempotency_key: "review-request-frontend-0001",
+            expected_latest_review_action_id: "review-action-previous",
+        });
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining(
+                "/admin/sales-trainer/readiness/dossiers/learner%2F1/review-actions",
+            ),
+            expect.objectContaining({
+                method: "POST",
+                body: JSON.stringify({
+                    decision: "require_retraining",
+                    reason: "表达结构仍需重练。",
+                    capability_keys: ["expression_clarity"],
+                    source_evidence_ids: ["audio_submission:submission-1"],
+                    idempotency_key: "review-request-frontend-0001",
+                    expected_latest_review_action_id: "review-action-previous",
+                }),
+            }),
+        );
+    });
+
     it("previews historical quiz-attempt regrade through the central facade", async () => {
         fetchMock.mockResolvedValue({
             ok: true,

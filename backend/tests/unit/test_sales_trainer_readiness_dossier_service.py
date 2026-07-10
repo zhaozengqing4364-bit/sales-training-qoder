@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,9 +19,14 @@ from sales_trainer.models import (
     SalesTrainerBusinessEtiquetteQuizAttempt,
     SalesTrainerQuizAnswer,
     SalesTrainerQuizAttempt,
+    SalesTrainerReadinessReviewAction,
     SalesTrainerUnit,
 )
-from sales_trainer.schemas import ReadinessDossierResponse, ReadinessWorkbenchResponse
+from sales_trainer.schemas import (
+    ReadinessDossierResponse,
+    ReadinessDossierReviewActionCreate,
+    ReadinessWorkbenchResponse,
+)
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
@@ -28,6 +34,7 @@ from sales_trainer.services.learning_topic_config_service import (
     NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
     NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
 )
+from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
     NEWCOMER_PATH_RESOURCE_TYPE,
@@ -35,6 +42,10 @@ from sales_trainer.services.path_config_models import (
 from sales_trainer.services.readiness_dossier_service import (
     ReadinessDossierError,
     ReadinessDossierService,
+)
+from sales_trainer.services.readiness_state import (
+    READINESS_DOSSIER_TARGET_TYPE,
+    REVIEW_ACTION_CREATED,
 )
 
 
@@ -478,6 +489,188 @@ async def _seed_ready_learner(
     return admin, learner, revision_id, quiz_unit_id
 
 
+def test_should_require_idempotency_and_explicit_expected_latest_request_keys() -> None:
+    with pytest.raises(ValidationError) as error:
+        ReadinessDossierReviewActionCreate.model_validate(
+            {
+                "decision": "mark_manual_follow_up",
+                "reason": "需要人工跟进。",
+                "capability_keys": [],
+                "source_evidence_ids": [],
+            }
+        )
+
+    missing_fields = {item["loc"] for item in error.value.errors()}
+    assert ("idempotency_key",) in missing_fields
+    assert ("expected_latest_review_action_id",) in missing_fields
+
+    payload = ReadinessDossierReviewActionCreate.model_validate(
+        {
+            "decision": "mark_manual_follow_up",
+            "reason": "需要人工跟进。",
+            "capability_keys": [],
+            "source_evidence_ids": [],
+            "idempotency_key": "review-request-0001",
+            "expected_latest_review_action_id": None,
+        }
+    )
+    assert payload.expected_latest_review_action_id is None
+
+
+@pytest.mark.asyncio
+async def test_should_merge_canonical_and_legacy_review_actions_without_audit_duplicate(
+    test_db: AsyncSession,
+) -> None:
+    admin, learner, _, _ = await _seed_ready_learner(test_db, realtime_ready=True)
+    legacy = await OperationLogService(test_db).record(
+        actor=admin,
+        action=REVIEW_ACTION_CREATED,
+        target_type=READINESS_DOSSIER_TARGET_TYPE,
+        target_id=str(learner.user_id),
+        metadata={
+            "decision": "mark_manual_follow_up",
+            "reason": "历史复核动作。",
+            "capability_keys": ["expression_clarity"],
+            "source_evidence_ids": [],
+        },
+    )
+    legacy.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    await test_db.commit()
+
+    service = ReadinessDossierService(test_db)
+    canonical = await service.create_review_action(
+        str(learner.user_id),
+        actor=admin,
+        team_department=None,
+        decision="require_retraining",
+        reason="最新证据仍需重练。",
+        capability_keys=["expression_clarity"],
+        idempotency_key="review-request-dual-read-0001",
+        expected_latest_review_action_id=str(legacy.log_id),
+    )
+    dossier = await service.get_dossier(
+        str(learner.user_id),
+        viewer=admin,
+        team_department=None,
+    )
+
+    response = ReadinessDossierResponse.model_validate(dossier)
+    assert len(response.review_actions) == 2
+    assert [item.state_storage for item in response.review_actions] == [
+        "readiness_review_action",
+        "operation_log",
+    ]
+    assert response.latest_review_action is not None
+    assert response.latest_review_action.action_id == canonical["action_id"]
+    assert response.latest_review_action.audit_log_id != str(legacy.log_id)
+    assert response.review_actions[1].action_id == str(legacy.log_id)
+    created_at = [item["created_at"] for item in dossier["review_actions"]]
+    normalized_created_at = [
+        value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        for value in created_at
+    ]
+    assert normalized_created_at == sorted(normalized_created_at, reverse=True)
+    assert response.latest_review_action.retraining_task is not None
+    assert response.latest_review_action.retraining_task.task_id == (
+        f"retraining:{canonical['action_id']}"
+    )
+    assert response.realtime_gate.locked is True
+
+
+@pytest.mark.asyncio
+async def test_should_use_same_tie_breaker_for_dossier_latest_and_write_version(
+    test_db: AsyncSession,
+) -> None:
+    admin, learner, _, _ = await _seed_ready_learner(test_db, realtime_ready=True)
+    legacy = await OperationLogService(test_db).record(
+        actor=admin,
+        action=REVIEW_ACTION_CREATED,
+        target_type=READINESS_DOSSIER_TARGET_TYPE,
+        target_id=str(learner.user_id),
+        metadata={
+            "decision": "mark_manual_follow_up",
+            "reason": "历史同时间动作。",
+            "capability_keys": ["expression_clarity"],
+            "source_evidence_ids": [],
+        },
+    )
+    legacy.log_id = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    await test_db.commit()
+
+    service = ReadinessDossierService(test_db)
+    canonical_payload = await service.create_review_action(
+        str(learner.user_id),
+        actor=admin,
+        team_department=None,
+        decision="mark_manual_follow_up",
+        reason="专用表同时间动作。",
+        idempotency_key="review-request-tie-breaker-0001",
+        expected_latest_review_action_id=str(legacy.log_id),
+    )
+    canonical = await test_db.get(
+        SalesTrainerReadinessReviewAction,
+        canonical_payload["action_id"],
+    )
+    assert canonical is not None
+    tied_at = datetime(2026, 2, 1, tzinfo=UTC)
+    legacy.created_at = tied_at
+    canonical.created_at = tied_at
+    await test_db.commit()
+
+    dossier = await service.get_dossier(
+        str(learner.user_id),
+        viewer=admin,
+        team_department=None,
+    )
+    assert dossier["latest_review_action"]["action_id"] == str(legacy.log_id)
+
+    next_action = await service.create_review_action(
+        str(learner.user_id),
+        actor=admin,
+        team_department=None,
+        decision="mark_manual_follow_up",
+        reason="沿用 GET 返回的 latest 版本继续复核。",
+        idempotency_key="review-request-tie-breaker-0002",
+        expected_latest_review_action_id=dossier["latest_review_action"]["action_id"],
+    )
+    assert next_action["action_id"] not in {
+        canonical_payload["action_id"],
+        str(legacy.log_id),
+    }
+
+
+@pytest.mark.asyncio
+async def test_should_map_review_action_version_conflict_to_dossier_error(
+    test_db: AsyncSession,
+) -> None:
+    admin, learner, _, _ = await _seed_ready_learner(test_db, realtime_ready=True)
+    service = ReadinessDossierService(test_db)
+    first = await service.create_review_action(
+        str(learner.user_id),
+        actor=admin,
+        team_department=None,
+        decision="mark_manual_follow_up",
+        reason="第一次人工跟进。",
+        idempotency_key="review-request-conflict-0001",
+        expected_latest_review_action_id=None,
+    )
+
+    with pytest.raises(ReadinessDossierError) as error:
+        await service.create_review_action(
+            str(learner.user_id),
+            actor=admin,
+            team_department=None,
+            decision="mark_manual_follow_up",
+            reason="使用陈旧版本再次提交。",
+            idempotency_key="review-request-conflict-0002",
+            expected_latest_review_action_id=None,
+        )
+
+    assert error.value.code == "[READINESS_REVIEW_VERSION_CONFLICT]"
+    assert error.value.status_code == 409
+    assert error.value.details["latest_review_action_id"] == first["action_id"]
+
+
 @pytest.mark.asyncio
 async def test_should_mark_passed_pre_realtime_modules_as_pending_review(
     test_db: AsyncSession,
@@ -511,6 +704,8 @@ async def test_should_approve_dossier_and_open_ready_realtime_gate(
         team_department=None,
         decision="approve",
         reason="证据完整，准许进入真实语音对练。",
+        idempotency_key=f"review-{uuid.uuid4().hex}",
+        expected_latest_review_action_id=None,
     )
     dossier = await service.get_dossier(
         str(learner.user_id),
@@ -524,6 +719,67 @@ async def test_should_approve_dossier_and_open_ready_realtime_gate(
     assert response.latest_review_action is not None
     assert response.latest_review_action.decision == "approve"
     assert response.realtime_gate.locked is False
+
+
+@pytest.mark.asyncio
+async def test_should_replay_same_approve_after_dossier_becomes_approved(
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin, learner, _, _ = await _seed_ready_learner(test_db, realtime_ready=True)
+    service = ReadinessDossierService(test_db)
+    idempotency_key = "review-approve-network-retry-0001"
+
+    first = await service.create_review_action(
+        str(learner.user_id),
+        actor=admin,
+        team_department=None,
+        decision="approve",
+        reason="证据完整，准许进入真实语音对练。",
+        idempotency_key=idempotency_key,
+        expected_latest_review_action_id=None,
+    )
+    monkeypatch.setattr(
+        service,
+        "_default_review_capability_keys",
+        lambda _dossier: ["objection_handling"],
+    )
+    monkeypatch.setattr(
+        service,
+        "_default_review_evidence_ids",
+        lambda _dossier: ["audio_submission:new-after-first-submit"],
+    )
+    replay = await service.create_review_action(
+        str(learner.user_id),
+        actor=admin,
+        team_department=None,
+        decision="approve",
+        reason="证据完整，准许进入真实语音对练。",
+        idempotency_key=idempotency_key,
+        expected_latest_review_action_id=None,
+    )
+    with pytest.raises(ReadinessDossierError) as reused_key:
+        await service.create_review_action(
+            str(learner.user_id),
+            actor=admin,
+            team_department=None,
+            decision="approve",
+            reason="证据完整，准许进入真实语音对练。",
+            capability_keys=["made_up_capability"],
+            source_evidence_ids=["audio_submission:not-visible"],
+            idempotency_key=idempotency_key,
+            expected_latest_review_action_id=None,
+        )
+    dossier = await service.get_dossier(
+        str(learner.user_id),
+        viewer=admin,
+        team_department=None,
+    )
+
+    assert replay["action_id"] == first["action_id"]
+    assert reused_key.value.code == "[READINESS_IDEMPOTENCY_KEY_REUSED]"
+    assert len(dossier["review_actions"]) == 1
+    assert dossier["status"] == "approved"
 
 
 @pytest.mark.asyncio
@@ -558,6 +814,8 @@ async def test_should_not_approve_before_required_training_is_pending_review(
             team_department=None,
             decision="approve",
             reason="未完成训练时不能确认达标。",
+            idempotency_key=f"review-{uuid.uuid4().hex}",
+            expected_latest_review_action_id=None,
         )
 
     assert error.value.code == "[READINESS_DOSSIER_NOT_READY]"
@@ -584,9 +842,7 @@ async def test_should_use_configured_module_capability_keys_for_readiness_mappin
     )
     response = ReadinessDossierResponse.model_validate(dossier)
     audio_evidence = next(
-        item
-        for item in response.evidence
-        if item.module_key == "ppt_explanation"
+        item for item in response.evidence if item.module_key == "ppt_explanation"
     )
     objection = next(
         item
@@ -612,6 +868,8 @@ async def test_should_group_retraining_review_actions_in_workbench(
         decision="require_retraining",
         reason="商务礼仪表达仍需重练。",
         capability_keys=["business_etiquette"],
+        idempotency_key=f"review-{uuid.uuid4().hex}",
+        expected_latest_review_action_id=None,
     )
     workbench = await service.list_workbench(
         viewer=admin,
@@ -657,6 +915,8 @@ async def test_should_group_manual_follow_up_review_actions_as_not_passed(
         decision="mark_manual_follow_up",
         reason="需要主管单独跟进表达稳定性。",
         capability_keys=["expression_clarity"],
+        idempotency_key=f"review-{uuid.uuid4().hex}",
+        expected_latest_review_action_id=None,
     )
     dossier = await service.get_dossier(
         str(learner.user_id),
@@ -699,6 +959,8 @@ async def test_should_return_retraining_to_pending_review_after_new_submission(
         decision="require_retraining",
         reason="商务礼仪表达仍需重练。",
         capability_keys=["business_etiquette"],
+        idempotency_key=f"review-{uuid.uuid4().hex}",
+        expected_latest_review_action_id=None,
     )
     await _seed_business_skills_quiz_attempt(
         test_db,
@@ -756,6 +1018,8 @@ async def test_should_reject_review_action_with_unknown_evidence_or_capability(
             decision="require_retraining",
             reason="能力项不在系统模型中。",
             capability_keys=["made_up_capability"],
+            idempotency_key=f"review-{uuid.uuid4().hex}",
+            expected_latest_review_action_id=None,
         )
     assert capability_error.value.code == "[READINESS_DOSSIER_CAPABILITY_INVALID]"
 
@@ -767,6 +1031,8 @@ async def test_should_reject_review_action_with_unknown_evidence_or_capability(
             decision="require_retraining",
             reason="证据不属于当前档案。",
             source_evidence_ids=["audio_submission:not-visible"],
+            idempotency_key=f"review-{uuid.uuid4().hex}",
+            expected_latest_review_action_id=None,
         )
     assert evidence_error.value.code == "[READINESS_DOSSIER_EVIDENCE_INVALID]"
 
@@ -787,6 +1053,8 @@ async def test_should_not_approve_when_path_config_is_blocked(
             team_department=None,
             decision="approve",
             reason="配置异常时不能确认达标。",
+            idempotency_key=f"review-{uuid.uuid4().hex}",
+            expected_latest_review_action_id=None,
         )
     assert error.value.code == "[READINESS_DOSSIER_CONFIG_BLOCKED]"
     assert error.value.status_code == 409
@@ -805,6 +1073,8 @@ async def test_should_surface_config_exception_even_when_previous_review_approve
         team_department=None,
         decision="approve",
         reason="当前证据完整，准许进入真实语音对练。",
+        idempotency_key=f"review-{uuid.uuid4().hex}",
+        expected_latest_review_action_id=None,
     )
     await test_db.execute(
         delete(SalesTrainerAssetActiveRevision).where(

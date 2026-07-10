@@ -141,6 +141,7 @@ describe("client domain factories", () => {
                 manage_questions: true,
                 manage_modules: false,
                 manage_prompts: false,
+                review_readiness: true,
                 view_records: true,
                 view_global_records: false,
                 retry_jobs: false,
@@ -148,7 +149,13 @@ describe("client domain factories", () => {
                 view_logs: true,
                 view_settings: true,
             },
-            capability_keys: ["manage_questions", "view_records", "view_logs", "view_settings"],
+            capability_keys: [
+                "manage_questions",
+                "review_readiness",
+                "view_records",
+                "view_logs",
+                "view_settings",
+            ],
         });
         const adminSalesTrainer = createAdminSalesTrainerDomain({
             request,
@@ -160,6 +167,7 @@ describe("client domain factories", () => {
 
         expect(request).toHaveBeenCalledWith("/admin/sales-trainer/capabilities");
         expect(result.capabilities.view_records).toBe(true);
+        expect(result.capabilities.review_readiness).toBe(true);
     });
 
     it("loads support runtime faults through the extracted domain normalizer", async () => {

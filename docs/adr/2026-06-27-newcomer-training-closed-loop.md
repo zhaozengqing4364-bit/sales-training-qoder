@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. 本 ADR 冻结新人训练路径 Phase 1 的 API/运行时边界契约，作为后续权限、配置治理、TrainingJourney、AI Coach 和 realtime 接入实现的门禁。
+Accepted（2026-07-10 增补 Readiness 复核决策完整性）。本 ADR 冻结新人训练路径 Phase 1 的 API/运行时边界契约，作为后续权限、配置治理、TrainingJourney、AI Coach、Readiness 人工决定和 realtime 接入实现的门禁。
 
 ## 背景
 
@@ -12,6 +12,7 @@ Accepted. 本 ADR 冻结新人训练路径 Phase 1 的 API/运行时边界契约
 - API 契约仍写明 realtime 模块只能是 disabled/coming-soon placeholder，无法承载“实时对练纳入完整闭环”的产品决策。
 - 训练状态散落在 audio、quiz、business etiquette、AI Coach 等局部记录中，缺统一 TrainingJourney / ModuleProgress / ModuleOutcome 契约。
 - 三类等级（角色等级、学员等级、训练阶段等级）和 AI Coach 必过语义未在闭环契约中统一表达，前端和管理看板容易继续自行推断。
+- Readiness 人工复核曾复用记录读取权限并以通用 OperationLog 作为状态存储，导致 ops 可写、幂等与并发不可约束、有限日志窗口可能丢失当前状态，无法作为 realtime gate 的可信人工决定。
 
 同时，`docs/architecture.md` 已明确 `sales_trainer` 不得直接 import `sales_bot/` 或 `training_runtime/` 创建或变更 realtime 会话；因此 realtime 接入必须先定义 binding/projection 契约，而不是在新人训练域内新建运行时。
 
@@ -70,6 +71,14 @@ AI Coach Prompt、评分 Prompt、模型、temperature、timeout、retry、max t
 
 历史 attempt、submission、score result、AI Coach session 和 realtime outcome 必须优先读取创建时冻结的 snapshot 或 revision refs。无法可靠回填的旧记录只能标记 `legacy_snapshot_only=true` 或 `regrade_unavailable=true`，不得从 latest active revision 重建历史解释。
 
+### 7. Readiness 复核采用独立权限和专用 append-only 真源
+
+`review_readiness` 与 `view_records` 分离。平台管理员拥有全局复核权；现有 `SALES_TRAINER_MANAGER_ROLES` allowlist 中的培训负责人仅能复核本人部门 learner；ops 保留全局记录和 Dossier 读取能力，但 `review_readiness=false`。后端 route 与决策服务都必须校验能力和对象范围，前端隐藏表单不能替代授权。
+
+新建 `sales_trainer_readiness_review_actions` 作为 `approve`、`require_retraining`、`mark_manual_follow_up` 三种决定的 canonical append-only 真源。MVP 不实现撤销、覆盖或复核人委派。`SalesTrainerOperationLog` 降为同一数据库事务内的审计 Adapter；审计失败必须使业务 action 一并回滚。Dossier 在有限兼容期双读专表和历史日志，并按 `audit_log_id` 去重；专表 action 的审计镜像不得再次作为 legacy 状态或并发版本。
+
+写请求必须同时携带长度 16..100 的 `idempotency_key` 和 key 必须存在、值可为 `null` 的 `expected_latest_review_action_id`。同一 actor/key/规范化内容只产生一条 action 和一条审计记录；同 key 异内容以 409 `[READINESS_IDEMPOTENCY_KEY_REUSED]` 拒绝。learner 行锁内比较专表与未镜像 legacy 日志的合并最新版本；陈旧版本以 409 `[READINESS_REVIEW_VERSION_CONFLICT]` 和 `details.latest_review_action_id` 拒绝。客户端网络重试复用 token，编辑后换 token，版本冲突刷新档案并要求重新确认，禁止自动覆盖或自动重放。
+
 ## 备选方案
 
 ### 方案 A：继续保持 realtime placeholder，先做异步模块闭环
@@ -104,11 +113,14 @@ Realtime 采用 runtime binding，而不是新人训练域内建运行时。这�
 - `SalesTrainerPath` 被降级为 legacy 兼容读面，新看板和管理分析应优先使用 TrainingJourney。
 - realtime 模块新增 `runtime_binding`、provider registry/readiness、failure policy 和 rollback policy 契约。
 - StepAudio 2.5 realtime 默认模型迁移必须具备 apply/rollback 语义：apply 只更新默认 StepFun realtime profile，rollback 只恢复默认模型；两者均不处理 secret、不覆盖管理员显式模型选择。
+- Readiness review action 写请求新增必填幂等键和 expected-latest 版本；这是第一方 Web、后端与 migration 协调发布的内部强契约，不提供缺字段的静默兼容写入口。
 - 新增 `[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]`、`[NEWCOMER_REALTIME_BINDING_INVALID]`、`[NEWCOMER_REALTIME_PROVIDER_REGISTRY_DISABLED]`、`[NEWCOMER_REALTIME_PROVIDER_DESCRIPTOR_MISSING]`、`[NEWCOMER_REALTIME_PROVIDER_DISABLED]`、`[NEWCOMER_REALTIME_PROVIDER_NOT_READY]`、`[NEWCOMER_REALTIME_PERMISSION_DENIED]`、`[NEWCOMER_REALTIME_OUTCOME_MISSING]`。
+- Readiness 新增 `[READINESS_REVIEW_ROLE_REQUIRED]`、`[READINESS_IDEMPOTENCY_KEY_REUSED]`、`[READINESS_REVIEW_VERSION_CONFLICT]` 等稳定错误；版本冲突通过 `details.latest_review_action_id` 暴露可重试基线，不暴露越权对象。
 
 ### 权限与状态影响
 
 - 角色能力必须由后端 capability projection 返回，前端 fail-closed。
+- `review_readiness` 独立投影：平台管理员全局、培训负责人本部门、ops 只读；对象级权限以后端最终校验为准。
 - 学员等级来源仍可在后续人工决策中确定，但 API 必须暴露 `source` 和配置 revision。
 - 训练阶段由后端统一返回，前端不得把 `passed=null`、网络错误或 403/500 推断为失败、无绑定或可用。
 
@@ -120,7 +132,8 @@ Realtime 采用 runtime binding，而不是新人训练域内建运行时。这�
 
 ### 数据与迁移影响
 
-- 本 ADR 不要求立即新增表或迁移。
+- 原 Phase 1 决策不要求立即持久化 TrainingJourney；2026-07-10 Readiness 增补以 additive migration `20260710_1200_092` 新增专用 action 表，不改变 TrainingJourney 是否持久化的决策。
+- 新 Readiness 决定以专表为 canonical，OperationLog 只保留审计；历史 OperationLog 不回填、不删除，并通过 Dossier 双读继续可见。
 - 旧历史数据通过 `legacy_snapshot_only`、`regrade_unavailable` 和 snapshot refs 解释。
 - `unit_backfill` 不再是 learner 正式路径，只能用于管理端迁移/诊断。
 
@@ -134,6 +147,8 @@ Realtime 采用 runtime binding，而不是新人训练域内建运行时。这�
 - realtime binding 发布校验、provider not ready、terminal/transient/voluntary failure。
 - AI Coach 必过、坏配置 fail-closed、Prompt 缺失和模型失败兜底。
 - snapshot-first 历史展示，不从 latest active revision 伪造历史。
+- Readiness 权限矩阵（含 ops 只读和培训负责人部门范围）、三决定 allowlist、幂等 replay/异体冲突、expected-latest 版本冲突、legacy 双读去重、前端明确确认和 token 重试语义。
+- additive migration upgrade/downgrade 必须在隔离数据库验证：downgrade 仅删除专表，历史 OperationLog 保留；生产已有新 action 时不执行 schema downgrade。
 
 ## 回滚
 
@@ -144,3 +159,5 @@ Realtime 采用 runtime binding，而不是新人训练域内建运行时。这�
 3. TrainingJourney 可回退为 read model 只读关闭入口，保留原始 audio/quiz/AI Coach/realtime 记录不变。
 4. Active revision 唯一真源若需迁移窗口，只允许在管理端暴露 legacy migration snapshot；不得恢复 learner `unit_backfill` 伪成功作为长期策略。
 5. 已写入历史 snapshot、operation log、regrade run 和 runtime outcome projection 不得被回滚脚本覆盖。
+6. Readiness 发布顺序为 migration → 支持专表/双读和新必填字段的后端 → 新 Web；混合版本窗口内旧 Web 不得继续提交复核写请求。
+7. 应用回滚保留 additive `sales_trainer_readiness_review_actions` 及其业务数据，Dossier 继续双读。schema downgrade 只允许在确认专表无业务数据、或隔离环境完成备份后执行；其语义只删除专表，绝不删除或改写历史 OperationLog。

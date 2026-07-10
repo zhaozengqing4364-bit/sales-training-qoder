@@ -26,6 +26,7 @@ from sales_trainer.permissions import (
     can_manage_sales_trainer,
     can_manage_sales_trainer_questions,
     can_retry_sales_trainer_jobs,
+    can_review_sales_trainer_readiness,
     can_view_sales_trainer_global_records,
     can_view_sales_trainer_logs,
     can_view_sales_trainer_records,
@@ -190,6 +191,16 @@ def _require_records_viewer(user: User) -> JSONResponse | None:
         return None
     return _api_error(
         "[ROLE_REQUIRED]", status_code=403, message="当前账号无权查看学员记录。"
+    )
+
+
+def _require_readiness_reviewer(user: User) -> JSONResponse | None:
+    if can_review_sales_trainer_readiness(user):
+        return None
+    return _api_error(
+        "[READINESS_REVIEW_ROLE_REQUIRED]",
+        status_code=403,
+        message="当前账号无权执行训练达标复核。",
     )
 
 
@@ -1738,7 +1749,7 @@ async def admin_create_readiness_review_action(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse:
-    if error := _require_records_viewer(current_user):
+    if error := _require_readiness_reviewer(current_user):
         return error
     try:
         action = await ReadinessDossierService(db).create_review_action(
@@ -1747,6 +1758,8 @@ async def admin_create_readiness_review_action(
             team_department=_team_scope(current_user),
             decision=payload.decision,
             reason=payload.reason,
+            idempotency_key=payload.idempotency_key,
+            expected_latest_review_action_id=(payload.expected_latest_review_action_id),
             capability_keys=payload.capability_keys,
             source_evidence_ids=payload.source_evidence_ids,
             request_id=get_trace_id(),

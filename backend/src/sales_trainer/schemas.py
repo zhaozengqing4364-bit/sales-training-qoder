@@ -3740,16 +3740,22 @@ class ReadinessDossierReviewAction(BaseModel):
     reviewer_role: str | None = None
     created_at: object
     retraining_task: ReadinessDossierRetrainingTask | None = None
-    state_storage: Literal["operation_log"] = "operation_log"
+    state_storage: Literal["readiness_review_action", "operation_log"]
 
 
 class ReadinessDossierReviewActionCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     decision: ReadinessReviewDecision
     reason: str = Field(..., min_length=1, max_length=1000)
     capability_keys: list[str] = Field(default_factory=list, max_length=20)
     source_evidence_ids: list[str] = Field(default_factory=list, max_length=50)
+    idempotency_key: str = Field(..., min_length=16, max_length=100)
+    expected_latest_review_action_id: str | None = Field(
+        ...,
+        min_length=1,
+        max_length=36,
+    )
 
     @field_validator("capability_keys", "source_evidence_ids")
     @classmethod
@@ -3794,7 +3800,9 @@ class ReadinessDossierSummary(BaseModel):
     weak_capability_count: int = 0
     retraining_task_count: int = 0
     completed_retraining_task_count: int = 0
-    review_state_source: Literal["operation_log"] = "operation_log"
+    review_state_source: Literal["readiness_review_action", "operation_log"] = (
+        "operation_log"
+    )
 
 
 class ReadinessDossierResponse(BaseModel):

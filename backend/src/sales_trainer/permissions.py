@@ -26,6 +26,7 @@ SALES_TRAINER_ADMIN_CAPABILITY_KEYS: Final = (
     "manage_questions",
     "manage_modules",
     "manage_prompts",
+    "review_readiness",
     "view_records",
     "view_global_records",
     "retry_jobs",
@@ -47,11 +48,7 @@ def is_sales_trainer_admin(user: User) -> bool:
 
 @lru_cache(maxsize=8)
 def _resolve_sales_trainer_manager_roles(raw_value: str) -> frozenset[str]:
-    configured = {
-        item.strip().lower()
-        for item in raw_value.split(",")
-        if item.strip()
-    }
+    configured = {item.strip().lower() for item in raw_value.split(",") if item.strip()}
     if not configured:
         return frozenset(DEFAULT_TRAINING_MANAGER_ROLES)
 
@@ -111,6 +108,10 @@ def can_view_sales_trainer_records(user: User) -> bool:
         or is_sales_trainer_manager(user)
         or is_sales_trainer_ops(user)
     )
+
+
+def can_review_sales_trainer_readiness(user: User) -> bool:
+    return is_sales_trainer_admin(user) or is_sales_trainer_manager(user)
 
 
 def can_view_sales_trainer_global_records(user: User) -> bool:
@@ -182,6 +183,7 @@ def sales_trainer_admin_capability_projection(user: User) -> dict[str, object]:
         "manage_questions": can_manage_sales_trainer_questions(user),
         "manage_modules": can_manage_sales_trainer_modules(user),
         "manage_prompts": can_manage_sales_trainer_prompts(user),
+        "review_readiness": can_review_sales_trainer_readiness(user),
         "view_records": can_view_sales_trainer_records(user),
         "view_global_records": can_view_sales_trainer_global_records(user),
         "retry_jobs": can_retry_sales_trainer_jobs(user),

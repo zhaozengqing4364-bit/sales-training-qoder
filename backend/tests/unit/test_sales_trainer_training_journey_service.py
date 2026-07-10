@@ -19,6 +19,7 @@ from sales_trainer.models import (
     SalesTrainerOperationLog,
     SalesTrainerQuizAnswer,
     SalesTrainerQuizAttempt,
+    SalesTrainerReadinessReviewAction,
     SalesTrainerRoleplayObservation,
     SalesTrainerUnit,
 )
@@ -695,7 +696,7 @@ async def test_should_project_readiness_retraining_request_to_learner_journey(
         request.target_modules[0].target_path == "/sales-trainer/business-skills/coach"
     )
 
-    await OperationLogService(test_db).record(
+    approved_log = await OperationLogService(test_db).record(
         actor=admin,
         action=REVIEW_ACTION_CREATED,
         target_type=READINESS_DOSSIER_TARGET_TYPE,
@@ -718,6 +719,42 @@ async def test_should_project_readiness_retraining_request_to_learner_journey(
         viewer=learner,
     )
     assert approved_journey["retraining_requests"] == []
+
+    canonical_action = SalesTrainerReadinessReviewAction(
+        learner_id=str(learner.user_id),
+        actor_id=str(admin.user_id),
+        actor_role="admin",
+        decision="require_retraining",
+        reason="专表决定要求再次补练。",
+        capability_keys=["business_etiquette"],
+        source_evidence_ids=[f"ai_coach_session:{ai_session.session_id}"],
+        retraining_task={
+            "task_id": "retraining:canonical-action",
+            "status": "pending",
+            "source": "readiness_review_action",
+            "capability_keys": ["business_etiquette"],
+            "source_evidence_ids": [f"ai_coach_session:{ai_session.session_id}"],
+            "target_learner_id": str(learner.user_id),
+        },
+        idempotency_key="journey-canonical-retraining-0001",
+        request_hash="a" * 64,
+        expected_previous_action_id=str(approved_log.log_id),
+        audit_log_id=None,
+    )
+    test_db.add(canonical_action)
+    await test_db.commit()
+
+    canonical_journey = await TrainingJourneyService(test_db).get_learner_journey(
+        str(learner.user_id),
+        viewer=learner,
+    )
+    assert len(canonical_journey["retraining_requests"]) == 1
+    assert canonical_journey["retraining_requests"][0]["request_id"] == str(
+        canonical_action.action_id
+    )
+    assert canonical_journey["retraining_requests"][0]["reason"] == (
+        "专表决定要求再次补练。"
+    )
 
 
 @pytest.mark.asyncio

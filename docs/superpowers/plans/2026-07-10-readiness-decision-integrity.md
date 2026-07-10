@@ -15,6 +15,7 @@
 - 每个写请求必须携带 `idempotency_key` 和 `expected_latest_review_action_id`。
 - 同一 `actor_id + idempotency_key` 只能产生一条业务决策。
 - `expected_latest_review_action_id` 与当前最新动作不一致时返回 409，不覆盖并发决定。
+- 专用 review action 表采用 append-only history；MVP 不提供 update、delete、撤销或委派写入口。
 - OperationLog 仍记录 actor、角色、requestId、IP、User-Agent，但不再是业务状态唯一存储。
 - 不删除历史 OperationLog；Dossier 在兼容期合并历史日志和新表记录。
 
@@ -29,6 +30,9 @@
 - Modify: `web/src/lib/api/types.ts`
 - Modify: `web/src/lib/sales-trainer/routes.ts`
 - Modify: `web/src/lib/sales-trainer/routes.test.ts`
+- Modify: `web/src/components/layout/admin-sidebar.test.tsx`
+- Modify: `web/src/components/admin/sales-trainer/module-nav.test.tsx`
+- Modify: `web/src/lib/api/client-domains.test.ts`
 
 **Interfaces:**
 - Produces: `can_review_sales_trainer_readiness(user: User) -> bool`
@@ -88,18 +92,20 @@ export type SalesTrainerAdminCapabilityKey =
 
 Readiness 页面仍由 `view_records` 控制可见性；复核表单根据 `routeAccess.capabilities?.capabilities.review_readiness` 显示，ops 看到只读档案。
 
+`SalesTrainerAdminCapabilities["capabilities"]` 是完整 `Record`；同步给 `routes.test.ts`、`admin-sidebar.test.tsx`、`module-nav.test.tsx` 和 `client-domains.test.ts` 的强类型 fixture 增加 `review_readiness`，避免 `tsc` 因缺字段失败。页面中未声明为 `SalesTrainerAdminCapabilities` 的局部 mock 不做机械改写。
+
 - [ ] **Step 4: 运行权限和路由测试**
 
 Run: `cd backend && ./.venv/bin/python -m pytest -c pyproject.toml tests/unit/test_newcomer_training_path_permissions.py -q --no-cov`
 
-Run: `cd web && npx vitest run src/lib/sales-trainer/routes.test.ts`
+Run: `cd web && npx vitest run src/lib/sales-trainer/routes.test.ts src/components/layout/admin-sidebar.test.tsx src/components/admin/sales-trainer/module-nav.test.tsx src/lib/api/client-domains.test.ts`
 
 Expected: 两条命令均 PASS，且 ops 的 `view_records=true`、`review_readiness=false`。
 
 - [ ] **Step 5: 提交权限切片**
 
 ```bash
-git add backend/src/sales_trainer/permissions.py backend/src/sales_trainer/api.py backend/tests/unit/test_newcomer_training_path_permissions.py web/src/lib/api/types.ts web/src/lib/sales-trainer/routes.ts web/src/lib/sales-trainer/routes.test.ts
+git add backend/src/sales_trainer/permissions.py backend/src/sales_trainer/api.py backend/tests/unit/test_newcomer_training_path_permissions.py web/src/lib/api/types.ts web/src/lib/sales-trainer/routes.ts web/src/lib/sales-trainer/routes.test.ts web/src/components/layout/admin-sidebar.test.tsx web/src/components/admin/sales-trainer/module-nav.test.tsx web/src/lib/api/client-domains.test.ts
 git commit -m "fix: separate readiness review permission"
 ```
 
@@ -144,11 +150,15 @@ assert replayed.action_id == first.action_id
 
 再增加一个测试：已有最新 action 后，以错误的 `expected_latest_review_action_id` 提交，断言 `[READINESS_REVIEW_VERSION_CONFLICT]`、HTTP 409。
 
+增加兼容基线测试：先写入一条旧 `operation_log` review action，Dossier 返回其 `log_id` 作为 `latest_review_action.action_id`；新请求携带该 ID 时允许创建第一条专用 action，携带 `null` 时返回版本冲突。
+
 Run: `cd backend && ./.venv/bin/python -m pytest -c pyproject.toml tests/unit/test_readiness_review_action_service.py -q --no-cov`
 
 Expected: FAIL because model/table/service do not exist.
 
 - [ ] **Step 2: 创建 migration 和 ORM model**
+
+先运行 `cd backend && ./.venv/bin/alembic heads` 并检查 `alembic/versions/`。只有当前 head 仍为 `20260707_1200_091` 时使用文件名/revision `20260710_1200_092`；如果并行任务已占用 092，先按实际 head 顺延 revision 和 `down_revision`，再同步本计划、PRD 和后续依赖计划中的编号。
 
 ```python
 class SalesTrainerReadinessReviewAction(Base):
@@ -248,8 +258,7 @@ async def create(self, *, learner_id: str, actor: User, team_department: str | N
                 409,
             )
         return replay
-    latest = await self._latest_for_learner(learner_id)
-    latest_id = str(latest.action_id) if latest is not None else None
+    latest_id = await self._latest_version_id_for_learner(learner_id)
     if latest_id != expected_latest_review_action_id:
         raise ReadinessReviewActionError(
             "[READINESS_REVIEW_VERSION_CONFLICT]",
@@ -303,9 +312,30 @@ async def create(self, *, learner_id: str, actor: User, team_department: str | N
     await self._db.commit()
     await self._db.refresh(action)
     return action
+
+async def _latest_version_id_for_learner(self, learner_id: str) -> str | None:
+    stored = await self._latest_for_learner(learner_id)
+    legacy_logs, _ = await self._logs.list_logs(
+        target_type=READINESS_DOSSIER_TARGET_TYPE,
+        target_id=learner_id,
+        limit=200,
+    )
+    candidates: list[tuple[datetime, str]] = []
+    if stored is not None:
+        candidates.append((stored.created_at, str(stored.action_id)))
+    for log in legacy_logs:
+        metadata = log.metadata_json if isinstance(log.metadata_json, dict) else {}
+        if log.action != REVIEW_ACTION_CREATED:
+            continue
+        if metadata.get("state_storage") == "readiness_review_action":
+            continue
+        candidates.append((log.created_at, str(log.log_id)))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
 ```
 
-幂等命中必须在版本冲突判断前返回旧结果；业务决策和审计日志必须使用同一个 transaction。
+幂等命中必须在版本冲突判断前返回旧结果；业务决策和审计日志必须使用同一个 transaction。并发版本基线必须合并专用 action 和 legacy OperationLog，且排除新 action 对应的审计镜像，避免上线后的第一次写入被错误阻断。
 
 - [ ] **Step 4: 运行 migration 和服务测试**
 
@@ -344,26 +374,35 @@ Expected: FAIL because Dossier only reads OperationLog.
 - [ ] **Step 2: 将 create_review_action 改成编排而不是存储**
 
 ```python
-action = await self._review_action_service.create(
-    learner_id=learner_id,
-    actor=actor,
-    team_department=team_department,
-    decision=decision,
-    reason=reason.strip(),
-    capability_keys=normalized_capabilities,
-    source_evidence_ids=evidence_ids,
-    idempotency_key=idempotency_key,
-    expected_latest_review_action_id=expected_latest_review_action_id,
-    audit_context=ReadinessAuditContext(
-        request_id=request_id,
-        ip_address=ip_address,
-        user_agent=user_agent,
-    ),
+audit_context = ReadinessAuditContext(
+    request_id=request_id,
+    ip_address=ip_address,
+    user_agent=user_agent,
 )
+try:
+    action = await self._review_action_service.create(
+        learner_id=learner_id,
+        actor=actor,
+        team_department=team_department,
+        decision=decision,
+        reason=reason.strip(),
+        capability_keys=normalized_capabilities,
+        source_evidence_ids=evidence_ids,
+        idempotency_key=idempotency_key,
+        expected_latest_review_action_id=expected_latest_review_action_id,
+        audit_context=audit_context,
+    )
+except ReadinessReviewActionError as exc:
+    raise ReadinessDossierError(
+        exc.code,
+        exc.message,
+        exc.status_code,
+        details=exc.details,
+    ) from exc
 return self._stored_review_action_payload(action)
 ```
 
-保留 Dossier 的 evidence/capability/approve 前置校验；删除生成时间戳 task id 和直接 `_logs.record()` 的写逻辑。重练 task id 改为 `retraining:{action_id}`。
+保留 Dossier 的 evidence/capability/approve 前置校验；删除生成时间戳 task id 和直接 `_logs.record()` 的写逻辑。重练 task id 改为 `retraining:{action_id}`。Dossier 校验、learner row lock、action 写入和 OperationLog flush 都是数据库 IO；该 transaction 内不得加入通知、HTTP 或其他慢速外部 IO。
 
 - [ ] **Step 3: 实现有限兼容双读**
 
@@ -404,6 +443,8 @@ git commit -m "refactor: make readiness decisions canonical"
 - Modify: `backend/src/sales_trainer/schemas.py`
 - Modify: `backend/src/sales_trainer/api.py`
 - Create: `backend/tests/integration/test_sales_trainer_readiness_api.py`
+- Modify: `backend/tests/integration/test_sales_trainer_api.py`
+- Modify: `web/src/lib/api/sales-trainer.test.ts`
 
 **Interfaces:**
 - Produces request fields: `idempotency_key: string`, `expected_latest_review_action_id: string | null`
@@ -424,6 +465,8 @@ expect(createReadinessReviewActionMock).toHaveBeenCalledWith("learner-1", {
 
 页面测试还要断言第一次点击只打开确认区，第二次明确确认才发送请求；ops 只读时表单不存在。
 
+更新现有 `test_sales_trainer_api.py` 中两处 review-action POST，为请求补齐 `idempotency_key` 和显式 `expected_latest_review_action_id: null`；普通 learner 的预期错误改为 `[READINESS_REVIEW_ROLE_REQUIRED]`。在 `web/src/lib/api/sales-trainer.test.ts` 增加 domain 请求测试，锁定两个字段原样进入 JSON body。
+
 Run: `cd web && npx vitest run 'src/app/admin/sales-trainer/readiness/[learnerId]/page.test.tsx'`
 
 Expected: FAIL because request fields and confirmation do not exist.
@@ -437,10 +480,10 @@ class ReadinessDossierReviewActionCreate(BaseModel):
     capability_keys: list[str] = Field(default_factory=list, max_length=20)
     source_evidence_ids: list[str] = Field(default_factory=list, max_length=50)
     idempotency_key: str = Field(..., min_length=16, max_length=100)
-    expected_latest_review_action_id: str | None = Field(None, min_length=1, max_length=36)
+    expected_latest_review_action_id: str | None = Field(..., min_length=1, max_length=36)
 ```
 
-API 将两个字段传给 `ReadinessDossierService.create_review_action`。缺少幂等键由 Pydantic 返回 422，不生成业务记录。
+API 将两个字段传给 `ReadinessDossierService.create_review_action`。`expected_latest_review_action_id` 的 JSON key 必填，但首个决定允许值为 `null`；缺少任一前置字段由 Pydantic 返回 422，不生成业务记录。
 
 - [ ] **Step 3: 实现一次提交一个稳定 token**
 
@@ -467,16 +510,16 @@ setPendingIdempotencyKey(null);
 
 - [ ] **Step 5: 运行 API、页面、类型检查**
 
-Run: `cd backend && ./.venv/bin/python -m pytest -c pyproject.toml tests/integration/test_sales_trainer_readiness_api.py tests/unit/test_sales_trainer_readiness_dossier_service.py -q --no-cov`
+Run: `cd backend && ./.venv/bin/python -m pytest -c pyproject.toml tests/integration/test_sales_trainer_readiness_api.py tests/integration/test_sales_trainer_api.py tests/unit/test_sales_trainer_readiness_dossier_service.py -q --no-cov`
 
-Run: `cd web && npx vitest run 'src/app/admin/sales-trainer/readiness/[learnerId]/page.test.tsx' src/lib/sales-trainer/routes.test.ts && npx tsc --noEmit`
+Run: `cd web && npx vitest run 'src/app/admin/sales-trainer/readiness/[learnerId]/page.test.tsx' src/lib/api/sales-trainer.test.ts src/lib/sales-trainer/routes.test.ts && npx tsc --noEmit`
 
 Expected: 全部 PASS；无复核权限的账号不能看到或调用写动作；重复请求只产生一个 action。
 
 - [ ] **Step 6: 提交端到端切片**
 
 ```bash
-git add backend/src/sales_trainer/schemas.py backend/src/sales_trainer/api.py backend/tests/integration/test_sales_trainer_readiness_api.py web/src/lib/api/types.ts web/src/lib/api/domains/sales-trainer.ts 'web/src/app/admin/sales-trainer/readiness/[learnerId]/page.tsx' 'web/src/app/admin/sales-trainer/readiness/[learnerId]/page.test.tsx'
+git add backend/src/sales_trainer/schemas.py backend/src/sales_trainer/api.py backend/tests/integration/test_sales_trainer_readiness_api.py backend/tests/integration/test_sales_trainer_api.py web/src/lib/api/types.ts web/src/lib/api/domains/sales-trainer.ts web/src/lib/api/sales-trainer.test.ts 'web/src/app/admin/sales-trainer/readiness/[learnerId]/page.tsx' 'web/src/app/admin/sales-trainer/readiness/[learnerId]/page.test.tsx'
 git commit -m "fix: make readiness review submissions safe"
 ```
 

@@ -329,7 +329,9 @@ class SalesTrainerBusinessEtiquetteQuizAttempt(Base):
     training_pack_key = Column(String(80), nullable=False, index=True)
     learning_unit_key = Column(String(80), nullable=False, index=True)
     learning_unit_title = Column(String(120), nullable=False)
-    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
+    user_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=False, index=True
+    )
     path_revision_id = Column(
         String(36),
         ForeignKey("sales_trainer_asset_revisions.revision_id"),
@@ -825,7 +827,9 @@ class SalesTrainerRoleplayObservation(Base):
     source_record_id = Column(String(36), nullable=False, index=True)
     source = Column(String(30), nullable=False, index=True)
     turn_index = Column(Integer, nullable=False, default=0)
-    evaluator_status = Column(String(20), nullable=False, default="completed", index=True)
+    evaluator_status = Column(
+        String(20), nullable=False, default="completed", index=True
+    )
     dimensions_json = Column("dimensions", JSON, nullable=False, default=list)
     signals_json = Column("signals", JSON, nullable=False, default=list)
     error_json = Column("error", JSON, nullable=True)
@@ -899,4 +903,53 @@ class SalesTrainerOperationLog(Base):
     __table_args__ = (
         Index("idx_sales_trainer_operation_actor", "actor_id", "created_at"),
         Index("idx_sales_trainer_operation_target", "target_type", "target_id"),
+    )
+
+
+class SalesTrainerReadinessReviewAction(Base):
+    """Canonical append-only readiness decisions.
+
+    ``SalesTrainerOperationLog`` remains the audit adapter. New readiness state is
+    owned by this table so idempotency and optimistic concurrency are enforced by
+    business storage rather than reconstructed from a generic log window.
+    """
+
+    __tablename__ = "sales_trainer_readiness_review_actions"
+
+    action_id = Column(String(36), primary_key=True, default=_uuid)
+    learner_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=False, index=True
+    )
+    actor_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=False, index=True
+    )
+    actor_role = Column(String(50), nullable=False)
+    decision = Column(String(40), nullable=False)
+    reason = Column(Text, nullable=False)
+    capability_keys = Column(JSON, nullable=False, default=list)
+    source_evidence_ids = Column(JSON, nullable=False, default=list)
+    retraining_task = Column(JSON, nullable=True)
+    idempotency_key = Column(String(100), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    expected_previous_action_id = Column(String(36), nullable=True)
+    audit_log_id = Column(String(36), nullable=True, index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "actor_id",
+            "idempotency_key",
+            name="uq_readiness_review_actor_idempotency",
+        ),
+        CheckConstraint(
+            "decision IN ('approve', 'require_retraining', 'mark_manual_follow_up')",
+            name="ck_readiness_review_decision",
+        ),
+        Index(
+            "idx_readiness_review_learner_created",
+            "learner_id",
+            "created_at",
+        ),
     )

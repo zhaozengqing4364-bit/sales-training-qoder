@@ -24,8 +24,8 @@
 - learner 权限: 只能读取已发布训练单元，只能提交、读取本人做题记录和本人音频提交。
 - 超级管理员权限: `admin` / `super_admin` 可管理内容配置、发布/归档、查看全局记录、查看日志、重试失败任务和显式重评历史成绩。
 - 内容管理员权限: `content_admin` / `newcomer_content_admin` 可管理训练单元、文章绑定、题库、考卷、材料和录音评分标准；不能查看学员记录、配置健康、操作日志或重试任务。AI Coach 高风险字段仍需 `sales_trainer.manage_prompts`。
-- 培训负责人权限: `support` / `training_lead` / `training_manager` 可查看本人 `department` 范围内的学员录音、评分结果、做题记录和训练记录；当前后端同时保留题库维护兼容能力 `sales_trainer.manage_questions`；不能修改其他内容配置、查看系统日志或重试任务。无部门时使用空范围兜底，不放大全局权限。
-- 运维人员权限: `operations` / `ops` / `operator` / `sre` 可查看配置健康、操作日志、全局记录，并可重试转写/评分任务、显式重评历史成绩；不能管理文章、题库、考卷、材料等内容配置。
+- 培训负责人权限: `support` / `training_lead` / `training_manager` 可查看本人 `department` 范围内的学员录音、评分结果、做题记录和训练记录，并以独立 `review_readiness` 复核本部门学员；当前后端同时保留题库维护兼容能力 `sales_trainer.manage_questions`；不能复核其他部门、修改其他内容配置、查看系统日志或重试任务。无部门时使用空范围兜底，不放大全局权限。
+- 运维人员权限: `operations` / `ops` / `operator` / `sre` 可查看配置健康、操作日志、全局记录，并可重试转写/评分任务、显式重评历史成绩；`review_readiness=false`，Readiness 保持只读；不能管理文章、题库、考卷、材料等内容配置。
 - 销售训练材料单独管理: 销售训练 PPT、逐字稿、示例录音和附件属于 `sales_trainer` 域，不复用 `/admin/presentations` 的业务语义。
 - 录音评测场景门禁: `ppt_explanation`、`company_product_demo` 等场景通过 `AudioEvaluationScenario.material_policy` 声明是否必须绑定并确认已发布材料；学员提交前必须确认当前要求版本；提交记录冻结材料、任务简报和评分方案快照。旧 `ppt_pitch` / `ppt_explanation` 继续兼容映射到 PPT 讲解场景。
 - 兼容命名: API 路径和模块目录暂不改名；新增 DTO、后台导航和学员页面文案必须以“新人训练路径”为展示名。
@@ -41,6 +41,7 @@ type SalesTrainerAdminCapabilityKey =
   | "manage_questions"
   | "manage_modules"
   | "manage_prompts"
+  | "review_readiness"
   | "view_records"
   | "view_global_records"
   | "retry_jobs"
@@ -1103,7 +1104,7 @@ TrainingJourney 是新人训练 learner 首页、模块详情、训练记录、�
 | `GET` | `/api/v1/admin/sales-trainer/journeys/{learner_id}` | 单个学员 journey 详情和历史证据 | 部门范围或全局记录权限 |
 | `GET` | `/api/v1/admin/sales-trainer/readiness/workbench` | 达标验收工作台，按待复核、未达标、需重练、已达标、配置异常、训练中分组 | `sales_trainer.view_records` / `sales_trainer.view_global_records` |
 | `GET` | `/api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}` | 单个新人训练达标档案，聚合训练提交证据、AI/规则初评、复核动作、重练任务和 realtime gate | 部门范围或全局记录权限 |
-| `POST` | `/api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}/review-actions` | 创建复核动作：确认达标、要求重练或标记人工跟进；动作写入操作日志并作为当前 V0.9 状态源 | 培训负责人 / 全局记录管理员 |
+| `POST` | `/api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}/review-actions` | 创建 append-only 复核动作：确认达标、要求重练或标记人工跟进；专用表为业务真源，OperationLog 为同事务审计 | `sales_trainer.review_readiness`；平台管理员全局、培训负责人限本部门 |
 
 `GET /api/v1/admin/sales-trainer/journeys` query:
 
@@ -1354,7 +1355,7 @@ interface ReadinessDossierResponse {
     weak_capability_count: number;
     retraining_task_count: number;
     completed_retraining_task_count: number;
-    review_state_source: "operation_log";
+    review_state_source: "readiness_review_action" | "operation_log";
   };
   modules: Array<{
     module_key?: string | null;
@@ -1455,7 +1456,7 @@ interface ReadinessDossierReviewAction {
   reviewer_role?: string | null;
   created_at: string;
   retraining_task?: ReadinessDossierRetrainingTask | null;
-  state_storage: "operation_log";
+  state_storage: "readiness_review_action" | "operation_log";
 }
 
 interface ReadinessDossierReviewActionCreateRequest {
@@ -1463,6 +1464,8 @@ interface ReadinessDossierReviewActionCreateRequest {
   reason: string;
   capability_keys?: string[];
   source_evidence_ids?: string[];
+  idempotency_key: string; // 必填，trim 后长度 16..100
+  expected_latest_review_action_id: string | null; // key 必须存在；首次复核传 null
 }
 
 interface ReadinessDossierNextAction {
@@ -1476,7 +1479,14 @@ interface ReadinessDossierNextAction {
 
 语义约束：
 
-- `readiness_dossier_v1` 第一版为 read-model 聚合；复核状态与重练任务当前采用 `SalesTrainerOperationLog` append-only 存储，`state_storage="operation_log"` 必须显式返回。未来如果迁移到专表，旧日志仍是审计真源。
+- `readiness_dossier_v1` 仍是 read-model 聚合。自 2026-07-10 起，新动作以 `sales_trainer_readiness_review_actions` 专用 append-only 表为 canonical 业务真源，响应返回 `state_storage="readiness_review_action"`；`SalesTrainerOperationLog` 仅作为同一数据库事务内的审计 Adapter。任一写入失败都必须回滚整个决定，不允许“业务成功但无审计”。
+- 兼容读取会合并专用表与历史 OperationLog，并按 `audit_log_id` 去重；专用 action 对应的审计镜像不得再次作为 legacy action 或并发版本。历史 OperationLog 只在有限兼容期返回 `state_storage="operation_log"`，不回填成专用 action，也不再作为新业务状态写入口。
+- `review_readiness` 与 `view_records` 是独立能力：平台管理员拥有全局复核权；`SALES_TRAINER_MANAGER_ROLES` allowlist 内的培训负责人只可复核本人 `department` 学员；`operations` / `ops` / `operator` / `sre` 仅可读取全局记录和 Dossier，`review_readiness=false`。内容管理员、普通用户和其他角色不可写。route guard 与决策服务均由后端校验 capability 和 learner scope；培训负责人跨部门目标以 404 `[TRAINING_RECORD_NOT_FOUND]` 隐藏对象存在性，前端隐藏表单不能代替该校验。
+- `approve`、`require_retraining`、`mark_manual_follow_up` 是唯一合法决定，全部 append-only；MVP 不支持撤销、覆盖或委派。`require_retraining` 的任务 ID 稳定派生为 `retraining:{action_id}`。
+- `idempotency_key` 与 `expected_latest_review_action_id` 都是协调发布后的必填 request key；前者 trim 后长度必须为 16..100，后者值可为 `null` 但不得省略。相同 `actor_id + idempotency_key`、相同规范化业务内容重放必须返回同一 action，且只产生一条 canonical action 和一条审计日志；相同 key 携带不同内容返回 409 `[READINESS_IDEMPOTENCY_KEY_REUSED]`。
+- HTTP 请求缺少上述 key、`idempotency_key` 长度非法、`expected_latest_review_action_id` 非法、reason 为空或 decision 不命中 Literal 时，在进入业务服务前返回 422，后端原始响应体为 FastAPI `detail[]`，不包含顶层稳定错误码。该数组仅由第一方 Web API client 在本地归一化为 `ApiRequestError.errorCode="[REQUEST_VALIDATION_ERROR]"`；此客户端适配码不是服务端 wire contract。`[READINESS_IDEMPOTENCY_KEY_INVALID]`、`[READINESS_REVIEW_REASON_REQUIRED]`、`[READINESS_REVIEW_DECISION_INVALID]` 只作为业务服务的防御性直调错误，不是缺字段 HTTP 契约。
+- 每次写入都以 `expected_latest_review_action_id` 执行乐观并发检查，并在 learner 行锁内串行化。版本基线取专用表最新 action 与未被专用 action 引用的最新 legacy OperationLog 中较新者；首次且无历史时传 `null`。不匹配返回 409 `[READINESS_REVIEW_VERSION_CONFLICT]`，`details.latest_review_action_id` 返回当前版本 ID（可能是专用 action ID、legacy OperationLog ID 或 `null`），服务端不得覆盖或自动重放。
+- 管理端必须先展示包含决定、原因、能力项和证据的明确确认，再发送请求；提交中禁止重复点击。网络失败重试复用同一 `idempotency_key`，用户修改决定、原因、能力项或证据后生成新 token。409 版本冲突时刷新 Dossier、清除待确认提交并提示重新确认，不自动重放旧决定。
 - `pending_review` 表示前置关键训练证据已齐且 AI/规则初评通过，但尚未人工确认；它不是自动达标。
 - `approved` 只能由有复核权限的人工动作产生。`approve` 仅允许在档案状态为 `pending_review` 且 `summary.evidence_count>0` 时提交；未完成训练、证据为空、仍在 AI 评分、需重练或人工跟进时必须返回 `[READINESS_DOSSIER_NOT_READY]`，存在非 realtime 配置阻断时必须返回 `[READINESS_DOSSIER_CONFIG_BLOCKED]`。
 - `require_retraining` 必须生成可追踪 `retraining_task` 元数据；任务处于 `pending` 或 `in_progress` 时在 workbench 归入 `needs_retraining` 分组，不得只写一段备注。
@@ -1485,7 +1495,12 @@ interface ReadinessDossierNextAction {
 - `evidence[]` 只展示已授权 scope 内的训练证据，且必须保留材料、评分、任务简报或 path revision 的可追溯快照引用；普通管理页面不得展示 Prompt 原文、模型密钥、trace raw payload。
 - `competencies[]` 第一版能力项采用固定代码集合；每个训练模块覆盖哪些固定能力项由 `newcomer_path.modules[].capability_keys` 配置和 active revision 快照决定。缺失旧数据可使用后端兼容映射，但新增/发布配置不得依赖前端按模块名推断能力项。通过线、评分结果、模块启停、题库、材料和 AI Coach 行为必须继续来自后台配置与训练记录，不得由前端写死。
 - 学习专题 evidence（商务礼仪小测、商务礼仪 AI Coach）可以进入 `evidence[]` 和能力项弱项说明，但不参与 `summary.total_modules`、`pending_review` 门槛或 `approved` 前置必达判断。未完成学习专题不得把 dossier 置为 `not_passed`、`needs_retraining` 或 `blocked_by_config`。
-- `source_evidence_ids` 和 `capability_keys` 如传入未知值，后端必须返回 typed error；省略时后端可以基于当前档案选择默认证据和能力项。
+- `source_evidence_ids` 和 `capability_keys` 如传入未知值，后端必须返回 typed error；省略或传空数组时，后端基于当前档案选择默认证据和能力项。管理端确认区必须先把这组有效默认值冻结并展示，不能显示“0 项/0 条”后再由后端静默补成非空引用。
+
+协调发布与回滚：
+
+- 这是第一方 Web、后端与 migration 同一切片协调升级的内部强契约。先部署 additive migration `20260710_1200_092`，再部署支持专用表/双读和新必填字段的后端，最后部署发送 token/version 并执行确认交互的 Web；混合版本窗口内旧 Web 不得继续提交写请求。
+- 应用回滚可回退 Web/后端，但必须保留 additive 专用表和其中已产生的决定；兼容 Dossier 继续双读。schema downgrade 只允许在确认新表尚无业务数据、或隔离环境完成备份后执行；其语义仅删除 `sales_trainer_readiness_review_actions`，不删除或改写历史 OperationLog。重新 upgrade 必须可恢复空专用表。
 
 ```typescript
 type LearnerLevelSource =
@@ -1712,7 +1727,7 @@ interface TrainingJourney {
 - `learning_topics[]` 是非阻塞学习证据投影，不属于 `modules[]`，不得计入 `overall_progress.total_modules`、`completed_modules`、`passed_modules` 或下一关阻断。管理端筛选 `module_key=business_skills` 时可以匹配学习专题 evidence，但 funnel/readiness 主结果仍只基于 required modules。
 - `ModuleOutcome` 必须覆盖录音、普通试卷、商务礼仪小测、AI Coach、realtime、补救、重评。历史展示 snapshot-first：优先读取记录创建时冻结的 snapshot/revision refs；旧数据只能标记 `legacy_snapshot_only=true`，不得从 latest active revision 伪造历史解释。
 - 重评必须以 append-only `ModuleOutcome(record_type="regrade", snapshot_ref.snapshot_type="regrade_snapshot")` 进入对应 audio/quiz 模块的 `outcome_history`。`source_record_id` 指向被重评的原始训练记录，`evidence.record_id` 指向 `sales_trainer_regrade_runs.run_id`；原始 audio/quiz outcome 必须继续保留在 history 中，不得被重评结果覆盖或改写。重评失败或 `after_snapshot.error_code` 存在时 outcome 为 `error_terminal`，成功重评分数按 `after_snapshot.total_score/max_score/passed` 投影。
-- `retraining_requests[]` 是管理员达标复核动作对 learner 端的只读投影。来源仍是 `ReadinessDossier` 的 operation-log-backed review state，但 learner UI 只能展示用户语言：补练能力、负责人原因、关联证据数量、可进入的训练模块和入口；不得展示 `operation_log`、审计日志 ID、raw evidence id、Prompt、trace 或模型调试字段。若复核引用了具体证据，`target_modules` 必须优先定位产生该证据的模块；能力项匹配只作为补充。
+- `retraining_requests[]` 是管理员达标复核动作对 learner 端的只读投影。来源是 `ReadinessDossier` 合并后的 review state：新决定读取专用 canonical action，历史决定有限兼容读取 OperationLog；learner UI 只能展示用户语言：补练能力、负责人原因、关联证据数量、可进入的训练模块和入口；不得展示 `operation_log`、审计日志 ID、raw evidence id、Prompt、trace 或模型调试字段。若复核引用了具体证据，`target_modules` 必须优先定位产生该证据的模块；能力项匹配只作为补充。
 - PPT 录音、考卷、必修模块 AI Coach 和 realtime 模块都必须通过 `modules[].next_action` 暴露 learner 入口或锁定原因；学习专题入口必须通过 `learning_topics[]` 暴露。前端不得回退读取 `/paths`/catalog 来拼接入口。
 - AI Coach 对必修训练任务可配置为必过；对学习专题只能是可选、非阻塞学习证据。若 active revision 声明必修模块 `require_ai_coach=true`，TrainingJourney 必须返回 AI Coach `ModuleProgress` 和达标 outcome；若学习专题 `ai_coach.enabled=true`，只影响学习专题入口和证据，不得阻塞 overall/readiness。缺 Prompt、坏配置或模型不可用必须返回 typed terminal/transient 状态，不得静默默认通过。
 - realtime outcome 只能来自 runtime binding 的 outcome projection。`sales_trainer` 不直接消费 WebSocket 中间态作为通过依据，不从前端连接状态推断完成。
@@ -3687,7 +3702,7 @@ interface AudioScorePromptRollbackRequest {
 | `GET` | `/api/v1/admin/sales-trainer/manager-dashboard` | 阶段 2 管理者看板，聚合完成率、通过率、风险学员、弱项维度和干预建议 |
 | `GET` | `/api/v1/admin/sales-trainer/readiness/workbench` | 达标验收工作台，按验收状态分组聚合学员 |
 | `GET` | `/api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}` | 单个学员训练达标档案，聚合证据、能力项、复核记录和下一阶段 gate |
-| `POST` | `/api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}/review-actions` | 创建复核动作并写入操作日志，支持确认达标、要求重练和人工跟进 |
+| `POST` | `/api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}/review-actions` | 以 `review_readiness` 创建专表 canonical、OperationLog 同事务审计的 append-only 复核动作 |
 
 Response `data`:
 
@@ -4562,6 +4577,17 @@ interface OperationLogListResponse {
 | `[ASR_TASK_FAILED]` | 502 | ASR 任务执行失败，未命中更具体供应商错误 |
 | `[TRAINING_RECORD_TYPE_INVALID]` | 400 | 统一训练记录详情的 `record_type` 不是 `audio_submission`、`quiz_attempt`、`ai_coach_session`、`business_etiquette_quiz_attempt` 或 `realtime_roleplay_session` |
 | `[TRAINING_RECORD_NOT_FOUND]` | 404 | 训练记录不存在 |
+| `[READINESS_REVIEW_ROLE_REQUIRED]` | 403 | 当前账号没有独立 `review_readiness` 能力；拥有 `view_records`（包括 ops）不授予复核写权限 |
+| FastAPI request validation payload | 422 | Readiness HTTP payload 缺字段、格式/长度非法、reason 为空或 decision 不在 Literal；后端返回原生 `detail[]` 且无顶层错误码，第一方 Web client 才在本地归一化为 `[REQUEST_VALIDATION_ERROR]` |
+| `[READINESS_REVIEW_DECISION_INVALID]` | service guard 400 | 业务服务被绕过 HTTP schema 直调且决定不在三值 allowlist；HTTP 同类非法返回原生 422 `detail[]` |
+| `[READINESS_REVIEW_REASON_REQUIRED]` | service guard 400 | 业务服务防御性拒绝空原因；HTTP 同类非法返回原生 422 `detail[]` |
+| `[READINESS_IDEMPOTENCY_KEY_INVALID]` | service guard 400 | 业务服务防御性拒绝 trim 后长度不在 16..100 的 token；HTTP 缺失/长度非法返回原生 422 `detail[]` |
+| `[READINESS_IDEMPOTENCY_KEY_REUSED]` | 409 | 同一 actor 的幂等键已用于不同规范化业务内容；不创建 action/审计记录；当前响应省略 `details` |
+| `[READINESS_REVIEW_VERSION_CONFLICT]` | 409 | `expected_latest_review_action_id` 与专表/legacy 合并后的当前版本不一致；`details.latest_review_action_id` 返回当前版本 ID 或 `null` |
+| `[READINESS_DOSSIER_NOT_READY]` | 409 | 当前档案不满足 approve 前置；`details` 包含 `required_status`、当前 `status` 和 `evidence_count` |
+| `[READINESS_DOSSIER_CONFIG_BLOCKED]` | 409 | 当前档案存在非 realtime 配置阻断，不能确认达标 |
+| `[READINESS_DOSSIER_CAPABILITY_INVALID]` | 400 | 请求包含未知能力项；`details.unknown_capability_keys` 返回未识别 key |
+| `[READINESS_DOSSIER_EVIDENCE_INVALID]` | 400 | 请求引用不存在或无权访问的证据；`details.unknown_evidence_ids` 返回未识别 ID |
 | `[ROLEPLAY_OBSERVATION_SESSION_NOT_FOUND]` | 404 | 旁路观测写入目标实时会话不存在；sink 必须 warning-only，不影响实时链路 |
 | `[ROLEPLAY_OBSERVATION_SESSION_MODE_INVALID]` | 409 | 旁路观测目标不是 `stepfun_realtime` 会话；sink 必须 warning-only |
 | `[ROLEPLAY_OBSERVATION_SESSION_SCOPE_INVALID]` | 409 | 旁路观测目标不属于 `sales_trainer` external binding；sink 必须 warning-only |
@@ -4588,7 +4614,7 @@ interface OperationLogListResponse {
 | `SALES_TRAINER_ASR_MODE` | `legacy` | 转写服务 | 环境配置/系统配置 | `file` 时使用 DashScope 录音文件识别，要求音频可通过 HTTP/HTTPS URL 访问 |
 | `DASHSCOPE_API_KEY` | 无 | DashScope 文件识别 | 环境配置/密钥管理 | `SALES_TRAINER_ASR_MODE=file` 时必填，缺失返回 `[ASR_API_KEY_REQUIRED]` |
 | `SALES_TRAINER_ASR_MODEL` | `fun-asr` | DashScope 文件识别 | 环境配置/系统配置 | `language_hints` 仅在 `paraformer-v2` 时传入 |
-| `SALES_TRAINER_MANAGER_ROLES` | `support,training_lead,training_manager` | 培训负责人记录查看能力兼容配置 | 环境配置/系统配置 | 逗号分隔角色列表；缺失/空值使用默认培训负责人角色；显式配置只保留 allowlist 合法角色，混入非法值记录诊断，全非法配置 fail-closed 为空角色集合；只授予团队记录读取能力，不授予内容管理、日志、配置健康或任务重试能力 |
+| `SALES_TRAINER_MANAGER_ROLES` | `support,training_lead,training_manager` | 培训负责人记录查看与本部门 Readiness 复核能力兼容配置 | 环境配置/系统配置 | 逗号分隔角色列表；缺失/空值使用默认培训负责人角色；显式配置只保留 allowlist 合法角色，混入非法值记录诊断，全非法配置 fail-closed 为空角色集合；授予团队记录读取和本部门 `review_readiness`，不授予全局记录、内容管理、日志、配置健康或任务重试能力 |
 | `sales_trainer.phase2.closed_loop_policy` | `sales_trainer_phase2_closed_loop_policy_v1`、`enabled=true`、`low_score_threshold=70`、`repeat_practice_threshold=2`、`dashboard_record_limit=500`、默认主管动作与补救动作 | 阶段 2 训练记录投影、能力画像、补救动作、管理者看板和 settings 策略摘要 | `/admin/business-rules/sales-trainer-phase2`，复用 `BusinessRuleConfig` 发布/回滚/禁用/审计 | 阈值范围 `0..100`、`1..20`、`1..5000`；action code/record_type 必须覆盖且不重复；文案/模板非空；缺失、非法或 disabled 使用 bundled default，并返回 `phase2_policy.fallback_applied=true` |
 | `modules[].ai_coach.allowed_training_card_types` | 裸默认 `["scenario_judgment"]`；商务礼仪 seed/admin 默认 `["scenario_judgment","expression_rewrite","role_response"]` | 必修 path module 的 `modules[].ai_coach`；商务礼仪规范读取 `newcomer_learning_topics_v1.topics[].ai_coach` | `/admin/sales-trainer/ai-coach` + `/admin/sales-trainer/learning-topics/business-etiquette` | 至少 1 项，只允许 `scenario_judgment`、`expression_rewrite`、`role_response`；改写/角色回应必须同时启用 `short_answer` 并绑定评分 prompt；非法保存返回 Pydantic 校验错误，运行时输出不命中返回 `[AI_COACH_TRAINING_CARD_TYPE_NOT_ALLOWED]` |
 | `BUSINESS_SKILLS_COACH_WORKBENCH_COPY` | 页面标题、聊天工作台、教练反馈、结束面板、按钮和空状态文案 | `web/src/app/(dashboard)/sales-trainer/business-skills/coach/coach-workbench-config.ts` | 当前为前端集中配置；未来运营可调时迁移到 `/admin/sales-trainer/ai-coach` | 必须非空、语义与 Chat-First 教练工作台一致；缺失会在构建/类型检查阶段暴露；当前不支持后台热更新 |
@@ -4651,11 +4677,12 @@ interface OperationLogListResponse {
 
 | 日期 | 变更 | 说明 |
 |---|---|---|
+| 2026-07-10 | Readiness 复核决策完整性升级 | 新增独立 `review_readiness`、专用 append-only action 真源、OperationLog 同事务审计、幂等/expected-latest 并发契约、legacy 双读和协调发布/回滚语义；ops 保持只读 |
 | 2026-07-08 | 新增 TrainingJourney 展示身份与 Playwright 审计归档契约 | 同一 `module_key` 的不同 `kind` 必须按 `module_key + kind` 展示和聚合；非阻塞学习专题不参与 required path；专项审计证据归档后不再生成 active task 目录 |
 | 2026-07-08 | 新增录音评测场景治理契约 | `AudioEvaluationScenario` registry 管理 PPT 讲解、公司产品 Demo、金字塔演讲；path module additive `scenario_key`；材料门禁从 PPT 特判改为场景策略 |
 | 2026-07-08 | 新增学习专题独立治理契约 | `newcomer_learning_topics_v1` 复用 asset revision；`TrainingJourney.learning_topics` 非阻塞展示；商务礼仪规范从旧 `business_skills` 生成草稿并独立发布 |
 | 2026-07-06 | 收紧达标档案确认与模块能力映射契约 | `approve` 只能在 `pending_review` 且有证据时提交；`newcomer_path.modules[].capability_keys` 成为达标档案能力映射配置源 |
-| 2026-07-06 | 新增 V0.9 训练达标档案与达标验收工作台契约 | `/readiness/workbench`、`/readiness/dossiers/{learner_id}`、`/review-actions` 聚合 journey、训练记录和 operation log；复核动作采用 operation-log-backed 状态 |
+| 2026-07-06 | 新增 V0.9 训练达标档案与达标验收工作台契约 | `/readiness/workbench`、`/readiness/dossiers/{learner_id}`、`/review-actions` 聚合 journey、训练记录和历史日志；当时的通用日志状态方案已由 2026-07-10 专表真源决策 supersede |
 | 2026-07-03 | 冻结 StepFun roleplay compliance record-only 契约 | `roleplay_observation_v1` 全局 `record_only`，current turn `main_chain_effect=none`；next-turn soft steering 非阻断且可审计；旧同步 cancel/regenerate/repair audio 退役，恢复阻断必须另起 ADR |
 | 2026-07-02 | 同步 StepAudio 2.5 安全/迁移契约 | 明确 provider migration apply/rollback、secret 不入库不入日志、legacy fallback 只读、observation 对象级授权 |
 | 2026-07-02 | 新增实时角色一致性旁路观测契约 | `roleplay_observation_v1` 固定 record-only（旧称 `observe_only`）/ `main_chain_effect=none`，admin endpoint 只读展示，不阻断 StepAudio 2.5 realtime |

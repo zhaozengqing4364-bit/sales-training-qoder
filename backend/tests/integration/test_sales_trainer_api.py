@@ -402,12 +402,23 @@ async def test_sales_trainer_question_api_should_validate_business_question_shap
     assert invalid_response.status_code == 422
     assert invalid_response.json()["error"] == "[QUESTION_CORRECT_ANSWER_INVALID]"
     assert multi_response.status_code == 200
-    assert multi_response.json()["data"]["scoring_criteria"]["correct_answers"] == ["A", "B"]
+    assert multi_response.json()["data"]["scoring_criteria"]["correct_answers"] == [
+        "A",
+        "B",
+    ]
     assert true_false_response.status_code == 200
-    assert true_false_response.json()["data"]["scoring_criteria"]["correct_bool"] is True
+    assert (
+        true_false_response.json()["data"]["scoring_criteria"]["correct_bool"] is True
+    )
     assert short_response.status_code == 200
-    assert short_response.json()["data"]["reference_answer"] == "先确认预算约束，再回到价值和风险成本。"
-    assert short_response.json()["data"]["explanation"] == "优秀答案应兼顾共情、澄清和价值重构。"
+    assert (
+        short_response.json()["data"]["reference_answer"]
+        == "先确认预算约束，再回到价值和风险成本。"
+    )
+    assert (
+        short_response.json()["data"]["explanation"]
+        == "优秀答案应兼顾共情、澄清和价值重构。"
+    )
     assert short_response.json()["data"]["ai_scoring"]["pass_threshold"] == 75
     assert default_ai_response.status_code == 200
     assert default_ai_response.json()["data"]["ai_scoring"] == {
@@ -593,7 +604,8 @@ async def test_should_allow_training_manager_to_reach_readiness_review_scope_gua
     monkeypatch.delenv("SALES_TRAINER_MANAGER_ROLES", raising=False)
     manager = _user("support", department="华东销售")
     learner = _user("user", department="华东销售")
-    test_db.add_all([manager, learner])
+    ops = _user("operations", department="运维")
+    test_db.add_all([manager, learner, ops])
     await test_db.commit()
 
     manager_response = await async_client.post(
@@ -604,6 +616,19 @@ async def test_should_allow_training_manager_to_reach_readiness_review_scope_gua
             "reason": "测试权限应先进入对象级校验。",
             "capability_keys": [],
             "source_evidence_ids": [],
+            "idempotency_key": "review-api-manager-0001",
+            "expected_latest_review_action_id": None,
+        },
+    )
+    missing_version_response = await async_client.post(
+        "/api/v1/admin/sales-trainer/readiness/dossiers/missing-learner/review-actions",
+        headers=_auth_headers(manager),
+        json={
+            "decision": "mark_manual_follow_up",
+            "reason": "缺少显式版本前置字段时应由请求契约拒绝。",
+            "capability_keys": [],
+            "source_evidence_ids": [],
+            "idempotency_key": "review-api-missing-version-0001",
         },
     )
     learner_response = await async_client.post(
@@ -614,13 +639,30 @@ async def test_should_allow_training_manager_to_reach_readiness_review_scope_gua
             "reason": "普通学员不能复核。",
             "capability_keys": [],
             "source_evidence_ids": [],
+            "idempotency_key": "review-api-learner-0001",
+            "expected_latest_review_action_id": None,
+        },
+    )
+    ops_response = await async_client.post(
+        f"/api/v1/admin/sales-trainer/readiness/dossiers/{manager.user_id}/review-actions",
+        headers=_auth_headers(ops),
+        json={
+            "decision": "mark_manual_follow_up",
+            "reason": "运维只有记录读取权限，不能执行复核。",
+            "capability_keys": [],
+            "source_evidence_ids": [],
+            "idempotency_key": "review-api-operations-0001",
+            "expected_latest_review_action_id": None,
         },
     )
 
     assert manager_response.status_code == 404
     assert manager_response.json()["error"] == "[TRAINING_RECORD_NOT_FOUND]"
+    assert missing_version_response.status_code == 422
     assert learner_response.status_code == 403
-    assert learner_response.json()["error"] == "[ROLE_REQUIRED]"
+    assert learner_response.json()["error"] == "[READINESS_REVIEW_ROLE_REQUIRED]"
+    assert ops_response.status_code == 403
+    assert ops_response.json()["error"] == "[READINESS_REVIEW_ROLE_REQUIRED]"
 
 
 @pytest.mark.asyncio
@@ -803,10 +845,16 @@ async def test_should_scope_sales_trainer_manager_to_same_department(
     assert submissions_response.status_code == 200
     submissions_payload = submissions_response.json()["data"]
     assert submissions_payload["total"] == 1
-    assert submissions_payload["items"][0]["submission_id"] == same_submission.submission_id
+    assert (
+        submissions_payload["items"][0]["submission_id"]
+        == same_submission.submission_id
+    )
     assert submissions_payload["items"][0]["user_name"] == same_department_user.name
     assert submissions_payload["items"][0]["user_email"] == same_department_user.email
-    assert submissions_payload["items"][0]["user_department"] == same_department_user.department
+    assert (
+        submissions_payload["items"][0]["user_department"]
+        == same_department_user.department
+    )
     assert same_detail_response.status_code == 200
     same_detail_payload = same_detail_response.json()["data"]
     assert same_detail_payload["user_name"] == same_department_user.name
@@ -918,7 +966,16 @@ async def test_should_expose_realtime_roleplay_observations_with_record_scope_gu
         payload_hash="sha256:llm",
     )
     test_db.add_all(
-        [learner, manager, outside_manager, content_admin, scenario, session, heuristic, llm]
+        [
+            learner,
+            manager,
+            outside_manager,
+            content_admin,
+            scenario,
+            session,
+            heuristic,
+            llm,
+        ]
     )
     await test_db.commit()
 
@@ -1070,7 +1127,9 @@ async def test_should_list_only_own_audio_submissions_for_learner(
     assert learner_response.status_code == 200
     learner_payload = learner_response.json()["data"]
     assert learner_payload["total"] == 1
-    assert learner_payload["items"][0]["submission_id"] == str(own_submission.submission_id)
+    assert learner_payload["items"][0]["submission_id"] == str(
+        own_submission.submission_id
+    )
     assert learner_payload["items"][0]["user_id"] == str(learner.user_id)
 
     # admin 端 list 不受学员端端点影响（走 admin_router，可看到全部）

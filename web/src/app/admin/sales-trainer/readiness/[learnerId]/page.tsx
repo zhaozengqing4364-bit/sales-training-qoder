@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, usePathname } from "next/navigation";
 import { AlertTriangle, ClipboardCheck, FileText, RefreshCw } from "lucide-react";
 
@@ -10,7 +10,7 @@ import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
-import { api, getApiErrorMessage } from "@/lib/api/client";
+import { ApiRequestError, api } from "@/lib/api/client";
 import type {
     ReadinessDossier,
     ReadinessDossierCompetency,
@@ -58,6 +58,46 @@ const RECORD_TYPE_LABELS: Record<string, string> = {
     ai_coach_session: "AI 补练记录",
     business_etiquette_quiz_attempt: "商务礼仪练习",
 };
+
+const READINESS_ERROR_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
+    "[TRAINING_RECORD_NOT_FOUND]": "档案不存在或当前账号无权查看。",
+    "[READINESS_REVIEW_ROLE_REQUIRED]": "当前账号无权提交训练达标复核。",
+    "[READINESS_REVIEW_VERSION_CONFLICT]": "档案已更新，请查看最新复核记录后再次确认。",
+    "[READINESS_IDEMPOTENCY_KEY_REUSED]": "本次提交标识已失效，请修改复核内容后重新确认。",
+    "[READINESS_DOSSIER_NOT_READY]": "当前训练证据尚未满足达标复核条件。",
+    "[READINESS_DOSSIER_CONFIG_BLOCKED]": "当前档案存在配置问题，暂时不能确认达标。",
+    "[READINESS_DOSSIER_CAPABILITY_INVALID]": "关联能力项已变化，请刷新档案后重新选择。",
+    "[READINESS_DOSSIER_EVIDENCE_INVALID]": "关联证据已变化，请刷新档案后重新选择。",
+    "[READINESS_REVIEW_REASON_REQUIRED]": "请填写复核原因。",
+    "[READINESS_REVIEW_DECISION_INVALID]": "复核决定已失效，请重新选择。",
+});
+const NETWORK_TYPE_ERROR_PATTERN =
+    /(?:failed to fetch|networkerror|network request failed|load failed)/i;
+const NETWORK_ERROR_MESSAGE = "网络连接失败，请检查网络后重试。";
+
+interface ReadinessReviewSubmissionSnapshot {
+    readonly learnerId: string;
+    readonly learnerName: string;
+    readonly decision: ReadinessReviewDecision;
+    readonly reason: string;
+    readonly capabilityKeys: readonly string[];
+    readonly evidenceIds: readonly string[];
+    readonly expectedLatestReviewActionId: string | null;
+    readonly idempotencyKey: string;
+}
+
+export function readinessReviewSubmissionIsCurrent(context: {
+    readonly submissionLearnerId: string;
+    readonly routeLearnerId: string;
+    readonly dossierLearnerId: string | null;
+    readonly submissionExpectedLatestReviewActionId: string | null;
+    readonly currentLatestReviewActionId: string | null;
+}): boolean {
+    return context.submissionLearnerId === context.routeLearnerId
+        && context.submissionLearnerId === context.dossierLearnerId
+        && context.submissionExpectedLatestReviewActionId
+            === context.currentLatestReviewActionId;
+}
 
 function paramValue(value: string | string[] | undefined): string {
     return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
@@ -138,6 +178,7 @@ function readinessDisplayMessage(message: string | null | undefined): string {
     }
     return rawMessage
         .replace(/\s*\(trace_id:[^)]+\)/g, "")
+        .replace(/\btrace[_-]?id\s*[:=]\s*[^\s,)]+/gi, "")
         .replace(/\[[A-Z0-9_]+\]\s*/g, "")
         .replace(/TrainingJourney/g, "训练路径")
         .replace(/Journey/g, "训练路径")
@@ -149,6 +190,23 @@ function readinessDisplayMessage(message: string | null | undefined): string {
         .replace(/Prompt/g, "后台配置")
         .replace(/terminal/g, "需处理")
         .trim();
+}
+
+function readinessErrorMessage(error: unknown, fallback: string): string {
+    if (error instanceof ApiRequestError) {
+        return READINESS_ERROR_MESSAGES[error.errorCode] ?? fallback;
+    }
+    if (
+        error instanceof TypeError
+        && NETWORK_TYPE_ERROR_PATTERN.test(error.message)
+    ) {
+        return NETWORK_ERROR_MESSAGE;
+    }
+    return fallback;
+}
+
+function learnerDisplayName(dossier: ReadinessDossier): string {
+    return dossier.learner.name?.trim() || "未命名新人";
 }
 
 function snapshotSummary(
@@ -198,7 +256,7 @@ function snapshotSummary(
 }
 
 function evidenceLabel(evidence: ReadinessDossierEvidence): string {
-    return evidence.module_title || evidence.module_key || evidence.evidence_id;
+    return evidence.module_title || "训练证据";
 }
 
 function evidenceResultSummary(evidence: ReadinessDossierEvidence): string {
@@ -249,7 +307,11 @@ function capabilityNames(
 
 function defaultCapabilitySelection(dossier: ReadinessDossier): string[] {
     const risk = dossier.competencies
-        .filter((item) => item.status === "ai_failed" || item.status === "pending_review")
+        .filter((item) => (
+            item.status === "ai_failed"
+            || item.status === "pending_review"
+            || item.status === "needs_retraining"
+        ))
         .map((item) => item.capability_key);
     if (risk.length > 0) {
         return risk;
@@ -271,6 +333,24 @@ function defaultEvidenceSelection(dossier: ReadinessDossier): string[] {
 
 function toggleValue(values: string[], value: string): string[] {
     return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
+
+function decisionLabel(decision: ReadinessReviewDecision): string {
+    return DECISION_OPTIONS.find((option) => option.value === decision)?.label ?? "复核动作";
+}
+
+function confirmationButtonLabel(decision: ReadinessReviewDecision): string {
+    if (decision === "approve") {
+        return "确认新人达标并开放下一阶段";
+    }
+    if (decision === "require_retraining") {
+        return "确认下发重练";
+    }
+    return "确认标记人工跟进";
+}
+
+function createReviewIdempotencyKey(): string {
+    return globalThis.crypto.randomUUID();
 }
 
 function CompetencyRow({ competency }: { competency: ReadinessDossierCompetency }) {
@@ -406,20 +486,79 @@ export default function SalesTrainerReadinessDossierPage() {
     const [actionError, setActionError] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [reviewSubmission, setReviewSubmission] =
+        useState<ReadinessReviewSubmissionSnapshot | null>(null);
+    const confirmationRef = useRef<HTMLElement | null>(null);
+    const activeLearnerIdRef = useRef(learnerId);
+    const previousLearnerIdRef = useRef(learnerId);
+    const dossierRequestGenerationRef = useRef(0);
+    const submissionGenerationRef = useRef(0);
+    activeLearnerIdRef.current = learnerId;
+    const canReviewReadiness = Boolean(
+        routeAccess.capabilities?.capabilities.review_readiness,
+    );
 
-    const loadDossier = useCallback(async () => {
-        if (!routeAccess.canAccess || !learnerId) {
+    useEffect(() => {
+        if (previousLearnerIdRef.current === learnerId) {
             return;
         }
+        previousLearnerIdRef.current = learnerId;
+        dossierRequestGenerationRef.current += 1;
+        submissionGenerationRef.current += 1;
+        setDossier(null);
+        setError(null);
+        setDecision("approve");
+        setReason("");
+        setSelectedCapabilityKeys([]);
+        setSelectedEvidenceIds([]);
+        setActionError(null);
+        setActionMessage(null);
+        setIsSubmitting(false);
+        setReviewSubmission(null);
+    }, [learnerId]);
+
+    const loadDossier = useCallback(async () => {
+        const requestGeneration = ++dossierRequestGenerationRef.current;
+        if (!routeAccess.canAccess || !learnerId) {
+            setDossier(null);
+            setIsLoading(false);
+            return;
+        }
+        const requestedLearnerId = learnerId;
         setIsLoading(true);
         setError(null);
         try {
-            setDossier(await api.admin.salesTrainer.getReadinessDossier(learnerId));
+            const loadedDossier = await api.admin.salesTrainer.getReadinessDossier(
+                requestedLearnerId,
+            );
+            if (
+                activeLearnerIdRef.current !== requestedLearnerId
+                || dossierRequestGenerationRef.current !== requestGeneration
+            ) {
+                return;
+            }
+            setDossier(loadedDossier);
         } catch (loadError) {
+            if (
+                activeLearnerIdRef.current !== requestedLearnerId
+                || dossierRequestGenerationRef.current !== requestGeneration
+            ) {
+                return;
+            }
             setDossier(null);
-            setError(getApiErrorMessage(loadError));
+            setError(
+                readinessErrorMessage(
+                    loadError,
+                    "档案暂时无法加载，请稍后重试。",
+                ),
+            );
         } finally {
-            setIsLoading(false);
+            if (
+                activeLearnerIdRef.current === requestedLearnerId
+                && dossierRequestGenerationRef.current === requestGeneration
+            ) {
+                setIsLoading(false);
+            }
         }
     }, [learnerId, routeAccess.canAccess]);
 
@@ -435,6 +574,45 @@ export default function SalesTrainerReadinessDossierPage() {
         setSelectedEvidenceIds(defaultEvidenceSelection(dossier));
     }, [dossier]);
 
+    const latestReviewActionId = dossier?.latest_review_action?.action_id ?? null;
+    const dossierLearnerId = dossier?.learner.learner_id ?? null;
+    const submissionIsCurrent = reviewSubmission !== null
+        && readinessReviewSubmissionIsCurrent({
+            submissionLearnerId: reviewSubmission.learnerId,
+            routeLearnerId: learnerId,
+            dossierLearnerId,
+            submissionExpectedLatestReviewActionId:
+                reviewSubmission.expectedLatestReviewActionId,
+            currentLatestReviewActionId: latestReviewActionId,
+        });
+    const currentReviewSubmission = submissionIsCurrent ? reviewSubmission : null;
+    const isConfirming = currentReviewSubmission !== null;
+
+    useEffect(() => {
+        setReviewSubmission((current) => {
+            if (
+                current
+                && !readinessReviewSubmissionIsCurrent({
+                    submissionLearnerId: current.learnerId,
+                    routeLearnerId: learnerId,
+                    dossierLearnerId,
+                    submissionExpectedLatestReviewActionId:
+                        current.expectedLatestReviewActionId,
+                    currentLatestReviewActionId: latestReviewActionId,
+                })
+            ) {
+                return null;
+            }
+            return current;
+        });
+    }, [dossierLearnerId, latestReviewActionId, learnerId]);
+
+    useEffect(() => {
+        if (currentReviewSubmission) {
+            confirmationRef.current?.focus();
+        }
+    }, [currentReviewSubmission]);
+
     const failedCompetencies = useMemo(() => {
         return dossier?.competencies.filter((item) => item.weak) ?? [];
     }, [dossier]);
@@ -447,9 +625,13 @@ export default function SalesTrainerReadinessDossierPage() {
         );
     }, [dossier]);
 
-    async function submitReviewAction(event: React.FormEvent<HTMLFormElement>) {
+    function resetPendingSubmission(): void {
+        setReviewSubmission(null);
+    }
+
+    function openReviewConfirmation(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (!dossier) {
+        if (!dossier || dossier.learner.learner_id !== learnerId) {
             return;
         }
         const trimmedReason = reason.trim();
@@ -457,27 +639,113 @@ export default function SalesTrainerReadinessDossierPage() {
             setActionError("请填写复核原因。");
             return;
         }
+        setActionError(null);
+        setActionMessage(null);
+        const effectiveCapabilityKeys = selectedCapabilityKeys.length > 0
+            ? selectedCapabilityKeys
+            : defaultCapabilitySelection(dossier);
+        const effectiveEvidenceIds = selectedEvidenceIds.length > 0
+            ? selectedEvidenceIds
+            : defaultEvidenceSelection(dossier);
+        if (selectedCapabilityKeys.length === 0 && effectiveCapabilityKeys.length > 0) {
+            setSelectedCapabilityKeys(effectiveCapabilityKeys);
+        }
+        if (selectedEvidenceIds.length === 0 && effectiveEvidenceIds.length > 0) {
+            setSelectedEvidenceIds(effectiveEvidenceIds);
+        }
+        setReviewSubmission(Object.freeze({
+            learnerId: dossier.learner.learner_id,
+            learnerName: learnerDisplayName(dossier),
+            decision,
+            reason: trimmedReason,
+            capabilityKeys: Object.freeze([...effectiveCapabilityKeys]),
+            evidenceIds: Object.freeze([...effectiveEvidenceIds]),
+            expectedLatestReviewActionId:
+                dossier.latest_review_action?.action_id ?? null,
+            idempotencyKey: createReviewIdempotencyKey(),
+        }));
+    }
+
+    async function confirmReviewAction() {
+        if (!reviewSubmission || isSubmitting) {
+            return;
+        }
+        if (!readinessReviewSubmissionIsCurrent({
+            submissionLearnerId: reviewSubmission.learnerId,
+            routeLearnerId: learnerId,
+            dossierLearnerId,
+            submissionExpectedLatestReviewActionId:
+                reviewSubmission.expectedLatestReviewActionId,
+            currentLatestReviewActionId: latestReviewActionId,
+        })) {
+            setReviewSubmission(null);
+            return;
+        }
+        const submission = reviewSubmission;
+        const submissionGeneration = ++submissionGenerationRef.current;
         setIsSubmitting(true);
         setActionError(null);
         setActionMessage(null);
         try {
             const action = await api.admin.salesTrainer.createReadinessReviewAction(
-                dossier.learner.learner_id,
+                submission.learnerId,
                 {
-                    decision,
-                    reason: trimmedReason,
-                    capability_keys: selectedCapabilityKeys,
-                    source_evidence_ids: selectedEvidenceIds,
+                    decision: submission.decision,
+                    reason: submission.reason,
+                    capability_keys: [...submission.capabilityKeys],
+                    source_evidence_ids: [...submission.evidenceIds],
+                    idempotency_key: submission.idempotencyKey,
+                    expected_latest_review_action_id:
+                        submission.expectedLatestReviewActionId,
                 },
             );
+            if (
+                activeLearnerIdRef.current !== submission.learnerId
+                || submissionGenerationRef.current !== submissionGeneration
+            ) {
+                return;
+            }
             setActionMessage(`${action.decision_label}已记录。`);
             setReason("");
+            resetPendingSubmission();
             await loadDossier();
         } catch (submitError) {
-            setActionError(getApiErrorMessage(submitError));
+            if (
+                activeLearnerIdRef.current !== submission.learnerId
+                || submissionGenerationRef.current !== submissionGeneration
+            ) {
+                return;
+            }
+            if (
+                submitError instanceof ApiRequestError
+                && submitError.errorCode === "[READINESS_REVIEW_VERSION_CONFLICT]"
+            ) {
+                setActionError("档案已更新，请查看最新复核记录后再次确认。");
+                resetPendingSubmission();
+                await loadDossier();
+            } else {
+                setActionError(
+                    readinessErrorMessage(
+                        submitError,
+                        "复核动作提交失败，请稍后重试。",
+                    ),
+                );
+            }
         } finally {
-            setIsSubmitting(false);
+            if (submissionGenerationRef.current === submissionGeneration) {
+                setIsSubmitting(false);
+            }
         }
+    }
+
+    function refreshDossier(): void {
+        if (isSubmitting) {
+            return;
+        }
+        resetPendingSubmission();
+        setActionError(null);
+        setActionMessage(null);
+        void loadDossier();
     }
 
     const content = (() => {
@@ -489,11 +757,16 @@ export default function SalesTrainerReadinessDossierPage() {
             );
         }
         if (!routeAccess.canAccess) {
+            const capabilityLoadFailed = Boolean(routeAccess.error);
             return (
                 <AdminLoadErrorCard
-                    title="训练达标档案不可访问"
-                    description="当前账号没有查看或复核该新人训练档案的权限，系统不会加载档案证据。"
-                    message={routeAccess.denialMessage}
+                    title={capabilityLoadFailed ? "权限信息加载失败" : "训练达标档案不可访问"}
+                    description={capabilityLoadFailed
+                        ? "系统暂时无法确认当前账号的档案权限，已停止加载训练证据。"
+                        : "当前账号没有查看该新人训练档案的权限，系统不会加载档案证据。"}
+                    message={capabilityLoadFailed
+                        ? "权限信息暂时无法加载，请稍后重试。"
+                        : "当前账号无权查看此训练达标档案。"}
                     retryLabel="重新检查权限"
                     onRetry={routeAccess.reloadCapabilities}
                 />
@@ -634,8 +907,9 @@ export default function SalesTrainerReadinessDossierPage() {
                         </GlassCard>
                     </div>
 
+                    {canReviewReadiness ? (
                     <GlassCard className="h-fit p-5">
-                        <form className="space-y-5" onSubmit={submitReviewAction}>
+                        <form className="space-y-5" onSubmit={openReviewConfirmation}>
                             <div>
                                 <h2 className="text-base font-bold text-slate-900">复核动作</h2>
                                 <p className="mt-1 text-sm text-slate-500">
@@ -654,9 +928,11 @@ export default function SalesTrainerReadinessDossierPage() {
                                     id="review-decision"
                                     className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
                                     value={decision}
-                                    onChange={(event) =>
-                                        setDecision(event.target.value as ReadinessReviewDecision)
-                                    }
+                                    disabled={isSubmitting}
+                                    onChange={(event) => {
+                                        setDecision(event.target.value as ReadinessReviewDecision);
+                                        resetPendingSubmission();
+                                    }}
                                 >
                                     {DECISION_OPTIONS.map((option) => (
                                         <option key={option.value} value={option.value}>
@@ -677,7 +953,11 @@ export default function SalesTrainerReadinessDossierPage() {
                                     id="review-reason"
                                     className="min-h-28 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                                     value={reason}
-                                    onChange={(event) => setReason(event.target.value)}
+                                    disabled={isSubmitting}
+                                    onChange={(event) => {
+                                        setReason(event.target.value);
+                                        resetPendingSubmission();
+                                    }}
                                     placeholder="写明复核依据、重练要求或人工跟进原因"
                                 />
                             </div>
@@ -693,17 +973,19 @@ export default function SalesTrainerReadinessDossierPage() {
                                             <input
                                                 type="checkbox"
                                                 className="mt-1"
+                                                disabled={isSubmitting}
                                                 checked={selectedCapabilityKeys.includes(
                                                     competency.capability_key,
                                                 )}
-                                                onChange={() =>
+                                                onChange={() => {
                                                     setSelectedCapabilityKeys((current) =>
                                                         toggleValue(
                                                             current,
                                                             competency.capability_key,
                                                         ),
-                                                    )
-                                                }
+                                                    );
+                                                    resetPendingSubmission();
+                                                }}
                                             />
                                             <span>
                                                 <span className="font-medium text-slate-900">
@@ -736,17 +1018,19 @@ export default function SalesTrainerReadinessDossierPage() {
                                                 <input
                                                     type="checkbox"
                                                     className="mt-1"
+                                                    disabled={isSubmitting}
                                                     checked={selectedEvidenceIds.includes(
                                                         evidence.evidence_id,
                                                     )}
-                                                    onChange={() =>
+                                                    onChange={() => {
                                                         setSelectedEvidenceIds((current) =>
                                                             toggleValue(
                                                                 current,
                                                                 evidence.evidence_id,
                                                             ),
-                                                        )
-                                                    }
+                                                        );
+                                                        resetPendingSubmission();
+                                                    }}
                                                 />
                                                 <span>
                                                     <span className="font-medium text-slate-900">
@@ -777,28 +1061,106 @@ export default function SalesTrainerReadinessDossierPage() {
                                 </div>
                             ) : null}
                             {actionMessage ? (
-                                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                                <div
+                                    role="status"
+                                    aria-live="polite"
+                                    className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+                                >
                                     {actionMessage}
                                 </div>
                             ) : null}
 
-                            <Button
-                                type="submit"
-                                className="w-full bg-slate-900 text-white"
-                                disabled={isSubmitting}
-                            >
-                                <ClipboardCheck className="mr-2 h-4 w-4" />
-                                {isSubmitting ? "正在提交" : "提交复核动作"}
-                            </Button>
+                            {currentReviewSubmission ? (
+                                <section
+                                    ref={confirmationRef}
+                                    aria-label="复核动作确认"
+                                    tabIndex={-1}
+                                    className="space-y-4 rounded-xl border border-amber-200 bg-amber-50 p-4"
+                                >
+                                    <div>
+                                        <h3 className="font-semibold text-amber-950">
+                                            请确认本次复核动作
+                                        </h3>
+                                        <p className="mt-1 text-sm text-amber-800">
+                                            提交后会追加到档案并留下审计记录。
+                                        </p>
+                                    </div>
+                                    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+                                        <dt className="text-amber-700">新人</dt>
+                                        <dd className="font-medium text-amber-950">
+                                            {currentReviewSubmission.learnerName}
+                                        </dd>
+                                        <dt className="text-amber-700">决定</dt>
+                                        <dd className="font-medium text-amber-950">
+                                            {decisionLabel(currentReviewSubmission.decision)}
+                                        </dd>
+                                        <dt className="text-amber-700">原因</dt>
+                                        <dd className="whitespace-pre-wrap text-amber-950">
+                                            {currentReviewSubmission.reason}
+                                        </dd>
+                                        <dt className="text-amber-700">能力项数量</dt>
+                                        <dd className="text-amber-950">
+                                            {currentReviewSubmission.capabilityKeys.length} 项
+                                        </dd>
+                                        <dt className="text-amber-700">证据数量</dt>
+                                        <dd className="text-amber-950">
+                                            {currentReviewSubmission.evidenceIds.length} 条
+                                        </dd>
+                                    </dl>
+                                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            disabled={isSubmitting}
+                                            onClick={resetPendingSubmission}
+                                        >
+                                            返回修改
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            className="bg-slate-900 text-white"
+                                            disabled={isSubmitting}
+                                            onClick={() => void confirmReviewAction()}
+                                        >
+                                            {isSubmitting
+                                                ? "正在提交"
+                                                : confirmationButtonLabel(currentReviewSubmission.decision)}
+                                        </Button>
+                                    </div>
+                                </section>
+                            ) : null}
+
+                            {!isConfirming ? (
+                                <Button
+                                    type="submit"
+                                    className="w-full bg-slate-900 text-white"
+                                    disabled={
+                                        isSubmitting
+                                        || isLoading
+                                        || dossier.learner.learner_id !== learnerId
+                                    }
+                                >
+                                    <ClipboardCheck className="mr-2 h-4 w-4" />
+                                    {isSubmitting ? "正在提交" : "提交复核动作"}
+                                </Button>
+                            ) : null}
                         </form>
                     </GlassCard>
+                    ) : (
+                        <GlassCard className="h-fit p-5">
+                            <h2 className="text-base font-bold text-slate-900">复核动作</h2>
+                            <p className="mt-2 text-sm leading-6 text-slate-600">
+                                当前账号仅可查看档案，不能提交达标、重练或人工跟进决定。
+                            </p>
+                        </GlassCard>
+                    )}
                 </div>
             </>
         );
     })();
 
     const title = dossier
-        ? `${dossier.learner.name || dossier.learner.learner_id} 的训练达标档案`
+        ? `${learnerDisplayName(dossier)}的训练达标档案`
         : "训练达标档案";
 
     return (
@@ -809,7 +1171,12 @@ export default function SalesTrainerReadinessDossierPage() {
             description="聚合训练进度、能力项、证据链、复核动作和下一阶段准入。"
             actions={
                 routeAccess.canAccess ? (
-                    <Button type="button" variant="outline" onClick={() => void loadDossier()}>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isSubmitting}
+                        onClick={refreshDossier}
+                    >
                         <RefreshCw className="mr-2 h-4 w-4" />
                         刷新
                     </Button>

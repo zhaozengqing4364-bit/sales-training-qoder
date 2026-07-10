@@ -20,6 +20,7 @@ function capabilities(
         manage_questions: false,
         manage_modules: false,
         manage_prompts: false,
+        review_readiness: false,
         view_records: false,
         view_global_records: false,
         retry_jobs: false,
@@ -131,6 +132,17 @@ describe("sales trainer admin routes", () => {
         expect(isSalesTrainerAdminPathAllowedForCapabilities(
             "/admin/sales-trainer/analytics",
             capabilities({ manage_content: true }),
+        )).toBe(false);
+    });
+
+    it("keeps readiness route visibility separate from readiness review permission", () => {
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/readiness/learner-1",
+            capabilities({ view_records: true, review_readiness: false }),
+        )).toBe(true);
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/readiness/learner-1",
+            capabilities({ review_readiness: true }),
         )).toBe(false);
     });
 

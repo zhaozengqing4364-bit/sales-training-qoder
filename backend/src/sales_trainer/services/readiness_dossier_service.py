@@ -8,12 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.readiness_review_action_service import (
+    ReadinessAuditContext,
+    ReadinessReviewActionError,
+    ReadinessReviewActionService,
+    ReadinessReviewActionSnapshot,
+)
 from sales_trainer.services.readiness_state import (
     CAPABILITY_DEFINITIONS,
     CAPABILITY_KEYS,
     READINESS_CONTRACT_VERSION,
-    READINESS_DOSSIER_TARGET_TYPE,
-    REVIEW_ACTION_CREATED,
     decision_label,
     module_capability_keys,
     unique_non_empty,
@@ -89,6 +93,10 @@ class ReadinessDossierService:
         self._journeys = TrainingJourneyService(db)
         self._records = TrainingRecordService(db)
         self._logs = OperationLogService(db)
+        self._review_action_service = ReadinessReviewActionService(
+            db,
+            logs=self._logs,
+        )
 
     async def get_dossier(
         self,
@@ -212,6 +220,8 @@ class ReadinessDossierService:
         team_department: str | None,
         decision: ReadinessDecision,
         reason: str,
+        idempotency_key: str,
+        expected_latest_review_action_id: str | None,
         capability_keys: list[str] | None = None,
         source_evidence_ids: list[str] | None = None,
         request_id: str | None = None,
@@ -223,7 +233,40 @@ class ReadinessDossierService:
             viewer=actor,
             team_department=team_department,
         )
-        normalized_capabilities = unique_non_empty(capability_keys or [])
+        request_capability_keys = unique_non_empty(capability_keys or [])
+        request_evidence_ids = unique_non_empty(source_evidence_ids or [])
+        normalized_capabilities = list(request_capability_keys)
+        evidence_ids = list(request_evidence_ids)
+        if not evidence_ids:
+            evidence_ids = self._default_review_evidence_ids(dossier)
+        if not normalized_capabilities:
+            normalized_capabilities = self._default_review_capability_keys(dossier)
+
+        latest_review_action = dossier.get("latest_review_action")
+        current_latest_action_id = (
+            str(latest_review_action.get("action_id"))
+            if isinstance(latest_review_action, dict)
+            and latest_review_action.get("action_id")
+            else None
+        )
+        if current_latest_action_id != expected_latest_review_action_id:
+            return await self._create_stored_review_action(
+                learner_id=learner_id,
+                actor=actor,
+                team_department=team_department,
+                decision=decision,
+                reason=reason,
+                capability_keys=normalized_capabilities,
+                source_evidence_ids=evidence_ids,
+                request_capability_keys=request_capability_keys,
+                request_source_evidence_ids=request_evidence_ids,
+                idempotency_key=idempotency_key,
+                expected_latest_review_action_id=(expected_latest_review_action_id),
+                request_id=request_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
         unknown_capabilities = sorted(set(normalized_capabilities) - CAPABILITY_KEYS)
         if unknown_capabilities:
             raise ReadinessDossierError(
@@ -232,7 +275,6 @@ class ReadinessDossierService:
                 400,
                 details={"unknown_capability_keys": unknown_capabilities},
             )
-        evidence_ids = unique_non_empty(source_evidence_ids or [])
         known_evidence_ids = {
             str(item.get("evidence_id"))
             for item in dossier.get("evidence", [])
@@ -248,43 +290,68 @@ class ReadinessDossierService:
             )
         if decision == "approve":
             self._ensure_dossier_can_be_approved(dossier)
-        if not evidence_ids:
-            evidence_ids = self._default_review_evidence_ids(dossier)
-        if not normalized_capabilities:
-            normalized_capabilities = self._default_review_capability_keys(dossier)
-
-        retraining_task = None
-        if decision == "require_retraining":
-            retraining_task = {
-                "task_id": f"retraining:{learner_id}:{datetime.now(UTC).timestamp()}",
-                "status": "pending",
-                "source": "operation_log",
-                "capability_keys": normalized_capabilities,
-                "source_evidence_ids": evidence_ids,
-                "target_learner_id": learner_id,
-            }
-
-        log = await self._logs.record(
+        return await self._create_stored_review_action(
+            learner_id=learner_id,
             actor=actor,
-            action=REVIEW_ACTION_CREATED,
-            target_type=READINESS_DOSSIER_TARGET_TYPE,
-            target_id=learner_id,
+            team_department=team_department,
+            decision=decision,
+            reason=reason,
+            capability_keys=normalized_capabilities,
+            source_evidence_ids=evidence_ids,
+            request_capability_keys=request_capability_keys,
+            request_source_evidence_ids=request_evidence_ids,
+            idempotency_key=idempotency_key,
+            expected_latest_review_action_id=expected_latest_review_action_id,
             request_id=request_id,
             ip_address=ip_address,
             user_agent=user_agent,
-            metadata={
-                "contract_version": READINESS_CONTRACT_VERSION,
-                "decision": decision,
-                "decision_label": decision_label(decision),
-                "reason": reason.strip(),
-                "capability_keys": normalized_capabilities,
-                "source_evidence_ids": evidence_ids,
-                "retraining_task": retraining_task,
-                "state_storage": "operation_log",
-            },
         )
-        await self._db.commit()
-        return self._review_action_payload(log)
+
+    async def _create_stored_review_action(
+        self,
+        *,
+        learner_id: str,
+        actor: User,
+        team_department: str | None,
+        decision: ReadinessDecision,
+        reason: str,
+        capability_keys: list[str],
+        source_evidence_ids: list[str],
+        request_capability_keys: list[str],
+        request_source_evidence_ids: list[str],
+        idempotency_key: str,
+        expected_latest_review_action_id: str | None,
+        request_id: str | None,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> dict[str, Any]:
+        try:
+            action = await self._review_action_service.create(
+                learner_id=learner_id,
+                actor=actor,
+                team_department=team_department,
+                decision=decision,
+                reason=reason.strip(),
+                capability_keys=capability_keys,
+                source_evidence_ids=source_evidence_ids,
+                request_capability_keys=request_capability_keys,
+                request_source_evidence_ids=request_source_evidence_ids,
+                idempotency_key=idempotency_key,
+                expected_latest_review_action_id=(expected_latest_review_action_id),
+                audit_context=ReadinessAuditContext(
+                    request_id=request_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
+            )
+        except ReadinessReviewActionError as exc:
+            raise ReadinessDossierError(
+                exc.code,
+                exc.message,
+                exc.status_code,
+                details=exc.details,
+            ) from exc
+        return self._stored_review_action_payload(action)
 
     @staticmethod
     def _ensure_dossier_can_be_approved(dossier: dict[str, Any]) -> None:
@@ -368,16 +435,11 @@ class ReadinessDossierService:
         return list(result.scalars().all()), total
 
     async def _review_actions(self, learner_id: str) -> list[dict[str, Any]]:
-        logs, _ = await self._logs.list_logs(
-            target_type=READINESS_DOSSIER_TARGET_TYPE,
-            target_id=learner_id,
-            limit=50,
+        actions = await self._review_action_service.list_merged_for_learner(
+            learner_id,
+            limit=200,
         )
-        return [
-            self._review_action_payload(log)
-            for log in logs
-            if log.action == REVIEW_ACTION_CREATED
-        ]
+        return [self._review_action_snapshot_payload(action) for action in actions]
 
     def _dossier_payload(
         self,
@@ -451,7 +513,11 @@ class ReadinessDossierService:
                 "completed_retraining_task_count": sum(
                     1 for item in retraining_tasks if item.get("status") == "completed"
                 ),
-                "review_state_source": "operation_log",
+                "review_state_source": (
+                    str(latest_review_action.get("state_storage"))
+                    if latest_review_action is not None
+                    else "operation_log"
+                ),
             },
             "modules": modules,
             "competencies": competencies,
@@ -1059,25 +1125,41 @@ class ReadinessDossierService:
         ]
 
     @staticmethod
-    def _review_action_payload(log: Any) -> dict[str, Any]:
-        metadata = log.metadata_json if isinstance(log.metadata_json, dict) else {}
-        decision = str(metadata.get("decision") or "mark_manual_follow_up")
+    def _review_action_snapshot_payload(
+        action: ReadinessReviewActionSnapshot,
+    ) -> dict[str, Any]:
+        decision = action.decision
         return {
-            "action_id": str(log.log_id),
-            "audit_log_id": str(log.log_id),
+            "action_id": action.action_id,
+            "audit_log_id": action.audit_log_id,
             "decision": decision,
-            "decision_label": metadata.get("decision_label")
-            or decision_label(decision),
-            "reason": metadata.get("reason"),
-            "capability_keys": unique_non_empty(metadata.get("capability_keys") or []),
-            "source_evidence_ids": unique_non_empty(
-                metadata.get("source_evidence_ids") or []
-            ),
-            "reviewer_id": str(log.actor_id) if log.actor_id else None,
-            "reviewer_role": log.actor_role,
-            "created_at": log.created_at,
-            "retraining_task": metadata.get("retraining_task"),
-            "state_storage": metadata.get("state_storage") or "operation_log",
+            "decision_label": decision_label(decision),
+            "reason": action.reason,
+            "capability_keys": action.capability_keys,
+            "source_evidence_ids": action.source_evidence_ids,
+            "reviewer_id": action.actor_id,
+            "reviewer_role": action.actor_role,
+            "created_at": action.created_at,
+            "retraining_task": action.retraining_task,
+            "state_storage": action.state_storage,
+        }
+
+    @staticmethod
+    def _stored_review_action_payload(action: Any) -> dict[str, Any]:
+        decision = str(action.decision)
+        return {
+            "action_id": str(action.action_id),
+            "audit_log_id": str(action.audit_log_id),
+            "decision": decision,
+            "decision_label": decision_label(decision),
+            "reason": action.reason,
+            "capability_keys": unique_non_empty(action.capability_keys or []),
+            "source_evidence_ids": unique_non_empty(action.source_evidence_ids or []),
+            "reviewer_id": str(action.actor_id) if action.actor_id else None,
+            "reviewer_role": action.actor_role,
+            "created_at": action.created_at,
+            "retraining_task": action.retraining_task,
+            "state_storage": "readiness_review_action",
         }
 
     @staticmethod
