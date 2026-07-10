@@ -202,6 +202,7 @@ BACKEND_GATE_TARGETS=(
   "tests/integration/test_auth_login_api.py"
   "tests/integration/test_history_evidence_flow.py"
   "tests/integration/test_replay_api.py"
+  "tests/integration/test_sales_realtime_reconnect_flow.py"
   "tests/integration/test_support_runtime_api.py"
   "tests/integration/test_observability_surfaces.py"
   "tests/contract/test_analytics.py"
@@ -223,6 +224,9 @@ BACKEND_GATE_TARGETS=(
   "tests/unit/common/auth/test_roles.py"
   "tests/unit/common/jobs/test_persistent_task_contract.py"
   "tests/unit/common/test_business_rule_config_service.py"
+  "tests/unit/common/test_route_integrity.py"
+  "tests/unit/test_app_factory.py"
+  "tests/unit/test_generate_openapi_contract.py"
   "tests/unit/test_admin_permissions_rbac.py"
   "tests/unit/test_newcomer_training_path_boundary.py"
   "tests/unit/test_newcomer_training_path_config_revision.py"
@@ -637,6 +641,12 @@ log "Backend ruff"
 (
   cd "${ROOT_DIR}/backend"
   "${PYTHON_BIN}" -m ruff check src
+)
+
+log "OpenAPI contract parity"
+(
+  cd "${ROOT_DIR}/backend"
+  "${PYTHON_BIN}" scripts/generate_openapi_contract.py --check
 )
 
 log "Web typecheck"
