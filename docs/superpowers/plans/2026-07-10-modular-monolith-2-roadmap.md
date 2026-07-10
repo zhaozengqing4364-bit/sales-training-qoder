@@ -9,9 +9,26 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 本路线图按 Gate 和独立变更包推进，不按人周推进。预计 27–39 个变更包；每包
 1–3 个提交、一个明确 reviewer gate、一个可独立运行的验证集合。
 
+## 执行状态
+
+| Gate | 状态 | 当前证据 / 下一步 |
+|------|------|-------------------|
+| 0A | Completed（2026-07-10） | 5 个工作提交；聚焦回归 `53 passed`；OpenAPI parity 已进入主门禁 |
+| 0B | Pending | 修复后端 unit + contract 剩余 15 项已登记失败 |
+| 0C | Pending | 恢复全量 Vitest 绿色和自然退出 |
+| 1A | Completed（2026-07-10） | 49 条边全部受 policy 治理；12 包 SCC 只许缩小；guard 已进入主门禁 |
+| 1B | Blocked by 0B/0C | 全量自动发现、影响测试选择和变更覆盖 |
+| 2–6 | Not started | 按顺序实施 Realtime、Provider、领域所有权、Locality 和兼容层退役 |
+
+Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进度，不把已批准的目标
+设计或已完成的单个基础设施 Gate 误写成模块化单体 2.0 整体完成。
+
 ## Gate 0：恢复测试和合同事实
 
 ### Gate 0A：平台合同真相
+
+状态：**Completed（2026-07-10）**。聚焦回归 `53 passed, 1 warning`；后端全量仍有
+15 项 Gate 0B 失败，因此这里只声明平台合同真相技术闭环。
 
 范围：
 
@@ -55,6 +72,10 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 ## Gate 1：建立架构和测试护栏
 
 ### Gate 1A：跨包依赖与 SCC guard
+
+状态：**Completed（2026-07-10）**。当前 49 条跨包边均由 stable/temporary policy
+解释；12 包历史 SCC 可缩小但不得扩大，临时例外具备 owner、退役条件和到期日。
+Architecture guard 与 19 个单测已进入主门禁。
 
 - 纯 Python AST 扫描跨包 import 和字面量 dynamic import；
 - 目标允许边 + 临时 exception policy；

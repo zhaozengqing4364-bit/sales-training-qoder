@@ -2,6 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Completed on 2026-07-10. This closes the architecture guard Gate only;
+Gate 0B/0C, Gate 1B, and the dependency-removal migrations remain open.
+
+**Evidence:** The current AST inventory is 49 cross-package edges and one
+12-package baseline SCC, with `supervisor` separate. Changed-file Ruff passed;
+the architecture and retained boundary suite finished with
+`36 passed, 1 warning`; the CLI passes from both repo root and `backend/`.
+The temporary `sales_bot -> supervisor` probe produced both the unexpected-edge
+and expanded-SCC violations, was deleted, and the CLI returned to green.
+Core work commits: `2e04bd77` and `0a1010ff`.
+
 **Goal:** 把当前后端跨包依赖和强连通分量转化为可执行 CI 合同，禁止新增边、扩大循环和永久例外。
 
 **Architecture:** 使用仓库内纯 Python AST 扫描静态 import 与字面量 dynamic import；目标允许边和临时例外写入 YAML policy；Tarjan SCC 检查允许现有大 SCC 缩小但不允许扩大。CodeGraph 继续用于理解和影响分析，CI 不依赖 `.codegraph` 索引状态。
@@ -37,7 +48,7 @@
 - Produces contract: `collect_edges(src_root, packages) -> dict[Edge, set[str]]`；`strongly_connected_components(packages, edges) -> list[frozenset[str]]`。
 - `Edge` 是 `tuple[str, str]`，分别为 source package 和 target package。
 
-- [ ] **Step 1: 创建失败测试**
+- [x] **Step 1: 创建失败测试**
 
 创建 `backend/tests/unit/test_architecture_dependency_guard.py`：
 
@@ -112,7 +123,7 @@ def test_current_repository_dependency_policy_is_valid() -> None:
     assert violations == []
 ```
 
-- [ ] **Step 2: 运行测试确认缺少实现**
+- [x] **Step 2: 运行测试确认缺少实现**
 
 Run:
 
@@ -133,7 +144,7 @@ Expected: FAIL with `ModuleNotFoundError: scripts.architecture_dependency_guard`
 - Consumes: `docs/architecture/module-dependency-policy.yaml`。
 - Produces: `validate_repository(...) -> list[str]` 和 CLI `--check`。
 
-- [ ] **Step 1: 创建完整实现**
+- [x] **Step 1: 创建完整实现**
 
 创建 `backend/scripts/architecture_dependency_guard.py`：
 
@@ -364,7 +375,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 2: 运行算法单测，预期只因 policy 尚不存在失败**
+- [x] **Step 2: 运行算法单测，预期只因 policy 尚不存在失败**
 
 Run: 使用 Task 1 Step 2 相同命令。
 Expected: 前两个测试通过；repository policy 测试因缺 YAML 失败。
@@ -378,7 +389,7 @@ Expected: 前两个测试通过；repository policy 测试因缺 YAML 失败。
 - Produces: architecture guard 的唯一 policy authority。
 - Consumes: 当前 13 个顶层包和审计得到的 49 条跨包边。
 
-- [ ] **Step 1: 创建 policy**
+- [x] **Step 1: 创建 policy**
 
 创建 `docs/architecture/module-dependency-policy.yaml`：
 
@@ -483,7 +494,7 @@ baseline_sccs:
   - [admin, agent, common, curriculum_analytics, curriculum_practice, evaluation, presentation_coach, prompt_templates, sales_bot, sales_trainer, support, training_runtime]
 ```
 
-- [ ] **Step 2: 运行 policy test 和 CLI**
+- [x] **Step 2: 运行 policy test 和 CLI**
 
 Run:
 
@@ -496,7 +507,7 @@ cd backend
 
 Expected: 3 passed；CLI 输出 `dependency policy satisfied`。
 
-- [ ] **Step 3: 人为验证新增边会失败，然后撤销探针**
+- [x] **Step 3: 人为验证新增边会失败，然后撤销探针**
 
 临时创建 `backend/src/sales_bot/_architecture_guard_probe.py`：
 
@@ -514,7 +525,7 @@ cd backend
 Expected: 非零退出，并同时报告 `Unexpected dependency sales_bot->supervisor` 和扩大
 SCC。随后删除临时 probe 文件，重新运行必须通过。该探针不得提交。
 
-- [ ] **Step 4: 提交 guard 和 policy 变更包**
+- [x] **Step 4: 提交 guard 和 policy 变更包**
 
 ```bash
 git add backend/scripts/architecture_dependency_guard.py \
@@ -533,7 +544,7 @@ git commit -m "test(architecture): guard module edges and dependency cycles"
 - Consumes: canonical `critical-quality-gate.sh`。
 - Produces: 主门禁中的 architecture fitness check。
 
-- [ ] **Step 1: 更新架构文档，区分目标和当前过渡态**
+- [x] **Step 1: 更新架构文档，区分目标和当前过渡态**
 
 在 `docs/architecture.md` 模块边界表后加入：
 
@@ -549,7 +560,7 @@ git commit -m "test(architecture): guard module edges and dependency cycles"
 代码已经满足无环结构。每删除一条临时边，必须在同一变更中收缩 policy。
 ```
 
-- [ ] **Step 2: 在 Backend ruff 后接入 architecture guard**
+- [x] **Step 2: 在 Backend ruff 后接入 architecture guard**
 
 向 `scripts/critical-quality-gate.sh` 加入：
 
@@ -567,7 +578,7 @@ log "Backend architecture dependency guard"
   "tests/unit/test_architecture_dependency_guard.py"
 ```
 
-- [ ] **Step 3: 运行完整 Gate 1A 验证**
+- [x] **Step 3: 运行完整 Gate 1A 验证**
 
 Run:
 
@@ -587,7 +598,7 @@ cd backend
 
 Expected: ruff exit 0；architecture/boundary tests 全部通过；CLI exit 0。
 
-- [ ] **Step 4: 提交文档和门禁变更包**
+- [x] **Step 4: 提交文档和门禁变更包**
 
 ```bash
 git add docs/architecture.md scripts/critical-quality-gate.sh
@@ -596,10 +607,10 @@ git commit -m "ci: enforce executable module dependency policy"
 
 ## Self-Review Checklist
 
-- [ ] 当前 49 条边全部被 stable 或 temporary policy 解释。
-- [ ] 当前 12 包 SCC 可通过，但 supervisor 加入会失败。
-- [ ] 新增同一 SCC 内的额外边也会因 unexpected edge 失败。
-- [ ] 删除临时边而忘记清 policy 会因 stale exception 失败。
-- [ ] policy 到期会失败，不存在永久 allowlist。
-- [ ] 未引入 CodeGraph CI 依赖或第三方图算法库。
-- [ ] 本 Gate 没有移动业务代码或改变运行时行为。
+- [x] 当前 49 条边全部被 stable 或 temporary policy 解释。
+- [x] 当前 12 包 SCC 可通过，但 supervisor 加入会失败。
+- [x] 新增同一 SCC 内的额外边也会因 unexpected edge 失败。
+- [x] 删除临时边而忘记清 policy 会因 stale exception 失败。
+- [x] policy 到期会失败，不存在永久 allowlist。
+- [x] 未引入 CodeGraph CI 依赖或第三方图算法库。
+- [x] 本 Gate 没有移动业务代码或改变运行时行为。

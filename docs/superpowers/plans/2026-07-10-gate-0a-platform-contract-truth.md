@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Completed on 2026-07-10. This closes Gate 0A only; Gate 0B/0C and
+the modular-monolith migration remain open.
+
+**Evidence:** Work commits `7c9b5e1d`, `08c8b463`, `1fa43e17`, `ee1bae58`,
+and `43ee3780`; archived Trellis task commit `ccfc1917`. The focused Gate 0A
+suite finished with `53 passed, 1 warning`; backend unit + contract finished
+with `2579 passed, 15 failed, 1 skipped`, with the 15 remaining failures owned
+by Gate 0B. Runtime-generated OpenAPI parity, changed-file Ruff, Bash syntax,
+Trellis validation, and `git diff --check` passed.
+
 **Goal:** 恢复 FastAPI 路由/OpenAPI、domain contributor、Realtime 鉴权与异步采集测试的可信基线，使平台合同失败能够进入主门禁。
 
 **Architecture:** 只修复测试事实和生成式合同，不改变生产 REST/WS、权限、状态机或 Provider 行为。路由盘点通过一个局部兼容函数适配 FastAPI `_IncludedRouter`；domain contributor 继续由生产 composition root 作为唯一注册清单；OpenAPI 从 runtime schema 生成并支持 `--check`。
@@ -42,7 +52,7 @@
 - Consumes: `stepfun_realtime_handler.verify_token(token) -> dict[str, Any]`、`transcript_capture_sink(payload) -> Awaitable[None]`。
 - Produces: 可重复的 reconnect 和 transcript-capture 行为测试；不产生新生产 Interface。
 
-- [ ] **Step 1: 复现两个已知失败**
+- [x] **Step 1: 复现两个已知失败**
 
 Run:
 
@@ -56,7 +66,7 @@ cd backend
 
 Expected: 2 failed；reconnect 关闭 4401，capture 在任务调度前读取空列表。
 
-- [ ] **Step 2: 给 reconnect 测试注入与 production payload 一致的身份**
+- [x] **Step 2: 给 reconnect 测试注入与 production payload 一致的身份**
 
 在创建第一个 Handler 前加入：
 
@@ -71,7 +81,7 @@ Expected: 2 failed；reconnect 关闭 4401，capture 在任务调度前读取空
 保留调用中的 `token="test-token"`，它现在只是测试 transport 值；测试不再伪装它是
 真实 JWT，也不修改生产 `verify_token` 或 4401 行为。
 
-- [ ] **Step 3: 把异步采集测试改成条件等待**
+- [x] **Step 3: 把异步采集测试改成条件等待**
 
 将测试开头和 sink 改为：
 
@@ -95,12 +105,12 @@ Expected: 2 failed；reconnect 关闭 4401，capture 在任务调度前读取空
 
 这同时证明：事件处理没有等待 sink 完成，且 sink 已真实收到 payload。
 
-- [ ] **Step 4: 运行聚焦测试**
+- [x] **Step 4: 运行聚焦测试**
 
 Run: 使用 Step 1 相同命令。
 Expected: 2 passed。
 
-- [ ] **Step 5: 提交独立变更包**
+- [x] **Step 5: 提交独立变更包**
 
 ```bash
 git add backend/tests/integration/test_sales_realtime_reconnect_flow.py \
@@ -120,7 +130,7 @@ git commit -m "test(realtime): align auth and async capture fixtures"
 - Consumes: `domain_contributor_bootstrap.register_domain_contributors()`、`register_sales_trainer_asset_revision_lineage_provider()`。
 - Produces: 每个测试开始和结束时与 production composition root 一致的默认 contributor 状态。
 
-- [ ] **Step 1: 用顺序相关测试复现 registry 污染**
+- [x] **Step 1: 用顺序相关测试复现 registry 污染**
 
 Run:
 
@@ -135,7 +145,7 @@ cd backend
 Expected: `test_sales_trainer_phase2_contract.py` teardown 清空 contributor 后，后续 session
 测试出现 `[RUNTIME_POLICY_RESOLVER_NOT_REGISTERED]`。
 
-- [ ] **Step 2: 用生产 bootstrap 替换 conftest 的手工注册清单**
+- [x] **Step 2: 用生产 bootstrap 替换 conftest 的手工注册清单**
 
 删除 `backend/tests/conftest.py` 中各 domain `register_*_contributor` 的单独 import 和模块
 级调用，只保留模型 metadata import、Sales Trainer lineage provider，并加入：
@@ -152,7 +162,7 @@ def _register_default_test_contributors() -> None:
     register_sales_trainer_asset_revision_lineage_provider()
 ```
 
-- [ ] **Step 3: 新增自动恢复 fixture**
+- [x] **Step 3: 新增自动恢复 fixture**
 
 放在 `test_feature_flags` fixture 前：
 
@@ -168,7 +178,7 @@ def restore_default_domain_contributors():
 不在 fixture 内清空 registry；production registrar 已验证可重复调用，测试若需要空状态，
 必须在自身 Arrange 阶段显式 `clear_*`。
 
-- [ ] **Step 4: 运行顺序复现和 bootstrap 单测**
+- [x] **Step 4: 运行顺序复现和 bootstrap 单测**
 
 Run:
 
@@ -183,7 +193,7 @@ cd backend
 
 Expected: 全部通过；不再出现未注册 runtime policy resolver。
 
-- [ ] **Step 5: 提交独立变更包**
+- [x] **Step 5: 提交独立变更包**
 
 ```bash
 git add backend/tests/conftest.py
@@ -200,7 +210,7 @@ git commit -m "test(backend): isolate domain contributor registries"
 - Consumes: direct FastAPI/Starlette route objects，以及当前 FastAPI included route 的 `effective_route_contexts()` 兼容入口。
 - Produces: `Iterator[object]` 形式的 effective route inventory，仅存在于测试文件内部。
 
-- [ ] **Step 1: 复现结构型失败**
+- [x] **Step 1: 复现结构型失败**
 
 Run:
 
@@ -215,7 +225,7 @@ cd backend
 
 Expected: direct health routes 可见，included HTTP/WS routes 被 `_IncludedRouter` 隐藏。
 
-- [ ] **Step 2: 在两个测试文件各加入局部 compatibility iterator**
+- [x] **Step 2: 在两个测试文件各加入局部 compatibility iterator**
 
 在 imports 加入 `from collections.abc import Iterator`，然后定义：
 
@@ -232,7 +242,7 @@ def _effective_routes(app) -> Iterator[object]:
 
 不把该 helper 放入生产 `common`；它是框架测试 Adapter。
 
-- [ ] **Step 3: 修改 HTTP 和 WebSocket 盘点**
+- [x] **Step 3: 修改 HTTP 和 WebSocket 盘点**
 
 所有 `_collect_method_path_pairs` / `_method_path_pairs` 循环改为：
 
@@ -258,12 +268,12 @@ WebSocket 盘点改为：
 from fastapi.routing import APIWebSocketRoute
 ```
 
-- [ ] **Step 4: 保持静态路由优先级断言**
+- [x] **Step 4: 保持静态路由优先级断言**
 
 `prompt_routes` 改为从 `_effective_routes(app)` 读取，继续断言
 `by-scenario/{scenario_type}` 位于 `{template_id}` 前。不要删除顺序合同。
 
-- [ ] **Step 5: 运行聚焦测试**
+- [x] **Step 5: 运行聚焦测试**
 
 Run:
 
@@ -284,7 +294,7 @@ Expected: 7 passed。另行运行
 `test_committed_openapi_contract_matches_runtime_paths` 仍因 161 个 runtime-only paths
 失败，该真实合同漂移由 Task 4 修复。
 
-- [ ] **Step 6: 提交独立变更包**
+- [x] **Step 6: 提交独立变更包**
 
 ```bash
 git add backend/tests/unit/common/test_route_integrity.py \
@@ -304,7 +314,7 @@ git commit -m "test(api): inspect FastAPI included route contexts"
 - Produces: `render_openapi_yaml(schema: dict[str, object]) -> str`；`check_contract(path: Path, schema: dict[str, object]) -> bool`；CLI `--check` / `--output`。
 - Consumes: `app_factory.create_app().openapi()`。
 
-- [ ] **Step 1: 先写生成器单测**
+- [x] **Step 1: 先写生成器单测**
 
 创建 `backend/tests/unit/test_generate_openapi_contract.py`：
 
@@ -340,7 +350,7 @@ def test_should_detect_semantic_contract_drift(tmp_path) -> None:
     )
 ```
 
-- [ ] **Step 2: 运行单测确认失败**
+- [x] **Step 2: 运行单测确认失败**
 
 Run:
 
@@ -352,7 +362,7 @@ cd backend
 
 Expected: FAIL with `ModuleNotFoundError: scripts.generate_openapi_contract`。
 
-- [ ] **Step 3: 创建生成器**
+- [x] **Step 3: 创建生成器**
 
 创建 `backend/scripts/generate_openapi_contract.py`：
 
@@ -424,12 +434,12 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 4: 运行生成器测试**
+- [x] **Step 4: 运行生成器测试**
 
 Run: 使用 Step 2 相同命令。
 Expected: 2 passed。
 
-- [ ] **Step 5: 生成 committed contract 并检查幂等**
+- [x] **Step 5: 生成 committed contract 并检查幂等**
 
 Run:
 
@@ -441,7 +451,7 @@ cd backend
 
 Expected: 第一条写入合同；第二条退出 0 并输出 `OpenAPI contract is current`。
 
-- [ ] **Step 6: 更新脚本文档**
+- [x] **Step 6: 更新脚本文档**
 
 在 `scripts/README.md` 的质量/契约命令区加入：
 
@@ -458,7 +468,7 @@ cd backend
 语义漂移时返回非零退出码。
 ````
 
-- [ ] **Step 7: 验证路由和 OpenAPI 合同**
+- [x] **Step 7: 验证路由和 OpenAPI 合同**
 
 Run:
 
@@ -472,7 +482,7 @@ cd backend
 
 Expected: 全部通过，runtime-only 和 committed-only path 均为 0。
 
-- [ ] **Step 8: 提交生成合同变更包**
+- [x] **Step 8: 提交生成合同变更包**
 
 ```bash
 git add backend/scripts/generate_openapi_contract.py \
@@ -491,7 +501,7 @@ git commit -m "test(api): generate and verify runtime OpenAPI contract"
 - Consumes: `BACKEND_GATE_TARGETS` 和现有 canonical quality gate。
 - Produces: 每次主门禁必跑的 route/OpenAPI/reconnect 测试；不新增第二套 gate。
 
-- [ ] **Step 1: 扩展现有后端目标数组**
+- [x] **Step 1: 扩展现有后端目标数组**
 
 向 `BACKEND_GATE_TARGETS` 加入：
 
@@ -504,7 +514,7 @@ git commit -m "test(api): generate and verify runtime OpenAPI contract"
 
 不要删除当前已列出的 StepFun、session authority 或 E2E 目标。
 
-- [ ] **Step 2: 在启动 smoke stack 前增加只读 OpenAPI check**
+- [x] **Step 2: 在启动 smoke stack 前增加只读 OpenAPI check**
 
 在 Backend ruff 后加入：
 
@@ -516,7 +526,7 @@ log "OpenAPI contract parity"
 )
 ```
 
-- [ ] **Step 3: 运行无服务依赖的 Gate 0A 回归集**
+- [x] **Step 3: 运行无服务依赖的 Gate 0A 回归集**
 
 Run:
 
@@ -537,7 +547,7 @@ cd backend
 
 Expected: 全部通过。
 
-- [ ] **Step 4: 运行静态检查**
+- [x] **Step 4: 运行静态检查**
 
 Run:
 
@@ -555,7 +565,7 @@ cd backend
 
 Expected: exit 0。
 
-- [ ] **Step 5: 重跑全量后端 unit+contract 并记录 Gate 0B 剩余失败**
+- [x] **Step 5: 重跑全量后端 unit+contract 并记录 Gate 0B 剩余失败**
 
 Run:
 
@@ -568,7 +578,7 @@ Expected: Gate 0A 负责的 route/app-factory/contributor/transcript 失败消�
 只允许是路线图 Gate 0B 已列出的 Sales Trainer、PPT forbidden word 或 secret scan
 簇；出现新的平台合同失败则本 Task 不得完成。
 
-- [ ] **Step 6: 提交门禁变更包**
+- [x] **Step 6: 提交门禁变更包**
 
 ```bash
 git add scripts/critical-quality-gate.sh
@@ -577,8 +587,8 @@ git commit -m "ci: enforce platform route and OpenAPI truth"
 
 ## Self-Review Checklist
 
-- [ ] 计划没有改变生产 auth、permission、lifecycle 或 WS payload。
-- [ ] OpenAPI 文件只能由 runtime schema 生成，`--check` 不写文件。
-- [ ] Contributor fixture 使用 production bootstrap，没有第二份手工清单。
-- [ ] 异步测试证明 non-blocking，而不是通过 sleep 碰运气。
-- [ ] Gate 0B 剩余失败被显式报告，没有伪报全量绿色。
+- [x] 计划没有改变生产 auth、permission、lifecycle 或 WS payload。
+- [x] OpenAPI 文件只能由 runtime schema 生成，`--check` 不写文件。
+- [x] Contributor fixture 使用 production bootstrap，没有第二份手工清单。
+- [x] 异步测试证明 non-blocking，而不是通过 sleep 碰运气。
+- [x] Gate 0B 剩余失败被显式报告，没有伪报全量绿色。

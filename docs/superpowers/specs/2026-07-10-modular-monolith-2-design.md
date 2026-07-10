@@ -1,8 +1,13 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，待分 Gate 实施
+状态：已批准，分 Gate 实施中（Gate 0A、Gate 1A 已完成）
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
+
+实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
+和 Realtime 测试合同；聚焦回归为 `53 passed, 1 warning`。Gate 1A 已将当前 49 条
+跨包边、12 包 SCC 和临时例外纳入 CI。Gate 0B/0C、Gate 1B 及 Gate 2–6 仍按路线图
+推进，本文件的目标架构尚未整体落地。
 
 ## 1. 背景
 
