@@ -359,3 +359,39 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: 模块化单体 2.0 Gate 1A 架构适应度
+
+**Date**: 2026-07-10
+**Task**: 模块化单体 2.0 Gate 1A 架构适应度
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+同步 Gate 0A 证据，建立 49 条跨包边与 12 包 SCC 的 AST 架构政策、临时例外生命周期、故障探针和 canonical CI 门禁，并沉淀 Trellis 架构适应度合同。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2e04bd77` | (see git log) |
+| `0a1010ff` | (see git log) |
+| `b2840c54` | (see git log) |
+| `e9484687` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
