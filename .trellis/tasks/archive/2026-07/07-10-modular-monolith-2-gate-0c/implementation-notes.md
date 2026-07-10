@@ -50,3 +50,5 @@
 ## Commits
 
 - `a1d852f1` `test(frontend): align governed learning topic fixtures`
+- `dd5cf226` `docs: close modular monolith Gate 0C`
+- `37b397f3` `chore(task): archive 07-10-modular-monolith-2-gate-0c`

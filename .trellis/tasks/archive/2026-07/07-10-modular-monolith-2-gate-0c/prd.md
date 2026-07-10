@@ -51,7 +51,7 @@
 - [x] 所有新增 timer/listener/server/observer 在测试后可证明清理。
 - [x] 全量 `npx vitest run` 绿色并在规定 timeout 内自然退出。
 - [x] `npx tsc --noEmit`、ESLint、architecture guard 与 `git diff --check` 通过。
-- [ ] Trellis check、update-spec、CodeGraph post-impact、逻辑提交和归档完成。
+- [x] Trellis check、update-spec、CodeGraph post-impact、逻辑提交和归档完成。
 
 ## Definition of Done
 
