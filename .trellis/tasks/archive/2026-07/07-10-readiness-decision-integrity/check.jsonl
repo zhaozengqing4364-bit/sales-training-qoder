@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "复核实现是否与 PRD、研究和下游类型/调用方一致。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查权限、API、数据库、前端数据流和错误映射。"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "检查 migration、事务、行锁、唯一约束和回滚。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查稳定错误码、对象范围隐藏和异常转换。"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "检查同事务审计、trace 和敏感信息边界。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "执行后端质量门禁。"}
+{"file": ".trellis/spec/backend/sales-trainer-readiness-review-decisions.md", "reason": "检查独立复核权限、专表真源、幂等、并发、双读、审计和前端确认的可执行契约。"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "检查只读 ops 与 reviewer 确认交互。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查 capability/request/response 类型一致性。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "执行前端测试、lint、类型和可访问性检查。"}
+{"file": ".trellis/tasks/07-10-readiness-decision-integrity/research/repository-write-integrity-patterns.md", "reason": "对照仓库真实写入模式检查实现偏差。"}

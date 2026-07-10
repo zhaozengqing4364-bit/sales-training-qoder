@@ -1,0 +1,14 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "复核动作跨数据库、API、权限投影和前端提交，需要逐层核对数据流。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "新增 capability、幂等和审计时先复用现有角色、client token 与 OperationLog 模式。"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端规范索引与不可妥协约束。"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "专用 action 表、唯一约束、行锁和 Alembic migration。"}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "复核权限和 manager allowlist 必须保持集中、校验和 fail-closed。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "权限、幂等和版本冲突需要稳定领域错误与 API 映射。"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "业务 action 与 OperationLog 同事务审计且不得泄露敏感证据。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端 TDD、Ruff、mypy、pytest 和禁止模式。"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范索引与管理界面约束。"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "Readiness 详情页的只读/可写能力和高风险确认交互。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "提交 token、重试、409 刷新和表单状态所有权。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "新增 capability 与请求字段需跨 API 类型和 fixtures 一致。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Vitest、ESLint、a11y 和 TypeScript 验证。"}
+{"file": ".trellis/tasks/07-10-readiness-decision-integrity/research/repository-write-integrity-patterns.md", "reason": "已核实的仓库幂等、append-only、专用状态表和审计 Adapter 模式。"}
