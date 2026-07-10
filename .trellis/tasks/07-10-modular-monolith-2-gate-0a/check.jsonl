@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端非协商约束复核。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试、Ruff 和门禁验收标准。"}
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "contributor、effective route 与 OpenAPI 合同复核。"}
+{"file": ".trellis/spec/backend/realtime-roleplay-v1.md", "reason": "Realtime 行为不变量复核。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "OpenAPI、路由、测试与 CI 跨层复核。"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "实现和计划七维一致性复核。"}
+{"file": "docs/superpowers/plans/2026-07-10-gate-0a-platform-contract-truth.md", "reason": "逐任务验收命令和范围复核。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0a/research/platform-contract-root-causes.md", "reason": "根因与修复匹配复核。"}

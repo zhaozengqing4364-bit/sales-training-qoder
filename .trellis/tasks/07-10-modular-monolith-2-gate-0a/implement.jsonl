@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端开发总索引与非协商约束。"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "FastAPI 路由、脚本和测试文件放置规范。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "pytest、Ruff、测试隔离和质量门禁规范。"}
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "本任务沉淀的 contributor、effective route 与 OpenAPI 可执行合同。"}
+{"file": ".trellis/spec/backend/realtime-roleplay-v1.md", "reason": "Realtime frozen snapshot、鉴权和 record-only 不变量。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用 production contributor bootstrap，避免第二份注册清单。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "OpenAPI runtime→committed contract 跨层一致性。"}
+{"file": "docs/superpowers/plans/2026-07-10-gate-0a-platform-contract-truth.md", "reason": "已批准的 Gate 0A 逐任务实施计划。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0a/research/platform-contract-root-causes.md", "reason": "可重复反馈环和四个失败簇根因。"}
