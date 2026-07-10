@@ -226,6 +226,7 @@ BACKEND_GATE_TARGETS=(
   "tests/unit/common/test_business_rule_config_service.py"
   "tests/unit/common/test_route_integrity.py"
   "tests/unit/test_app_factory.py"
+  "tests/unit/test_architecture_dependency_guard.py"
   "tests/unit/test_generate_openapi_contract.py"
   "tests/unit/test_admin_permissions_rbac.py"
   "tests/unit/test_newcomer_training_path_boundary.py"
@@ -641,6 +642,12 @@ log "Backend ruff"
 (
   cd "${ROOT_DIR}/backend"
   "${PYTHON_BIN}" -m ruff check src
+)
+
+log "Backend architecture dependency guard"
+(
+  cd "${ROOT_DIR}/backend"
+  "${PYTHON_BIN}" scripts/architecture_dependency_guard.py --check
 )
 
 log "OpenAPI contract parity"

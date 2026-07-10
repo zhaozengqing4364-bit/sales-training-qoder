@@ -898,6 +898,9 @@ TrainingTask 1──0..N PracticeSession 1──0..N ConversationMessage
 
 ## 17. 模块边界
 
+下表描述迁移完成后的稳定依赖方向，不代表当前代码已经无环。当前依赖事实、迁移例外
+和 SCC 基线以本节后述的可执行政策为准。
+
 | 目录 | 领域 | 允许依赖 |
 |------|------|---------|
 | `common/` | 共享平台层 | 三方库 |
@@ -924,6 +927,24 @@ TrainingTask 1──0..N PracticeSession 1──0..N ConversationMessage
 - 跨域访问其他模块的 DB 模型（只能通过 `common/db/models.py` 访问）
 - 场景特定字段泄露到共享实体
 - `presentation_coach/` / `sales_bot/` / `curriculum_practice/` 各自拥有独立 WebSocket 路由, 不得在 `router_registry.py` 中合并入口
+
+### 17.1 可执行依赖政策
+
+[`docs/architecture/module-dependency-policy.yaml`](architecture/module-dependency-policy.yaml)
+是模块依赖的 CI 权威。`stable_edges` 表达目标允许方向；`temporary_edges` 是当前
+迁移例外，必须包含 owner、原因、退役条件和到期日。
+`backend/scripts/architecture_dependency_guard.py --check` 使用离线 Python AST 扫描
+静态 import、`TYPE_CHECKING`、函数内 import 和字面量 dynamic import，并禁止：
+
+- 新增未声明跨包边；
+- 扩大现有强连通分量；
+- 保留已经消失的临时例外；
+- 使用缺少治理字段、日期无效或已过期的例外。
+
+当前实测仍有 49 条跨包边，以及一个包含 12 个包的历史 SCC；`supervisor` 当前在该
+SCC 之外。因此这里描述的是受控迁移状态，不是声称代码已满足无环结构。历史 SCC
+允许拆分和缩小，但不得扩大。每删除一条临时边，必须在同一变更中收缩 policy。
+非字面量 plugin path 不由 AST 猜测，继续由 runtime plugin contract 测试保护。
 
 ---
 
