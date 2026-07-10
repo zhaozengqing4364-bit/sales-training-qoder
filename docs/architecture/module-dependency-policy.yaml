@@ -1,0 +1,159 @@
+version: 1
+
+packages:
+  - admin
+  - agent
+  - common
+  - curriculum_analytics
+  - curriculum_practice
+  - evaluation
+  - presentation_coach
+  - prompt_templates
+  - sales_bot
+  - sales_trainer
+  - supervisor
+  - support
+  - training_runtime
+
+# Stable edges are target dependency directions. They may be absent while a
+# package is being simplified; adding any edge outside this list and the
+# temporary groups below is forbidden.
+stable_edges:
+  - [admin, common]
+  - [agent, common]
+  - [curriculum_analytics, common]
+  - [curriculum_practice, common]
+  - [curriculum_practice, evaluation]
+  - [evaluation, common]
+  - [evaluation, prompt_templates]
+  - [presentation_coach, common]
+  - [prompt_templates, common]
+  - [sales_bot, common]
+  - [sales_trainer, common]
+  - [sales_trainer, prompt_templates]
+  - [supervisor, common]
+  - [supervisor, evaluation]
+  - [support, common]
+  - [training_runtime, common]
+
+# Temporary groups describe current, observed architecture debt. Every edge
+# must remain present until removed from this policy; expiry is fail-closed.
+temporary_edges:
+  - source: admin
+    targets:
+      - agent
+      - curriculum_analytics
+      - curriculum_practice
+      - presentation_coach
+      - sales_bot
+      - sales_trainer
+      - support
+    owner: platform-architecture
+    reason: >-
+      Admin currently aggregates domain governance and runtime diagnostics.
+    retire_when: >-
+      Admin is delivery-only and each domain exposes a governance port.
+    expires_on: 2026-10-31
+
+  - source: agent
+    targets: [support]
+    owner: agent-platform
+    reason: Agent diagnostics still consume support projections.
+    retire_when: >-
+      Diagnostics are provided through a neutral observability port.
+    expires_on: 2026-10-31
+
+  - source: common
+    targets: [agent, curriculum_practice, evaluation, prompt_templates]
+    owner: platform-architecture
+    reason: >-
+      Shared kernel still owns transitional domain projections and composition
+      helpers.
+    retire_when: Common contains only stable kernel types and ports.
+    expires_on: 2026-10-31
+
+  - source: curriculum_practice
+    targets: [admin, agent, sales_trainer, support]
+    owner: curriculum-practice
+    reason: >-
+      Curriculum publishing and runtime still use transitional governance and
+      content adapters.
+    retire_when: >-
+      Roleplay Contract, Configuration Governance, and asset ports are neutral.
+    expires_on: 2026-10-31
+
+  - source: evaluation
+    targets: [admin, curriculum_practice, presentation_coach, sales_bot]
+    owner: evaluation
+    reason: >-
+      Report composition still imports scenario and governance implementations.
+    retire_when: >-
+      Evaluation consumes only evidence, roleplay, and scenario evaluation
+      ports.
+    expires_on: 2026-10-31
+
+  - source: presentation_coach
+    targets: [agent, evaluation, prompt_templates, sales_bot, support]
+    owner: presentation-coach
+    reason: >-
+      Presentation StepFun runtime inherits sales shared implementation and
+      report helpers.
+    retire_when: >-
+      Presentation uses RealtimeSessionEngine composition and evidence ports.
+    expires_on: 2026-10-31
+
+  - source: sales_bot
+    targets:
+      - agent
+      - curriculum_practice
+      - evaluation
+      - prompt_templates
+      - sales_trainer
+      - support
+      - training_runtime
+    owner: realtime-platform
+    reason: >-
+      Sales realtime still composes provider, roleplay, scoring, and runtime
+      selection internally.
+    retire_when: >-
+      Provider, roleplay, evaluation, and scenario hooks are neutral seams.
+    expires_on: 2026-10-31
+
+  - source: sales_trainer
+    targets: [curriculum_practice]
+    owner: sales-trainer
+    reason: Controlled legacy content adapter remains active.
+    retire_when: >-
+      Curriculum adapter retirement conditions in ADR 2026-06-20 are met.
+    expires_on: 2026-10-31
+
+  - source: supervisor
+    targets: [curriculum_practice]
+    owner: supervisor
+    reason: >-
+      Supervisor projection still reads curriculum implementation details.
+    retire_when: >-
+      Supervisor consumes evaluation and training journey projections only.
+    expires_on: 2026-10-31
+
+  - source: support
+    targets: [agent]
+    owner: support
+    reason: Support diagnostics still read agent implementation details.
+    retire_when: >-
+      Agent diagnostics are registered through observability contributors.
+    expires_on: 2026-10-31
+
+baseline_sccs:
+  - - admin
+    - agent
+    - common
+    - curriculum_analytics
+    - curriculum_practice
+    - evaluation
+    - presentation_coach
+    - prompt_templates
+    - sales_bot
+    - sales_trainer
+    - support
+    - training_runtime
