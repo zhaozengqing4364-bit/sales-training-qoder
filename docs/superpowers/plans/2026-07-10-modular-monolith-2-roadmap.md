@@ -14,10 +14,10 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 | Gate | 状态 | 当前证据 / 下一步 |
 |------|------|-------------------|
 | 0A | Completed（2026-07-10） | 5 个工作提交；聚焦回归 `53 passed`；OpenAPI parity 已进入主门禁 |
-| 0B | Pending | 修复后端 unit + contract 剩余 15 项已登记失败 |
+| 0B | Completed（2026-07-10） | 15 项逐项分类并清零；后端 unit + contract `2617 passed`；ForbiddenWord 事务/DTO 合同闭环 |
 | 0C | Pending | 恢复全量 Vitest 绿色和自然退出 |
 | 1A | Completed（2026-07-10） | 49 条边全部受 policy 治理；12 包 SCC 只许缩小；guard 已进入主门禁 |
-| 1B | Blocked by 0B/0C | 全量自动发现、影响测试选择和变更覆盖 |
+| 1B | Blocked by 0C | 全量自动发现、影响测试选择和变更覆盖；纳入持久化进度→路径解锁 branch coverage |
 | 2–6 | Not started | 按顺序实施 Realtime、Provider、领域所有权、Locality 和兼容层退役 |
 
 Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进度，不把已批准的目标
@@ -27,8 +27,9 @@ Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进
 
 ### Gate 0A：平台合同真相
 
-状态：**Completed（2026-07-10）**。聚焦回归 `53 passed, 1 warning`；后端全量仍有
-15 项 Gate 0B 失败，因此这里只声明平台合同真相技术闭环。
+状态：**Completed（2026-07-10）**。聚焦回归 `53 passed, 1 warning`；Gate 0A 完成时
+后端全量仍有 15 项 Gate 0B 失败，因此该 Gate 只声明平台合同真相技术闭环。上述失败
+随后已由 Gate 0B 逐项分类并清零。
 
 范围：
 
@@ -44,7 +45,11 @@ Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进
 
 ### Gate 0B：新人训练后端回归真相
 
-当前已复现的失败簇：
+状态：**Completed（2026-07-10）**。基线 15 项最终分类为 11 项 fixture 漂移、
+3 项断言语义漂移和 1 项生产缺陷；最终后端 unit + contract 为
+`2617 passed, 1 skipped, 74 warnings`，相关 integration 为 `41 passed, 2 warnings`。
+
+已闭环的失败簇：
 
 - audio evaluation scenario 治理后，旧 fixture 缺 `scenario_key`/受控 config；
 - learning topic/path/quiz 收口后，旧测试仍按旧发布和解锁语义构造数据；
@@ -53,10 +58,14 @@ Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进
 - secret scan 默认路径断言和当前证据目录不一致；
 - PPT forbidden word contract 漂移。
 
-此 Gate 必须先逐簇确定“生产 bug”还是“测试 fixture 漂移”，再编写独立计划；禁止
-在未核对领域规则前批量修改断言。
+ForbiddenWord 生产缺陷已通过公共 DTO、commit 前验证、数据库失败 rollback、两路权限
+和 runtime OpenAPI schema 回归闭环。Sales Trainer fixture 已通过正式 path
+save/publish 入口，不再绕过 canonical 发布校验。Secret scan 使用确定性临时证据目录。
 
-验收：后端 unit + contract 全量绿色；任何隔离项有 owner、原因和到期日。
+详细计划：
+`docs/superpowers/plans/2026-07-10-gate-0b-backend-regression-truth.md`。
+
+验收：**通过**。没有新增 skip、xfail、永久隔离或无期限例外。
 
 ### Gate 0C：前端回归真相
 
@@ -92,7 +101,7 @@ Architecture guard 与 19 个单测已进入主门禁。
 - 保留 critical-quality-gate 的关键路径 E2E；
 - 增加 changed-line coverage 和关键状态机 branch coverage。
 
-前置：Gate 0B/0C 全绿，避免把现有失败引入永久排除列表。
+前置：Gate 0B 已全绿；仍等待 Gate 0C 全绿，避免把前端现有失败引入永久排除列表。
 
 ## Gate 2：Realtime Session Engine tracer bullet
 

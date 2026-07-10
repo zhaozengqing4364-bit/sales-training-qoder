@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端边界和用户合同复核。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试、Ruff、mypy 与全量回归复核。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "ForbiddenWord DTO、事务、错误响应，以及 ORM 写入 commit 前 DTO 验证合同复核。"}
+{"file": ".trellis/spec/backend/sales-trainer-audio-evaluation-scenarios.md", "reason": "audio scenario fixture 不得弱化生产治理。"}
+{"file": ".trellis/spec/backend/sales-trainer-learning-topic-governance.md", "reason": "topic、required path、stage 和 permission 语义复核。"}
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "OpenAPI parity 和主门禁复核。"}
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "跨包边与 SCC policy 复核。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "API/DTO/ORM 与 journey/projection 跨层复核。"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "研究分类与实现证据复核。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0b/research/sales-trainer-failure-classification.md", "reason": "Sales Trainer 逐项修复依据。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0b/research/platform-api-failure-classification.md", "reason": "secret/PPT 根因和回归依据。"}

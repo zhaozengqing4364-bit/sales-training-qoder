@@ -1,13 +1,14 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，分 Gate 实施中（Gate 0A、Gate 1A 已完成）
+状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 1A 已完成）
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 
 实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
 和 Realtime 测试合同；聚焦回归为 `53 passed, 1 warning`。Gate 1A 已将当前 49 条
-跨包边、12 包 SCC 和临时例外纳入 CI。Gate 0B/0C、Gate 1B 及 Gate 2–6 仍按路线图
-推进，本文件的目标架构尚未整体落地。
+跨包边、12 包 SCC 和临时例外纳入 CI。Gate 0B 已逐项清零后端 15 个失败，最终
+unit + contract 为 `2617 passed, 1 skipped, 74 warnings`。Gate 0C、Gate 1B 及
+Gate 2–6 仍按路线图推进，本文件的目标架构尚未整体落地。
 
 ## 1. 背景
 
@@ -48,7 +49,7 @@ strangler 切片把现有物理目录逐步深化为真正的 Module。
 
 ### 2.2 质量事实
 
-聚焦架构和 realtime 测试能够通过，但全量事实并不绿色：
+本设计获批时，聚焦架构和 realtime 测试能够通过，但全量事实并不绿色：
 
 - 后端 unit + contract：2,592 collected，2,556 passed，36 failed，1 skipped；
 - 路由完整性 5 个失败中，4 个来自 FastAPI `_IncludedRouter` 表示变化，1 个
@@ -59,7 +60,9 @@ strangler 切片把现有物理目录逐步深化为真正的 Module。
   fixture/topic-governance 失败；完整运行超过 5 分钟仍未自然收敛，已主动终止，
   不把它伪报为完整失败清单。
 
-因此，Gate 0 必须先恢复测试事实，不能直接把现有全量测试加入发布门禁。
+因此，Gate 0 必须先恢复测试事实，不能直接把当时的全量测试加入发布门禁。截至
+2026-07-10，Gate 0A 已恢复平台合同真相，Gate 0B 已使后端 unit + contract 达到
+`2617 passed, 1 skipped`；Gate 0C 的前端全量绿色和自然退出仍待闭环。
 
 ## 3. 设计目标
 

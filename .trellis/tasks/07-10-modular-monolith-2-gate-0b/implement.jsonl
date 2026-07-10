@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端开发总索引与非协商边界。"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "API、服务、测试和脚本放置约定。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试隔离、Ruff、mypy 和全量门禁要求。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "稳定 API DTO、事务回滚、5xx 错误映射，以及 update-spec 固化的 commit 前 DTO 验证合同。"}
+{"file": ".trellis/spec/backend/sales-trainer-audio-evaluation-scenarios.md", "reason": "canonical audio scenario、prompt、material 和兼容错误合同。"}
+{"file": ".trellis/spec/backend/sales-trainer-learning-topic-governance.md", "reason": "learning topic 与 required path 解耦、stage/权限合同。"}
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "OpenAPI runtime parity 和 canonical quality gate。"}
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "修改后不得新增未治理跨包边。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用 ForbiddenWordResponse 与 test-local canonical fixtures。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "ORM→DTO→OpenAPI 与 path config→journey→projection 数据流。"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "失败分类、PRD、实现和验证证据一致性。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0b/research/sales-trainer-failure-classification.md", "reason": "13 项 Sales Trainer 逐项根因、修复簇和禁止伪修复。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0b/research/platform-api-failure-classification.md", "reason": "secret fixture 与 ForbiddenWord 生产 500 的根因证据。"}

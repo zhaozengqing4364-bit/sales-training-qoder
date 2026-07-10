@@ -90,6 +90,106 @@ Special case: `RequestValidationError` on `/api/v1/prompt-templates` maps to `er
 
 Contract tests: `backend/tests/contract/test_error_envelopes.py`.
 
+## Scenario: ORM-backed write responses
+
+### 1. Scope / Trigger
+
+- Trigger: a FastAPI write route creates or updates an SQLAlchemy entity and returns
+  fields from that entity.
+- Scope: route response models, ORM-to-DTO mapping, transaction ordering, rollback,
+  and generated OpenAPI.
+- Why: FastAPI/Pydantic may fail while serializing an arbitrary ORM object after the
+  handler has returned. If the route already committed, the client receives a 500
+  even though the write succeeded and may create a duplicate when it retries.
+
+### 2. Signatures
+
+```python
+@router.post(
+    "/resources/{resource_id}/items",
+    status_code=201,
+    response_model=ItemResponse,
+)
+async def create_item(...) -> ItemResponse | JSONResponse: ...
+
+class ItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+```
+
+The response DTO must be an explicit Pydantic model with
+`ConfigDict(from_attributes=True)` when it reads ORM attributes. Do not annotate an
+ORM-returning route as `Any`.
+
+### 3. Contracts
+
+- Normalize and validate the request before constructing the ORM entity.
+- Use this success order:
+  `add -> flush -> refresh -> DTO model_validate -> commit -> return DTO`.
+- The route decorator's `response_model` and the return annotation must describe the
+  same public DTO. Internal ORM fields are not part of the API contract.
+- SQLAlchemy failures must roll back before returning the module's normalized 5xx
+  response.
+- Regenerate committed OpenAPI after changing the response schema and require runtime
+  parity.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected behavior |
+|---|---|
+| Request or domain validation fails before `flush` | Return the existing 4xx contract; no write |
+| `flush`, `refresh`, or `commit` raises `SQLAlchemyError` | Roll back and return the stable module error code |
+| DTO validation fails after `refresh` | Do not commit; let the failure be visible and the session roll back |
+| DTO and ORM field types differ but are convertible | `model_validate` performs the conversion before commit |
+| Runtime OpenAPI differs from committed schema | Contract parity check fails |
+
+### 5. Good/Base/Bad Cases
+
+- Good: a create route maps the refreshed entity to its public DTO before commit,
+  commits, and returns the already validated DTO.
+- Base: an expected database constraint failure rolls back and returns a stable error
+  envelope without exposing the exception.
+- Bad: a route commits and returns a SQLAlchemy object as `Any`, leaving the first
+  response validation to FastAPI after the write is durable.
+
+### 6. Tests Required
+
+- Contract test: create a real parent fixture, require the exact success status, parse
+  the response with the public DTO, and verify one matching persisted row.
+- Permission test: an unauthorized caller receives 401/403 and creates no row.
+- Failure-path unit or integration test: force a database failure and assert rollback,
+  the stable error code, and no durable write.
+- OpenAPI parity test: the success response references the public DTO schema.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+@router.post("/items", status_code=201)
+async def create_item(...) -> Any:
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return item
+```
+
+#### Correct
+
+```python
+@router.post("/items", status_code=201, response_model=ItemResponse)
+async def create_item(...) -> ItemResponse | JSONResponse:
+    try:
+        db.add(item)
+        await db.flush()
+        await db.refresh(item)
+        response = ItemResponse.model_validate(item)
+        await db.commit()
+        return response
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error("[ITEM_CREATE_FAILED]", exc=exc)
+```
+
 ---
 
 ## WebSocket Errors
