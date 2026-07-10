@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import types
 from collections import Counter
+from collections.abc import Iterator
 
 import pytest
 from fastapi import FastAPI
@@ -109,9 +110,19 @@ from app_lifespan import lifespan
 IGNORED_METHODS = {"HEAD", "OPTIONS"}
 
 
+def _effective_routes(app) -> Iterator[object]:
+    """Yield direct routes and FastAPI included-router effective contexts."""
+    for route in app.router.routes:
+        effective_route_contexts = getattr(route, "effective_route_contexts", None)
+        if callable(effective_route_contexts):
+            yield from effective_route_contexts()
+        else:
+            yield route
+
+
 def _method_path_pairs(app) -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
-    for route in app.router.routes:
+    for route in _effective_routes(app):
         path = getattr(route, "path", None)
         methods = getattr(route, "methods", None)
         if not path or not methods:
@@ -134,7 +145,9 @@ def test_create_app_registers_startup_http_and_websocket_surfaces() -> None:
     app = create_app()
     http_routes = set(_method_path_pairs(app))
     websocket_routes = {
-        route.path for route in app.router.routes if isinstance(route, APIWebSocketRoute)
+        str(getattr(getattr(route, "original_route", route), "path", ""))
+        for route in _effective_routes(app)
+        if isinstance(getattr(route, "original_route", route), APIWebSocketRoute)
     }
 
     assert ("GET", "/health") in http_routes

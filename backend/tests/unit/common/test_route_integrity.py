@@ -1,9 +1,11 @@
 """Route integrity checks for mounted FastAPI routes."""
 
 from collections import Counter
+from collections.abc import Iterator
 from pathlib import Path
 
 import yaml
+from fastapi.routing import APIWebSocketRoute
 
 from main import app
 
@@ -17,10 +19,20 @@ OPENAPI_CONTRACT_PATH = (
 )
 
 
+def _effective_routes(app) -> Iterator[object]:
+    """Yield direct routes and FastAPI included-router effective contexts."""
+    for route in app.router.routes:
+        effective_route_contexts = getattr(route, "effective_route_contexts", None)
+        if callable(effective_route_contexts):
+            yield from effective_route_contexts()
+        else:
+            yield route
+
+
 def _collect_method_path_pairs() -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
 
-    for route in app.router.routes:
+    for route in _effective_routes(app):
         methods = getattr(route, "methods", None)
         path = getattr(route, "path", None)
         if not methods or not path:
@@ -81,9 +93,9 @@ def test_lane_11_canonical_route_inventory_is_present() -> None:
 
 def test_websocket_routes_support_legacy_and_path_modes() -> None:
     websocket_paths = {
-        getattr(route, "path", "")
-        for route in app.router.routes
-        if route.__class__.__name__ == "APIWebSocketRoute"
+        str(getattr(getattr(route, "original_route", route), "path", ""))
+        for route in _effective_routes(app)
+        if isinstance(getattr(route, "original_route", route), APIWebSocketRoute)
     }
 
     assert "/ws/sales" in websocket_paths
@@ -95,7 +107,7 @@ def test_websocket_routes_support_legacy_and_path_modes() -> None:
 def test_prompt_templates_static_route_precedes_dynamic_route() -> None:
     prompt_routes = [
         getattr(route, "path", "")
-        for route in app.router.routes
+        for route in _effective_routes(app)
         if isinstance(getattr(route, "path", None), str)
         and str(getattr(route, "path", "")).startswith("/api/v1/prompt-templates")
     ]

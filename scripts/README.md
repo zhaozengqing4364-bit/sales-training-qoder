@@ -69,22 +69,34 @@ bash scripts/critical-quality-gate.sh
 固定顺序：
 1. secret / environment checks
 2. backend ruff
-3. web typecheck
-4. web lint
-5. vitest coverage gate
-6. dev smoke stack + DB ready + `alembic upgrade head` + smoke bootstrap / seed
-7. Playwright smoke matrix
-8. Playwright newcomer closed-loop E2E
-9. Playwright presentation / sales Phase 4 E2E
-10. optional real-provider focused gates
-11. backend newcomer coverage + mypy
-12. backend targeted tests + smoke regression
+3. OpenAPI contract parity
+4. web typecheck
+5. web lint
+6. vitest coverage gate
+7. dev smoke stack + DB ready + `alembic upgrade head` + smoke bootstrap / seed
+8. Playwright smoke matrix
+9. Playwright newcomer closed-loop E2E
+10. Playwright presentation / sales Phase 4 E2E
+11. optional real-provider focused gates
+12. backend newcomer coverage + mypy
+13. backend targeted tests + smoke regression
 
 说明：
 - 这里的 Playwright 包含 smoke matrix、新人训练 closed-loop E2E 以及 presentation/sales Phase 4 E2E；真实 provider 仍由专项模式或显式开关验证。
 - 默认门禁使用 deterministic local provider，不依赖外部 StepFun 或真实 LLM；真实 provider 由 release/nightly 专项模式验证。
 - realtime 真实 provider 专项模式默认不会在缺凭证时通过；会输出 classified skip 证据并失败。只有人工明确设置 `NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1` 时，缺凭证才可作为可追踪跳过项通过；发布前仍可用 `NEWCOMER_REAL_PROVIDER_REQUIRED=1` 强制缺凭证失败。
 - AI Coach 真实 provider 专项模式同样默认 fail-closed；缺 `LLM_API_KEY` / `OPENAI_API_KEY` 时会输出 classified skip 证据并失败，只有人工明确设置 `NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1` 才允许可追踪跳过。
+
+### OpenAPI 合同
+
+```bash
+cd backend
+.venv/bin/python scripts/generate_openapi_contract.py
+.venv/bin/python scripts/generate_openapi_contract.py --check
+```
+
+生成命令以 FastAPI runtime schema 为权威更新 committed contract；`--check` 只读并在
+语义漂移时返回非零退出码。
 
 真实 provider release/nightly 专项模式：
 
