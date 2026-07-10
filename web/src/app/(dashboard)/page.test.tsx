@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import HomePage from "./page";
 import packageJson from "../../../package.json";
@@ -200,9 +200,13 @@ describe("HomePage dashboard header", () => {
         useCurrentUserMock.mockReturnValue({ data: null });
     });
 
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it("shows the current user's display name with a time-based greeting and the package version badge", async () => {
         vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-04-09T09:00:00+08:00"));
+        vi.setSystemTime(new Date(2026, 3, 9, 9, 0, 0));
         useCurrentUserMock.mockReturnValue({
             data: {
                 id: "user-1",
@@ -368,7 +372,7 @@ describe("HomePage dashboard header", () => {
 
     it("falls back to the email prefix and switches to an evening greeting when no name is present", async () => {
         vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-04-09T20:00:00+08:00"));
+        vi.setSystemTime(new Date(2026, 3, 9, 20, 0, 0));
         useCurrentUserMock.mockReturnValue({
             data: {
                 id: "user-2",
@@ -767,7 +771,10 @@ describe("HomePage dashboard header", () => {
 
     it("shows streak and weekly goal using only completed evaluable practice", async () => {
         vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-04-20T10:00:00+08:00"));
+        vi.setSystemTime(new Date(2026, 3, 20, 10, 0, 0));
+        const localIso = (day: number, hour: number, minute = 0) => (
+            new Date(2026, 3, day, hour, minute, 0).toISOString()
+        );
         getMyHistoryMock.mockResolvedValueOnce({
             sessions: [
                 {
@@ -776,11 +783,11 @@ describe("HomePage dashboard header", () => {
                     scenario_type: "sales",
                     persona_name: null,
                     agent_name: "销售教练",
-                    start_time: "2026-04-20T01:00:00.000Z",
+                    start_time: localIso(20, 8),
                     duration_seconds: 300,
                     overall_score: 88,
                     report_status: "completed",
-                    report_generated_at: "2026-04-20T01:10:00.000Z",
+                    report_generated_at: localIso(20, 8, 10),
                     status: "completed",
                     evaluable: true,
                     not_evaluable_reason: null,
@@ -792,11 +799,11 @@ describe("HomePage dashboard header", () => {
                     scenario_type: "presentation",
                     persona_name: null,
                     agent_name: "演讲教练",
-                    start_time: "2026-04-20T03:00:00.000Z",
+                    start_time: localIso(20, 9),
                     duration_seconds: 420,
                     overall_score: 86,
                     report_status: "completed",
-                    report_generated_at: "2026-04-20T03:10:00.000Z",
+                    report_generated_at: localIso(20, 9, 10),
                     status: "completed",
                     evaluable: true,
                     not_evaluable_reason: null,
@@ -808,11 +815,11 @@ describe("HomePage dashboard header", () => {
                     scenario_type: "sales",
                     persona_name: null,
                     agent_name: "销售教练",
-                    start_time: "2026-04-19T01:00:00.000Z",
+                    start_time: localIso(19, 8),
                     duration_seconds: 300,
                     overall_score: 82,
                     report_status: "completed",
-                    report_generated_at: "2026-04-19T01:10:00.000Z",
+                    report_generated_at: localIso(19, 8, 10),
                     status: "completed",
                     evaluable: true,
                     not_evaluable_reason: null,
@@ -824,11 +831,11 @@ describe("HomePage dashboard header", () => {
                     scenario_type: "sales",
                     persona_name: null,
                     agent_name: "销售教练",
-                    start_time: "2026-04-18T01:00:00.000Z",
+                    start_time: localIso(18, 8),
                     duration_seconds: 300,
                     overall_score: 0,
                     report_status: "completed",
-                    report_generated_at: "2026-04-18T01:10:00.000Z",
+                    report_generated_at: localIso(18, 8, 10),
                     status: "completed",
                     evaluable: false,
                     not_evaluable_reason: "INSUFFICIENT_TURN_DATA",
@@ -840,11 +847,11 @@ describe("HomePage dashboard header", () => {
                     scenario_type: "sales",
                     persona_name: null,
                     agent_name: "销售教练",
-                    start_time: "2026-04-17T01:00:00.000Z",
+                    start_time: localIso(17, 8),
                     duration_seconds: 300,
                     overall_score: 90,
                     report_status: "completed",
-                    report_generated_at: "2026-04-17T01:10:00.000Z",
+                    report_generated_at: localIso(17, 8, 10),
                     status: "in_progress",
                     evaluable: true,
                     not_evaluable_reason: null,
