@@ -96,4 +96,5 @@
   `41 passed, 2 warnings in 23.84s`。独立 trellis-check 确认 P1 阻塞清零。
 - 2026-07-10 / 逻辑提交：`63a878db` 封装 ForbiddenWord 生产修复、public API
   成功/失败/权限合同和 OpenAPI；`0c418048` 封装 Sales Trainer canonical fixture 与
-  Secret hygiene 隔离。Readiness 并行文档持续排除，未进入任一 staged set。
+  Secret hygiene 隔离；`6453f6c3` 同步 code-spec、详细计划、路线图、设计状态和完整
+  Trellis 证据。Readiness 并行文档持续排除，未进入任一 staged set。

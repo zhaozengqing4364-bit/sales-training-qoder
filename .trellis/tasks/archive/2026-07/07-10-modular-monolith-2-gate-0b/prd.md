@@ -57,7 +57,7 @@
 - [x] 修改文件 Ruff 通过，architecture guard 通过。
 - [x] `tests/unit tests/contract -q --no-cov` 全量 0 failed。
 - [x] 不新增 skip/xfail/永久排除，不修改外部无关行为。
-- [ ] Trellis check、update-spec、CodeGraph post-impact、逻辑提交和归档完成。
+- [x] Trellis check、update-spec、CodeGraph post-impact、逻辑提交和归档完成。
 
 ## Definition of Done
 
