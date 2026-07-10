@@ -395,3 +395,38 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: 模块化单体 2.0 Gate 0B 后端回归真相
+
+**Date**: 2026-07-10
+**Task**: 模块化单体 2.0 Gate 0B 后端回归真相
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+逐项分类并清零后端 15 个失败，修复 ForbiddenWord commit 后序列化 500，迁移 Sales Trainer/Secret fixtures，2617 项 unit+contract 全绿并完成独立复核。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `63a878db` | (see git log) |
+| `0c418048` | (see git log) |
+| `6453f6c3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
