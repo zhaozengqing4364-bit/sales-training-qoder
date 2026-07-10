@@ -228,7 +228,7 @@ async def test_should_reject_audio_submission_for_unit_outside_active_path(
     prompt = SalesTrainerAudioScorePrompt(
         prompt_id=str(uuid.uuid4()),
         name="Active path audio prompt",
-        purpose="general_audio_scoring",
+        purpose="elevator_pitch",
         system_prompt="评分。",
         scoring_template="请评分：{transcript}",
         output_schema={},
@@ -240,7 +240,14 @@ async def test_should_reject_audio_submission_for_unit_outside_active_path(
         unit_id=str(uuid.uuid4()),
         name="Active audio",
         unit_type="audio_scoring",
-        config={},
+        config={
+            "audio": {
+                "scenario_key": "elevator_pitch",
+                "purpose": "elevator_pitch",
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 80,
+            }
+        },
         status="published",
         created_by=admin.user_id,
         updated_by=admin.user_id,
@@ -271,6 +278,7 @@ async def test_should_reject_audio_submission_for_unit_outside_active_path(
             modules=[
                 NewcomerPathModuleConfig(
                     module_key="elevator_pitch",
+                    scenario_key="elevator_pitch",
                     module_type="audio_scoring_group",
                     enabled=True,
                     order_index=1,
@@ -324,7 +332,7 @@ async def test_should_freeze_path_revision_lineage_when_submitting_audio(
     prompt = SalesTrainerAudioScorePrompt(
         prompt_id=str(uuid.uuid4()),
         name="PPT 讲解评分",
-        purpose="general_audio_scoring",
+        purpose="ppt_pitch",
         system_prompt="你是销售训练评分员。",
         scoring_template="请评分：{transcript}",
         output_schema={},
@@ -339,9 +347,10 @@ async def test_should_freeze_path_revision_lineage_when_submitting_audio(
         unit_type="audio_scoring",
         config={
             "audio": {
+                "scenario_key": "ppt_explanation",
                 "scoring_prompt_id": prompt.prompt_id,
                 "pass_threshold": 80,
-                "purpose": "general_audio_scoring",
+                "purpose": "ppt_pitch",
             }
         },
         status="published",
@@ -359,6 +368,7 @@ async def test_should_freeze_path_revision_lineage_when_submitting_audio(
             modules=[
                 NewcomerPathModuleConfig(
                     module_key="ppt_explanation",
+                    scenario_key="ppt_explanation",
                     module_type="audio_scoring",
                     enabled=True,
                     order_index=1,
@@ -381,7 +391,7 @@ async def test_should_freeze_path_revision_lineage_when_submitting_audio(
     submission = await audio_service.create_submission(
         AudioSubmissionCreate(
             unit_id=unit.unit_id,
-            purpose="general_audio_scoring",
+            purpose="ppt_pitch",
             original_filename="ppt-explanation.wav",
             content_type="audio/wav",
             size_bytes=1024,
@@ -479,7 +489,9 @@ async def test_should_use_path_audio_bindings_when_submitting_and_scoring(
         created_by=admin.user_id,
         updated_by=admin.user_id,
     )
-    test_db.add_all([admin, learner, legacy_prompt, path_prompt, material, version, unit])
+    test_db.add_all(
+        [admin, learner, legacy_prompt, path_prompt, material, version, unit]
+    )
     await test_db.commit()
 
     path_service = SalesTrainerPathConfigService(test_db)
@@ -490,6 +502,7 @@ async def test_should_use_path_audio_bindings_when_submitting_and_scoring(
             modules=[
                 NewcomerPathModuleConfig(
                     module_key="ppt_explanation",
+                    scenario_key="ppt_explanation",
                     module_type="audio_scoring",
                     enabled=True,
                     order_index=1,
@@ -549,6 +562,7 @@ async def test_should_use_path_audio_bindings_when_submitting_and_scoring(
             modules=[
                 NewcomerPathModuleConfig(
                     module_key="ppt_explanation",
+                    scenario_key="ppt_explanation",
                     module_type="audio_scoring",
                     enabled=True,
                     order_index=1,
@@ -573,7 +587,10 @@ async def test_should_use_path_audio_bindings_when_submitting_and_scoring(
     assert scoring.prompt_id == path_prompt.prompt_id
     assert scoring.pass_threshold == 73
     assert serialized["score_scheme_snapshot"]["prompt_id"] == path_prompt.prompt_id
-    assert serialized["material_snapshot"]["items"][0]["material_id"] == material.material_id
+    assert (
+        serialized["material_snapshot"]["items"][0]["material_id"]
+        == material.material_id
+    )
     assert serialized["score_result"]["prompt_id"] == path_prompt.prompt_id
     assert serialized["score_result"]["legacy_snapshot_only"] is False
 
@@ -624,7 +641,9 @@ async def test_should_use_effective_path_config_for_unit_brief_api(
         created_by=admin.user_id,
         updated_by=admin.user_id,
     )
-    test_db.add_all([admin, learner, legacy_prompt, path_prompt, material, version, unit])
+    test_db.add_all(
+        [admin, learner, legacy_prompt, path_prompt, material, version, unit]
+    )
     await test_db.commit()
 
     path_service = SalesTrainerPathConfigService(test_db)
@@ -635,6 +654,7 @@ async def test_should_use_effective_path_config_for_unit_brief_api(
             modules=[
                 NewcomerPathModuleConfig(
                     module_key="ppt_explanation",
+                    scenario_key="ppt_explanation",
                     module_type="audio_scoring",
                     enabled=True,
                     order_index=1,
@@ -663,38 +683,36 @@ async def test_should_use_effective_path_config_for_unit_brief_api(
     assert data["materials"][0]["current_version"]["version_id"] == version.version_id
     assert "storage_key" not in data["materials"][0]["current_version"]
 
-    non_learner_admin = _user("admin")
-    test_db.add(non_learner_admin)
+    acceptance_admin = _user("admin")
+    test_db.add(acceptance_admin)
     await test_db.commit()
-    denied_response = await async_client.get(
+    admin_brief_response = await async_client.get(
         f"/api/v1/sales-trainer/units/{unit.unit_id}/brief",
-        headers=_auth_headers(non_learner_admin),
+        headers=_auth_headers(acceptance_admin),
     )
-    assert denied_response.status_code == 403
-    denied_body = denied_response.json()
-    assert denied_body.get("data") is None
-    assert "[NEWCOMER_LEARNER_ROLE_REQUIRED]" in str(denied_body)
+    assert admin_brief_response.status_code == 200
+    assert admin_brief_response.json()["data"]["unit"]["unit_id"] == str(unit.unit_id)
 
-    denied_units_response = await async_client.get(
+    admin_units_response = await async_client.get(
         "/api/v1/sales-trainer/units",
-        headers=_auth_headers(non_learner_admin),
+        headers=_auth_headers(acceptance_admin),
     )
-    assert denied_units_response.status_code == 403
-    assert "[NEWCOMER_LEARNER_ROLE_REQUIRED]" in str(denied_units_response.json())
+    assert admin_units_response.status_code == 200
 
-    denied_paths_response = await async_client.get(
+    admin_paths_response = await async_client.get(
         "/api/v1/sales-trainer/paths",
-        headers=_auth_headers(non_learner_admin),
+        headers=_auth_headers(acceptance_admin),
     )
-    assert denied_paths_response.status_code == 403
-    assert "[NEWCOMER_LEARNER_ROLE_REQUIRED]" in str(denied_paths_response.json())
+    assert admin_paths_response.status_code == 200
 
-    denied_journey_response = await async_client.get(
+    admin_journey_response = await async_client.get(
         "/api/v1/sales-trainer/journey",
-        headers=_auth_headers(non_learner_admin),
+        headers=_auth_headers(acceptance_admin),
     )
-    assert denied_journey_response.status_code == 403
-    assert "[NEWCOMER_LEARNER_ROLE_REQUIRED]" in str(denied_journey_response.json())
+    assert admin_journey_response.status_code == 200
+    assert admin_journey_response.json()["data"]["learner_id"] == str(
+        acceptance_admin.user_id
+    )
 
 
 @pytest.mark.asyncio
@@ -970,7 +988,12 @@ async def test_should_reject_publishing_audio_path_without_effective_prompt(
         unit_id=str(uuid.uuid4()),
         name="PPT 讲解录音",
         unit_type="audio_scoring",
-        config={"audio": {"purpose": "general_audio_scoring"}},
+        config={
+            "audio": {
+                "scenario_key": "ppt_explanation",
+                "purpose": "ppt_pitch",
+            }
+        },
         status="published",
         created_by=admin.user_id,
         updated_by=admin.user_id,
@@ -986,6 +1009,7 @@ async def test_should_reject_publishing_audio_path_without_effective_prompt(
             modules=[
                 NewcomerPathModuleConfig(
                     module_key="ppt_explanation",
+                    scenario_key="ppt_explanation",
                     module_type="audio_scoring",
                     enabled=True,
                     order_index=1,
@@ -1133,7 +1157,9 @@ async def test_should_expand_audio_group_duration_options_and_score_with_group_p
         reason="电梯演讲路径生效",
     )
 
-    paths = await SalesTrainerPathService(test_db).list_paths_for_user(str(learner.user_id))
+    paths = await SalesTrainerPathService(test_db).list_paths_for_user(
+        str(learner.user_id)
+    )
     levels = paths[0]["levels"]
     assert [level["unit_id"] for level in levels] == [unit_10.unit_id, unit_20.unit_id]
     assert [level["level_title"] for level in levels] == ["10 分钟", "20 分钟"]
@@ -1178,7 +1204,7 @@ async def test_should_expose_audio_score_result_path_revision_lineage(
     prompt = SalesTrainerAudioScorePrompt(
         prompt_id=str(uuid.uuid4()),
         name="PPT 讲解评分",
-        purpose="general_audio_scoring",
+        purpose="ppt_pitch",
         system_prompt="你是销售训练评分员。",
         scoring_template="请评分：{transcript}",
         output_schema={},
@@ -1193,9 +1219,10 @@ async def test_should_expose_audio_score_result_path_revision_lineage(
         unit_type="audio_scoring",
         config={
             "audio": {
+                "scenario_key": "ppt_explanation",
                 "scoring_prompt_id": prompt.prompt_id,
                 "pass_threshold": 80,
-                "purpose": "general_audio_scoring",
+                "purpose": "ppt_pitch",
             }
         },
         status="published",
@@ -1213,6 +1240,7 @@ async def test_should_expose_audio_score_result_path_revision_lineage(
             modules=[
                 NewcomerPathModuleConfig(
                     module_key="ppt_explanation",
+                    scenario_key="ppt_explanation",
                     module_type="audio_scoring",
                     enabled=True,
                     order_index=1,
@@ -1235,7 +1263,7 @@ async def test_should_expose_audio_score_result_path_revision_lineage(
     submission = await audio_service.create_submission(
         AudioSubmissionCreate(
             unit_id=unit.unit_id,
-            purpose="general_audio_scoring",
+            purpose="ppt_pitch",
             original_filename="ppt-explanation.wav",
             content_type="audio/wav",
             size_bytes=1024,

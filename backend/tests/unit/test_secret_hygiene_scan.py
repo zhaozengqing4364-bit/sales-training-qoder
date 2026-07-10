@@ -100,16 +100,20 @@ def test_secret_scan_passes_stepfun_realtime_contract_and_migrations():
     assert "Secret hygiene scan passed" in result.stdout
 
 
-def test_secret_scan_default_paths_cover_runtime_evidence_and_skip_report():
+def test_secret_scan_default_paths_cover_runtime_evidence_and_skip_report(tmp_path):
     module = _load_script_module()
+    evidence_dir = tmp_path / ".sisyphus" / "evidence"
+    evidence_dir.mkdir(parents=True)
+    runtime_evidence = evidence_dir / "newcomer-real-provider-gate.json"
+    runtime_evidence.write_text('{"provider": "synthetic"}\n', encoding="utf-8")
+    generated_report = evidence_dir / "secret-scan-report.json"
+    generated_report.write_text('{"findings": []}\n', encoding="utf-8")
 
     assert ".sisyphus/evidence" in module.DEFAULT_PATHS
-    files = module.iter_files(REPO_ROOT, (".sisyphus/evidence",))
-    display_names = {path.name for path in files}
+    files = module.iter_files(tmp_path, module.DEFAULT_PATHS)
 
-    assert "newcomer-ai-coach-real-provider-gate.json" in display_names
-    assert "newcomer-real-provider-gate.json" in display_names
-    assert "secret-scan-report.json" not in display_names
+    assert runtime_evidence in files
+    assert generated_report not in files
 
 
 def test_secret_scan_skips_generated_report_names_to_prevent_recursive_pollution(

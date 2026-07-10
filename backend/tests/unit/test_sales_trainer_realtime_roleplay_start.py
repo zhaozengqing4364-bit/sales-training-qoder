@@ -394,8 +394,12 @@ async def test_start_realtime_roleplay_fails_when_registry_is_disabled(
     assert exc_info.value.details["source"] == "default"
 
 
-def test_realtime_roleplay_enter_permission_is_learner_only() -> None:
+def test_realtime_roleplay_enter_permission_follows_learning_path_policy() -> None:
     assert can_enter_sales_trainer_realtime(_user("user")) is True
     assert can_enter_sales_trainer_realtime(_user("learner")) is True
-    assert can_enter_sales_trainer_realtime(_user("admin")) is False
+    assert can_enter_sales_trainer_realtime(_user("admin")) is True
     assert can_enter_sales_trainer_realtime(_user("training_manager")) is False
+
+    inactive_admin = _user("admin")
+    inactive_admin.is_active = False
+    assert can_enter_sales_trainer_realtime(inactive_admin) is False

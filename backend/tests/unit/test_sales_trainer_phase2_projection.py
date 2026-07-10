@@ -146,9 +146,12 @@ def test_training_record_snapshot_dtos_keep_legacy_replay_fields() -> None:
         "历史评分模板"
     )
     assert response.score_scheme_snapshot.prompt_snapshot.model_extra is not None
-    assert response.score_scheme_snapshot.prompt_snapshot.model_extra[
-        "legacy_prompt_field"
-    ] == "kept"
+    assert (
+        response.score_scheme_snapshot.prompt_snapshot.model_extra[
+            "legacy_prompt_field"
+        ]
+        == "kept"
+    )
     assert response.task_brief_snapshot is not None
     assert response.task_brief_snapshot.title == "历史任务"
     assert response.task_brief_snapshot.model_extra is not None
@@ -337,16 +340,18 @@ async def test_training_record_projection_uses_append_only_regrade_as_effective_
         trace_id="trace-phase2-regrade",
         created_by=admin.user_id,
     )
-    test_db.add_all([
-        admin,
-        learner,
-        unit,
-        category,
-        question,
-        attempt,
-        answer,
-        regrade_run,
-    ])
+    test_db.add_all(
+        [
+            admin,
+            learner,
+            unit,
+            category,
+            question,
+            attempt,
+            answer,
+            regrade_run,
+        ]
+    )
     await test_db.commit()
 
     records, total = await TrainingRecordService(test_db).list_records(limit=50)
@@ -433,8 +438,12 @@ async def test_manager_dashboard_uses_same_phase2_projection(
     assert dashboard["intervention_suggestions"][0]["action"] == "打回并安排补救训练"
     response = SalesTrainerManagerDashboardResponse.model_validate(dashboard)
     assert response.policy.key == SALES_TRAINER_PHASE2_CLOSED_LOOP_POLICY_KEY
-    assert response.policy.management_entry == "/admin/business-rules/sales-trainer-phase2"
-    assert response.policy.dashboard_record_limit >= response.summary.loaded_record_count
+    assert (
+        response.policy.management_entry == "/admin/business-rules/sales-trainer-phase2"
+    )
+    assert (
+        response.policy.dashboard_record_limit >= response.summary.loaded_record_count
+    )
     assert response.summary.low_score_record_count == 1
     assert response.module_summaries[0].module_key == unit.unit_id
     assert response.risk_learners[0].user_id == learner.user_id
@@ -577,7 +586,9 @@ async def test_ai_coach_not_mastered_record_projects_remediation_and_snapshot(
     )
     assert record["remediation"]["needed"] is True
     assert record["remediation"]["action_label"] == "继续 AI 教练训练"
-    assert record["remediation"]["target_path"] == "/sales-trainer/business-skills/coach"
+    assert (
+        record["remediation"]["target_path"] == "/sales-trainer/business-skills/coach"
+    )
 
 
 @pytest.mark.asyncio
@@ -816,7 +827,8 @@ async def test_training_records_filter_by_module_stage_and_levels(
     )
     assert default_total == 1
     assert len(default_records) == 1
-    assert default_records[0]["training_stage"] in {"in_progress", "passed"}
+    # Learning-topic evidence is non-blocking and must not advance required-path stage.
+    assert default_records[0]["training_stage"] == "not_started"
     assert default_records[0]["learner_level"]["level_key"] == "unassigned"
     assert default_records[0]["role_level"]["level_key"] == "learner"
 
@@ -828,7 +840,7 @@ async def test_training_records_filter_by_module_stage_and_levels(
     assert module_total == 1
     assert len(module_records) == 1
     module_record = module_records[0]
-    assert module_record["training_stage"] in {"in_progress", "passed"}
+    assert module_record["training_stage"] == "not_started"
     assert module_record["learner_level"]["level_key"] == "unassigned"
     assert module_record["role_level"]["level_key"] == "learner"
 
@@ -948,12 +960,16 @@ async def test_realtime_roleplay_session_enters_training_records(
     assert records[0]["path_revision_no"] == 3
     assert records[0]["module_key"] == "realtime_roleplay"
     assert records[0]["legacy_snapshot_only"] is False
-    assert records[0]["realtime_roleplay_session"]["external_binding"][
-        "binding_key"
-    ] == "newcomer_realtime_roleplay_v1"
-    assert records[0]["realtime_roleplay_session"]["snapshot"]["external_binding"][
-        "binding_key"
-    ] == "newcomer_realtime_roleplay_v1"
+    assert (
+        records[0]["realtime_roleplay_session"]["external_binding"]["binding_key"]
+        == "newcomer_realtime_roleplay_v1"
+    )
+    assert (
+        records[0]["realtime_roleplay_session"]["snapshot"]["external_binding"][
+            "binding_key"
+        ]
+        == "newcomer_realtime_roleplay_v1"
+    )
     assert records[0]["score_explanation"]["basis"] == (
         "realtime_roleplay_runtime_outcome_snapshot_v1"
     )

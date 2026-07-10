@@ -143,7 +143,7 @@ async def test_should_expose_audio_training_record_path_revision_lineage(
     prompt = SalesTrainerAudioScorePrompt(
         prompt_id=str(uuid.uuid4()),
         name="PPT 讲解评分",
-        purpose="general_audio_scoring",
+        purpose="ppt_pitch",
         system_prompt="你是销售训练评分员。",
         scoring_template="请评分：{transcript}",
         output_schema={},
@@ -157,9 +157,10 @@ async def test_should_expose_audio_training_record_path_revision_lineage(
         unit_type="audio_scoring",
         config={
             "audio": {
+                "scenario_key": "ppt_explanation",
                 "scoring_prompt_id": prompt.prompt_id,
                 "pass_threshold": 80,
-                "purpose": "general_audio_scoring",
+                "purpose": "ppt_pitch",
             }
         },
         status="published",
@@ -178,6 +179,7 @@ async def test_should_expose_audio_training_record_path_revision_lineage(
             modules=[
                 NewcomerPathModuleConfig(
                     module_key="ppt_explanation",
+                    scenario_key="ppt_explanation",
                     module_type="audio_scoring",
                     enabled=True,
                     order_index=1,
@@ -199,7 +201,7 @@ async def test_should_expose_audio_training_record_path_revision_lineage(
     submission = await AudioSubmissionService(test_db).create_submission(
         AudioSubmissionCreate(
             unit_id=unit.unit_id,
-            purpose="general_audio_scoring",
+            purpose="ppt_pitch",
             original_filename="ppt-explanation.wav",
             content_type="audio/wav",
             size_bytes=1024,

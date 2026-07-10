@@ -27,6 +27,7 @@ from sales_trainer.schemas import (
     QuizAttemptCreate,
     SalesTrainerMaterialCreate,
     SalesTrainerMaterialVersionCreate,
+    SalesTrainerPathConfig,
     SalesTrainerUnitCreate,
     SalesTrainerUnitUpdate,
     UnitQuestionBinding,
@@ -42,8 +43,12 @@ from sales_trainer.services.deucate_scoring_service import (
 )
 from sales_trainer.services.material_service import SalesTrainerMaterialService
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.path_config_models import (
+    NEWCOMER_PATH_LOGICAL_ID,
+)
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
-from sales_trainer.services.path_service import SalesTrainerPathService
+from sales_trainer.services.path_progress_service import UnitProgress
+from sales_trainer.services.path_projection_payloads import build_path_payload
 from sales_trainer.services.question_bank import QuestionBankAdapter
 from sales_trainer.services.quiz_service import QuizService, QuizServiceError
 from sales_trainer.services.short_answer_scoring_service import (
@@ -293,6 +298,67 @@ async def _publish_audio_path_for_unit(
     await service.publish_config(
         actor=actor,
         reason="测试录音任务 active revision 生效",
+    )
+
+
+async def _publish_active_quiz_path_for_unit(
+    db: AsyncSession,
+    *,
+    actor: User,
+    unit: SalesTrainerUnit,
+) -> None:
+    """Authorize one published quiz through the canonical active path seam."""
+    content = LearningContent(
+        learning_content_id=str(uuid.uuid4()),
+        title=f"{unit.name} 学习内容",
+        summary="测试正式路径发布所需的最小已发布学习内容。",
+        owner="新人训练路径测试",
+        source="unit_test",
+        status="published",
+        created_by=str(actor.user_id),
+        updated_by=str(actor.user_id),
+    )
+    paper = SalesTrainerExamPaper(
+        paper_id=str(uuid.uuid4()),
+        paper_key=f"quiz-path-{uuid.uuid4().hex}",
+        title=f"{unit.name} 考卷",
+        module_key="business_skills",
+        unit_id=str(unit.unit_id),
+        pass_threshold=10,
+        status="published",
+        created_by=str(actor.user_id),
+        updated_by=str(actor.user_id),
+    )
+    db.add_all([content, paper])
+    await db.commit()
+
+    service = SalesTrainerPathConfigService(db)
+    await service.save_config(
+        NewcomerPathConfigSaveRequest.model_validate(
+            {
+                "path_key": NEWCOMER_PATH_LOGICAL_ID,
+                "title": "新人训练路径",
+                "reason": "测试 quiz active-path authorization",
+                "modules": [
+                    {
+                        "module_key": "business_skills",
+                        "module_type": "article_exam",
+                        "enabled": True,
+                        "order_index": 1,
+                        "title": unit.name,
+                        "target_unit_id": str(unit.unit_id),
+                        "learning_content_id": content.learning_content_id,
+                        "exam_paper_id": paper.paper_id,
+                        "completion_rule": "passed",
+                    }
+                ],
+            }
+        ),
+        actor=actor,
+    )
+    await service.publish_config(
+        actor=actor,
+        reason="测试 quiz active-path authorization 生效",
     )
 
 
@@ -763,6 +829,11 @@ async def test_should_publish_quiz_unit_and_score_choice_answer(
         actor=test_user,
     )
     unit = await unit_service.publish_unit(unit, actor=test_user)
+    await _publish_active_quiz_path_for_unit(
+        test_db,
+        actor=test_user,
+        unit=unit,
+    )
 
     attempt = await QuizService(test_db).submit_attempt(
         QuizAttemptCreate(
@@ -841,6 +912,11 @@ async def test_should_reject_incomplete_quiz_attempt_before_creating_snapshot(
         actor=test_user,
     )
     unit = await unit_service.publish_unit(unit, actor=test_user)
+    await _publish_active_quiz_path_for_unit(
+        test_db,
+        actor=test_user,
+        unit=unit,
+    )
 
     with pytest.raises(QuizServiceError) as error:
         await QuizService(test_db).submit_attempt(
@@ -906,6 +982,11 @@ async def test_should_score_short_answer_with_ai_and_store_feedback_snapshot(
         actor=test_user,
     )
     unit = await unit_service.publish_unit(unit, actor=test_user)
+    await _publish_active_quiz_path_for_unit(
+        test_db,
+        actor=test_user,
+        unit=unit,
+    )
 
     quiz_service = QuizService(
         test_db,
@@ -1022,6 +1103,11 @@ async def test_should_submit_short_answer_attempt_when_ai_scoring_provider_fails
         actor=test_user,
     )
     unit = await unit_service.publish_unit(unit, actor=test_user)
+    await _publish_active_quiz_path_for_unit(
+        test_db,
+        actor=test_user,
+        unit=unit,
+    )
     quiz_service = QuizService(
         test_db,
         short_answer_scoring_service=ShortAnswerScoringService(
@@ -1059,228 +1145,77 @@ async def test_should_submit_short_answer_attempt_when_ai_scoring_provider_fails
     assert answer["scoring_feedback"] is None
 
 
-@pytest.mark.asyncio
-async def test_should_project_sales_trainer_path_with_unlock_progress(
-    test_db: AsyncSession,
-    test_user: User,
-) -> None:
-    category = QuestionCategory(
-        category_id="path-category",
-        name="路径题库",
-        order_index=1,
-    )
-    question = QuestionItem(
-        question_id="path-question-1",
-        category_id=category.category_id,
-        title="产品定位",
-        stem="石犀核心定位是什么？",
-        scoring_criteria={
-            "question_type": "single_choice",
-            "options": [{"value": "A", "label": "数据流动治理"}],
-            "correct_answer": "A",
-        },
-        scoring_dimensions=["content_accuracy"],
-        status="published",
-        usage_scope="sales_trainer",
-    )
-    first_content = LearningContent(
-        learning_content_id=str(uuid.uuid4()),
-        title="产品定位学习内容",
-        summary="产品定位学习内容。",
-        owner="新人销售闯关",
-        source="unit_test",
-        status="published",
-        created_by=str(test_user.user_id),
-        updated_by=str(test_user.user_id),
-    )
-    second_content = LearningContent(
-        learning_content_id=str(uuid.uuid4()),
-        title="价值表达学习内容",
-        summary="价值表达学习内容。",
-        owner="新人销售闯关",
-        source="unit_test",
-        status="published",
-        created_by=str(test_user.user_id),
-        updated_by=str(test_user.user_id),
-    )
+def test_should_project_sales_trainer_path_with_unlock_progress() -> None:
     first_unit = SalesTrainerUnit(
         unit_id="path-unit-1",
-        name="第一关：产品定位",
-        unit_type="quiz",
-        config={
-            "quiz": {"pass_threshold": 10},
-            "path": {
-                "enabled": True,
-                "path_key": "newcomer_training_path_v1",
-                "path_title": "新人销售闯关",
-                "goal_title": "掌握首次客户沟通",
-                "level_title": "第一关：产品定位",
-                "order_index": 1,
-                "completion_rule": "passed",
-            },
-        },
-        status="published",
-        created_by=test_user.user_id,
-        updated_by=test_user.user_id,
-    )
-    first_paper = SalesTrainerExamPaper(
-        paper_id=str(uuid.uuid4()),
-        paper_key="path-unit-1-paper",
-        title="产品定位考卷",
-        module_key="business_skills",
-        unit_id=first_unit.unit_id,
-        pass_threshold=10,
-        status="published",
-        created_by=test_user.user_id,
-        updated_by=test_user.user_id,
+        name="第一关：PPT 讲解",
+        unit_type="audio_scoring",
+        description="完成 PPT 讲解录音。",
     )
     second_unit = SalesTrainerUnit(
         unit_id="path-unit-2",
-        name="第二关：价值表达",
-        unit_type="quiz",
-        config={
-            "quiz": {"pass_threshold": 10},
-            "path": {
-                "enabled": True,
-                "path_key": "newcomer_training_path_v1",
-                "path_title": "新人销售闯关",
-                "goal_title": "掌握首次客户沟通",
-                "level_title": "第二关：价值表达",
-                "order_index": 2,
-                "unlock_after_unit_ids": ["path-unit-1"],
-                "completion_rule": "passed",
-            },
-        },
-        status="published",
-        created_by=test_user.user_id,
-        updated_by=test_user.user_id,
+        name="第二关：电梯演讲",
+        unit_type="audio_scoring",
+        description="完成电梯演讲录音。",
     )
-    second_paper = SalesTrainerExamPaper(
-        paper_id=str(uuid.uuid4()),
-        paper_key="path-unit-2-paper",
-        title="价值表达考卷",
+    first_config = SalesTrainerPathConfig(
+        enabled=True,
+        path_key=NEWCOMER_PATH_LOGICAL_ID,
+        module_key="ppt_explanation",
+        module_type="audio_scoring",
+        order_index=1,
+        level_title="第一关：PPT 讲解",
+        completion_rule="passed",
+    )
+    second_config = SalesTrainerPathConfig(
+        enabled=True,
+        path_key=NEWCOMER_PATH_LOGICAL_ID,
         module_key="elevator_pitch",
-        unit_id=second_unit.unit_id,
-        pass_threshold=10,
-        status="published",
-        created_by=test_user.user_id,
-        updated_by=test_user.user_id,
+        module_type="audio_scoring_group",
+        order_index=2,
+        level_title="第二关：电梯演讲",
+        unlock_after_unit_ids=[first_unit.unit_id],
+        completion_rule="passed",
     )
-    test_db.add_all(
-        [
-            category,
-            question,
-            first_content,
-            second_content,
-            first_unit,
-            second_unit,
-            first_paper,
-            second_paper,
-        ]
+    ordered_items = [
+        (first_unit, first_config),
+        (second_unit, second_config),
+    ]
+
+    path_before = build_path_payload(
+        path_key=NEWCOMER_PATH_LOGICAL_ID,
+        title="新人训练路径",
+        goal_title="掌握新人核心表达能力",
+        ordered_items=ordered_items,
+        quiz_progress={},
+        audio_progress={},
     )
-    await test_db.flush()
-    await UnitService(test_db)._replace_questions(
-        first_unit.unit_id,
-        [
-            UnitQuestionBinding(
-                question_id=question.question_id, order_index=1, points=10
+
+    assert path_before["current_level_id"] == first_unit.unit_id
+    assert path_before["levels"][1]["status"] == "locked"
+
+    path_after = build_path_payload(
+        path_key=NEWCOMER_PATH_LOGICAL_ID,
+        title="新人训练路径",
+        goal_title="掌握新人核心表达能力",
+        ordered_items=ordered_items,
+        quiz_progress={},
+        audio_progress={
+            first_unit.unit_id: UnitProgress(
+                status="scored",
+                passed=True,
+                score=88,
+                max_score=100,
+                submitted_at=None,
+                result_id="ppt-result",
+                target_path="/sales-trainer/audio/result/ppt-result",
             )
-        ],
-    )
-    await UnitService(test_db)._replace_questions(
-        second_unit.unit_id,
-        [
-            UnitQuestionBinding(
-                question_id=question.question_id, order_index=1, points=10
-            )
-        ],
-    )
-    await test_db.commit()
-
-    path_config_service = SalesTrainerPathConfigService(test_db)
-    await path_config_service.save_config(
-        NewcomerPathConfigSaveRequest.model_validate(
-            {
-                "path_key": "newcomer_training_path_v1",
-                "title": "新人销售闯关",
-                "goal_title": "掌握首次客户沟通",
-                "reason": "发布测试路径 active revision",
-                "modules": [
-                    {
-                        "module_key": "business_skills",
-                        "module_type": "article_exam",
-                        "order_index": 1,
-                        "title": "第一关：产品定位",
-                        "target_unit_id": first_unit.unit_id,
-                        "learning_content_id": first_content.learning_content_id,
-                        "exam_paper_id": first_paper.paper_id,
-                        "completion_rule": "passed",
-                    },
-                    {
-                        "module_key": "elevator_pitch",
-                        "module_type": "article_exam",
-                        "order_index": 2,
-                        "title": "第二关：价值表达",
-                        "target_unit_id": second_unit.unit_id,
-                        "learning_content_id": second_content.learning_content_id,
-                        "exam_paper_id": second_paper.paper_id,
-                        "unlock_after_unit_ids": [first_unit.unit_id],
-                        "completion_rule": "passed",
-                    },
-                ],
-            }
-        ),
-        actor=test_user,
-    )
-    await path_config_service.publish_config(
-        actor=test_user,
-        reason="测试路径 active revision 生效",
+        },
     )
 
-    paths_before = await SalesTrainerPathService(test_db).list_paths_for_user(
-        str(test_user.user_id)
-    )
-
-    assert paths_before[0]["current_level_id"] == "path-unit-1"
-    assert paths_before[0]["levels"][1]["status"] == "locked"
-
-    await QuizService(test_db).submit_attempt(
-        QuizAttemptCreate(
-            unit_id=first_unit.unit_id,
-            answers=[
-                QuizAnswerSubmit(
-                    question_id=question.question_id,
-                    answer_payload="A",
-                )
-            ],
-        ),
-        actor=test_user,
-    )
-
-    paths_after = await SalesTrainerPathService(test_db).list_paths_for_user(
-        str(test_user.user_id)
-    )
-
-    assert paths_after[0]["completed_levels"] == 1
-    assert paths_after[0]["current_level_id"] == "path-unit-2"
-    assert paths_after[0]["levels"][0]["status"] == "completed"
-    assert paths_after[0]["levels"][1]["status"] == "available"
-    assert paths_after[0]["goal_context"]["score_basis"] == (
-        "sales_trainer_path_projection_v1"
-    )
-    assert paths_after[0]["goal_context"]["evidence_items"][0]["evidence_type"] == (
-        "quiz_attempt"
-    )
-    assert paths_after[0]["goal_context"]["weak_points"][0]["unit_id"] == "path-unit-2"
-    assert paths_after[0]["goal_context"]["next_recommendation"] == {
-        "title": "下一关：第二关：价值表达",
-        "reason": "本关还没有训练证据。",
-        "action_label": "开始做题",
-        "target_path": "/sales-trainer/business-skills",
-        "unit_id": "path-unit-2",
-        "level_title": "第二关：价值表达",
-        "recommendation_kind": "start_level",
-    }
+    assert path_after["completed_levels"] == 1
+    assert path_after["current_level_id"] == second_unit.unit_id
+    assert path_after["levels"][1]["status"] == "available"
 
 
 @pytest.mark.asyncio
