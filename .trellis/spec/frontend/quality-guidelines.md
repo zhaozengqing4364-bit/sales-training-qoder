@@ -61,6 +61,104 @@ Run: `npm run test:coverage`
 
 Route tests verify **shell/render/ownership** — not full backend integration (`web/src/app/AGENTS.md`).
 
+## Scenario: Governance Projection Fixtures And Local Time
+
+### 1. Scope / Trigger
+
+- Trigger: a page test mocks `TrainingJourneyResponse`, another governed projection, a domain-specific
+  public API facade, or browser-local date/time behavior.
+- Scope: co-located Vitest page/hook tests and their `vi.mock("@/lib/api/client")` fixtures.
+
+### 2. Signatures
+
+Business-etiquette learner pages use the governed topic contract:
+
+```ts
+api.salesTrainer.getJourney(): Promise<TrainingJourneyResponse>
+api.newcomerTraining.getBusinessEtiquetteArticle(): Promise<NewcomerArticle>
+api.newcomerTraining.completeBusinessEtiquetteArticleChapter(
+  chapterId: string,
+  options?: { learning_content_id?: string | null },
+): Promise<NewcomerArticleProgressResponse>
+```
+
+Time-sensitive tests express a runner-local browser hour:
+
+```ts
+vi.useFakeTimers();
+vi.setSystemTime(new Date(2026, 3, 9, 20, 0, 0));
+```
+
+### 3. Contracts
+
+- Type shared response helpers as the public DTO so newly required projection fields fail at compile time.
+- A `TrainingJourneyResponse` fixture includes `learning_topics` and `retraining_requests`; a governed
+  business-etiquette topic remains `required: false`, `blocks_next: false`, and owns `ai_coach` availability.
+- Mock the exact public facade called by production. Do not keep a green mock for a legacy method that the
+  page no longer invokes.
+- Preserve missing/disabled projection fixtures as explicit fail-closed tests; a shared happy-path fixture
+  must not erase the error branch.
+- Tests for `Date#getHours()` use the numeric local constructor, not an offset-bearing ISO instant whose
+  local hour changes with the runner timezone.
+- When a test compares local calendar days/weeks, fake now and event timestamps must originate from the
+  same local calendar. Construct event `Date`s locally, then call `.toISOString()` for API-shaped fields;
+  do not mix runner-local now with near-midnight hard-coded UTC events.
+- Restore real timers in `afterEach`, including when an assertion fails before the test body finishes.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required assertion |
+|---|---|
+| Governed topic absent | Page shows the current unpublished/unavailable state; downstream article/unit APIs are not called |
+| Topic AI coach unavailable | No coach link; governed `disabled_reason` is visible |
+| URL `unitId` absent | Page does not infer a stale catalog unit; safe route fallback is asserted |
+| Legacy API mock name/signature | Focused test must fail until the mock and call assertion match the public facade |
+| Offset ISO used with `getHours()` | Replace with numeric local date constructor |
+| Local day/week calculation with fixed UTC events | Build now and events from the same local calendar; verify multiple `TZ` values |
+| Fake timers enabled | `afterEach(() => vi.useRealTimers())` is required |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a typed Journey helper contains the non-blocking learning topic, and tests separately cover topic
+  available, coach unavailable, and topic missing.
+- Base: no optional AI coach is configured; article and learning units still load through topic-specific APIs.
+- Bad: add `business_skills` back to required `modules`, derive the coach link from module `next_action`, or
+  mock `getModuleArticle` while production calls `getBusinessEtiquetteArticle`.
+
+### 6. Tests Required
+
+- Happy path: governed topic loads article/units through the public facade with exact call signatures.
+- Authority: catalog and module projections are not consulted for topic article/coach truth.
+- Fail closed: topic missing and Journey rejection prevent downstream calls.
+- Time: morning/evening assertions freeze runner-local hours and prove timer cleanup through the surrounding suite.
+- Calendar: streak/week assertions pass under at least UTC, an Asian timezone, and an American timezone.
+- Verification: focused Vitest, strict `tsc --noEmit`, target ESLint, then full `npx vitest run` natural exit.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+vi.setSystemTime(new Date("2026-04-09T20:00:00+08:00"));
+getJourneyMock.mockResolvedValue({ modules: [legacyBusinessModule] });
+completeChapterMock.mockImplementation((_moduleKey, chapterId) => undefined);
+```
+
+The instant is noon in a UTC runner, the fixture omits the current topic projection, and the mock keeps an
+obsolete three-argument contract alive.
+
+#### Correct
+
+```ts
+afterEach(() => vi.useRealTimers());
+vi.setSystemTime(new Date(2026, 3, 9, 20, 0, 0));
+getJourneyMock.mockResolvedValue(typedJourneyWithBusinessEtiquetteTopic());
+const localEventIso = new Date(2026, 3, 9, 8, 0, 0).toISOString();
+expect(completeChapterMock).toHaveBeenCalledWith("chapter-1", {
+  learning_content_id: "article-1",
+});
+```
+
 ---
 
 ## Lint

@@ -1,14 +1,15 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 1A 已完成）
+状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 0C、Gate 1A 已完成）
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 
 实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
 和 Realtime 测试合同；聚焦回归为 `53 passed, 1 warning`。Gate 1A 已将当前 49 条
 跨包边、12 包 SCC 和临时例外纳入 CI。Gate 0B 已逐项清零后端 15 个失败，最终
-unit + contract 为 `2617 passed, 1 skipped, 74 warnings`。Gate 0C、Gate 1B 及
-Gate 2–6 仍按路线图推进，本文件的目标架构尚未整体落地。
+unit + contract 为 `2617 passed, 1 skipped, 74 warnings`。Gate 0C 已把前端全量恢复为
+209 files、1327 passed、6 skipped，并在 5:54.32 自然 exit 0。Gate 1B 及 Gate 2–6
+仍按路线图推进，本文件的目标架构尚未整体落地。
 
 ## 1. 背景
 
@@ -56,13 +57,14 @@ strangler 切片把现有物理目录逐步深化为真正的 Module。
   来自真实 OpenAPI 漂移；
 - committed OpenAPI 330 paths，runtime OpenAPI 491 paths，runtime-only 161；
 - Realtime 另有 reconnect fake token 和异步 transcript sink 时序测试漂移；
-- 前端全量 Vitest 已确认 dashboard 1 个时间断言失败、business-skills 16 个
-  fixture/topic-governance 失败；完整运行超过 5 分钟仍未自然收敛，已主动终止，
-  不把它伪报为完整失败清单。
+- 前端初始短窗口曾确认 dashboard 1 个时间断言失败、business-skills 16 个
+  fixture/topic-governance 失败；Gate 0C 随后用 420 秒诊断保护得到完整 209-file 基线，
+  证明当时的“超过 5 分钟”是观察窗口不足而非进程挂住。
 
 因此，Gate 0 必须先恢复测试事实，不能直接把当时的全量测试加入发布门禁。截至
 2026-07-10，Gate 0A 已恢复平台合同真相，Gate 0B 已使后端 unit + contract 达到
-`2617 passed, 1 skipped`；Gate 0C 的前端全量绿色和自然退出仍待闭环。
+`2617 passed, 1 skipped`；Gate 0C 也已达到 209 files 全绿、1327 passed、6 skipped，
+并在 5:54.32 自然退出。Gate 1B 可以基于这些事实接入自动发现和变更覆盖。
 
 ## 3. 设计目标
 

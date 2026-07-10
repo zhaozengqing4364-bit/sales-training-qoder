@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端整体边界和交付门禁复核。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "测试隔离、自然退出、TypeScript 与 ESLint 复核。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "effect/计时器/异步任务生命周期复核。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Journey DTO 与公开 API mock 的完整类型/签名复核。"}
+{"file": ".trellis/spec/backend/sales-trainer-learning-topic-governance.md", "reason": "learning topic fail-closed 和 AI coach authority 复核。"}
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "架构依赖基线复核。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Journey→hook→UI 数据流与故障分支复核。"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "研究、PRD、实现和最终证据一致性复核。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0c/research/frontend-failure-classification.md", "reason": "17 项失败分类和语义迁移验收依据。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0c/research/vitest-runtime-exit-diagnosis.md", "reason": "自然退出与 CI timeout 验收依据。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0c/research/design-artifact-audit.md", "reason": "七维设计审计和禁止回退项复核。"}

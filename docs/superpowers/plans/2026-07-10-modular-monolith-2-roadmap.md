@@ -15,9 +15,9 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 |------|------|-------------------|
 | 0A | Completed（2026-07-10） | 5 个工作提交；聚焦回归 `53 passed`；OpenAPI parity 已进入主门禁 |
 | 0B | Completed（2026-07-10） | 15 项逐项分类并清零；后端 unit + contract `2617 passed`；ForbiddenWord 事务/DTO 合同闭环 |
-| 0C | Pending | 恢复全量 Vitest 绿色和自然退出 |
+| 0C | Completed（2026-07-10） | 17 项失败按时区/fixture/旧语义清零；209 files / 1327 passed / 6 skipped；5:54.32 自然 exit 0 |
 | 1A | Completed（2026-07-10） | 49 条边全部受 policy 治理；12 包 SCC 只许缩小；guard 已进入主门禁 |
-| 1B | Blocked by 0C | 全量自动发现、影响测试选择和变更覆盖；纳入持久化进度→路径解锁 branch coverage |
+| 1B | Ready | Gate 0B/0C 全绿；下一步接入全量自动发现、影响测试选择和变更覆盖，并纳入持久化进度→路径解锁 branch coverage |
 | 2–6 | Not started | 按顺序实施 Realtime、Provider、领域所有权、Locality 和兼容层退役 |
 
 Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进度，不把已批准的目标
@@ -69,14 +69,22 @@ save/publish 入口，不再绕过 canonical 发布校验。Secret scan 使用�
 
 ### Gate 0C：前端回归真相
 
-当前已复现：
+状态：**Completed（2026-07-10）**。可观测基线为 209 files、17 failed、
+1309 passed、6 skipped，366.45 秒；最终为 209 files 全绿、1327 passed、6 skipped，
+352.93 秒 / 5:54.32 wall clock，自然 exit 0，`hanging-process` 未报告遗留句柄。
 
-- dashboard greeting 测试依赖实际系统时钟，未冻结时间；
-- business-skills 的 16 个失败都先落入“学习专题未发布”分支，说明测试共享 mock
-  未覆盖新增 topic-governance API，而不是 16 个独立 UI bug；
-- 全量 Vitest 运行超过 5 分钟，需建立 per-file duration 和 open-handle 诊断。
+已闭环：
 
-验收：全量 Vitest 绿色且能在规定 CI timeout 内自然退出。
+- dashboard 用 runner-local fake system time，并在 `afterEach` 恢复 real timers；
+- business-skills Journey fixture 迁到 non-blocking `learning_topics`，公开 API mock 迁到
+  topic-specific facade；
+- 5 个旧 required module/active path/catalog/next-action 用例改为 Learning Topic 当前治理语义；
+- 新增专题未发布 fail-closed 回归；未修改生产代码、runner 并行配置或既有 skip。
+
+详细计划：
+`docs/superpowers/plans/2026-07-10-gate-0c-frontend-regression-truth.md`。
+
+验收：**通过**。全量 Vitest 绿色且远低于 45 分钟 release-truth job timeout，自然退出。
 
 ## Gate 1：建立架构和测试护栏
 
@@ -101,7 +109,7 @@ Architecture guard 与 19 个单测已进入主门禁。
 - 保留 critical-quality-gate 的关键路径 E2E；
 - 增加 changed-line coverage 和关键状态机 branch coverage。
 
-前置：Gate 0B 已全绿；仍等待 Gate 0C 全绿，避免把前端现有失败引入永久排除列表。
+前置：**已满足**。Gate 0B 后端与 Gate 0C 前端全量均已绿色，未引入永久排除列表。
 
 ## Gate 2：Realtime Session Engine tracer bullet
 

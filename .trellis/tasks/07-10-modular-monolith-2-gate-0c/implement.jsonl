@@ -1,0 +1,12 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端开发总索引、组件和验证边界。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Vitest、TypeScript、ESLint、生命周期清理和回归要求。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "页面 useEffect/useState 数据加载与卸载清理的现行约定。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "公开 API facade、snake_case DTO 与严格 TypeScript fixture 合同。"}
+{"file": ".trellis/spec/backend/sales-trainer-learning-topic-governance.md", "reason": "商务礼仪已由 learning topic 而非旧 required module/active path 治理。"}
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "测试迁移不得引入新的跨包依赖或旁路。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用公开 API facade 和集中 journey fixture，避免重复旧合同。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Journey DTO 到 hook 到页面断言的端到端语义对齐。"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "PRD、失败分类、类型字段、调用语义和验证证据一致性。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0c/research/frontend-failure-classification.md", "reason": "17 项失败的逐簇根因、当前合同和禁止伪修复。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0c/research/vitest-runtime-exit-diagnosis.md", "reason": "全量 Vitest 自然退出、耗时、runner 与 CI timeout 的实证。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-0c/research/design-artifact-audit.md", "reason": "七维审计确认公开 API、DTO、旧语义迁移和 runner 边界。"}
