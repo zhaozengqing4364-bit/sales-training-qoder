@@ -21,6 +21,12 @@ from common.services.practice_session_ports import (
     register_runtime_policy_resolver_factory,
 )
 from curriculum_practice.models import PracticeTemplate
+from sales_trainer.models import (
+    SalesTrainerAudioScorePrompt,
+    SalesTrainerAudioScoreResult,
+    SalesTrainerAudioSubmission,
+    SalesTrainerUnit,
+)
 from sales_trainer.permissions import can_enter_sales_trainer_realtime
 from sales_trainer.schemas import RealtimeRoleplayStartResponse
 from sales_trainer.services.asset_revision_service import (
@@ -81,7 +87,37 @@ async def _publish_realtime_path(
     actor: User,
     binding: dict[str, object],
     learner_level_required: list[str] | None = None,
+    prerequisite_unit_id: str | None = None,
 ) -> str:
+    modules: list[dict[str, object]] = []
+    if prerequisite_unit_id is not None:
+        modules.append(
+            {
+                "module_key": "ppt_explanation",
+                "module_type": "audio_scoring",
+                "enabled": True,
+                "order_index": 1,
+                "title": "PPT 讲解",
+                "target_unit_id": prerequisite_unit_id,
+                "completion_rule": "passed",
+                "unlock_after_unit_ids": [],
+            }
+        )
+    modules.append(
+        {
+            "module_key": "realtime_roleplay",
+            "module_type": "realtime_roleplay",
+            "enabled": True,
+            "order_index": 2 if prerequisite_unit_id is not None else 4,
+            "title": "实时对练",
+            "completion_rule": "submitted",
+            "learner_level_required": learner_level_required or [],
+            "unlock_after_unit_ids": (
+                [prerequisite_unit_id] if prerequisite_unit_id is not None else []
+            ),
+            "runtime_binding": binding,
+        }
+    )
     result = await SalesTrainerAssetRevisionService(db).create_published_revision(
         resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
         logical_id=NEWCOMER_PATH_LOGICAL_ID,
@@ -89,18 +125,7 @@ async def _publish_realtime_path(
             "path_key": NEWCOMER_PATH_LOGICAL_ID,
             "title": "新人训练路径",
             "enabled": True,
-            "modules": [
-                {
-                    "module_key": "realtime_roleplay",
-                    "module_type": "realtime_roleplay",
-                    "enabled": True,
-                    "order_index": 4,
-                    "title": "实时对练",
-                    "completion_rule": "submitted",
-                    "learner_level_required": learner_level_required or [],
-                    "runtime_binding": binding,
-                }
-            ],
+            "modules": modules,
         },
         actor=actor,
         change_class="semantic",
@@ -108,6 +133,50 @@ async def _publish_realtime_path(
     )
     await db.commit()
     return str(result.revision.revision_id)
+
+
+async def _seed_passed_audio_evidence(
+    db: AsyncSession,
+    *,
+    learner: User,
+    prompt: SalesTrainerAudioScorePrompt,
+    unit: SalesTrainerUnit,
+    revision_id: str,
+) -> None:
+    submission = SalesTrainerAudioSubmission(
+        submission_id=str(uuid.uuid4()),
+        unit_id=unit.unit_id,
+        user_id=learner.user_id,
+        purpose="ppt_pitch",
+        original_filename="realtime-prerequisite.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/realtime-prerequisite.wav",
+        task_brief_snapshot={
+            "submission_context": {
+                "path_key": NEWCOMER_PATH_LOGICAL_ID,
+                "path_revision_id": revision_id,
+                "path_revision_no": 1,
+                "module_key": "ppt_explanation",
+                "legacy_snapshot_only": False,
+            }
+        },
+        status="scored",
+    )
+    score = SalesTrainerAudioScoreResult(
+        score_id=str(uuid.uuid4()),
+        submission_id=submission.submission_id,
+        prompt_id=prompt.prompt_id,
+        prompt_version=1,
+        prompt_hash="realtime-prerequisite-hash",
+        total_score=90,
+        passed=True,
+        strengths=[],
+        improvements=[],
+        dimension_scores={},
+    )
+    db.add_all([submission, score])
+    await db.commit()
 
 
 async def _publish_ready_runtime_registry(
@@ -353,6 +422,99 @@ async def test_start_realtime_roleplay_fails_when_module_is_locked_by_learner_le
     assert exc_info.value.status_code == 404
     session_count = await test_db.scalar(select(func.count(PracticeSession.session_id)))
     assert session_count == 0
+
+
+@pytest.mark.asyncio
+async def test_start_realtime_roleplay_requires_active_revision_prerequisite_evidence(
+    test_db: AsyncSession,
+) -> None:
+    learner = _user("user")
+    admin = _user("admin")
+    template_id = str(uuid.uuid4())
+    agent_id = str(uuid.uuid4())
+    persona_id = str(uuid.uuid4())
+    runtime_profile_id = str(uuid.uuid4())
+    template = PracticeTemplate(
+        template_id=template_id,
+        name="前置闸门实时对练模板",
+        scenario_type="sales",
+        mode="customer_roleplay",
+        agent_id=agent_id,
+        persona_id=persona_id,
+        runtime_profile_id=runtime_profile_id,
+        voice_mode="stepfun_realtime",
+        scoring_ruleset_id=str(uuid.uuid4()),
+        knowledge_base_refs=[],
+        status="published",
+    )
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="实时对练前置评分",
+        purpose="ppt_pitch",
+        system_prompt="评分。",
+        scoring_template="评分：{transcript}",
+        output_schema={},
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    prerequisite_unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="PPT 讲解",
+        unit_type="audio_scoring",
+        config={},
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    test_db.add_all([learner, admin, template, prompt, prerequisite_unit])
+    await test_db.commit()
+    await _publish_ready_runtime_registry(test_db, actor=admin)
+    active_revision_id = await _publish_realtime_path(
+        test_db,
+        actor=admin,
+        binding=_ready_binding(template_id),
+        prerequisite_unit_id=prerequisite_unit.unit_id,
+    )
+
+    with pytest.raises(RealtimeRoleplayStartError) as locked:
+        await RealtimeRoleplayStartService(test_db).start(actor=learner)
+    assert locked.value.code == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    assert locked.value.status_code == 404
+    assert await test_db.scalar(select(func.count(PracticeSession.session_id))) == 0
+
+    await _seed_passed_audio_evidence(
+        test_db,
+        learner=learner,
+        prompt=prompt,
+        unit=prerequisite_unit,
+        revision_id="old-path-revision",
+    )
+    with pytest.raises(RealtimeRoleplayStartError) as stale:
+        await RealtimeRoleplayStartService(test_db).start(actor=learner)
+    assert stale.value.code == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    assert stale.value.status_code == 404
+    assert await test_db.scalar(select(func.count(PracticeSession.session_id))) == 0
+
+    await _seed_passed_audio_evidence(
+        test_db,
+        learner=learner,
+        prompt=prompt,
+        unit=prerequisite_unit,
+        revision_id=active_revision_id,
+    )
+    _register_practice_ports(
+        agent_id=agent_id,
+        persona_id=persona_id,
+        runtime_profile_id=runtime_profile_id,
+    )
+    try:
+        result = await RealtimeRoleplayStartService(test_db).start(actor=learner)
+    finally:
+        clear_practice_session_contributors()
+
+    assert result["path_revision_id"] == active_revision_id
+    assert await test_db.scalar(select(func.count(PracticeSession.session_id))) == 1
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from sales_trainer.models import SalesTrainerAssetRevision, SalesTrainerUnit
 from sales_trainer.schemas import (
+    NEWCOMER_PATH_HISTORICAL_PREREQUISITE_CONTEXT,
     AiCoachConfig,
     NewcomerPathConfigPayload,
     NewcomerPathModuleConfig,
@@ -23,6 +24,10 @@ from sales_trainer.services.audio_evaluation_scenarios import (
     resolve_audio_evaluation_scenario_from_config,
 )
 from sales_trainer.services.path_config_audio_refs import audio_refs_from_unit
+from sales_trainer.services.path_prerequisite_policy import (
+    PrerequisiteReferenceError,
+    validate_prerequisite_references,
+)
 from sales_trainer.services.readiness_state import CAPABILITY_KEYS
 
 PathModuleBindingRef = tuple[Any, ...]
@@ -181,6 +186,15 @@ def validate_path_payload_for_write(payload: NewcomerPathConfigPayload) -> None:
             )
         seen_order_indexes.add(module.order_index)
 
+    try:
+        validate_prerequisite_references(payload.modules)
+    except PrerequisiteReferenceError as exc:
+        raise SalesTrainerPathConfigError(
+            "[NEWCOMER_PATH_PREREQUISITE_INVALID]",
+            str(exc),
+            422,
+        ) from exc
+
 
 def path_config(config: dict[str, Any]) -> SalesTrainerPathConfig | None:
     raw_path = config.get("path")
@@ -270,38 +284,43 @@ def path_config_from_module(
     level_title: str | None = None,
     order_index: int | None = None,
 ) -> SalesTrainerPathConfig:
-    return SalesTrainerPathConfig(
-        enabled=module.enabled,
-        path_key=payload.path_key,
-        module_key=module.module_key,
-        scenario_key=module.scenario_key,
-        module_type=module.module_type,
-        path_title=payload.title,
-        goal_title=payload.goal_title,
-        level_title=level_title or module.title,
-        level_description=module.description,
-        order_index=order_index or module.order_index,
-        target_unit_id=target_unit_id or module.target_unit_id,
-        learning_content_id=module.learning_content_id,
-        exam_paper_id=module.exam_paper_id,
-        material_id=module.material_id,
-        material_version_id=module.material_version_id,
-        scoring_prompt_id=module.scoring_prompt_id,
-        disabled_reason=module.disabled_reason,
-        unlock_after_unit_ids=module.unlock_after_unit_ids,
-        capability_keys=module.capability_keys,
-        learner_level_required=module.learner_level_required,
-        completion_rule=module.completion_rule,
-        primary_action_label=module.primary_action_label,
-        retry_action_label=module.retry_action_label,
-        review_action_label=module.review_action_label,
-        guidance_templates=module.guidance_templates,
-        ai_coach=module.ai_coach.model_dump(mode="json") if module.ai_coach else None,
-        runtime_binding=(
-            module.runtime_binding.model_dump(mode="json")
-            if module.runtime_binding
-            else None
-        ),
+    return SalesTrainerPathConfig.model_validate(
+        {
+            "enabled": module.enabled,
+            "path_key": payload.path_key,
+            "module_key": module.module_key,
+            "scenario_key": module.scenario_key,
+            "module_type": module.module_type,
+            "path_title": payload.title,
+            "goal_title": payload.goal_title,
+            "level_title": level_title or module.title,
+            "level_description": module.description,
+            "order_index": order_index or module.order_index,
+            "target_unit_id": target_unit_id or module.target_unit_id,
+            "learning_content_id": module.learning_content_id,
+            "exam_paper_id": module.exam_paper_id,
+            "material_id": module.material_id,
+            "material_version_id": module.material_version_id,
+            "scoring_prompt_id": module.scoring_prompt_id,
+            "disabled_reason": module.disabled_reason,
+            "unlock_after_unit_ids": module.unlock_after_unit_ids,
+            "capability_keys": module.capability_keys,
+            "learner_level_required": module.learner_level_required,
+            "completion_rule": module.completion_rule,
+            "primary_action_label": module.primary_action_label,
+            "retry_action_label": module.retry_action_label,
+            "review_action_label": module.review_action_label,
+            "guidance_templates": module.guidance_templates,
+            "ai_coach": (
+                module.ai_coach.model_dump(mode="json") if module.ai_coach else None
+            ),
+            "runtime_binding": (
+                module.runtime_binding.model_dump(mode="json")
+                if module.runtime_binding
+                else None
+            ),
+        },
+        context={NEWCOMER_PATH_HISTORICAL_PREREQUISITE_CONTEXT: True},
     )
 
 
@@ -309,7 +328,10 @@ def payload_from_revision(
     revision: SalesTrainerAssetRevision,
 ) -> NewcomerPathConfigPayload:
     try:
-        return NewcomerPathConfigPayload.model_validate(revision.payload_json)
+        return NewcomerPathConfigPayload.model_validate(
+            revision.payload_json,
+            context={NEWCOMER_PATH_HISTORICAL_PREREQUISITE_CONTEXT: True},
+        )
     except ValidationError as exc:
         raise SalesTrainerPathConfigError(
             "[NEWCOMER_PATH_REVISION_INVALID]",

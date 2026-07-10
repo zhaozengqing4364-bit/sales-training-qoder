@@ -52,13 +52,14 @@ def _published_material(
     admin: User,
     *,
     key_prefix: str,
+    purpose: str = "ppt_pitch",
 ) -> tuple[SalesTrainerMaterial, SalesTrainerMaterialVersion]:
     material = SalesTrainerMaterial(
         material_id=str(uuid.uuid4()),
         material_key=f"{key_prefix}-{uuid.uuid4().hex[:8]}",
         name=f"{key_prefix} 材料",
         material_type="ppt_deck",
-        purpose="ppt_pitch",
+        purpose=purpose,
         status="published",
         created_by=admin.user_id,
         updated_by=admin.user_id,
@@ -78,6 +79,50 @@ def _published_material(
     )
     material.current_version_id = version.version_id
     return material, version
+
+
+async def _seed_passed_prerequisite_audio(
+    test_db: AsyncSession,
+    *,
+    learner: User,
+    prompt: SalesTrainerAudioScorePrompt,
+    unit: SalesTrainerUnit,
+    revision_id: str,
+) -> None:
+    submission = SalesTrainerAudioSubmission(
+        submission_id=str(uuid.uuid4()),
+        unit_id=unit.unit_id,
+        user_id=learner.user_id,
+        purpose="ppt_pitch",
+        original_filename="audio-prerequisite.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/audio-prerequisite.wav",
+        task_brief_snapshot={
+            "submission_context": {
+                "path_key": "newcomer_training_path_v1",
+                "path_revision_id": revision_id,
+                "path_revision_no": 1,
+                "module_key": "ppt_explanation",
+                "legacy_snapshot_only": False,
+            }
+        },
+        status="scored",
+    )
+    score = SalesTrainerAudioScoreResult(
+        score_id=str(uuid.uuid4()),
+        submission_id=submission.submission_id,
+        prompt_id=prompt.prompt_id,
+        prompt_version=1,
+        prompt_hash="audio-prerequisite-hash",
+        total_score=88,
+        passed=True,
+        strengths=[],
+        improvements=[],
+        dimension_scores={},
+    )
+    test_db.add_all([submission, score])
+    await test_db.commit()
 
 
 async def _publish_audio_path(
@@ -137,6 +182,174 @@ class _FakeTranscriptionService:
             transcript_text="大家好，今天我介绍石犀的数据流动治理价值。",
             raw_payload={"storage_key": storage_key},
         )
+
+
+@pytest.mark.asyncio
+async def test_should_block_dependent_audio_submission_until_active_revision_evidence(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="前置闸门评分标准",
+        purpose="ppt_pitch",
+        system_prompt="你是销售训练评分员。",
+        scoring_template="请评分：{transcript}",
+        output_schema={},
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    owner_material, owner_version = _published_material(
+        admin,
+        key_prefix="prerequisite-owner",
+    )
+    dependent_material, dependent_version = _published_material(
+        admin,
+        key_prefix="prerequisite-dependent",
+        purpose="company_product_demo",
+    )
+    owner_unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="PPT 讲解",
+        unit_type="audio_scoring",
+        config={
+            "audio": {
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 80,
+                "purpose": "ppt_pitch",
+            }
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    dependent_unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="公司产品 Demo",
+        unit_type="audio_scoring",
+        config={
+            "audio": {
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 80,
+                "purpose": "company_product_demo",
+            }
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    test_db.add_all(
+        [
+            admin,
+            learner,
+            prompt,
+            owner_material,
+            owner_version,
+            dependent_material,
+            dependent_version,
+            owner_unit,
+            dependent_unit,
+        ]
+    )
+    await test_db.commit()
+
+    path_service = SalesTrainerPathConfigService(test_db)
+    await path_service.save_config(
+        NewcomerPathConfigSaveRequest(
+            title="新人训练路径",
+            reason="发布录音提交前置闸门",
+            modules=[
+                NewcomerPathModuleConfig(
+                    module_key="ppt_explanation",
+                    module_type="audio_scoring",
+                    enabled=True,
+                    order_index=1,
+                    title="PPT 讲解",
+                    target_unit_id=owner_unit.unit_id,
+                    material_id=owner_material.material_id,
+                    material_version_id=owner_version.version_id,
+                    completion_rule="passed",
+                ),
+                NewcomerPathModuleConfig(
+                    module_key="company_product_demo",
+                    module_type="audio_scoring",
+                    enabled=True,
+                    order_index=2,
+                    title="公司产品 Demo",
+                    target_unit_id=dependent_unit.unit_id,
+                    material_id=dependent_material.material_id,
+                    material_version_id=dependent_version.version_id,
+                    unlock_after_unit_ids=[owner_unit.unit_id],
+                    completion_rule="passed",
+                ),
+            ],
+        ),
+        actor=admin,
+    )
+    publish_result = await path_service.publish_config(
+        actor=admin,
+        reason="录音提交前置闸门生效",
+    )
+    active_revision_id = str(publish_result.revision.revision_id)
+    request = AudioSubmissionCreate(
+        unit_id=dependent_unit.unit_id,
+        purpose="company_product_demo",
+        original_filename="company-demo.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/company-demo.wav",
+        confirmed_material_version_id=dependent_version.version_id,
+        auto_process=False,
+    )
+    audio_service = AudioSubmissionService(test_db)
+
+    with pytest.raises(AudioSubmissionServiceError) as locked:
+        await audio_service.create_submission(request, actor=learner)
+    assert locked.value.code == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    assert locked.value.status_code == 404
+    assert (
+        await test_db.scalar(
+            select(func.count())
+            .select_from(SalesTrainerAudioSubmission)
+            .where(SalesTrainerAudioSubmission.unit_id == dependent_unit.unit_id)
+        )
+        == 0
+    )
+
+    await _seed_passed_prerequisite_audio(
+        test_db,
+        learner=learner,
+        prompt=prompt,
+        unit=owner_unit,
+        revision_id="old-path-revision",
+    )
+    with pytest.raises(AudioSubmissionServiceError) as stale:
+        await audio_service.create_submission(request, actor=learner)
+    assert stale.value.code == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+    assert stale.value.status_code == 404
+    assert (
+        await test_db.scalar(
+            select(func.count())
+            .select_from(SalesTrainerAudioSubmission)
+            .where(SalesTrainerAudioSubmission.unit_id == dependent_unit.unit_id)
+        )
+        == 0
+    )
+
+    await _seed_passed_prerequisite_audio(
+        test_db,
+        learner=learner,
+        prompt=prompt,
+        unit=owner_unit,
+        revision_id=active_revision_id,
+    )
+    submission = await audio_service.create_submission(request, actor=learner)
+
+    assert submission.unit_id == dependent_unit.unit_id
+    serialized = await audio_service.serialize_submission(submission)
+    assert serialized["path_revision_id"] == active_revision_id
 
 
 class _CaptureScoringService:
@@ -479,7 +692,9 @@ async def test_should_use_path_audio_bindings_when_submitting_and_scoring(
         created_by=admin.user_id,
         updated_by=admin.user_id,
     )
-    test_db.add_all([admin, learner, legacy_prompt, path_prompt, material, version, unit])
+    test_db.add_all(
+        [admin, learner, legacy_prompt, path_prompt, material, version, unit]
+    )
     await test_db.commit()
 
     path_service = SalesTrainerPathConfigService(test_db)
@@ -573,7 +788,10 @@ async def test_should_use_path_audio_bindings_when_submitting_and_scoring(
     assert scoring.prompt_id == path_prompt.prompt_id
     assert scoring.pass_threshold == 73
     assert serialized["score_scheme_snapshot"]["prompt_id"] == path_prompt.prompt_id
-    assert serialized["material_snapshot"]["items"][0]["material_id"] == material.material_id
+    assert (
+        serialized["material_snapshot"]["items"][0]["material_id"]
+        == material.material_id
+    )
     assert serialized["score_result"]["prompt_id"] == path_prompt.prompt_id
     assert serialized["score_result"]["legacy_snapshot_only"] is False
 
@@ -624,7 +842,9 @@ async def test_should_use_effective_path_config_for_unit_brief_api(
         created_by=admin.user_id,
         updated_by=admin.user_id,
     )
-    test_db.add_all([admin, learner, legacy_prompt, path_prompt, material, version, unit])
+    test_db.add_all(
+        [admin, learner, legacy_prompt, path_prompt, material, version, unit]
+    )
     await test_db.commit()
 
     path_service = SalesTrainerPathConfigService(test_db)
@@ -1133,7 +1353,9 @@ async def test_should_expand_audio_group_duration_options_and_score_with_group_p
         reason="电梯演讲路径生效",
     )
 
-    paths = await SalesTrainerPathService(test_db).list_paths_for_user(str(learner.user_id))
+    paths = await SalesTrainerPathService(test_db).list_paths_for_user(
+        str(learner.user_id)
+    )
     levels = paths[0]["levels"]
     assert [level["unit_id"] for level in levels] == [unit_10.unit_id, unit_20.unit_id]
     assert [level["level_title"] for level in levels] == ["10 分钟", "20 分钟"]

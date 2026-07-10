@@ -47,6 +47,11 @@ from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_RESOURCE_TYPE,
     payload_from_revision,
 )
+from sales_trainer.services.path_prerequisite_policy import (
+    PREREQUISITE_CONFIG_INVALID_CODE,
+    PrerequisiteModuleState,
+    evaluate_prerequisites,
+)
 from sales_trainer.services.quiz_service import QuizService
 from sales_trainer.services.readiness_review_action_service import (
     ReadinessReviewActionService,
@@ -148,6 +153,7 @@ class JourneyModule:
     completion_rule: str
     target_unit_id: str | None
     target_unit_ids: tuple[str, ...] = ()
+    unlock_after_unit_ids: tuple[str, ...] = ()
     capability_keys: tuple[str, ...] = ()
     learning_content_id: str | None = None
     exam_paper_id: str | None = None
@@ -433,6 +439,7 @@ class TrainingJourneyService:
             overall=initial_overall,
         )
         self._apply_learner_level_required(modules, learner_level)
+        self._apply_prerequisite_decisions(modules, outcomes)
         module_payloads = [
             self._module_payload(
                 module, outcomes.get(self._bucket_key(module), []), active
@@ -582,6 +589,7 @@ class TrainingJourneyService:
             completion_rule=module.completion_rule,
             target_unit_id=module.target_unit_id,
             target_unit_ids=self._target_unit_ids(module),
+            unlock_after_unit_ids=tuple(module.unlock_after_unit_ids),
             capability_keys=tuple(module.capability_keys),
             learning_content_id=module.learning_content_id,
             exam_paper_id=module.exam_paper_id,
@@ -646,6 +654,7 @@ class TrainingJourneyService:
             completion_rule="passed",
             target_unit_id=None,
             target_unit_ids=(),
+            unlock_after_unit_ids=tuple(module.unlock_after_unit_ids),
             capability_keys=tuple(module.capability_keys),
             learning_content_id=module.learning_content_id,
             exam_paper_id=module.exam_paper_id,
@@ -678,6 +687,76 @@ class TrainingJourneyService:
                     "当前学员等级不满足 active path revision 的模块开放条件。",
                     severity="warning",
                     terminal=True,
+                )
+            )
+
+    def _apply_prerequisite_decisions(
+        self,
+        modules: list[JourneyModule],
+        outcomes: dict[str, list[dict[str, Any]]],
+    ) -> None:
+        states: list[PrerequisiteModuleState] = []
+        base_modules: dict[str, JourneyModule] = {}
+        for module in modules:
+            if module.kind == "ai_coach":
+                continue
+            base_modules.setdefault(module.module_key, module)
+            history = outcomes.get(self._bucket_key(module), [])
+            latest = history[0] if history else None
+            target_unit_ids = tuple(
+                dict.fromkeys(
+                    value
+                    for value in (*module.target_unit_ids, module.target_unit_id)
+                    if isinstance(value, str) and value.strip()
+                )
+            )
+            states.append(
+                PrerequisiteModuleState(
+                    module_key=module.module_key,
+                    module_type=module.module_type,
+                    order_index=module.order_index,
+                    target_unit_ids=target_unit_ids,
+                    unlock_after_unit_ids=module.unlock_after_unit_ids,
+                    enabled=module.enabled,
+                    completion_satisfied=self._completion_satisfied(module, latest),
+                    completed_target_unit_ids=(
+                        self._completed_prerequisite_target_unit_ids(module, history)
+                    ),
+                    already_locked=module.locked,
+                )
+            )
+
+        decisions = evaluate_prerequisites(states)
+        for module in modules:
+            decision = decisions.get(module.base_module_key)
+            if decision is None or not decision.locked:
+                continue
+            was_locked = module.locked
+            module.locked = True
+            if decision.reason_code is None:
+                base_module = base_modules.get(module.base_module_key)
+                if was_locked or base_module is None or not base_module.locked:
+                    continue
+                module.lock_status = base_module.lock_status
+                module.block_reason = base_module.block_reason
+                module.diagnostics.extend(
+                    diagnostic
+                    for diagnostic in base_module.diagnostics
+                    if diagnostic not in module.diagnostics
+                )
+                continue
+            config_invalid = decision.reason_code == PREREQUISITE_CONFIG_INVALID_CODE
+            if not was_locked:
+                module.lock_status = (
+                    "error_terminal" if config_invalid else "not_started"
+                )
+                module.block_reason = decision.reason
+            module.diagnostics.append(
+                self._diagnostic(
+                    decision.reason_code,
+                    decision.reason or "",
+                    severity="warning" if config_invalid else "info",
+                    terminal=config_invalid,
                 )
             )
 
@@ -937,7 +1016,7 @@ class TrainingJourneyService:
         modules: list[JourneyModule],
         outcomes: dict[str, list[dict[str, Any]]],
     ) -> None:
-        target_to_bucket: dict[tuple[str, str], str] = {}
+        target_to_source: dict[tuple[str, str], tuple[str, dict[str, Any]]] = {}
         for bucket_key, history in outcomes.items():
             for outcome in history:
                 record_type = str(outcome.get("record_type") or "")
@@ -945,8 +1024,11 @@ class TrainingJourneyService:
                     continue
                 source_record_id = str(outcome.get("source_record_id") or "")
                 if source_record_id:
-                    target_to_bucket[(record_type, source_record_id)] = bucket_key
-        if not target_to_bucket:
+                    target_to_source[(record_type, source_record_id)] = (
+                        bucket_key,
+                        outcome,
+                    )
+        if not target_to_source:
             return
 
         module_by_bucket = {self._bucket_key(module): module for module in modules}
@@ -955,20 +1037,19 @@ class TrainingJourneyService:
             .where(
                 SalesTrainerRegradeRun.status.in_(("completed", "failed")),
                 SalesTrainerRegradeRun.target_type.in_(
-                    {target_type for target_type, _ in target_to_bucket}
+                    {target_type for target_type, _ in target_to_source}
                 ),
                 SalesTrainerRegradeRun.target_id.in_(
-                    {target_id for _, target_id in target_to_bucket}
+                    {target_id for _, target_id in target_to_source}
                 ),
             )
             .order_by(SalesTrainerRegradeRun.created_at.desc())
         )
         for run in result.scalars().all():
-            regrade_bucket_key = target_to_bucket.get(
-                (str(run.target_type), str(run.target_id))
-            )
-            if regrade_bucket_key is None:
+            source = target_to_source.get((str(run.target_type), str(run.target_id)))
+            if source is None:
                 continue
+            regrade_bucket_key, original_outcome = source
             module = module_by_bucket.get(regrade_bucket_key)
             if module is None:
                 continue
@@ -978,6 +1059,9 @@ class TrainingJourneyService:
                     run,
                     path_revision_id=path_revision_id,
                     path_revision_no=path_revision_no,
+                    target_unit_id=(
+                        str(original_outcome.get("target_unit_id") or "") or None
+                    ),
                 )
             )
 
@@ -994,6 +1078,7 @@ class TrainingJourneyService:
             module=module,
             record_type="audio_submission",
             record_id=str(payload["submission_id"]),
+            target_unit_id=str(payload.get("unit_id") or "") or None,
             status=status,
             score=score_result.get("total_score"),
             max_score=100.0 if score_result else None,
@@ -1022,6 +1107,7 @@ class TrainingJourneyService:
             module=module,
             record_type="quiz_attempt",
             record_id=str(payload["attempt_id"]),
+            target_unit_id=str(payload.get("unit_id") or "") or None,
             status=status,
             score=payload.get("total_score"),
             max_score=payload.get("max_score"),
@@ -1134,6 +1220,7 @@ class TrainingJourneyService:
         *,
         path_revision_id: str,
         path_revision_no: int,
+        target_unit_id: str | None,
     ) -> dict[str, Any]:
         after_snapshot = json_dict_or_empty(run.after_snapshot_json)
         status, passed, failure_type, failure_code = self._regrade_stage(
@@ -1144,6 +1231,7 @@ class TrainingJourneyService:
             "outcome_id": f"regrade:{run.run_id}",
             "record_type": "regrade",
             "source_record_id": str(run.target_id),
+            "target_unit_id": target_unit_id,
             "module_key": module.module_key,
             "module_type": module.module_type,
             "kind": module.kind,
@@ -1175,6 +1263,7 @@ class TrainingJourneyService:
         module: JourneyModule,
         record_type: OutcomeRecordType,
         record_id: str,
+        target_unit_id: str | None = None,
         status: TrainingStage,
         score: Any,
         max_score: Any,
@@ -1193,6 +1282,7 @@ class TrainingJourneyService:
             "outcome_id": f"{record_type}:{record_id}",
             "record_type": record_type,
             "source_record_id": record_id,
+            "target_unit_id": target_unit_id,
             "module_key": module.module_key,
             "module_type": module.module_type,
             "kind": module.kind,
@@ -1314,6 +1404,28 @@ class TrainingJourneyService:
         if module.completion_rule == "scored":
             return status in {"scored", "passed", "failed"}
         return False
+
+    @classmethod
+    def _completed_prerequisite_target_unit_ids(
+        cls,
+        module: JourneyModule,
+        history: list[dict[str, Any]],
+    ) -> tuple[str, ...] | None:
+        if len(module.target_unit_ids) <= 1:
+            return None
+        completed: list[str] = []
+        for target_unit_id in module.target_unit_ids:
+            latest_for_target = next(
+                (
+                    outcome
+                    for outcome in history
+                    if str(outcome.get("target_unit_id") or "") == target_unit_id
+                ),
+                None,
+            )
+            if cls._completion_satisfied(module, latest_for_target):
+                completed.append(target_unit_id)
+        return tuple(completed)
 
     @staticmethod
     def _next_action(

@@ -12,7 +12,6 @@ from sales_trainer.services.learner_public_projection import (
 from sales_trainer.services.path_guidance import (
     DEFAULT_GUIDANCE_TEMPLATES,
     build_goal_context,
-    guidance_text,
 )
 from sales_trainer.services.path_progress_service import UnitProgress
 
@@ -39,20 +38,6 @@ def build_path_payload(
         )
         for unit, path_config in ordered_items
     ]
-    completed_unit_ids = {
-        level["unit_id"] for level in levels if level["status"] == "completed"
-    }
-    for level in levels:
-        missing = [
-            unit_id
-            for unit_id in level["unlock_after_unit_ids"]
-            if unit_id not in completed_unit_ids
-        ]
-        if missing:
-            level["locked"] = True
-            level["lock_reason"] = guidance_text(level, "locked")
-            level["status"] = "locked"
-        level.pop("unlock_after_unit_ids", None)
 
     available = [
         level
@@ -127,7 +112,6 @@ def _serialize_level(
         "target_path": _unit_target_path(unit, path_config),
         "ai_coach_availability": _ai_coach_availability(path_config),
         "latest_result": _progress_payload(progress),
-        "unlock_after_unit_ids": path_config.unlock_after_unit_ids,
         "guidance_templates": {
             **DEFAULT_GUIDANCE_TEMPLATES,
             **path_config.guidance_templates,
@@ -154,7 +138,7 @@ def _is_completed(progress: UnitProgress | None, rule: str) -> bool:
             "scoring",
             "scoring_failed",
             "scored",
-    }
+        }
     if rule == "scored":
         return bool(progress.status == "scored")
     return progress.passed is True
@@ -171,7 +155,9 @@ def _unit_target_path(
     return f"/sales-trainer/audio/{unit.unit_id}"
 
 
-def _ai_coach_availability(path_config: SalesTrainerPathConfig) -> dict[str, Any] | None:
+def _ai_coach_availability(
+    path_config: SalesTrainerPathConfig,
+) -> dict[str, Any] | None:
     if path_config.module_key != "business_skills":
         return None
     raw_config = path_config.ai_coach
@@ -183,7 +169,7 @@ def _ai_coach_availability(path_config: SalesTrainerPathConfig) -> dict[str, Any
             "coach_path": None,
             "disabled_reason": "AI 教练未启用。",
             "allowed_interaction_types": [],
-    }
+        }
     try:
         ai_coach = AiCoachConfig.model_validate(raw_config)
     except ValidationError:

@@ -11,14 +11,17 @@ from common.db.models import PromptTemplate, User
 from curriculum_practice.models import LearningContent
 from prompt_templates.models import PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
 from sales_trainer.models import (
+    SalesTrainerAssetRevision,
     SalesTrainerExamPaper,
     SalesTrainerOperationLog,
     SalesTrainerUnit,
 )
 from sales_trainer.schemas import (
+    NewcomerPathConfigPayload,
     NewcomerPathConfigResponse,
     NewcomerPathConfigSaveRequest,
     NewcomerPathModuleConfig,
+    SalesTrainerPathConfig,
 )
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
@@ -27,8 +30,15 @@ from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
     NEWCOMER_PATH_RESOURCE_TYPE,
     SalesTrainerPathConfigError,
+    path_config_from_module,
+    payload_from_revision,
+    validate_path_payload_for_write,
 )
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
+from sales_trainer.services.path_prerequisite_policy import (
+    PrerequisiteModuleState,
+    evaluate_prerequisites,
+)
 from sales_trainer.services.path_service import SalesTrainerPathService
 
 
@@ -192,6 +202,174 @@ def _realtime_binding(*, ready: bool = True) -> dict[str, object]:
             "fallback_to_placeholder": False,
         },
     }
+
+
+def _prerequisite_modules(
+    *,
+    second_unlock_after: list[str],
+    first_enabled: bool = True,
+    first_module_key: str = "ppt_explanation",
+    first_module_type: str = "audio_scoring",
+) -> list[dict[str, object]]:
+    return [
+        {
+            "module_key": first_module_key,
+            "module_type": first_module_type,
+            "enabled": first_enabled,
+            "order_index": 1,
+            "title": "前置训练",
+            "target_unit_id": "first-unit",
+        },
+        {
+            "module_key": "company_product_demo",
+            "module_type": "audio_scoring",
+            "enabled": True,
+            "order_index": 2,
+            "title": "后续训练",
+            "target_unit_id": "second-unit",
+            "unlock_after_unit_ids": second_unlock_after,
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    ("dependencies", "expected_fragment"),
+    [
+        (["missing-unit"], "不存在"),
+        (["second-unit"], "必须早于"),
+    ],
+)
+def test_should_map_invalid_prerequisite_to_write_boundary_error(
+    dependencies: list[str],
+    expected_fragment: str,
+) -> None:
+    payload = NewcomerPathConfigPayload.model_validate(
+        {
+            "modules": _prerequisite_modules(second_unlock_after=dependencies),
+        }
+    )
+
+    with pytest.raises(SalesTrainerPathConfigError) as exc_info:
+        validate_path_payload_for_write(payload)
+
+    assert exc_info.value.code == "[NEWCOMER_PATH_PREREQUISITE_INVALID]"
+    assert exc_info.value.status_code == 422
+    assert expected_fragment in exc_info.value.message
+
+
+@pytest.mark.parametrize(
+    "modules",
+    [
+        _prerequisite_modules(
+            second_unlock_after=["first-unit"],
+            first_enabled=False,
+        ),
+        _prerequisite_modules(
+            second_unlock_after=["first-unit"],
+            first_module_key="realtime_roleplay",
+            first_module_type="realtime_roleplay",
+        ),
+        _prerequisite_modules(
+            second_unlock_after=["first-unit"],
+            first_module_key="business_skills",
+            first_module_type="article_exam",
+        ),
+        [
+            {
+                "module_key": "ppt_explanation",
+                "module_type": "audio_scoring",
+                "enabled": True,
+                "order_index": 1,
+                "title": "PPT 讲解",
+                "target_unit_id": "shared-unit",
+            },
+            {
+                "module_key": "company_product_demo",
+                "module_type": "audio_scoring",
+                "enabled": True,
+                "order_index": 2,
+                "title": "产品演示",
+                "target_unit_id": "shared-unit",
+            },
+        ],
+    ],
+)
+def test_should_reject_non_completable_or_ambiguous_prerequisite_owner(
+    modules: list[dict[str, object]],
+) -> None:
+    payload = NewcomerPathConfigPayload.model_validate({"modules": modules})
+
+    with pytest.raises(SalesTrainerPathConfigError) as exc_info:
+        validate_path_payload_for_write(payload)
+
+    assert exc_info.value.code == "[NEWCOMER_PATH_PREREQUISITE_INVALID]"
+    assert exc_info.value.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "model_type",
+    [SalesTrainerPathConfig, NewcomerPathModuleConfig],
+)
+@pytest.mark.parametrize(
+    "unlock_after_unit_ids",
+    [[""], ["  "], ["unit-1", "unit-1"]],
+)
+def test_should_reject_blank_or_duplicate_prerequisite_values_at_schema_boundary(
+    model_type: type[SalesTrainerPathConfig] | type[NewcomerPathModuleConfig],
+    unlock_after_unit_ids: list[str],
+) -> None:
+    payload: dict[str, object] = {
+        "unlock_after_unit_ids": unlock_after_unit_ids,
+    }
+    if model_type is NewcomerPathModuleConfig:
+        payload.update({"module_key": "ppt_explanation", "title": "PPT 讲解"})
+
+    with pytest.raises(ValidationError):
+        model_type.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "unlock_after_unit_ids",
+    [[""], ["first-unit", "first-unit"]],
+)
+def test_should_read_historical_invalid_prerequisite_for_runtime_fail_closed(
+    unlock_after_unit_ids: list[str],
+) -> None:
+    revision = SalesTrainerAssetRevision(
+        revision_id="historical-invalid-prerequisite-revision",
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        revision_no=1,
+        status="published",
+        payload_json={
+            "path_key": NEWCOMER_PATH_LOGICAL_ID,
+            "title": "历史新人路径",
+            "modules": _prerequisite_modules(second_unlock_after=unlock_after_unit_ids),
+        },
+        payload_hash="historical-invalid-prerequisite-hash",
+        change_class="semantic",
+    )
+
+    payload = payload_from_revision(revision)
+    states = [
+        PrerequisiteModuleState(
+            module_key=module.module_key,
+            module_type=module.module_type,
+            order_index=module.order_index,
+            target_unit_ids=(module.target_unit_id,) if module.target_unit_id else (),
+            unlock_after_unit_ids=tuple(module.unlock_after_unit_ids),
+            enabled=module.enabled,
+            completion_satisfied=True,
+        )
+        for module in payload.modules
+    ]
+
+    assert payload.modules[1].unlock_after_unit_ids == unlock_after_unit_ids
+    projected = path_config_from_module(payload, payload.modules[1])
+    assert projected.unlock_after_unit_ids == unlock_after_unit_ids
+    assert evaluate_prerequisites(states)["company_product_demo"].reason_code == (
+        "[NEWCOMER_PATH_PREREQUISITE_CONFIG_INVALID]"
+    )
 
 
 def _business_assets(
@@ -624,17 +802,19 @@ async def test_should_backfill_one_path_module_per_business_stage(
         updated_at=datetime(2026, 2, 15, tzinfo=UTC),
         audio_purpose="pyramid_speech_10m",
     )
-    test_db.add_all([
-        admin,
-        old_business,
-        current_business,
-        ppt_unit,
-        elevator_unit,
-        elevator_20,
-        elevator_30,
-        realtime_unit,
-        uuid_noise,
-    ])
+    test_db.add_all(
+        [
+            admin,
+            old_business,
+            current_business,
+            ppt_unit,
+            elevator_unit,
+            elevator_20,
+            elevator_30,
+            realtime_unit,
+            uuid_noise,
+        ]
+    )
     await test_db.commit()
 
     config = await SalesTrainerPathConfigService(test_db).get_config()
@@ -650,8 +830,7 @@ async def test_should_backfill_one_path_module_per_business_stage(
     assert modules[1]["title"] == "商务技巧当前单元"
     assert modules[2]["target_unit_id"] == elevator_30.unit_id
     assert [
-        option["duration_minutes"]
-        for option in modules[2]["duration_options"]
+        option["duration_minutes"] for option in modules[2]["duration_options"]
     ] == [10, 20, 30]
     assert modules[3]["target_unit_id"] == realtime_unit.unit_id
     assert modules[3]["enabled"] is False
@@ -660,14 +839,16 @@ async def test_should_backfill_one_path_module_per_business_stage(
 @pytest.mark.asyncio
 async def test_should_keep_learner_path_on_active_revision_until_working_is_published(
     test_db: AsyncSession,
-    ) -> None:
+) -> None:
     admin = _admin()
     unit = _unit("path-config-working-unit", title="商务技巧旧版")
     test_db.add_all([admin, unit, *_business_assets(admin, unit)])
     await test_db.commit()
 
     service = SalesTrainerPathConfigService(test_db)
-    await service.save_config(_payload(unit_id=unit.unit_id, title="商务技巧新版"), actor=admin)
+    await service.save_config(
+        _payload(unit_id=unit.unit_id, title="商务技巧新版"), actor=admin
+    )
 
     before_publish = await SalesTrainerPathService(test_db).list_paths_for_user(
         str(admin.user_id)
@@ -698,10 +879,14 @@ async def test_should_expose_active_revision_module_identity_to_learner_path(
         _payload(unit_id=unit.unit_id, title="商务技巧路径配置"),
         actor=admin,
     )
-    publish_result = await service.publish_config(actor=admin, reason="路径 active revision 生效")
+    publish_result = await service.publish_config(
+        actor=admin, reason="路径 active revision 生效"
+    )
     config = await service.get_config()
 
-    paths = await SalesTrainerPathService(test_db).list_paths_for_user(str(admin.user_id))
+    paths = await SalesTrainerPathService(test_db).list_paths_for_user(
+        str(admin.user_id)
+    )
     level = paths[0]["levels"][0]
 
     assert config["source"] == "active_revision"
@@ -712,9 +897,9 @@ async def test_should_expose_active_revision_module_identity_to_learner_path(
     assert config["active_revision_snapshot"]["revision_id"] == str(
         publish_result.revision.revision_id
     )
-    assert config["active_revision_snapshot"]["payload"]["modules"][0]["module_key"] == (
-        "business_skills"
-    )
+    assert config["active_revision_snapshot"]["payload"]["modules"][0][
+        "module_key"
+    ] == ("business_skills")
     assert paths[0]["path_revision_id"] is not None
     assert paths[0]["path_revision_no"] == 1
     assert level["module_key"] == "business_skills"
@@ -802,9 +987,13 @@ async def test_should_rollback_path_config_future_only_and_write_audit_log(
     await test_db.commit()
     service = SalesTrainerPathConfigService(test_db)
 
-    await service.save_config(_payload(unit_id=unit.unit_id, title="商务技巧第一版"), actor=admin)
+    await service.save_config(
+        _payload(unit_id=unit.unit_id, title="商务技巧第一版"), actor=admin
+    )
     first_publish = await service.publish_config(actor=admin, reason="第一版生效")
-    await service.save_config(_payload(unit_id=unit.unit_id, title="商务技巧第二版"), actor=admin)
+    await service.save_config(
+        _payload(unit_id=unit.unit_id, title="商务技巧第二版"), actor=admin
+    )
     await service.publish_config(actor=admin, reason="第二版生效")
 
     before_rollback = await SalesTrainerPathService(test_db).list_paths_for_user(

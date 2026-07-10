@@ -218,6 +218,58 @@ async def _seed_ai_coach_prompt_templates(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "unlock_after_unit_ids",
+    [[""], ["first-unit", "first-unit"]],
+)
+async def test_should_return_stable_error_for_invalid_prerequisite_values_via_put(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    unlock_after_unit_ids: list[str],
+) -> None:
+    admin = _user("admin")
+    test_db.add(admin)
+    await test_db.commit()
+    payload = _path_payload("prerequisite-validation-unit", "前置校验")
+    modules = payload["modules"]
+    assert isinstance(modules, list)
+    module = modules[0]
+    assert isinstance(module, dict)
+    module["unlock_after_unit_ids"] = unlock_after_unit_ids
+
+    response = await async_client.put(
+        "/api/v1/admin/newcomer-training/path-config",
+        headers=_auth_headers(admin),
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "[NEWCOMER_PATH_PREREQUISITE_INVALID]"
+
+
+@pytest.mark.asyncio
+async def test_should_keep_unrelated_path_config_validation_on_default_contract(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    test_db.add(admin)
+    await test_db.commit()
+    payload = _path_payload("unrelated-validation-unit", "格式校验")
+    payload["title"] = ""
+
+    response = await async_client.put(
+        "/api/v1/admin/newcomer-training/path-config",
+        headers=_auth_headers(admin),
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert "error" not in response.json()
+    assert "detail" in response.json()
+
+
+@pytest.mark.asyncio
 async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     async_client: AsyncClient,
     test_db: AsyncSession,
@@ -241,7 +293,9 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     )
     assert backfill_response.status_code == 200
     assert backfill_response.json()["data"]["source"] == "legacy_migration_snapshot"
-    assert backfill_response.json()["data"]["fallback_reason"] == "active_revision_missing"
+    assert (
+        backfill_response.json()["data"]["fallback_reason"] == "active_revision_missing"
+    )
     assert backfill_response.json()["data"]["legacy_snapshot_only"] is True
     diagnostics = backfill_response.json()["data"]["diagnostics"]
     assert diagnostics["surface_key"] == NEWCOMER_PATH_LOGICAL_ID
@@ -283,9 +337,10 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     first_revision_id = publish_first_response.json()["data"]["active_revision_id"]
     assert publish_first_response.json()["data"]["fallback_reason"] is None
     assert publish_first_response.json()["data"]["legacy_snapshot_only"] is False
-    assert publish_first_response.json()["data"]["active_revision_snapshot"][
-        "revision_id"
-    ] == first_revision_id
+    assert (
+        publish_first_response.json()["data"]["active_revision_snapshot"]["revision_id"]
+        == first_revision_id
+    )
 
     save_second_response = await async_client.put(
         "/api/v1/admin/newcomer-training/path-config",
@@ -313,12 +368,14 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     assert publish_preview["risk_level"] == "medium"
     assert "module_configuration_changed" in publish_preview["risk_reasons"]
     assert publish_preview["change_class"] == "semantic"
-    assert publish_preview["target_revision_id"] == save_second_response.json()["data"][
-        "working_revision_id"
-    ]
+    assert (
+        publish_preview["target_revision_id"]
+        == save_second_response.json()["data"]["working_revision_id"]
+    )
     assert publish_preview["impact_scope"]["active_revision_id"] == first_revision_id
-    assert publish_preview["impact_scope"]["working_revision_id"] == (
-        save_second_response.json()["data"]["working_revision_id"]
+    assert (
+        publish_preview["impact_scope"]["working_revision_id"]
+        == (save_second_response.json()["data"]["working_revision_id"])
     )
     assert publish_preview["impact_scope"]["will_change_active_revision"] is True
     assert publish_preview["impact_scope"]["future_learner_paths_changed"] is True
@@ -328,13 +385,12 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     assert publish_preview["impact_scope"]["affected_module_keys"] == [
         "business_skills"
     ]
-    assert publish_preview["impact_scope"]["changed_module_keys"] == [
-        "business_skills"
-    ]
+    assert publish_preview["impact_scope"]["changed_module_keys"] == ["business_skills"]
     assert publish_preview["impact_scope"]["rollback_available"] is True
     assert publish_preview["before_snapshot"]["revision_id"] == first_revision_id
-    assert publish_preview["after_snapshot"]["revision_id"] == (
-        save_second_response.json()["data"]["working_revision_id"]
+    assert (
+        publish_preview["after_snapshot"]["revision_id"]
+        == (save_second_response.json()["data"]["working_revision_id"])
     )
     assert publish_preview["rollback_hint"]["available"] is True
     assert publish_preview["rollback_hint"]["target_revision_id"] == first_revision_id
@@ -356,7 +412,10 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     )
     assert after_second_publish_response.status_code == 200
     second_path = after_second_publish_response.json()["data"]["items"][0]
-    assert second_path["path_revision_id"] == publish_second_response.json()["data"]["active_revision_id"]
+    assert (
+        second_path["path_revision_id"]
+        == publish_second_response.json()["data"]["active_revision_id"]
+    )
     assert second_path["path_revision_no"] == 2
     assert second_path["levels"][0]["level_title"] == "商务技巧第二版"
     assert second_path["levels"][0]["module_key"] == "business_skills"
@@ -384,9 +443,10 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     assert preview["impact_scope"]["future_learner_paths_changed"] is True
     assert preview["impact_scope"]["historical_attempts_changed"] is False
     assert preview["impact_scope"]["historical_regrade_required"] is False
-    assert preview["before_snapshot"]["revision_id"] == publish_second_response.json()[
-        "data"
-    ]["active_revision_id"]
+    assert (
+        preview["before_snapshot"]["revision_id"]
+        == publish_second_response.json()["data"]["active_revision_id"]
+    )
     assert preview["after_snapshot"]["revision_id"] == first_revision_id
     assert "impact_scope" in preview["audit_event"]["required_fields"]
 
@@ -686,13 +746,17 @@ async def test_should_report_newcomer_path_dead_data_diagnostics(
     assert candidate_actions["LEARNING_CONTENT_NOT_PUBLISHED"]["action"] == (
         "restore_or_replace_asset_reference"
     )
-    assert candidate_actions["LEARNING_CONTENT_NOT_PUBLISHED"]["mutates_history"] is False
+    assert (
+        candidate_actions["LEARNING_CONTENT_NOT_PUBLISHED"]["mutates_history"] is False
+    )
     assert (
         candidate_actions["AUDIO_PROMPT_SNAPSHOT_MISSING"]["action"]
         == "preserve_read_only_replay_and_mark_legacy"
     )
     assert (
-        candidate_actions["AUDIO_PROMPT_SNAPSHOT_MISSING"]["safe_to_apply_automatically"]
+        candidate_actions["AUDIO_PROMPT_SNAPSHOT_MISSING"][
+            "safe_to_apply_automatically"
+        ]
         is False
     )
     assert candidate_actions["AUDIO_SUBMISSION_LINEAGE_MISSING"]["action"] == (
@@ -704,9 +768,10 @@ async def test_should_report_newcomer_path_dead_data_diagnostics(
     assert candidate_actions["AUDIO_SCORE_PROMPT_REVISION_MISSING"]["action"] == (
         "preserve_read_only_replay_and_mark_legacy"
     )
-    assert candidate_actions["HISTORICAL_MATERIAL_REPLAY_MISSING_REFERENCE"][
-        "action"
-    ] == "preserve_read_only_replay_and_mark_legacy"
+    assert (
+        candidate_actions["HISTORICAL_MATERIAL_REPLAY_MISSING_REFERENCE"]["action"]
+        == "preserve_read_only_replay_and_mark_legacy"
+    )
     assert candidate_actions["HISTORICAL_MATERIAL_REPLAY_MISSING_FILE"]["action"] == (
         "preserve_read_only_replay_and_mark_legacy"
     )
@@ -721,9 +786,10 @@ async def test_should_report_newcomer_path_dead_data_diagnostics(
     assert decisions["legacy_history_backfill_policy"]["required_before"] == (
         "production_backfill"
     )
-    assert "HISTORICAL_MATERIAL_REPLAY_MISSING_FILE" in decisions[
-        "legacy_history_backfill_policy"
-    ]["issue_codes"]
+    assert (
+        "HISTORICAL_MATERIAL_REPLAY_MISSING_FILE"
+        in decisions["legacy_history_backfill_policy"]["issue_codes"]
+    )
     assert "active_path_repair_policy" in decisions
 
 
@@ -866,7 +932,9 @@ async def test_should_not_report_orphan_material_when_referenced_version_is_outs
         score_scheme_snapshot={"prompt": {"prompt_id": "prompt-1"}},
         status="uploaded",
     )
-    test_db.add_all([admin, learner, material, current_version, historical_version, submission])
+    test_db.add_all(
+        [admin, learner, material, current_version, historical_version, submission]
+    )
     await test_db.commit()
 
     report = await NewcomerDeadDataDiagnosticsService(
@@ -875,9 +943,7 @@ async def test_should_not_report_orphan_material_when_referenced_version_is_outs
         material_scan_limit=1,
     ).build_report()
     material_issues = [
-        issue
-        for issue in report["issues"]
-        if issue["resource_id"] == material_id
+        issue for issue in report["issues"] if issue["resource_id"] == material_id
     ]
 
     assert report["scanned"]["materials"]["truncated"] is True
@@ -913,8 +979,7 @@ async def test_should_persist_path_config_revision_across_request_sessions(
     async with async_session() as session:
         revisions = await session.execute(
             select(SalesTrainerAssetRevision).where(
-                SalesTrainerAssetRevision.resource_type
-                == NEWCOMER_PATH_RESOURCE_TYPE,
+                SalesTrainerAssetRevision.resource_type == NEWCOMER_PATH_RESOURCE_TYPE,
                 SalesTrainerAssetRevision.logical_id == NEWCOMER_PATH_LOGICAL_ID,
             )
         )
@@ -1071,8 +1136,7 @@ async def test_should_return_typed_error_when_ai_coach_active_revision_is_invali
     active_revision = (
         await test_db.execute(
             select(SalesTrainerAssetRevision).where(
-                SalesTrainerAssetRevision.resource_type
-                == NEWCOMER_PATH_RESOURCE_TYPE,
+                SalesTrainerAssetRevision.resource_type == NEWCOMER_PATH_RESOURCE_TYPE,
                 SalesTrainerAssetRevision.logical_id == NEWCOMER_PATH_LOGICAL_ID,
                 SalesTrainerAssetRevision.status == "published",
             )
@@ -1231,8 +1295,7 @@ async def test_should_not_echo_fake_ai_coach_prompt_hash_on_admin_save(
     revision = (
         await test_db.execute(
             select(SalesTrainerAssetRevision).where(
-                SalesTrainerAssetRevision.resource_type
-                == NEWCOMER_PATH_RESOURCE_TYPE,
+                SalesTrainerAssetRevision.resource_type == NEWCOMER_PATH_RESOURCE_TYPE,
                 SalesTrainerAssetRevision.logical_id == NEWCOMER_PATH_LOGICAL_ID,
             )
         )
@@ -1440,8 +1503,7 @@ async def test_should_reject_invalid_ai_coach_prompt_binding_before_publish(
     working_revision = (
         await test_db.execute(
             select(SalesTrainerAssetRevision).where(
-                SalesTrainerAssetRevision.resource_type
-                == NEWCOMER_PATH_RESOURCE_TYPE,
+                SalesTrainerAssetRevision.resource_type == NEWCOMER_PATH_RESOURCE_TYPE,
                 SalesTrainerAssetRevision.logical_id == NEWCOMER_PATH_LOGICAL_ID,
                 SalesTrainerAssetRevision.status == "working",
             )
@@ -1485,8 +1547,7 @@ async def test_should_reject_invalid_ai_coach_prompt_binding_before_publish_prev
     working_revision = (
         await test_db.execute(
             select(SalesTrainerAssetRevision).where(
-                SalesTrainerAssetRevision.resource_type
-                == NEWCOMER_PATH_RESOURCE_TYPE,
+                SalesTrainerAssetRevision.resource_type == NEWCOMER_PATH_RESOURCE_TYPE,
                 SalesTrainerAssetRevision.logical_id == NEWCOMER_PATH_LOGICAL_ID,
                 SalesTrainerAssetRevision.status == "working",
             )

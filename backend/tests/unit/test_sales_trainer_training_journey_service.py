@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -52,6 +52,7 @@ from sales_trainer.services.readiness_state import (
     REVIEW_ACTION_CREATED,
 )
 from sales_trainer.services.training_journey_service import (
+    JourneyModule,
     TrainingJourneyError,
     TrainingJourneyService,
 )
@@ -260,6 +261,78 @@ async def _publish_path(
     )
     await test_db.commit()
     return str(result.revision.revision_id)
+
+
+async def _publish_prerequisite_path(
+    test_db: AsyncSession,
+    *,
+    actor: User,
+    modules: list[dict[str, object]],
+) -> str:
+    result = await SalesTrainerAssetRevisionService(test_db).create_published_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        payload={
+            "path_key": NEWCOMER_PATH_LOGICAL_ID,
+            "title": "新人训练路径",
+            "enabled": True,
+            "modules": modules,
+        },
+        actor=actor,
+        change_class="binding",
+        reason="发布 Journey 前置关系测试路径",
+    )
+    await test_db.commit()
+    return str(result.revision.revision_id)
+
+
+async def _seed_passed_audio_prerequisite(
+    test_db: AsyncSession,
+    *,
+    learner: User,
+    revision_id: str,
+    unit_id: str,
+    module_key: str,
+) -> None:
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="Journey 前置训练评分标准",
+        purpose="general_audio_scoring",
+        system_prompt="评分。",
+        scoring_template="评分：{transcript}",
+        output_schema={},
+        status="published",
+        created_by=learner.user_id,
+        updated_by=learner.user_id,
+    )
+    submission = SalesTrainerAudioSubmission(
+        submission_id=str(uuid.uuid4()),
+        unit_id=unit_id,
+        user_id=str(learner.user_id),
+        purpose="general_audio_scoring",
+        original_filename="journey-prerequisite.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/journey-prerequisite.wav",
+        task_brief_snapshot={
+            "submission_context": _context(revision_id, module_key=module_key)
+        },
+        status="scored",
+    )
+    score = SalesTrainerAudioScoreResult(
+        score_id=str(uuid.uuid4()),
+        submission_id=submission.submission_id,
+        prompt_id=prompt.prompt_id,
+        prompt_version=1,
+        prompt_hash="journey-prerequisite-hash",
+        total_score=88,
+        passed=True,
+        strengths=[],
+        improvements=[],
+        dimension_scores={},
+    )
+    test_db.add_all([prompt, submission, score])
+    await test_db.commit()
 
 
 def _context(revision_id: str, *, module_key: str) -> dict[str, object]:
@@ -525,6 +598,415 @@ async def test_should_fail_closed_when_active_revision_missing(
 
     assert exc.value.code == "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]"
     assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_should_unlock_dependent_journey_modules_only_from_active_revision(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    first_unit_id = str(uuid.uuid4())
+    second_unit_id = str(uuid.uuid4())
+    test_db.add_all(
+        [
+            admin,
+            learner,
+            _unit(first_unit_id, unit_type="audio_scoring", name="前置训练"),
+            _unit(second_unit_id, unit_type="audio_scoring", name="后续训练"),
+        ]
+    )
+    await test_db.commit()
+    revision_id = await _publish_prerequisite_path(
+        test_db,
+        actor=admin,
+        modules=[
+            {
+                "module_key": "ppt_explanation",
+                "module_type": "audio_scoring",
+                "enabled": True,
+                "order_index": 1,
+                "title": "前置训练",
+                "target_unit_id": first_unit_id,
+                "completion_rule": "passed",
+            },
+            {
+                "module_key": "company_product_demo",
+                "module_type": "audio_scoring",
+                "enabled": True,
+                "order_index": 2,
+                "title": "后续训练",
+                "target_unit_id": second_unit_id,
+                "unlock_after_unit_ids": [first_unit_id],
+                "completion_rule": "passed",
+                "ai_coach": {
+                    "enabled": True,
+                    "prompt_template_id": "11111111-1111-1111-1111-111111111111",
+                    "allowed_interaction_types": ["single_choice"],
+                    "min_turns": 3,
+                    "max_turns": 10,
+                    "mastery_threshold": 80,
+                },
+            },
+        ],
+    )
+    await _seed_passed_audio_prerequisite(
+        test_db,
+        learner=learner,
+        revision_id="old-path-revision",
+        unit_id=first_unit_id,
+        module_key="ppt_explanation",
+    )
+
+    locked_journey = await TrainingJourneyService(test_db).get_learner_journey(
+        str(learner.user_id),
+        viewer=learner,
+    )
+    locked_modules = {
+        (module["kind"], module["module_key"]): module
+        for module in locked_journey["modules"]
+    }
+    locked_base = locked_modules[("audio_submission", "company_product_demo")]
+    locked_ai_coach = locked_modules[("ai_coach", "company_product_demo")]
+
+    for module in (locked_base, locked_ai_coach):
+        assert module["locked"] is True
+        assert module["status"] == "not_started"
+        assert any(
+            diagnostic["code"] == "[NEWCOMER_PREREQUISITE_NOT_COMPLETED]"
+            and diagnostic["terminal"] is False
+            for diagnostic in module["diagnostics"]
+        )
+    assert locked_base["next_action"]["disabled"] is True
+    assert locked_base["next_action"]["disabled_reason"] == (
+        "请先完成前置训练，再开始本任务。"
+    )
+
+    await _seed_passed_audio_prerequisite(
+        test_db,
+        learner=learner,
+        revision_id=revision_id,
+        unit_id=first_unit_id,
+        module_key="ppt_explanation",
+    )
+
+    unlocked_journey = await TrainingJourneyService(test_db).get_learner_journey(
+        str(learner.user_id),
+        viewer=learner,
+    )
+    unlocked_modules = {
+        (module["kind"], module["module_key"]): module
+        for module in unlocked_journey["modules"]
+    }
+    unlocked_base = unlocked_modules[("audio_submission", "company_product_demo")]
+    unlocked_ai_coach = unlocked_modules[("ai_coach", "company_product_demo")]
+
+    assert unlocked_base["locked"] is False
+    assert unlocked_base["next_action"]["disabled"] is False
+    assert unlocked_ai_coach["locked"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid_case",
+    ["unknown", "blank", "duplicate", "realtime_owner", "business_owner"],
+)
+async def test_should_fail_closed_for_historical_invalid_journey_prerequisite(
+    test_db: AsyncSession,
+    invalid_case: str,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    owner_unit_id = str(uuid.uuid4())
+    dependent_unit_id = str(uuid.uuid4())
+    test_db.add_all(
+        [
+            admin,
+            learner,
+            _unit(owner_unit_id, unit_type="audio_scoring", name="前置训练"),
+            _unit(dependent_unit_id, unit_type="audio_scoring", name="后续训练"),
+        ]
+    )
+    await test_db.commit()
+
+    owner: dict[str, object] = {
+        "module_key": "ppt_explanation",
+        "module_type": "audio_scoring",
+        "enabled": True,
+        "order_index": 1,
+        "title": "前置训练",
+        "target_unit_id": owner_unit_id,
+        "completion_rule": "passed",
+    }
+    dependencies = [owner_unit_id]
+    if invalid_case == "unknown":
+        dependencies = ["missing-unit"]
+    elif invalid_case == "blank":
+        dependencies = [""]
+    elif invalid_case == "duplicate":
+        dependencies = [owner_unit_id, owner_unit_id]
+    elif invalid_case == "realtime_owner":
+        owner = {
+            "module_key": "realtime_roleplay",
+            "module_type": "realtime_roleplay",
+            "enabled": True,
+            "order_index": 1,
+            "title": "实时对练",
+            "target_unit_id": owner_unit_id,
+            "completion_rule": "submitted",
+            "runtime_binding": _ready_realtime_binding(),
+        }
+    elif invalid_case == "business_owner":
+        owner = {
+            "module_key": "business_skills",
+            "module_type": "article_exam",
+            "enabled": True,
+            "order_index": 1,
+            "title": "商务技巧",
+            "target_unit_id": owner_unit_id,
+            "completion_rule": "passed",
+        }
+
+    await _publish_prerequisite_path(
+        test_db,
+        actor=admin,
+        modules=[
+            owner,
+            {
+                "module_key": "company_product_demo",
+                "module_type": "audio_scoring",
+                "enabled": True,
+                "order_index": 2,
+                "title": "后续训练",
+                "target_unit_id": dependent_unit_id,
+                "unlock_after_unit_ids": dependencies,
+                "completion_rule": "passed",
+            },
+        ],
+    )
+
+    journey = await TrainingJourneyService(test_db).get_learner_journey(
+        str(learner.user_id),
+        viewer=learner,
+    )
+    dependent = next(
+        module
+        for module in journey["modules"]
+        if module["kind"] == "audio_submission"
+        and module["module_key"] == "company_product_demo"
+    )
+
+    assert dependent["locked"] is True
+    assert dependent["status"] == "error_terminal"
+    assert dependent["next_action"]["disabled"] is True
+    assert dependent["next_action"]["disabled_reason"] == (
+        "训练路径前置关系配置异常，请联系培训负责人。"
+    )
+    assert any(
+        diagnostic["code"] == "[NEWCOMER_PATH_PREREQUISITE_CONFIG_INVALID]"
+        and diagnostic["terminal"] is True
+        for diagnostic in dependent["diagnostics"]
+    )
+
+    paths = await SalesTrainerPathService(test_db).list_paths_for_user(
+        str(learner.user_id)
+    )
+    dependent_level = next(
+        level
+        for level in paths[0]["levels"]
+        if level["module_key"] == "company_product_demo"
+    )
+    assert dependent_level["locked"] is True
+    assert dependent_level["status"] == "locked"
+
+
+@pytest.mark.asyncio
+async def test_should_inherit_base_module_lock_for_ai_coach_without_reason_code(
+    test_db: AsyncSession,
+) -> None:
+    base = JourneyModule(
+        module_key="company_product_demo",
+        base_module_key="company_product_demo",
+        title="产品演示",
+        kind="audio_submission",
+        module_type="audio_scoring",
+        order_index=1,
+        required=True,
+        enabled=False,
+        completion_rule="passed",
+        target_unit_id="demo-unit",
+        target_unit_ids=("demo-unit",),
+        locked=True,
+        block_reason="该训练模块已停用。",
+        lock_status="disabled",
+    )
+    ai_coach = JourneyModule(
+        module_key="company_product_demo",
+        base_module_key="company_product_demo",
+        title="产品演示 AI Coach",
+        kind="ai_coach",
+        module_type="ai_coach",
+        order_index=1,
+        required=True,
+        enabled=True,
+        completion_rule="passed",
+        target_unit_id=None,
+    )
+
+    TrainingJourneyService(test_db)._apply_prerequisite_decisions(
+        [base, ai_coach],
+        {},
+    )
+
+    assert ai_coach.locked is True
+    assert ai_coach.lock_status == "disabled"
+    assert ai_coach.block_reason == "该训练模块已停用。"
+
+
+@pytest.mark.asyncio
+async def test_should_preserve_stronger_lock_when_prerequisite_is_unmet(
+    test_db: AsyncSession,
+) -> None:
+    owner = JourneyModule(
+        module_key="ppt_explanation",
+        base_module_key="ppt_explanation",
+        title="前置训练",
+        kind="audio_submission",
+        module_type="audio_scoring",
+        order_index=1,
+        required=True,
+        enabled=True,
+        completion_rule="passed",
+        target_unit_id="first-unit",
+        target_unit_ids=("first-unit",),
+    )
+    dependent = JourneyModule(
+        module_key="company_product_demo",
+        base_module_key="company_product_demo",
+        title="后续训练",
+        kind="audio_submission",
+        module_type="audio_scoring",
+        order_index=2,
+        required=True,
+        enabled=True,
+        completion_rule="passed",
+        target_unit_id="second-unit",
+        target_unit_ids=("second-unit",),
+        unlock_after_unit_ids=("first-unit",),
+        locked=True,
+        block_reason="当前学员等级暂不可进入该模块。",
+        lock_status="disabled",
+    )
+
+    TrainingJourneyService(test_db)._apply_prerequisite_decisions(
+        [owner, dependent],
+        {},
+    )
+
+    assert dependent.locked is True
+    assert dependent.lock_status == "disabled"
+    assert dependent.block_reason == "当前学员等级暂不可进入该模块。"
+    assert any(
+        diagnostic["code"] == "[NEWCOMER_PREREQUISITE_NOT_COMPLETED]"
+        and diagnostic["terminal"] is False
+        for diagnostic in dependent.diagnostics
+    )
+
+
+@pytest.mark.asyncio
+async def test_should_require_the_referenced_audio_group_target_to_be_completed(
+    test_db: AsyncSession,
+) -> None:
+    owner = JourneyModule(
+        module_key="elevator_pitch",
+        base_module_key="elevator_pitch",
+        title="金字塔演讲",
+        kind="audio_submission",
+        module_type="audio_scoring_group",
+        order_index=1,
+        required=True,
+        enabled=True,
+        completion_rule="passed",
+        target_unit_id=None,
+        target_unit_ids=("pitch-3m", "pitch-5m"),
+    )
+    dependent = JourneyModule(
+        module_key="company_product_demo",
+        base_module_key="company_product_demo",
+        title="产品演示",
+        kind="audio_submission",
+        module_type="audio_scoring",
+        order_index=2,
+        required=True,
+        enabled=True,
+        completion_rule="passed",
+        target_unit_id="demo-unit",
+        target_unit_ids=("demo-unit",),
+        unlock_after_unit_ids=("pitch-5m",),
+    )
+    outcomes = {
+        "audio_submission:elevator_pitch": [
+            {
+                "target_unit_id": "pitch-3m",
+                "status": "passed",
+                "passed": True,
+            }
+        ]
+    }
+
+    TrainingJourneyService(test_db)._apply_prerequisite_decisions(
+        [owner, dependent],
+        outcomes,
+    )
+
+    assert dependent.locked is True
+    assert any(
+        diagnostic["code"] == "[NEWCOMER_PREREQUISITE_NOT_COMPLETED]"
+        for diagnostic in dependent.diagnostics
+    )
+
+
+@pytest.mark.asyncio
+async def test_should_not_unlock_ai_coach_own_config_lock(
+    test_db: AsyncSession,
+) -> None:
+    base = JourneyModule(
+        module_key="company_product_demo",
+        base_module_key="company_product_demo",
+        title="产品演示",
+        kind="audio_submission",
+        module_type="audio_scoring",
+        order_index=1,
+        required=True,
+        enabled=True,
+        completion_rule="passed",
+        target_unit_id="demo-unit",
+        target_unit_ids=("demo-unit",),
+    )
+    ai_coach = JourneyModule(
+        module_key="company_product_demo",
+        base_module_key="company_product_demo",
+        title="产品演示 AI Coach",
+        kind="ai_coach",
+        module_type="ai_coach",
+        order_index=1,
+        required=True,
+        enabled=False,
+        completion_rule="passed",
+        target_unit_id=None,
+        locked=True,
+        block_reason="AI Coach 配置非法。",
+        lock_status="error_terminal",
+    )
+
+    TrainingJourneyService(test_db)._apply_prerequisite_decisions(
+        [base, ai_coach],
+        {},
+    )
+
+    assert ai_coach.locked is True
+    assert ai_coach.lock_status == "error_terminal"
+    assert ai_coach.block_reason == "AI Coach 配置非法。"
 
 
 @pytest.mark.asyncio
@@ -1036,6 +1518,7 @@ async def test_should_include_audio_group_duration_option_outcome(
     admin = _user("admin")
     learner = _user("user")
     audio_unit_id = str(uuid.uuid4())
+    other_audio_unit_id = str(uuid.uuid4())
     prompt = SalesTrainerAudioScorePrompt(
         prompt_id=str(uuid.uuid4()),
         name="Journey 分组评分标准",
@@ -1048,7 +1531,12 @@ async def test_should_include_audio_group_duration_option_outcome(
         updated_by=learner.user_id,
     )
     unit = _unit(audio_unit_id, unit_type="audio_scoring", name="电梯演讲 3 分钟")
-    test_db.add_all([admin, learner, prompt, unit])
+    other_unit = _unit(
+        other_audio_unit_id,
+        unit_type="audio_scoring",
+        name="电梯演讲 5 分钟",
+    )
+    test_db.add_all([admin, learner, prompt, unit, other_unit])
     await test_db.commit()
     result = await SalesTrainerAssetRevisionService(test_db).create_published_revision(
         resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
@@ -1072,7 +1560,14 @@ async def test_should_include_audio_group_duration_option_outcome(
                             "duration_minutes": 3,
                             "target_unit_id": audio_unit_id,
                             "order_index": 1,
-                        }
+                        },
+                        {
+                            "option_key": "pitch_5m",
+                            "display_name": "5 分钟",
+                            "duration_minutes": 5,
+                            "target_unit_id": other_audio_unit_id,
+                            "order_index": 2,
+                        },
                     ],
                 }
             ],
@@ -1120,8 +1615,71 @@ async def test_should_include_audio_group_duration_option_outcome(
 
     assert module["module_key"] == "elevator_pitch"
     assert module["latest_outcome"]["record_type"] == "audio_submission"
+    assert module["latest_outcome"]["target_unit_id"] == audio_unit_id
     assert module["latest_outcome"]["path_revision_no"] == 1
     assert module["passed"] is True
+
+    paths = await SalesTrainerPathService(test_db).list_paths_for_user(
+        str(learner.user_id)
+    )
+    levels_by_unit_id = {level["unit_id"]: level for level in paths[0]["levels"]}
+    assert levels_by_unit_id[audio_unit_id]["latest_result"]["result_id"] == (
+        audio.submission_id
+    )
+    assert levels_by_unit_id[other_audio_unit_id]["latest_result"] is None
+    assert paths[0]["goal_context"]["evidence_items"] == [
+        {
+            "evidence_id": audio.submission_id,
+            "evidence_type": "audio_submission",
+            "unit_id": audio_unit_id,
+            "unit_type": "audio_scoring",
+            "level_title": "3 分钟",
+            "status": "scored",
+            "passed": True,
+            "score": 90.0,
+            "max_score": 100.0,
+            "submitted_at": audio.created_at,
+            "result_path": f"/sales-trainer/audio/result/{audio.submission_id}",
+        }
+    ]
+
+    regrade_run = SalesTrainerRegradeRun(
+        target_type="audio_submission",
+        target_id=audio.submission_id,
+        target_revision_id=None,
+        status="completed",
+        reason="音频评分标准修订后重评",
+        impact_scope_json={"record_count": 1, "history_overwrite": False},
+        before_snapshot_json={"total_score": 90, "max_score": 100, "passed": True},
+        after_snapshot_json={"total_score": 92, "max_score": 100, "passed": True},
+        trace_id="trace-journey-group-regrade",
+        created_by=admin.user_id,
+        created_at=audio.created_at + timedelta(minutes=1),
+        completed_at=audio.created_at + timedelta(minutes=2),
+    )
+    test_db.add(regrade_run)
+    await test_db.commit()
+
+    regraded_journey = await TrainingJourneyService(test_db).get_learner_journey(
+        str(learner.user_id),
+        viewer=learner,
+    )
+    regraded_module = regraded_journey["modules"][0]
+    assert regraded_module["latest_outcome"]["record_type"] == "regrade"
+    assert regraded_module["latest_outcome"]["target_unit_id"] == audio_unit_id
+    response = TrainingJourneyResponse.model_validate(regraded_journey)
+    assert response.modules[0].latest_outcome is not None
+    assert response.modules[0].latest_outcome.target_unit_id == audio_unit_id
+
+    regraded_paths = await SalesTrainerPathService(test_db).list_paths_for_user(
+        str(learner.user_id)
+    )
+    regraded_levels = {level["unit_id"]: level for level in regraded_paths[0]["levels"]}
+    assert regraded_levels[audio_unit_id]["latest_result"]["result_id"] == (
+        audio.submission_id
+    )
+    assert regraded_levels[other_audio_unit_id]["latest_result"] is None
+    assert len(regraded_paths[0]["goal_context"]["evidence_items"]) == 1
 
 
 @pytest.mark.asyncio
@@ -1216,11 +1774,15 @@ async def test_should_enforce_learner_level_required_in_journey_path_and_unit_ac
     paths = await SalesTrainerPathService(test_db).list_paths_for_user(
         str(learner.user_id)
     )
-    business_level = next(
-        level for level in paths[0]["levels"] if level["unit_id"] == quiz_unit_id
+    assert paths[0]["total_levels"] == 1
+    assert paths[0]["completed_levels"] == 0
+    assert paths[0]["current_level_id"] == audio_unit_id
+    assert paths[0]["next_level_id"] == audio_unit_id
+    assert [level["unit_id"] for level in paths[0]["levels"]] == [audio_unit_id]
+    assert not any(
+        item["unit_id"] == quiz_unit_id
+        for item in paths[0]["goal_context"]["weak_points"]
     )
-    assert business_level["learner_level_required"] == ["ready"]
-    assert business_level["locked"] is False
 
     with pytest.raises(LearnerUnitAccessError) as exc_info:
         await require_learner_active_path_unit_access(

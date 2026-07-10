@@ -4,7 +4,15 @@ from collections.abc import Mapping
 from typing import Any, Final, Literal, cast
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
+from pydantic_core import PydanticCustomError
 
 from sales_trainer.rules import DEFAULT_SHORT_ANSWER_PASS_THRESHOLD
 
@@ -33,6 +41,34 @@ NEWCOMER_COMPLETION_RULE_COMPATIBILITY: Final[
     "all_audio_options_scored": "scored",
     "placeholder_disabled": "submitted",
 }
+
+NEWCOMER_PATH_HISTORICAL_PREREQUISITE_CONTEXT: Final = (
+    "allow_historical_invalid_prerequisites"
+)
+
+
+def _validate_unlock_after_unit_ids(
+    values: list[str],
+    info: ValidationInfo,
+) -> list[str]:
+    if (
+        isinstance(info.context, Mapping)
+        and info.context.get(NEWCOMER_PATH_HISTORICAL_PREREQUISITE_CONTEXT) is True
+    ):
+        return values
+    if any(not value.strip() for value in values):
+        raise PydanticCustomError(
+            "newcomer_path_prerequisite_invalid",
+            "unlock_after_unit_ids cannot contain blank values",
+        )
+    if len(set(values)) != len(values):
+        raise PydanticCustomError(
+            "newcomer_path_prerequisite_invalid",
+            "unlock_after_unit_ids cannot contain duplicate values",
+        )
+    return values
+
+
 QuizAttemptStatus = Literal["submitted", "scored", "failed"]
 AudioSubmissionStatus = Literal[
     "uploaded",
@@ -93,6 +129,15 @@ class SalesTrainerPathConfig(BaseModel):
     guidance_templates: dict[str, str] = Field(default_factory=dict)
     ai_coach: dict[str, Any] | None = None
     runtime_binding: dict[str, Any] | None = None
+
+    @field_validator("unlock_after_unit_ids")
+    @classmethod
+    def validate_unlock_after_unit_ids(
+        cls,
+        values: list[str],
+        info: ValidationInfo,
+    ) -> list[str]:
+        return _validate_unlock_after_unit_ids(values, info)
 
     @model_validator(mode="after")
     def validate_guidance_templates(self) -> SalesTrainerPathConfig:
@@ -1412,6 +1457,15 @@ class NewcomerPathModuleConfig(BaseModel):
     duration_options: list[NewcomerPathDurationOptionConfig] = Field(
         default_factory=list
     )
+
+    @field_validator("unlock_after_unit_ids")
+    @classmethod
+    def validate_unlock_after_unit_ids(
+        cls,
+        values: list[str],
+        info: ValidationInfo,
+    ) -> list[str]:
+        return _validate_unlock_after_unit_ids(values, info)
 
     @model_validator(mode="after")
     def validate_module_collections(self) -> NewcomerPathModuleConfig:
@@ -3250,6 +3304,7 @@ class TrainingJourneyModuleOutcome(BaseModel):
     outcome_id: str
     record_type: TrainingJourneyOutcomeRecordType
     source_record_id: str
+    target_unit_id: str | None = Field(None, min_length=1, max_length=36)
     module_key: str
     module_type: str
     kind: TrainingJourneyModuleKind

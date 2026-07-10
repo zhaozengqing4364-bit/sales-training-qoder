@@ -21,6 +21,12 @@ from sales_trainer.services.business_etiquette_import_service import (
     BUSINESS_ETIQUETTE_RESOURCE_TYPE,
     DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
 )
+from sales_trainer.services.learning_topic_config_service import (
+    BUSINESS_ETIQUETTE_TOPIC_KEY,
+    BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+    NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+    NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+)
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
     NEWCOMER_PATH_RESOURCE_TYPE,
@@ -48,7 +54,7 @@ async def _seed_active_path(
     test_db: AsyncSession,
     *,
     admin: User,
-    learner_level_required: list[str] | None = None,
+    include_unmet_main_prerequisite: bool = False,
 ) -> None:
     unit = SalesTrainerUnit(
         unit_id=f"be-quiz-{uuid.uuid4().hex[:8]}",
@@ -57,62 +63,86 @@ async def _seed_active_path(
         status="published",
         config={},
     )
-    test_db.add(unit)
+    prerequisite_units: list[SalesTrainerUnit] = []
+    if include_unmet_main_prerequisite:
+        prerequisite_units = [
+            SalesTrainerUnit(
+                unit_id=f"be-owner-{uuid.uuid4().hex[:8]}",
+                name="PPT 讲解",
+                unit_type="audio_scoring",
+                status="published",
+                config={},
+            ),
+            SalesTrainerUnit(
+                unit_id=f"be-dependent-{uuid.uuid4().hex[:8]}",
+                name="公司产品 Demo",
+                unit_type="audio_scoring",
+                status="published",
+                config={},
+            ),
+        ]
+    test_db.add_all([unit, *prerequisite_units])
     await test_db.flush()
+    modules: list[dict[str, object]] = []
+    if include_unmet_main_prerequisite:
+        owner, dependent = prerequisite_units
+        modules.extend(
+            [
+                {
+                    "module_key": "ppt_explanation",
+                    "module_type": "audio_scoring",
+                    "enabled": True,
+                    "order_index": 1,
+                    "title": "PPT 讲解",
+                    "target_unit_id": owner.unit_id,
+                    "unlock_after_unit_ids": [],
+                    "completion_rule": "passed",
+                },
+                {
+                    "module_key": "company_product_demo",
+                    "module_type": "audio_scoring",
+                    "enabled": True,
+                    "order_index": 2,
+                    "title": "公司产品 Demo",
+                    "target_unit_id": dependent.unit_id,
+                    "unlock_after_unit_ids": [owner.unit_id],
+                    "completion_rule": "passed",
+                },
+            ]
+        )
+    modules.append(
+        {
+            "module_key": "business_skills",
+            "module_type": "article_exam",
+            "enabled": True,
+            "order_index": 3,
+            "title": "商务礼仪",
+            "description": "按小单元完成商务礼仪训练。",
+            "target_unit_id": unit.unit_id,
+            "learning_content_id": None,
+            "learner_level_required": [],
+            "exam_paper_id": None,
+            "material_id": None,
+            "material_version_id": None,
+            "scoring_prompt_id": None,
+            "disabled_reason": None,
+            "unlock_after_unit_ids": [],
+            "completion_rule": "passed",
+            "primary_action_label": "开始训练",
+            "retry_action_label": None,
+            "review_action_label": None,
+            "guidance_templates": {},
+            "ai_coach": None,
+            "learning_units": [_business_learning_unit()],
+        }
+    )
     payload = {
         "path_key": NEWCOMER_PATH_LOGICAL_ID,
         "title": "新人训练路径",
         "goal_title": "完成商务礼仪训练",
         "description": None,
         "enabled": True,
-        "modules": [
-            {
-                "module_key": "business_skills",
-                "module_type": "article_exam",
-                "enabled": True,
-                "order_index": 2,
-                "title": "商务礼仪",
-                "description": "按小单元完成商务礼仪训练。",
-                "target_unit_id": unit.unit_id,
-                "learning_content_id": None,
-                "learner_level_required": learner_level_required or [],
-                "exam_paper_id": None,
-                "material_id": None,
-                "material_version_id": None,
-                "scoring_prompt_id": None,
-                "disabled_reason": None,
-                "unlock_after_unit_ids": [],
-                "completion_rule": "passed",
-                "primary_action_label": "开始训练",
-                "retry_action_label": None,
-                "review_action_label": None,
-                "guidance_templates": {},
-                "ai_coach": None,
-                "learning_units": [
-                    {
-                        "unit_key": "trust_foundation",
-                        "title": "职业信任底座",
-                        "description": "尊重分寸、第一印象。",
-                        "order_index": 1,
-                        "enabled": True,
-                        "source_chapter_orders": [1],
-                        "capability_keys": ["respect_boundaries"],
-                        "unlock_after_unit_keys": [],
-                        "require_reading": True,
-                        "require_quiz": True,
-                        "require_ai_coach": True,
-                        "quiz_question_count": 1,
-                        "quiz_pass_threshold": None,
-                        "quiz_allow_retake": True,
-                        "quiz_max_attempts": None,
-                        "quiz_question_type_weights": {"single_choice": 1},
-                        "allow_skip_reading": False,
-                        "block_next_until_complete": True,
-                        "empty_state_message": None,
-                    }
-                ],
-            }
-        ],
+        "modules": modules,
     }
     await SalesTrainerAssetRevisionService(test_db).create_published_revision(
         resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
@@ -153,7 +183,54 @@ async def _seed_active_training_pack(test_db: AsyncSession, *, admin: User) -> N
         change_class="semantic",
         reason="发布商务礼仪训练包",
     )
+    await SalesTrainerAssetRevisionService(test_db).create_published_revision(
+        resource_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+        logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+        payload={
+            "schema_version": NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+            "topics": [
+                {
+                    "topic_key": BUSINESS_ETIQUETTE_TOPIC_KEY,
+                    "source_module_key": BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+                    "enabled": True,
+                    "title": "商务礼仪规范",
+                    "order_index": 1,
+                    "learning_units": [_business_learning_unit()],
+                    "required": False,
+                    "blocks_next": False,
+                    "score_display_policy": "quiz_attempt_score",
+                }
+            ],
+        },
+        actor=admin,
+        change_class="binding",
+        reason="发布商务礼仪学习专题",
+    )
     await test_db.commit()
+
+
+def _business_learning_unit() -> dict[str, object]:
+    return {
+        "unit_key": "trust_foundation",
+        "title": "职业信任底座",
+        "description": "尊重分寸、第一印象。",
+        "order_index": 1,
+        "enabled": True,
+        "source_chapter_orders": [1],
+        "capability_keys": ["respect_boundaries"],
+        "unlock_after_unit_keys": [],
+        "require_reading": True,
+        "require_quiz": True,
+        "require_ai_coach": True,
+        "quiz_question_count": 1,
+        "quiz_pass_threshold": None,
+        "quiz_allow_retake": True,
+        "quiz_max_attempts": None,
+        "quiz_question_type_weights": {"single_choice": 1},
+        "allow_skip_reading": False,
+        "block_next_until_complete": True,
+        "empty_state_message": None,
+    }
 
 
 async def _seed_published_question(
@@ -302,7 +379,7 @@ async def test_should_reject_quiz_attempt_list_without_manager_permission(
 
 
 @pytest.mark.asyncio
-async def test_should_fail_closed_quiz_surfaces_when_journey_module_locked(
+async def test_should_keep_optional_topic_accessible_when_main_prerequisite_is_unmet(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
@@ -313,7 +390,28 @@ async def test_should_fail_closed_quiz_surfaces_when_journey_module_locked(
     await _seed_active_path(
         test_db,
         admin=admin,
-        learner_level_required=["ready"],
+        include_unmet_main_prerequisite=True,
+    )
+    await _seed_active_training_pack(test_db, admin=admin)
+    question = await _seed_published_question(test_db, admin=admin)
+
+    journey_response = await async_client.get(
+        "/api/v1/sales-trainer/journey",
+        headers=_auth_headers(learner),
+    )
+    assert journey_response.status_code == 200, journey_response.text
+    dependent_module = next(
+        module
+        for module in journey_response.json()["data"]["modules"]
+        if module["module_key"] == "company_product_demo"
+        and module["kind"] == "audio_submission"
+    )
+    assert dependent_module["locked"] is True
+    assert dependent_module["status"] == "not_started"
+    assert any(
+        diagnostic["code"] == "[NEWCOMER_PREREQUISITE_NOT_COMPLETED]"
+        and diagnostic["terminal"] is False
+        for diagnostic in dependent_module["diagnostics"]
     )
 
     quiz_response = await async_client.get(
@@ -325,7 +423,14 @@ async def test_should_fail_closed_quiz_surfaces_when_journey_module_locked(
         "/api/v1/newcomer-training/business-etiquette/"
         "learning-units/trust_foundation/quiz-attempts",
         headers=_auth_headers(learner),
-        json={"answers": []},
+        json={
+            "answers": [
+                {
+                    "question_id": question.question_id,
+                    "answer_payload": "A",
+                }
+            ]
+        },
     )
     list_response = await async_client.get(
         "/api/v1/newcomer-training/business-etiquette/"
@@ -334,8 +439,7 @@ async def test_should_fail_closed_quiz_surfaces_when_journey_module_locked(
     )
 
     for response in (quiz_response, submit_response, list_response):
-        assert response.status_code == 404, response.text
-        assert response.json()["error"] == "[SALES_TRAINER_UNIT_NOT_FOUND]"
+        assert response.status_code == 200, response.text
 
 
 @pytest.mark.asyncio

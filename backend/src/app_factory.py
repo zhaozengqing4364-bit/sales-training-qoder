@@ -133,9 +133,7 @@ def _validate_cors_origins(origins: list[str]) -> None:
 
         parsed = urlparse(origin)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise RuntimeError(
-                "CORS_ORIGINS entries must be explicit HTTP(S) origins"
-            )
+            raise RuntimeError("CORS_ORIGINS entries must be explicit HTTP(S) origins")
 
 
 def _configure_middleware(app: FastAPI) -> None:
@@ -166,7 +164,23 @@ async def _request_validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
 ) -> JSONResponse:
-    """Map prompt-template save validation to the governance-required 400 contract."""
+    """Map governed validation failures to their stable API contracts."""
+    if (
+        request.method == "PUT"
+        and request.url.path == "/api/v1/admin/newcomer-training/path-config"
+        and any(
+            error.get("type") == "newcomer_path_prerequisite_invalid"
+            for error in exc.errors()
+        )
+    ):
+        return JSONResponse(
+            status_code=422,
+            content=error_response(
+                "[NEWCOMER_PATH_PREREQUISITE_INVALID]",
+                message="前置训练单元不能为空或重复，请检查后重试。",
+            ),
+        )
+
     if request.url.path.startswith("/api/v1/prompt-templates"):
         return JSONResponse(
             status_code=400,

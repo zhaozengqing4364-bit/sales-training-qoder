@@ -12,6 +12,7 @@ from common.auth.service import create_access_token
 from common.db.models import User
 from sales_trainer.models import (
     SalesTrainerAudioScorePrompt,
+    SalesTrainerAudioScoreResult,
     SalesTrainerAudioSubmission,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
@@ -59,7 +60,13 @@ def _published_prompt(admin: User) -> SalesTrainerAudioScorePrompt:
     )
 
 
-def _audio_unit(admin: User, *, prompt_id: str, title: str) -> SalesTrainerUnit:
+def _audio_unit(
+    admin: User,
+    *,
+    prompt_id: str,
+    title: str,
+    purpose: str = "ppt_pitch",
+) -> SalesTrainerUnit:
     return SalesTrainerUnit(
         unit_id=str(uuid.uuid4()),
         name=title,
@@ -69,7 +76,7 @@ def _audio_unit(admin: User, *, prompt_id: str, title: str) -> SalesTrainerUnit:
             "audio": {
                 "scoring_prompt_id": prompt_id,
                 "pass_threshold": 80,
-                "purpose": "ppt_pitch",
+                "purpose": purpose,
             }
         },
         status="published",
@@ -85,6 +92,7 @@ def _material_with_version(
     key_prefix: str,
     body: bytes,
     status: str = "published",
+    purpose: str = "ppt_pitch",
 ) -> tuple[SalesTrainerMaterial, SalesTrainerMaterialVersion]:
     stored_path = storage_root / f"{key_prefix}-{uuid.uuid4().hex[:8]}.pdf"
     stored_path.write_bytes(body)
@@ -93,7 +101,7 @@ def _material_with_version(
         material_key=f"{key_prefix}-{uuid.uuid4().hex[:8]}",
         name=f"{key_prefix} 材料",
         material_type="attachment",
-        purpose="ppt_pitch",
+        purpose=purpose,
         status="published",
         created_by=admin.user_id,
         updated_by=admin.user_id,
@@ -126,7 +134,7 @@ async def _publish_audio_material_path(
     second_unit: SalesTrainerUnit,
     second_material: SalesTrainerMaterial,
     second_version: SalesTrainerMaterialVersion,
-) -> None:
+) -> str:
     service = SalesTrainerPathConfigService(test_db)
     await service.save_config(
         NewcomerPathConfigSaveRequest(
@@ -146,32 +154,68 @@ async def _publish_audio_material_path(
                     completion_rule="scored",
                 ),
                 NewcomerPathModuleConfig(
-                    module_key="elevator_pitch",
-                    module_type="audio_scoring_group",
+                    module_key="company_product_demo",
+                    module_type="audio_scoring",
                     enabled=True,
                     order_index=2,
-                    title="电梯演讲",
+                    title="公司产品 Demo",
                     description="第二阶段材料",
                     target_unit_id=second_unit.unit_id,
                     material_id=second_material.material_id,
                     material_version_id=second_version.version_id,
                     unlock_after_unit_ids=[first_unit.unit_id],
-                    completion_rule="scored",
-                    duration_options=[
-                        {
-                            "option_key": "elevator_pitch_3m",
-                            "display_name": "3 分钟",
-                            "duration_minutes": 3,
-                            "target_unit_id": second_unit.unit_id,
-                            "order_index": 1,
-                        }
-                    ],
+                    completion_rule="passed",
                 ),
             ],
         ),
         actor=admin,
     )
-    await service.publish_config(actor=admin, reason="材料文件访问路径生效")
+    result = await service.publish_config(actor=admin, reason="材料文件访问路径生效")
+    return str(result.revision.revision_id)
+
+
+async def _seed_passed_audio_evidence(
+    test_db: AsyncSession,
+    *,
+    learner: User,
+    prompt: SalesTrainerAudioScorePrompt,
+    unit: SalesTrainerUnit,
+    revision_id: str,
+) -> None:
+    submission = SalesTrainerAudioSubmission(
+        submission_id=str(uuid.uuid4()),
+        unit_id=unit.unit_id,
+        user_id=learner.user_id,
+        purpose="ppt_pitch",
+        original_filename="material-prerequisite.wav",
+        content_type="audio/wav",
+        size_bytes=1024,
+        storage_key="/tmp/material-prerequisite.wav",
+        task_brief_snapshot={
+            "submission_context": {
+                "path_key": "newcomer_training_path_v1",
+                "path_revision_id": revision_id,
+                "path_revision_no": 1,
+                "module_key": "ppt_explanation",
+                "legacy_snapshot_only": False,
+            }
+        },
+        status="scored",
+    )
+    score = SalesTrainerAudioScoreResult(
+        score_id=str(uuid.uuid4()),
+        submission_id=submission.submission_id,
+        prompt_id=prompt.prompt_id,
+        prompt_version=1,
+        prompt_hash="material-prerequisite-hash",
+        total_score=88,
+        passed=True,
+        strengths=[],
+        improvements=[],
+        dimension_scores={},
+    )
+    test_db.add_all([submission, score])
+    await test_db.commit()
 
 
 @pytest.mark.asyncio
@@ -451,6 +495,100 @@ async def test_should_upload_material_file_and_create_draft_version_via_api(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_should_unlock_dependent_material_only_with_active_revision_evidence(
+    async_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    test_db: AsyncSession,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SALES_TRAINER_MATERIAL_STORAGE_PATH", str(tmp_path))
+
+    admin = _user("admin")
+    learner = _user("user")
+    prompt = _published_prompt(admin)
+    first_unit = _audio_unit(admin, prompt_id=prompt.prompt_id, title="PPT 讲解")
+    second_unit = _audio_unit(
+        admin,
+        prompt_id=prompt.prompt_id,
+        title="公司产品 Demo",
+        purpose="company_product_demo",
+    )
+    first_material, first_version = _material_with_version(
+        admin,
+        storage_root=tmp_path,
+        key_prefix="prerequisite-material",
+        body=b"prerequisite-material",
+    )
+    dependent_material, dependent_version = _material_with_version(
+        admin,
+        storage_root=tmp_path,
+        key_prefix="dependent-material",
+        body=b"dependent-material",
+        purpose="company_product_demo",
+    )
+    test_db.add_all(
+        [
+            admin,
+            learner,
+            prompt,
+            first_unit,
+            second_unit,
+            first_material,
+            first_version,
+            dependent_material,
+            dependent_version,
+        ]
+    )
+    await test_db.commit()
+    active_revision_id = await _publish_audio_material_path(
+        test_db,
+        admin=admin,
+        first_unit=first_unit,
+        first_material=first_material,
+        first_version=first_version,
+        second_unit=second_unit,
+        second_material=dependent_material,
+        second_version=dependent_version,
+    )
+
+    locked = await async_client.get(
+        f"/api/v1/sales-trainer/materials/versions/{dependent_version.version_id}/file",
+        headers=_auth_headers(learner),
+    )
+    assert locked.status_code == 404
+    assert locked.json()["error"] == "[MATERIAL_FILE_NOT_FOUND]"
+
+    await _seed_passed_audio_evidence(
+        test_db,
+        learner=learner,
+        prompt=prompt,
+        unit=first_unit,
+        revision_id="old-path-revision",
+    )
+    stale_evidence = await async_client.get(
+        f"/api/v1/sales-trainer/materials/versions/{dependent_version.version_id}/file",
+        headers=_auth_headers(learner),
+    )
+    assert stale_evidence.status_code == 404
+    assert stale_evidence.json()["error"] == "[MATERIAL_FILE_NOT_FOUND]"
+
+    await _seed_passed_audio_evidence(
+        test_db,
+        learner=learner,
+        prompt=prompt,
+        unit=first_unit,
+        revision_id=active_revision_id,
+    )
+    unlocked = await async_client.get(
+        f"/api/v1/sales-trainer/materials/versions/{dependent_version.version_id}/file",
+        headers=_auth_headers(learner),
+    )
+    assert unlocked.status_code == 200
+    assert unlocked.content == b"dependent-material"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_should_enforce_object_scope_for_material_file_download(
     async_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -467,7 +605,12 @@ async def test_should_enforce_object_scope_for_material_file_download(
     ops_user = _user("operations")
     prompt = _published_prompt(admin)
     first_unit = _audio_unit(admin, prompt_id=prompt.prompt_id, title="PPT 讲解")
-    second_unit = _audio_unit(admin, prompt_id=prompt.prompt_id, title="电梯演讲")
+    second_unit = _audio_unit(
+        admin,
+        prompt_id=prompt.prompt_id,
+        title="公司产品 Demo",
+        purpose="company_product_demo",
+    )
     bound_material, bound_version = _material_with_version(
         admin,
         storage_root=tmp_path,
@@ -479,6 +622,7 @@ async def test_should_enforce_object_scope_for_material_file_download(
         storage_root=tmp_path,
         key_prefix="locked-material",
         body=b"locked-material",
+        purpose="company_product_demo",
     )
     extra_material, extra_version = _material_with_version(
         admin,
@@ -554,15 +698,6 @@ async def test_should_enforce_object_scope_for_material_file_download(
     manager_error = str(manager_forbidden.json()["error"])
     assert "PERMISSION_DENIED" in manager_error or "ROLE_REQUIRED" in manager_error
 
-    admin_public_forbidden = await async_client.get(
-        f"/api/v1/sales-trainer/materials/versions/{bound_version.version_id}/file",
-        headers=_auth_headers(admin),
-    )
-    assert admin_public_forbidden.status_code == 403
-    assert admin_public_forbidden.json()["error"] == (
-        "[NEWCOMER_LEARNER_ROLE_REQUIRED]"
-    )
-
     content_admin_allowed = await async_client.get(
         f"/api/v1/admin/sales-trainer/materials/versions/{extra_version.version_id}/file",
         headers=_auth_headers(content_admin),
@@ -583,6 +718,61 @@ async def test_should_enforce_object_scope_for_material_file_download(
     )
     assert draft_denied.status_code == 404
     assert draft_denied.json()["error"] == "[MATERIAL_VERSION_NOT_PUBLISHED]"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_platform_admin_public_material_route_permission_baseline(
+    async_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    test_db: AsyncSession,
+    tmp_path: Path,
+) -> None:
+    """Keep the pre-existing admin/learner-route decision visible and isolated."""
+
+    monkeypatch.setenv("SALES_TRAINER_MATERIAL_STORAGE_PATH", str(tmp_path))
+    admin = _user("admin")
+    prompt = _published_prompt(admin)
+    unit = _audio_unit(admin, prompt_id=prompt.prompt_id, title="PPT 讲解")
+    material, version = _material_with_version(
+        admin,
+        storage_root=tmp_path,
+        key_prefix="admin-public-route",
+        body=b"admin-public-route",
+    )
+    test_db.add_all([admin, prompt, unit, material, version])
+    await test_db.commit()
+
+    service = SalesTrainerPathConfigService(test_db)
+    await service.save_config(
+        NewcomerPathConfigSaveRequest(
+            title="新人训练路径",
+            reason="隔离平台管理员 learner 路由权限基线",
+            modules=[
+                NewcomerPathModuleConfig(
+                    module_key="ppt_explanation",
+                    module_type="audio_scoring",
+                    enabled=True,
+                    order_index=1,
+                    title="PPT 讲解",
+                    target_unit_id=unit.unit_id,
+                    material_id=material.material_id,
+                    material_version_id=version.version_id,
+                    completion_rule="scored",
+                )
+            ],
+        ),
+        actor=admin,
+    )
+    await service.publish_config(actor=admin, reason="管理员权限基线路径生效")
+
+    response = await async_client.get(
+        f"/api/v1/sales-trainer/materials/versions/{version.version_id}/file",
+        headers=_auth_headers(admin),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "[NEWCOMER_LEARNER_ROLE_REQUIRED]"
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -8,13 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
 from common.error_handling.result import Result
-from curriculum_practice.models import LearningContent, QuestionCategory, QuestionItem
+from curriculum_practice.models import QuestionCategory, QuestionItem
 from sales_trainer.models import (
     SalesTrainerAudioScorePrompt,
     SalesTrainerAudioScoreResult,
     SalesTrainerAudioSubmission,
     SalesTrainerAudioTranscript,
-    SalesTrainerExamPaper,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
     SalesTrainerQuizAttempt,
@@ -31,6 +31,9 @@ from sales_trainer.schemas import (
     SalesTrainerUnitUpdate,
     UnitQuestionBinding,
 )
+from sales_trainer.services.asset_revision_service import (
+    SalesTrainerAssetRevisionService,
+)
 from sales_trainer.services.audio_submission_service import (
     AudioSubmissionService,
     AudioSubmissionServiceError,
@@ -42,6 +45,10 @@ from sales_trainer.services.deucate_scoring_service import (
 )
 from sales_trainer.services.material_service import SalesTrainerMaterialService
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.path_config_models import (
+    NEWCOMER_PATH_LOGICAL_ID,
+    NEWCOMER_PATH_RESOURCE_TYPE,
+)
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
 from sales_trainer.services.path_service import SalesTrainerPathService
 from sales_trainer.services.question_bank import QuestionBankAdapter
@@ -50,6 +57,7 @@ from sales_trainer.services.short_answer_scoring_service import (
     ShortAnswerScoreOutcome,
     ShortAnswerScoringService,
 )
+from sales_trainer.services.training_journey_service import TrainingJourneyService
 from sales_trainer.services.transcription_service import (
     TranscriptionResult,
     TranscriptionService,
@@ -1060,225 +1068,253 @@ async def test_should_submit_short_answer_attempt_when_ai_scoring_provider_fails
 
 
 @pytest.mark.asyncio
-async def test_should_project_sales_trainer_path_with_unlock_progress(
+async def test_should_project_sales_trainer_path_with_unlock_progress_and_prerequisite_parity(
     test_db: AsyncSession,
     test_user: User,
 ) -> None:
-    category = QuestionCategory(
-        category_id="path-category",
-        name="路径题库",
-        order_index=1,
-    )
-    question = QuestionItem(
-        question_id="path-question-1",
-        category_id=category.category_id,
-        title="产品定位",
-        stem="石犀核心定位是什么？",
-        scoring_criteria={
-            "question_type": "single_choice",
-            "options": [{"value": "A", "label": "数据流动治理"}],
-            "correct_answer": "A",
-        },
-        scoring_dimensions=["content_accuracy"],
-        status="published",
-        usage_scope="sales_trainer",
-    )
-    first_content = LearningContent(
-        learning_content_id=str(uuid.uuid4()),
-        title="产品定位学习内容",
-        summary="产品定位学习内容。",
-        owner="新人销售闯关",
-        source="unit_test",
-        status="published",
-        created_by=str(test_user.user_id),
-        updated_by=str(test_user.user_id),
-    )
-    second_content = LearningContent(
-        learning_content_id=str(uuid.uuid4()),
-        title="价值表达学习内容",
-        summary="价值表达学习内容。",
-        owner="新人销售闯关",
-        source="unit_test",
-        status="published",
-        created_by=str(test_user.user_id),
-        updated_by=str(test_user.user_id),
-    )
+    first_unit_id = str(uuid.uuid4())
+    second_unit_id = str(uuid.uuid4())
     first_unit = SalesTrainerUnit(
-        unit_id="path-unit-1",
-        name="第一关：产品定位",
-        unit_type="quiz",
-        config={
-            "quiz": {"pass_threshold": 10},
-            "path": {
-                "enabled": True,
-                "path_key": "newcomer_training_path_v1",
-                "path_title": "新人销售闯关",
-                "goal_title": "掌握首次客户沟通",
-                "level_title": "第一关：产品定位",
-                "order_index": 1,
-                "completion_rule": "passed",
-            },
-        },
-        status="published",
-        created_by=test_user.user_id,
-        updated_by=test_user.user_id,
-    )
-    first_paper = SalesTrainerExamPaper(
-        paper_id=str(uuid.uuid4()),
-        paper_key="path-unit-1-paper",
-        title="产品定位考卷",
-        module_key="business_skills",
-        unit_id=first_unit.unit_id,
-        pass_threshold=10,
+        unit_id=first_unit_id,
+        name="第一关：PPT 讲解",
+        unit_type="audio_scoring",
+        config={},
         status="published",
         created_by=test_user.user_id,
         updated_by=test_user.user_id,
     )
     second_unit = SalesTrainerUnit(
-        unit_id="path-unit-2",
-        name="第二关：价值表达",
-        unit_type="quiz",
-        config={
-            "quiz": {"pass_threshold": 10},
-            "path": {
-                "enabled": True,
-                "path_key": "newcomer_training_path_v1",
-                "path_title": "新人销售闯关",
-                "goal_title": "掌握首次客户沟通",
-                "level_title": "第二关：价值表达",
-                "order_index": 2,
-                "unlock_after_unit_ids": ["path-unit-1"],
-                "completion_rule": "passed",
-            },
-        },
+        unit_id=second_unit_id,
+        name="第二关：公司产品 Demo",
+        unit_type="audio_scoring",
+        config={},
         status="published",
         created_by=test_user.user_id,
         updated_by=test_user.user_id,
     )
-    second_paper = SalesTrainerExamPaper(
-        paper_id=str(uuid.uuid4()),
-        paper_key="path-unit-2-paper",
-        title="价值表达考卷",
-        module_key="elevator_pitch",
-        unit_id=second_unit.unit_id,
-        pass_threshold=10,
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="路径前置闸门测试评分标准",
+        purpose="general_audio_scoring",
+        system_prompt="评分。",
+        scoring_template="评分：{transcript}",
+        output_schema={},
         status="published",
         created_by=test_user.user_id,
         updated_by=test_user.user_id,
     )
-    test_db.add_all(
-        [
-            category,
-            question,
-            first_content,
-            second_content,
-            first_unit,
-            second_unit,
-            first_paper,
-            second_paper,
-        ]
-    )
-    await test_db.flush()
-    await UnitService(test_db)._replace_questions(
-        first_unit.unit_id,
-        [
-            UnitQuestionBinding(
-                question_id=question.question_id, order_index=1, points=10
-            )
-        ],
-    )
-    await UnitService(test_db)._replace_questions(
-        second_unit.unit_id,
-        [
-            UnitQuestionBinding(
-                question_id=question.question_id, order_index=1, points=10
-            )
-        ],
-    )
+    test_db.add_all([first_unit, second_unit, prompt])
     await test_db.commit()
 
-    path_config_service = SalesTrainerPathConfigService(test_db)
-    await path_config_service.save_config(
-        NewcomerPathConfigSaveRequest.model_validate(
-            {
-                "path_key": "newcomer_training_path_v1",
-                "title": "新人销售闯关",
-                "goal_title": "掌握首次客户沟通",
-                "reason": "发布测试路径 active revision",
-                "modules": [
-                    {
-                        "module_key": "business_skills",
-                        "module_type": "article_exam",
-                        "order_index": 1,
-                        "title": "第一关：产品定位",
-                        "target_unit_id": first_unit.unit_id,
-                        "learning_content_id": first_content.learning_content_id,
-                        "exam_paper_id": first_paper.paper_id,
-                        "completion_rule": "passed",
-                    },
-                    {
-                        "module_key": "elevator_pitch",
-                        "module_type": "article_exam",
-                        "order_index": 2,
-                        "title": "第二关：价值表达",
-                        "target_unit_id": second_unit.unit_id,
-                        "learning_content_id": second_content.learning_content_id,
-                        "exam_paper_id": second_paper.paper_id,
-                        "unlock_after_unit_ids": [first_unit.unit_id],
-                        "completion_rule": "passed",
-                    },
-                ],
-            }
-        ),
-        actor=test_user,
-    )
-    await path_config_service.publish_config(
-        actor=test_user,
-        reason="测试路径 active revision 生效",
-    )
-
-    paths_before = await SalesTrainerPathService(test_db).list_paths_for_user(
-        str(test_user.user_id)
-    )
-
-    assert paths_before[0]["current_level_id"] == "path-unit-1"
-    assert paths_before[0]["levels"][1]["status"] == "locked"
-
-    await QuizService(test_db).submit_attempt(
-        QuizAttemptCreate(
-            unit_id=first_unit.unit_id,
-            answers=[
-                QuizAnswerSubmit(
-                    question_id=question.question_id,
-                    answer_payload="A",
-                )
+    publish_result = await SalesTrainerAssetRevisionService(
+        test_db
+    ).create_published_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        payload={
+            "path_key": NEWCOMER_PATH_LOGICAL_ID,
+            "title": "新人销售闯关",
+            "goal_title": "掌握首次客户沟通",
+            "enabled": True,
+            "modules": [
+                {
+                    "module_key": "ppt_explanation",
+                    "module_type": "audio_scoring",
+                    "order_index": 1,
+                    "title": "第一关：PPT 讲解",
+                    "target_unit_id": first_unit_id,
+                    "completion_rule": "passed",
+                },
+                {
+                    "module_key": "company_product_demo",
+                    "module_type": "audio_scoring",
+                    "order_index": 2,
+                    "title": "第二关：公司产品 Demo",
+                    "target_unit_id": second_unit_id,
+                    "unlock_after_unit_ids": [first_unit_id],
+                    "completion_rule": "passed",
+                },
             ],
-        ),
+        },
         actor=test_user,
+        change_class="binding",
+        reason="发布路径前置闸门 parity 测试版本",
+    )
+    await test_db.commit()
+    active_revision_id = str(publish_result.revision.revision_id)
+    active_revision_no = int(publish_result.revision.revision_no)
+
+    async def read_path_and_journey() -> tuple[
+        dict[str, object],
+        dict[str, object],
+        dict[str, dict[str, object]],
+        dict[str, dict[str, object]],
+    ]:
+        path = (
+            await SalesTrainerPathService(test_db).list_paths_for_user(
+                str(test_user.user_id)
+            )
+        )[0]
+        journey_payload = await TrainingJourneyService(test_db).get_learner_journey(
+            str(test_user.user_id),
+            viewer=test_user,
+        )
+        path_levels = {str(level["unit_id"]): level for level in path["levels"]}
+        journey_modules = {
+            str(unit_id): module
+            for module in journey_payload["modules"]
+            if module["kind"] != "ai_coach"
+            for unit_id in module["target_unit_ids"]
+        }
+        return path, journey_payload, path_levels, journey_modules
+
+    def audio_evidence(
+        *,
+        revision_id: str,
+        revision_no: int,
+        passed: bool,
+        created_at: datetime,
+    ) -> tuple[SalesTrainerAudioSubmission, SalesTrainerAudioScoreResult]:
+        submission = SalesTrainerAudioSubmission(
+            submission_id=str(uuid.uuid4()),
+            unit_id=first_unit_id,
+            user_id=str(test_user.user_id),
+            purpose="general_audio_scoring",
+            original_filename="prerequisite.wav",
+            content_type="audio/wav",
+            size_bytes=1024,
+            storage_key=f"/tmp/{uuid.uuid4()}.wav",
+            task_brief_snapshot={
+                "submission_context": {
+                    "path_key": NEWCOMER_PATH_LOGICAL_ID,
+                    "path_revision_id": revision_id,
+                    "path_revision_no": revision_no,
+                    "module_key": "ppt_explanation",
+                    "legacy_snapshot_only": False,
+                }
+            },
+            status="scored",
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        score = SalesTrainerAudioScoreResult(
+            score_id=str(uuid.uuid4()),
+            submission_id=submission.submission_id,
+            prompt_id=prompt.prompt_id,
+            prompt_version=1,
+            prompt_hash=f"path-parity-{revision_id}",
+            total_score=88 if passed else 40,
+            passed=passed,
+            strengths=[],
+            improvements=[] if passed else ["补充客户价值说明"],
+            dimension_scores={},
+            created_at=created_at,
+        )
+        return submission, score
+
+    current_evidence_time = datetime.now(UTC)
+    current_submission, current_score = audio_evidence(
+        revision_id=active_revision_id,
+        revision_no=active_revision_no,
+        passed=True,
+        created_at=current_evidence_time,
+    )
+    stale_submission, stale_score = audio_evidence(
+        revision_id=str(uuid.uuid4()),
+        revision_no=active_revision_no - 1,
+        passed=False,
+        created_at=current_evidence_time + timedelta(seconds=1),
+    )
+    test_db.add_all([stale_submission, stale_score])
+    await test_db.commit()
+
+    (
+        path_before,
+        _,
+        path_levels_before,
+        journey_modules_before,
+    ) = await read_path_and_journey()
+
+    assert {
+        unit_id: bool(level["locked"]) for unit_id, level in path_levels_before.items()
+    } == {
+        unit_id: bool(module["locked"])
+        for unit_id, module in journey_modules_before.items()
+    }
+    assert path_before["completed_levels"] == 0
+    assert path_before["current_level_id"] == first_unit_id
+    assert path_before["next_level_id"] == first_unit_id
+    assert path_levels_before[first_unit_id]["latest_result"] is None
+    assert path_levels_before[second_unit_id]["locked"] is True
+    assert path_levels_before[second_unit_id]["status"] == "locked"
+    assert path_levels_before[second_unit_id]["lock_reason"] == (
+        "请先完成前置训练，再开始本任务。"
+    )
+    assert path_before["goal_context"]["evidence_items"] == []
+    assert path_before["goal_context"]["next_recommendation"]["unit_id"] == (
+        first_unit_id
+    )
+    assert (
+        path_before["goal_context"]["next_recommendation"]["recommendation_kind"]
+        == "start_level"
     )
 
-    paths_after = await SalesTrainerPathService(test_db).list_paths_for_user(
-        str(test_user.user_id)
-    )
+    test_db.add_all([current_submission, current_score])
+    await test_db.commit()
 
-    assert paths_after[0]["completed_levels"] == 1
-    assert paths_after[0]["current_level_id"] == "path-unit-2"
-    assert paths_after[0]["levels"][0]["status"] == "completed"
-    assert paths_after[0]["levels"][1]["status"] == "available"
-    assert paths_after[0]["goal_context"]["score_basis"] == (
-        "sales_trainer_path_projection_v1"
-    )
-    assert paths_after[0]["goal_context"]["evidence_items"][0]["evidence_type"] == (
-        "quiz_attempt"
-    )
-    assert paths_after[0]["goal_context"]["weak_points"][0]["unit_id"] == "path-unit-2"
-    assert paths_after[0]["goal_context"]["next_recommendation"] == {
-        "title": "下一关：第二关：价值表达",
+    (
+        path_after,
+        _,
+        path_levels_after,
+        journey_modules_after,
+    ) = await read_path_and_journey()
+
+    assert {
+        unit_id: bool(level["locked"]) for unit_id, level in path_levels_after.items()
+    } == {
+        unit_id: bool(module["locked"])
+        for unit_id, module in journey_modules_after.items()
+    }
+    assert path_after["completed_levels"] == 1
+    assert path_after["current_level_id"] == second_unit_id
+    assert path_after["next_level_id"] == second_unit_id
+    assert path_levels_after[first_unit_id]["status"] == "completed"
+    assert path_levels_after[first_unit_id]["latest_result"] == {
+        "status": "scored",
+        "passed": True,
+        "score": 88.0,
+        "max_score": 100.0,
+        "submitted_at": current_evidence_time,
+        "result_id": current_submission.submission_id,
+        "target_path": (
+            f"/sales-trainer/audio/result/{current_submission.submission_id}"
+        ),
+        "improvements": [],
+    }
+    assert path_levels_after[second_unit_id]["status"] == "available"
+    assert path_levels_after[second_unit_id]["lock_reason"] is None
+    goal_context = path_after["goal_context"]
+    assert [item["evidence_id"] for item in goal_context["evidence_items"]] == [
+        current_submission.submission_id
+    ]
+    assert goal_context["weak_points"] == [
+        {
+            "unit_id": second_unit_id,
+            "level_title": "第二关：公司产品 Demo",
+            "issue_type": "not_started",
+            "issue_text": "本关还没有训练证据。",
+            "evidence_id": None,
+            "score": None,
+            "max_score": None,
+        }
+    ]
+    assert goal_context["next_recommendation"] == {
+        "title": "下一关：第二关：公司产品 Demo",
         "reason": "本关还没有训练证据。",
-        "action_label": "开始做题",
-        "target_path": "/sales-trainer/business-skills",
-        "unit_id": "path-unit-2",
-        "level_title": "第二关：价值表达",
+        "action_label": "上传录音",
+        "target_path": f"/sales-trainer/audio/{second_unit_id}",
+        "unit_id": second_unit_id,
+        "level_title": "第二关：公司产品 Demo",
         "recommendation_kind": "start_level",
     }
 
