@@ -355,3 +355,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: 新人路径前置闸门
+
+**Date**: 2026-07-10
+**Task**: 新人路径前置闸门
+**Branch**: `codex/newcomer-path-prerequisite-gates`
+
+### Summary
+
+统一新人路径 prerequisite 的写入校验、Journey 与 legacy /paths 投影、直接入口防绕过和 active revision 证据语义；补齐多 target 精确解锁、历史坏配置 fail-closed、契约、可执行规范与关键门禁。任务切片 100 项通过；保留已记录的仓库级 mypy 与旧权限/夹具基线。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `895fe51b` | (see git log) |
+| `1e1deb13` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
