@@ -24,60 +24,24 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import agent.models  # noqa: E402,F401  # Register agent/voice-runtime tables on shared Base metadata.
 import curriculum_practice.models  # noqa: E402,F401  # Register curriculum tables for FK targets.
 import sales_trainer.models  # noqa: E402,F401  # Register sales trainer MVP tables.
-from agent.services.knowledge_contributor import (  # noqa: E402
-    register_agent_knowledge_contributor,
-)
-from agent.services.practice_session_contributor import (  # noqa: E402
-    register_agent_practice_session_contributor,
-)
 from common.db.models import Base  # noqa: E402
-from curriculum_practice.services.practice_report_contributor import (  # noqa: E402
-    register_curriculum_practice_report_contributor,
-)
-from curriculum_practice.services.practice_session_contributor import (  # noqa: E402
-    register_curriculum_practice_session_contributor,
-)
-from curriculum_practice.services.question_bank_provider import (  # noqa: E402
-    register_curriculum_question_bank_provider,
-)
-from curriculum_practice.services.runtime_gate_contributor import (  # noqa: E402
-    register_curriculum_practice_runtime_gate_contributors,
-)
-from evaluation.services.practice_report_contributor import (  # noqa: E402
-    register_evaluation_practice_report_contributor,
-)
-from presentation_coach.services.practice_session_contributor import (  # noqa: E402
-    register_presentation_coach_practice_session_contributor,
-)
-from presentation_coach.services.support_runtime_contributor import (  # noqa: E402
-    register_presentation_coach_support_runtime_contributor,
-)
-from sales_bot.services.practice_session_contributor import (  # noqa: E402
-    register_sales_bot_practice_session_contributor,
-)
+from domain_contributor_bootstrap import register_domain_contributors  # noqa: E402
 from sales_trainer.services.asset_revision_lineage_provider import (  # noqa: E402
     register_sales_trainer_asset_revision_lineage_provider,
 )
-from support.services.knowledge_contributor import (  # noqa: E402
-    register_support_knowledge_contributor,
-)
-from training_runtime.practice_session_contributor import (  # noqa: E402
-    register_training_runtime_practice_session_contributor,
-)
 
-register_agent_knowledge_contributor()
-register_agent_practice_session_contributor()
-register_curriculum_question_bank_provider()
-register_curriculum_practice_runtime_gate_contributors()
-register_curriculum_practice_session_contributor()
-register_curriculum_practice_report_contributor()
-register_evaluation_practice_report_contributor()
-register_presentation_coach_practice_session_contributor()
-register_presentation_coach_support_runtime_contributor()
-register_sales_bot_practice_session_contributor()
-register_sales_trainer_asset_revision_lineage_provider()
-register_support_knowledge_contributor()
-register_training_runtime_practice_session_contributor()
+
+def _register_default_test_contributors() -> None:
+    register_domain_contributors()
+    register_sales_trainer_asset_revision_lineage_provider()
+
+
+@pytest.fixture(autouse=True)
+def restore_default_domain_contributors():
+    """Keep global contributor registries isolated between tests."""
+    _register_default_test_contributors()
+    yield
+    _register_default_test_contributors()
 
 
 @pytest.fixture(autouse=True)
