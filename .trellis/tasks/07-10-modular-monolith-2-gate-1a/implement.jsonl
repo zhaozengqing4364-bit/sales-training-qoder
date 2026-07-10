@@ -1,0 +1,12 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端平台开发总索引与非协商约束。"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "backend/scripts、tests 与架构政策文件放置约定。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "pytest、Ruff、mypy 与主门禁要求。"}
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "Gate 0A 已建立的生成式合同与单一门禁原则。"}
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "本 Gate 沉淀的依赖政策、exception 生命周期和 SCC 单调收缩合同。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用现有边界测试并避免第二套门禁。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "AST scanner、YAML policy、文档与 CI 跨层一致性。"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "计划、实现、验收和证据七维一致性。"}
+{"file": "docs/superpowers/plans/2026-07-10-gate-1a-architecture-fitness.md", "reason": "用户批准的 Gate 1A 逐步骤实施计划。"}
+{"file": "docs/superpowers/specs/2026-07-10-modular-monolith-2-design.md", "reason": "目标依赖方向、迁移约束和成功标准。"}
+{"file": "docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md", "reason": "架构 guard、临时例外与无运行时变更决策。"}
+{"file": ".trellis/tasks/07-10-modular-monolith-2-gate-1a/research/architecture-guard-baseline.md", "reason": "当前缺失项、动态 import、边界测试与实现风险基线。"}

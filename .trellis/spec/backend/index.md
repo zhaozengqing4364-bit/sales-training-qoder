@@ -43,6 +43,7 @@ Before writing backend code, read the guides relevant to your change:
 | [Error Handling](./error-handling.md) | `Result[T]`, API responses, middleware fallbacks | Ready |
 | [Quality Guidelines](./quality-guidelines.md) | pytest, ruff, mypy, forbidden patterns | Ready |
 | [Platform Contract Truth](./platform-contract-truth.md) | Contributor registry isolation, effective route inventory, runtime-generated OpenAPI parity | Ready |
+| [Architecture Fitness](./architecture-fitness.md) | Executable cross-package dependency policy, temporary exceptions, and SCC guard | Ready |
 | [Logging Guidelines](./logging-guidelines.md) | structlog, trace_id, redaction | Ready |
 
 ---
