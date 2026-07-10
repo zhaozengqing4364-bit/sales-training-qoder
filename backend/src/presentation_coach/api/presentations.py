@@ -12,6 +12,7 @@ from typing import Any, cast
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,6 +29,7 @@ from common.db.models import (
 )
 from common.db.schemas import (
     ForbiddenWordCreate,
+    ForbiddenWordResponse,
     PageResponse,
     PresentationDetail,
     PresentationResponse,
@@ -1073,24 +1075,43 @@ async def get_forbidden_words(
     return words
 
 
-@router.post("/presentations/{presentation_id}/forbidden-words", status_code=201)
+@router.post(
+    "/presentations/{presentation_id}/forbidden-words",
+    status_code=201,
+    response_model=ForbiddenWordResponse,
+)
 async def add_forbidden_word(
     presentation_id: str,
     word: ForbiddenWordCreate,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-) -> Any:
+) -> ForbiddenWordResponse | JSONResponse:
     """Add forbidden word to presentation"""
     _ = current_user
-    forbidden_word = ForbiddenWord(
-        presentation_id=presentation_id,
-        phrase=word.phrase,
-        suggested_alternative=word.suggested_alternative,
-        page_id=word.page_id,
-    )
+    try:
+        forbidden_word = ForbiddenWord(
+            presentation_id=presentation_id,
+            phrase=word.phrase,
+            suggested_alternative=word.suggested_alternative,
+            page_id=word.page_id,
+        )
 
-    db.add(forbidden_word)
-    await db.commit()
-    await db.refresh(forbidden_word)
-
-    return forbidden_word
+        db.add(forbidden_word)
+        await db.flush()
+        await db.refresh(forbidden_word)
+        response = ForbiddenWordResponse.model_validate(forbidden_word)
+        await db.commit()
+        return response
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        logger.error(
+            "Failed to add forbidden word",
+            presentation_id=presentation_id,
+            error=str(exc),
+        )
+        return build_server_error(
+            "[PRESENTATION_FORBIDDEN_WORD_CREATE_FAILED]",
+            message="Failed to add forbidden word",
+            exc=exc,
+            presentation_id=presentation_id,
+        )

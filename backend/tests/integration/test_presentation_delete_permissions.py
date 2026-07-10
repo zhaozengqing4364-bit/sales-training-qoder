@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
-from common.db.models import Page, Presentation, User
+from common.db.models import ForbiddenWord, Page, Presentation, User
 
 
 async def _create_user(test_db: AsyncSession, *, role: str, name: str) -> User:
@@ -142,12 +142,35 @@ async def test_presentation_governance_writes_require_admin(
     )
     assert talking_point_response.status_code == 403
 
-    forbidden_word_response = await async_client.post(
-        f"/api/v1/presentations/{presentation.presentation_id}/forbidden-words",
-        headers=_auth_headers(learner),
-        json={"phrase": "maybe", "suggested_alternative": "specifically"},
+    for path, payload in (
+        (
+            f"/api/v1/admin/presentations/{presentation.presentation_id}/forbidden-words",
+            {"word": "maybe", "pattern_type": "literal"},
+        ),
+        (
+            f"/api/v1/presentations/{presentation.presentation_id}/forbidden-words",
+            {"phrase": "maybe", "suggested_alternative": "specifically"},
+        ),
+    ):
+        forbidden_word_response = await async_client.post(
+            path,
+            headers=_auth_headers(learner),
+            json=payload,
+        )
+        assert forbidden_word_response.status_code == 403
+
+    persisted_forbidden_words = (
+        (
+            await test_db.execute(
+                select(ForbiddenWord).where(
+                    ForbiddenWord.presentation_id == presentation.presentation_id
+                )
+            )
+        )
+        .scalars()
+        .all()
     )
-    assert forbidden_word_response.status_code == 403
+    assert list(persisted_forbidden_words) == []
 
 
 @pytest.mark.integration

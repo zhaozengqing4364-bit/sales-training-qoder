@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -27,6 +28,7 @@ from common.db.models import (
     RequiredTalkingPoint,
     User,
 )
+from common.db.schemas import ForbiddenWordResponse
 from common.db.session import get_db
 from common.knowledge.ingestion_service import ingestion_service
 from common.monitoring.logger import get_logger
@@ -551,13 +553,17 @@ async def delete_talking_point(
 
 
 # Forbidden Words CRUD
-@router.post("/admin/presentations/{presentation_id}/forbidden-words", status_code=201)
+@router.post(
+    "/admin/presentations/{presentation_id}/forbidden-words",
+    status_code=201,
+    response_model=ForbiddenWordResponse,
+)
 async def create_forbidden_word(
     presentation_id: str,
     data: ForbiddenWordCreate,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-) -> Any:
+) -> ForbiddenWordResponse | JSONResponse:
     """Create a forbidden word for a presentation"""
     try:
         phrase_value = (data.phrase or data.word or "").strip()
@@ -574,13 +580,16 @@ async def create_forbidden_word(
         )
 
         db.add(forbidden_word)
-        await db.commit()
+        await db.flush()
         await db.refresh(forbidden_word)
+        response = ForbiddenWordResponse.model_validate(forbidden_word)
+        await db.commit()
 
-        return forbidden_word
+        return response
     except HTTPException:
         raise
     except SQLAlchemyError as e:
+        await db.rollback()
         logger.error(f"Failed to create forbidden word: {str(e)}")
         return build_server_error(
             "[ADMIN_FORBIDDEN_WORD_CREATE_FAILED]",

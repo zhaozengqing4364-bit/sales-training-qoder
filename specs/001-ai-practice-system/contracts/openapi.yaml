@@ -601,8 +601,7 @@ paths:
           content:
             application/json:
               schema:
-                title: Response Add Forbidden Word Api V1 Presentations  Presentation Id  Forbidden Words
-                  Post
+                $ref: '#/components/schemas/ForbiddenWordResponse'
         '422':
           description: Validation Error
           content:
@@ -10336,8 +10335,7 @@ paths:
           content:
             application/json:
               schema:
-                title: Response Create Forbidden Word Api V1 Admin Presentations  Presentation Id  Forbidden
-                  Words Post
+                $ref: '#/components/schemas/ForbiddenWordResponse'
         '422':
           description: Validation Error
           content:
@@ -30176,6 +30174,42 @@ components:
       required:
       - max_seconds
       title: ExaminerTimeoutConfig
+    ForbiddenWordResponse:
+      properties:
+        phrase:
+          type: string
+          maxLength: 500
+          title: Phrase
+        suggested_alternative:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Suggested Alternative
+        page_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Page Id
+        word_id:
+          type: string
+          format: uuid
+          title: Word Id
+        presentation_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Presentation Id
+        is_regex:
+          type: boolean
+          title: Is Regex
+          default: false
+      type: object
+      required:
+      - phrase
+      - word_id
+      title: ForbiddenWordResponse
     ForgotPasswordRequest:
       properties:
         email:
