@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 9
-- **Last Active**: 2026-07-08
+- **Total Sessions**: 10
+- **Last Active**: 2026-07-10
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~324 | Active |
+| `journal-1.md` | ~361 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 10 | 2026-07-10 | 模块化单体 2.0 Gate 0A 平台合同真相 | `7c9b5e1d`, `08c8b463`, `1fa43e17`, `ee1bae58`, `43ee3780` | `codex/newcomer-training-v0-9-closure` |
 | 9 | 2026-07-08 | 新人训练路径 Route Manifest 补齐 | `b794e5fc` | `codex/newcomer-training-v0-9-closure` |
 | 8 | 2026-07-08 | 新人训练路径 Playwright 审计治理闭环 | `d38bda36`, `baa86fdf`, `f32f0de3` | `codex/newcomer-training-v0-9-closure` |
 | 7 | 2026-07-08 | 新人训练后台一页式配置闭环 | `2e2fb720` | `codex/newcomer-training-v0-9-closure` |

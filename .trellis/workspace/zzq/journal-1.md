@@ -322,3 +322,40 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: 模块化单体 2.0 Gate 0A 平台合同真相
+
+**Date**: 2026-07-10
+**Task**: 模块化单体 2.0 Gate 0A 平台合同真相
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+修复 Realtime 测试夹具与 contributor 顺序污染，适配 FastAPI included routes，建立 runtime-generated OpenAPI 合同及主质量门禁，并沉淀平台合同规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7c9b5e1d` | (see git log) |
+| `08c8b463` | (see git log) |
+| `1fa43e17` | (see git log) |
+| `ee1bae58` | (see git log) |
+| `43ee3780` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
