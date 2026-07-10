@@ -322,3 +322,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: Readiness review decision integrity
+
+**Date**: 2026-07-10
+**Task**: Readiness review decision integrity
+**Branch**: `codex/readiness-decision-integrity`
+
+### Summary
+
+完成 Readiness 独立复核权限、专用追加式决策真源、幂等与并发控制、canonical/legacy 双读、前端安全确认和治理门禁；最终审查清零。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f5c17b17` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
