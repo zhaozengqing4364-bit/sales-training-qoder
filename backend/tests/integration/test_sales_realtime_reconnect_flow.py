@@ -242,6 +242,11 @@ async def test_sales_stepfun_reconnect_restores_turn_continuity_and_cleans_termi
     monkeypatch.setattr(stepfun_module, "AsyncSessionLocal", session_factory)
     monkeypatch.setattr(runtime_hooks_module, "AsyncSessionLocal", session_factory)
     monkeypatch.setattr(
+        stepfun_module,
+        "verify_token",
+        lambda _token: {"user_id": str(test_user.user_id)},
+    )
+    monkeypatch.setattr(
         stepfun_module.SessionLifecycleService,
         "trigger_report_generation_if_needed",
         AsyncMock(),

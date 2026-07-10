@@ -5344,10 +5344,12 @@ async def test_capability_pipeline_fails_does_not_change_training_session_status
 @pytest.mark.asyncio
 async def test_handle_upstream_response_audio_transcript_done_dispatches_capture_without_blocking():
     release_sink = asyncio.Event()
+    sink_started = asyncio.Event()
     captured: list[dict[str, Any]] = []
 
     async def sink(payload: dict[str, Any]) -> None:
         captured.append(payload)
+        sink_started.set()
         await release_sink.wait()
 
     handler = StepFunRealtimeHandler(transcript_capture_sink=sink)
@@ -5393,6 +5395,8 @@ async def test_handle_upstream_response_audio_transcript_done_dispatches_capture
         timeout=0.1,
     )
 
+    await asyncio.wait_for(sink_started.wait(), timeout=1.0)
+    assert not release_sink.is_set()
     assert len(captured) == 1
     payload = captured[0]
     assert payload["speaker"] == "assistant"
