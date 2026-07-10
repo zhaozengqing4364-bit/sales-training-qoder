@@ -628,6 +628,7 @@ async def test_dev_login_normalizes_legacy_dev_user_role_to_admin(
     persisted = refreshed.scalars().first()
     assert persisted is not None
     assert persisted.role == "admin"
+    assert persisted.department == "新人训练路径"
 
 
 @pytest.mark.asyncio

@@ -37,6 +37,12 @@ import type {
     BusinessEtiquetteUnitQuizAttempt,
     BusinessEtiquetteUnitQuizAttemptCreateRequest,
     BusinessEtiquetteUnitQuizAttemptListResponse,
+    CustomerFaqGenerateDraftRequest,
+    CustomerFaqImportParseRequest,
+    CustomerFaqImportParseResponse,
+    CustomerFaqLearningTopicResponse,
+    CustomerFaqShortAnswerAttemptResponse,
+    CustomerFaqShortAnswerSubmitRequest,
     LearningContentBindingImpactResponse,
     NewcomerArticle,
     NewcomerArticleBinding,
@@ -201,6 +207,25 @@ export function createNewcomerTrainingDomain({
                 {
                     method: "POST",
                     body: JSON.stringify({ reason: payload?.reason ?? null }),
+                },
+            );
+        },
+
+        getCustomerFaqTopic: async () => {
+            return request<CustomerFaqLearningTopicResponse>(
+                "/newcomer-training/customer-faq/topic",
+            );
+        },
+
+        submitCustomerFaqShortAnswerAttempt: async (
+            unitKey: string,
+            payload: CustomerFaqShortAnswerSubmitRequest,
+        ) => {
+            return request<CustomerFaqShortAnswerAttemptResponse>(
+                `/newcomer-training/customer-faq/learning-units/${encodeURIComponent(unitKey)}/short-answer-attempts`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
                 },
             );
         },
@@ -388,6 +413,28 @@ export function createAdminNewcomerTrainingDomain({
                 "/admin/newcomer-training/business-etiquette/imports",
                 formData,
                 signal,
+            );
+        },
+
+        parseCustomerFaqMaterial: async (payload: CustomerFaqImportParseRequest) => {
+            return request<CustomerFaqImportParseResponse>(
+                "/admin/newcomer-training/learning-topics/customer-faq/parse",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        generateCustomerFaqLearningTopicDraft: async (
+            payload: CustomerFaqGenerateDraftRequest,
+        ) => {
+            return request<NewcomerLearningTopicsConfigResponse>(
+                "/admin/newcomer-training/learning-topics/customer-faq/generate-draft",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
             );
         },
 

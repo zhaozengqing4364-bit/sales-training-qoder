@@ -12,7 +12,7 @@
 
 新人训练路径负责完整训练闭环：PPT/材料学习、录音上传、AI 转写、AI 评分、必修训练任务、学习专题、试卷考试、AI Coach、实时对练入口投影、后台配置、训练记录、管理看板和审计。实时语音运行时仍由 `sales_bot`、`practice_sessions`、`training_runtime`、`/practice/[sessionId]` 和 `/api/v1/practice/sessions` 等运行时权威负责；`sales_trainer` 只能通过 runtime binding 和 outcome projection 纳入闭环，不得直接创建、修改或修复 realtime 会话。
 
-自 2026-07-08 起，原 `business_skills` 的“商务技巧文章”语义被拆分：训练路径 active revision 只保留必修训练任务；专题内容和小单元进入独立 `newcomer_learning_topics_v1` 治理资产。第一版学习专题只支持 `business_etiquette` / “商务礼仪规范”，但后台入口统一展示为“学习专题”，不得把“商务技巧”作为长期信息架构或接口语义。
+自 2026-07-08 起，原 `business_skills` 的“商务技巧文章”语义被拆分：训练路径 active revision 只保留必修训练任务；专题内容和小单元进入独立 `newcomer_learning_topics_v1` 治理资产。学习专题当前支持 `business_etiquette` / “商务礼仪规范”和 `customer_faq` / “客户常见问答”，后台入口统一展示为“学习专题”，不得把“商务技巧”作为长期信息架构或接口语义。
 
 旧语义“模块 4 只能作为 disabled/coming-soon placeholder，且永不接入实时运行时”自 2026-06-27 起被本契约 supersede。实时对练可以纳入新人训练路径，但 learner 入口开放前必须同时满足 runtime binding、对象级权限、配置健康、provider readiness、TrainingJourney outcome projection、审计和 active revision rollback 语义。缺任一条件时模块必须 fail-closed，返回 typed diagnostic 或 disabled 状态；不得用占位成功、前端隐藏或 WebSocket 重连掩盖配置错误。
 
@@ -354,21 +354,28 @@ StepAudio 2.5 provider migration 语义：
 | `logical_id` | `newcomer_learning_topics_v1` |
 | `schema_version` | `newcomer_learning_topics_v1` |
 | 后台入口 | `/admin/sales-trainer/learning-topics`，用户可见名“学习专题”；旧 `/admin/sales-trainer/articles` 仅作为兼容入口 |
-| learner 入口 | `/sales-trainer/learning-topics/business-etiquette`；兼容保留 `/sales-trainer/business-skills` |
+| learner 入口 | `/sales-trainer/learning-topics/business-etiquette`、`/sales-trainer/learning-topics/customer-faq`；兼容保留 `/sales-trainer/business-skills` |
 
-第一版只支持 `business_etiquette` 专题。未来扩展销售技巧文章、客户常见质疑文章等专题时，应新增 topic key 和发布校验，不应恢复“商务技巧文章”作为顶层模块名。
+当前支持 `business_etiquette` 文章专题和 `customer_faq` 问答卡片专题。未来扩展销售技巧文章、客户常见质疑文章等专题时，应新增 topic key、内容形态和发布校验，不应恢复“商务技巧文章”作为顶层模块名。
 
 ```typescript
 type LearningTopicScoreDisplayPolicy = "quiz_attempt_score";
 
 interface NewcomerLearningTopicConfig {
-  topic_key: "business_etiquette";
-  source_module_key: "business_skills";
+  topic_key: "business_etiquette" | "customer_faq";
+  source_module_key: "business_skills" | "customer_faq";
+  content_kind: "article" | "faq_cards";
   enabled: boolean;
+  disabled_reason?: string | null;
   title: string; // 默认“商务礼仪规范”
   description?: string | null;
   order_index: number;
   learning_content_id?: string | null;
+  faq_cards?: CustomerFaqCard[];
+  duplicate_groups?: CustomerFaqDuplicateGroup[];
+  evidence_cases?: CustomerFaqEvidenceCase[];
+  audio_scenario_key?: string | null;
+  quiz_paper_id?: string | null;
   learning_units: BusinessEtiquetteTrainingUnitConfig[];
   ai_coach?: AiCoachAdminConfigLike | null;
   required: false;
@@ -403,6 +410,8 @@ interface NewcomerLearningTopicsConfigResponse {
 | `GET` | `/api/v1/admin/newcomer-training/learning-topics/config` | 读取 active/working 学习专题配置；有 working 时返回可编辑 payload，但 active 指针仍单独暴露 |
 | `PUT` | `/api/v1/admin/newcomer-training/learning-topics/config` | 保存学习专题 working revision |
 | `POST` | `/api/v1/admin/newcomer-training/learning-topics/business-etiquette/generate-draft` | 从 active path 的旧 `business_skills` 生成商务礼仪规范草稿；不自动发布 |
+| `POST` | `/api/v1/admin/newcomer-training/learning-topics/customer-faq/parse` | 解析客户常见问答材料为卡片、重复组、案例证据和高风险提示；不落库 |
+| `POST` | `/api/v1/admin/newcomer-training/learning-topics/customer-faq/generate-draft` | 从客户问答材料生成 `customer_faq` 学习专题 working revision；不自动发布 |
 | `POST` | `/api/v1/admin/newcomer-training/learning-topics/publish/preview` | 发布影响预览 |
 | `POST` | `/api/v1/admin/newcomer-training/learning-topics/publish` | 发布 working revision，只影响未来 learner 展示 |
 | `GET` | `/api/v1/admin/newcomer-training/learning-topics/revisions` | 学习专题修订列表 |
@@ -4606,8 +4615,10 @@ interface OperationLogListResponse {
 | `newcomer_path.modules[].target_unit_id(s)` | 无 | learner 模块入口、完成状态聚合 | admin 新人训练路径配置 | 必须指向已发布训练单元；缺失返回 `[NEWCOMER_MODULE_BINDING_MISSING]` |
 | `newcomer_path.modules[].learning_content_id` | 无 | 旧 `article_exam` 模块文章入口；商务礼仪规范不再读取此字段作为 learner 真源 | admin 新人训练路径文章绑定 | 必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` |
 | `newcomer_path.modules[].exam_paper_id` | 无 | 旧 `article_exam` 模块考卷入口 | admin 新人训练路径考卷管理 | 必须指向已发布考卷；缺失或草稿返回 `[PAPER_NOT_PUBLISHED]` |
-| `newcomer_learning_topics_v1.topics[]` | 空；第一版只支持 `business_etiquette` | learner `TrainingJourney.learning_topics`、商务礼仪文章/小单元/小测/AI Coach | `/admin/sales-trainer/learning-topics` | 必须通过 `SalesTrainerAssetRevision` 发布治理；`required=false`、`blocks_next=false`；未发布不展示；发布后只影响未来 learner；非法返回 `[LEARNING_TOPIC_CONFIG_INVALID]` |
+| `newcomer_learning_topics_v1.topics[]` | 空；当前显式支持 `business_etiquette`、`customer_faq` | learner `TrainingJourney.learning_topics`、商务礼仪文章/小单元/小测/AI Coach、客户问答卡片学习 | `/admin/sales-trainer/learning-topics` | 必须通过 `SalesTrainerAssetRevision` 发布治理；`required=false`、`blocks_next=false`；未发布不展示；发布后只影响未来 learner；非法返回 `[LEARNING_TOPIC_CONFIG_INVALID]` |
 | `newcomer_learning_topics_v1.topics[].learning_content_id` | 无 | 商务礼仪规范专题内容入口 | `/admin/sales-trainer/learning-topics/business-etiquette` | enabled topic 发布时必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_TOPIC_CONTENT_MISSING]` / `[LEARNING_TOPIC_CONTENT_INVALID]` |
+| `newcomer_learning_topics_v1.topics[].faq_cards[]` | 无 | 客户常见问答专题卡片学习、口播演练素材、AI 教练边界 | `/admin/sales-trainer/learning-topics/customer-faq` | `customer_faq` 发布时必须至少有一张 `status="published"` 卡片；重复问题组、证据案例和禁答边界必须随卡片保存；缺失返回 `[LEARNING_TOPIC_FAQ_CARDS_MISSING]` |
+| `newcomer_learning_topics_v1.topics[].learning_units[].source_card_keys[]` | 空数组 | 客户问答专题小单元与卡片范围绑定 | `/admin/sales-trainer/learning-topics/customer-faq` | 每个 key 必须指向本专题已发布卡片；非法返回 `[LEARNING_TOPIC_UNIT_CARD_BINDING_INVALID]` |
 | `newcomer_learning_topics_v1.topics[].learning_units[]` | 7 个商务礼仪小单元 seed | 商务礼仪 learner 首页、小单元详情、阅读进度和小测 | `/admin/sales-trainer/learning-topics/business-etiquette` | 标题、顺序、章节、能力点、小测题量、通过线、重测规则、题型权重和 AI Coach 达标策略均可配置；缺失返回 `[LEARNING_TOPIC_UNITS_MISSING]` |
 | `newcomer_path.modules[].duration_options` | `10/20/30` 分钟可由 seed 初始化 | 金字塔演讲模块入口 | admin 新人训练路径配置 | 每项必须有正数时长和已发布音频单元；非法返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` |
 | `newcomer_path.modules[].capability_keys` | seed 写入 V0.9 固定新人能力 key | 达标档案 evidence/competency 映射、重练目标模块匹配、workbench 弱项归因 | admin 新人训练路径配置 | 必须命中 V0.9 固定能力模型且不得重复；发布配置非法返回 `[NEWCOMER_PATH_CONFIG_INVALID]`；缺失旧数据只允许后端兼容映射，不得由前端按标题推断 |

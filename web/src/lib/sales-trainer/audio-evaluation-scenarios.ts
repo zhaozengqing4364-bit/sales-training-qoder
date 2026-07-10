@@ -3,7 +3,8 @@ import type { NewcomerPathModuleType } from "@/lib/api/types";
 export type AudioEvaluationScenarioKey =
     | "ppt_explanation"
     | "company_product_demo"
-    | "elevator_pitch";
+    | "elevator_pitch"
+    | "customer_faq_oral_drill";
 
 export type AudioEvaluationModuleKey = AudioEvaluationScenarioKey;
 
@@ -84,6 +85,25 @@ export const AUDIO_EVALUATION_SCENARIOS = [
         taskBriefTitle: "金字塔演讲",
         taskBriefPurpose: "训练新人用短时间讲清公司、产品价值和下一步邀约。",
         taskBriefScenario: "客户给你一段有限时间介绍机会，需要按金字塔结构完成清晰、有重点的价值说明。",
+    },
+    {
+        scenarioKey: "customer_faq_oral_drill",
+        moduleKey: "customer_faq_oral_drill",
+        slug: "customer-faq-oral-drill",
+        purposeKey: "customer_faq_oral_drill",
+        title: "客户问答口播演练",
+        orderLabel: "训练任务",
+        description: "抽取客户常见问题完成 60-120 秒口播回答，AI 评估事实准确、价值表达和边界意识。",
+        learnerPreview: "选择 1-3 个客户常见问题，上传连续口播回答并查看评分建议。",
+        moduleType: "audio_scoring",
+        completionRule: "scored",
+        orderIndex: 4,
+        primaryActionLabel: "上传问答录音",
+        materialRequired: false,
+        capabilityKeys: ["customer_perspective", "objection_handling", "expression_clarity"],
+        taskBriefTitle: "客户问答口播演练",
+        taskBriefPurpose: "训练新人把客户常见问题讲准、讲短，并知道何时转售前确认。",
+        taskBriefScenario: "客户现场追问产品、部署、案例或风险边界时，选择 1-3 个问题完成连续回答。",
     },
 ] as const satisfies readonly AudioEvaluationScenarioDefinition[];
 

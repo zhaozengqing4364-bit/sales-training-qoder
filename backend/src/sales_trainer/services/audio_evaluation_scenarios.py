@@ -35,6 +35,7 @@ class AudioEvaluationScenario:
 PPT_EXPLANATION_SCENARIO_KEY: Final = "ppt_explanation"
 COMPANY_PRODUCT_DEMO_SCENARIO_KEY: Final = "company_product_demo"
 ELEVATOR_PITCH_SCENARIO_KEY: Final = "elevator_pitch"
+CUSTOMER_FAQ_ORAL_DRILL_SCENARIO_KEY: Final = "customer_faq_oral_drill"
 
 
 AUDIO_EVALUATION_SCENARIOS: Final[dict[str, AudioEvaluationScenario]] = {
@@ -105,6 +106,28 @@ AUDIO_EVALUATION_SCENARIOS: Final[dict[str, AudioEvaluationScenario]] = {
         task_brief_purpose="训练新人用短时间讲清公司、产品价值和下一步邀约。",
         task_brief_scenario="客户给你一段有限时间介绍机会，需要按金字塔结构完成清晰、有重点的价值说明。",
     ),
+    CUSTOMER_FAQ_ORAL_DRILL_SCENARIO_KEY: AudioEvaluationScenario(
+        scenario_key=CUSTOMER_FAQ_ORAL_DRILL_SCENARIO_KEY,
+        purpose_key="customer_faq_oral_drill",
+        module_key="customer_faq_oral_drill",
+        display_name="客户问答口播演练",
+        module_type="audio_scoring",
+        material_policy="optional",
+        prompt_required=True,
+        runtime_shape="single_audio",
+        completion_rule="scored",
+        primary_action_label="上传问答录音",
+        default_order_index=4,
+        capability_keys=(
+            "customer_perspective",
+            "objection_handling",
+            "expression_clarity",
+        ),
+        description="抽取客户常见问题完成 60-120 秒口播回答，由 AI 评估事实准确、价值表达和边界意识。",
+        task_brief_title="客户问答口播演练",
+        task_brief_purpose="训练新人把客户常见问题讲准、讲短，并知道何时转售前确认。",
+        task_brief_scenario="客户现场追问产品、部署、案例或风险边界时，选择 1-3 个问题完成连续回答。",
+    ),
 }
 
 _SCENARIO_BY_MODULE_KEY: Final = {
@@ -159,14 +182,8 @@ def resolve_audio_evaluation_scenario_from_config(
     audio = raw_config.get("audio")
     path = raw_config.get("path")
     config_scenario_key = (
-        audio.get("scenario_key")
-        if isinstance(audio, dict)
-        else None
-    ) or (
-        path.get("scenario_key")
-        if isinstance(path, dict)
-        else None
-    )
+        audio.get("scenario_key") if isinstance(audio, dict) else None
+    ) or (path.get("scenario_key") if isinstance(path, dict) else None)
     config_module_key = path.get("module_key") if isinstance(path, dict) else None
     config_purpose_key = audio.get("purpose") if isinstance(audio, dict) else None
     return resolve_audio_evaluation_scenario(

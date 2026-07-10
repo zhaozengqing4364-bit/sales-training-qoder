@@ -30,12 +30,14 @@ Accepted. 本 ADR 冻结“学习专题”从新人训练路径必修模块中�
 
 `newcomer_path` 继续负责必修训练任务顺序、录音、演讲、realtime gate 等主路径。专题内容、小单元、小测规则和商务礼仪 AI Coach 进入 `newcomer_learning_topics_v1.topics[]`。
 
-第一版只支持：
+第一版支持两类专题形态：
 
 - `topic_key = "business_etiquette"`
 - `source_module_key = "business_skills"`，仅表示从旧配置生成草稿的兼容来源。
+- `topic_key = "customer_faq"`
+- `source_module_key = "customer_faq"`，表示客户常见问答卡片库专题，不对应必修路径关卡。
 
-`business_skills` 不再计入 required modules、overall completion 或下一关阻断。
+`business_skills` 和 `customer_faq` 不再计入 required modules、overall completion 或下一关阻断。
 
 ### 3. 后台入口保留，用户语言调整
 
@@ -66,15 +68,18 @@ Accepted. 本 ADR 冻结“学习专题”从新人训练路径必修模块中�
 
 采用逻辑资产而不是新表，牺牲一部分查询便利性，换取零 migration、低风险回滚和与现有发布治理一致的历史解释。
 
-保留 `/sales-trainer/business-skills` 和 `/admin/sales-trainer/articles`，避免破坏旧链接；新增 `/sales-trainer/learning-topics/business-etiquette` 作为更准确的新入口。
+保留 `/sales-trainer/business-skills` 和 `/admin/sales-trainer/articles`，避免破坏旧链接；新增 `/sales-trainer/learning-topics/business-etiquette` 和 `/sales-trainer/learning-topics/customer-faq` 作为更准确的新入口。
 
-第一版 topic key 限定为 `business_etiquette`，避免提前设计通用 CMS。未来新增销售技巧、客户质疑等专题时，按同一 payload 扩展 topic key 和校验，而不是复制一套路径模块。
+专题不是通用 CMS。新增销售技巧、客户质疑等专题时，应按同一 payload 扩展 topic key、内容形态和发布校验，而不是复制一套路径模块。
+
+客户问答专题采用 `content_kind="faq_cards"`：材料先解析为受审核问答卡片、重复问题组、案例证据和禁答边界，再由后台生成学习小单元。PPT 讲解、公司产品 Demo、客户问答口播都属于“上传录音并由 AI 评分”的能力；PPT 或客户问答只是载体/场景，不应作为能力层级。
 
 ## 影响
 
 ### API
 
 - Admin 新增 `/api/v1/admin/newcomer-training/learning-topics/*` 配置、生成草稿、发布、回滚和 revisions 端点。
+- 客户问答新增 `/api/v1/admin/newcomer-training/learning-topics/customer-faq/parse` 和 `/generate-draft`；learner 读取 `/api/v1/newcomer-training/customer-faq/topic`。
 - Learner Journey 新增 `learning_topics[]`。
 - 商务礼仪文章、小单元、小测和 AI Coach 运行时读取 active learning topic revision。
 - `/sales-trainer/business-skills` 保持兼容，读取同一个 published learning topic projection。

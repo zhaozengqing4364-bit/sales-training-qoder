@@ -135,6 +135,62 @@ describe("api.newcomerTraining facade", () => {
 
         expect(result.paper_revision_id).toBe("paper-revision-1");
     });
+
+    it("submits customer FAQ unit short answers through the typed facade", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    topic_key: "customer_faq",
+                    learning_unit_key: "company_value",
+                    learning_unit_title: "公司与核心价值",
+                    total_score: 86,
+                    max_score: 100,
+                    passed: true,
+                    pass_threshold: 80,
+                    answers: [{
+                        card_key: "customer_faq_q001",
+                        question: "石犀科技公司是做什么的？",
+                        answer_text: "石犀是做数据流动治理的平台。",
+                        score: 86,
+                        max_score: 100,
+                        passed: true,
+                        feedback: "回答覆盖核心口径。",
+                        reason: "covered_core_answer",
+                        scoring_source: "ai_llm",
+                        scoring_provider: "fake",
+                        scoring_model: "unit-test",
+                        scoring_latency_ms: 12,
+                    }],
+                },
+            }),
+        });
+
+        const result = await api.newcomerTraining.submitCustomerFaqShortAnswerAttempt(
+            "company_value",
+            {
+                answers: [{
+                    card_key: "customer_faq_q001",
+                    answer_text: "石犀是做数据流动治理的平台。",
+                }],
+            },
+        );
+
+        expect(result.total_score).toBe(86);
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining("/newcomer-training/customer-faq/learning-units/company_value/short-answer-attempts"),
+            expect.objectContaining({
+                method: "POST",
+                body: JSON.stringify({
+                    answers: [{
+                        card_key: "customer_faq_q001",
+                        answer_text: "石犀是做数据流动治理的平台。",
+                    }],
+                }),
+            }),
+        );
+    });
 });
 
 describe("api.admin.newcomerTraining facade", () => {
@@ -365,7 +421,7 @@ describe("api.admin.newcomerTraining facade", () => {
                     can_archive: false,
                     archive_block_reason: "该文章正在被已发布或待发布新人训练路径引用。",
                     management_entries: {
-                        article_binding: "/admin/sales-trainer/articles",
+                        article_binding: "/admin/sales-trainer/learning-topics",
                         path_config: "/admin/sales-trainer/paths",
                         question_drafts: "/admin/sales-trainer/questions/drafts",
                     },

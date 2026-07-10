@@ -84,6 +84,9 @@ AUTH_TRANSPORT_MATRIX: dict[str, dict[str, list[str] | str]] = {
 
 WECOM_API_BASE_URL = "https://qyapi.weixin.qq.com"
 WECOM_AUTHORIZE_URL = "https://open.weixin.qq.com/connect/oauth2/authorize"
+DEV_LOGIN_EMAIL = "dev@example.com"
+DEV_LOGIN_WECHAT_USER_ID = "dev_wechat_user"
+DEFAULT_DEV_LOGIN_TEAM_DEPARTMENT = "新人训练路径"
 
 
 def _read_env(*names: str) -> str:
@@ -92,6 +95,10 @@ def _read_env(*names: str) -> str:
         if value:
             return value
     return ""
+
+
+def get_dev_login_team_department() -> str:
+    return _read_env("AUTH_DEV_LOGIN_DEPARTMENT") or DEFAULT_DEV_LOGIN_TEAM_DEPARTMENT
 
 
 def get_wecom_corp_id() -> str:
@@ -739,8 +746,8 @@ async def get_dev_user(db: AsyncSession) -> User:
     result = await db.execute(
         select(User).where(
             or_(
-                User.email == "dev@example.com",
-                User.wechat_user_id == "dev_wechat_user",
+                User.email == DEV_LOGIN_EMAIL,
+                User.wechat_user_id == DEV_LOGIN_WECHAT_USER_ID,
             )
         )
     )
@@ -749,10 +756,10 @@ async def get_dev_user(db: AsyncSession) -> User:
     if not user:
         user = User(
             user_id=str(uuid.uuid4()),
-            wechat_user_id="dev_wechat_user",
-            email="dev@example.com",
+            wechat_user_id=DEV_LOGIN_WECHAT_USER_ID,
+            email=DEV_LOGIN_EMAIL,
             name="Developer",
-            department="Development",
+            department=get_dev_login_team_department(),
             role="admin",
         )
         db.add(user)
@@ -761,11 +768,13 @@ async def get_dev_user(db: AsyncSession) -> User:
         return user
 
     # Keep dev account identity fields canonical for predictable local testing.
-    _set_user_field(user, "wechat_user_id", "dev_wechat_user")
+    _set_user_field(user, "wechat_user_id", DEV_LOGIN_WECHAT_USER_ID)
     if not user.email:
-        _set_user_field(user, "email", "dev@example.com")
+        _set_user_field(user, "email", DEV_LOGIN_EMAIL)
     if not user.name:
         _set_user_field(user, "name", "Developer")
+    if _user_field(user, "department") != get_dev_login_team_department():
+        _set_user_field(user, "department", get_dev_login_team_department())
     # Dev fallback account is the local administrator for seeding training
     # paths and admin-only flows. Normalize legacy rows that were created
     # before role was set here; production is gated by is_dev_login_enabled().

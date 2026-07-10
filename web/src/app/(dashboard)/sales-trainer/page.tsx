@@ -94,6 +94,13 @@ function getOutcomeRecordLabel(recordType: TrainingJourneyModuleOutcome["record_
     return JOURNEY_OUTCOME_RECORD_LABELS[recordType] ?? recordType;
 }
 
+function getLearningTopicHref(topicKey: string): string {
+    if (topicKey === "customer_faq") {
+        return "/sales-trainer/learning-topics/customer-faq";
+    }
+    return "/sales-trainer/learning-topics/business-etiquette";
+}
+
 function getOutcomeFailureTypeLabel(
     failureType: TrainingJourneyModuleOutcome["failure_type"],
 ): string | null {
@@ -611,7 +618,7 @@ export default function SalesTrainerPage() {
                                                 </div>
                                                 <div className="flex flex-wrap gap-2">
                                                     <Button asChild variant="primary">
-                                                        <Link href="/sales-trainer/learning-topics/business-etiquette">
+                                                        <Link href={getLearningTopicHref(topic.topic_key)}>
                                                             <ArrowRight className="mr-2 h-4 w-4" />
                                                             进入学习
                                                         </Link>

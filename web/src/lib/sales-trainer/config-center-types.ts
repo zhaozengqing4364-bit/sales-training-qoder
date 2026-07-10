@@ -15,6 +15,7 @@ export type NewcomerConfigModuleKey =
     | "company_product_demo"
     | "business_skills"
     | "elevator_pitch"
+    | "customer_faq_oral_drill"
     | "realtime_roleplay"
     | "realtime_roleplay_placeholder";
 

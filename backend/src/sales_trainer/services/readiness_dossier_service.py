@@ -393,9 +393,7 @@ class ReadinessDossierService:
             full_evidence,
         )
         evidence = (
-            full_evidence
-            if evidence_limit is None
-            else full_evidence[:evidence_limit]
+            full_evidence if evidence_limit is None else full_evidence[:evidence_limit]
         )
         latest_review_action = review_actions[0] if review_actions else None
         retraining_tasks = [
@@ -451,9 +449,7 @@ class ReadinessDossierService:
                 ),
                 "retraining_task_count": len(retraining_tasks),
                 "completed_retraining_task_count": sum(
-                    1
-                    for item in retraining_tasks
-                    if item.get("status") == "completed"
+                    1 for item in retraining_tasks if item.get("status") == "completed"
                 ),
                 "review_state_source": "operation_log",
             },
@@ -551,11 +547,7 @@ class ReadinessDossierService:
                 record_id = str(unit["latest_attempt_id"])
                 record_type = "business_etiquette_quiz_attempt"
                 unit_capabilities = unique_non_empty(
-                    [
-                        str(value)
-                        for value in unit.get("capability_keys") or []
-                        if value
-                    ]
+                    [str(value) for value in unit.get("capability_keys") or [] if value]
                     + topic_capabilities
                 )
                 evidence.append(
@@ -668,9 +660,7 @@ class ReadinessDossierService:
         task = dict(task_value)
         action_created_at = _datetime_or_none(action.get("created_at"))
         source_evidence_ids = unique_non_empty(
-            action.get("source_evidence_ids")
-            or task.get("source_evidence_ids")
-            or []
+            action.get("source_evidence_ids") or task.get("source_evidence_ids") or []
         )
         capability_keys = unique_non_empty(
             action.get("capability_keys") or task.get("capability_keys") or []
@@ -1145,6 +1135,8 @@ def _record_detail_path(record_type: str, record_id: str) -> str | None:
 def _learning_topic_detail_path(topic_key: str) -> str | None:
     if topic_key == "business_etiquette":
         return "/sales-trainer/learning-topics/business-etiquette"
+    if topic_key == "customer_faq":
+        return "/sales-trainer/learning-topics/customer-faq"
     return None
 
 
@@ -1255,9 +1247,11 @@ def _evidence_after_review(
             continue
         matched.append(item)
     matched.sort(
-        key=lambda item: _datetime_or_none(item.get("submitted_at"))
-        or _datetime_or_none(item.get("completed_at"))
-        or datetime.min.replace(tzinfo=UTC),
+        key=lambda item: (
+            _datetime_or_none(item.get("submitted_at"))
+            or _datetime_or_none(item.get("completed_at"))
+            or datetime.min.replace(tzinfo=UTC)
+        ),
         reverse=True,
     )
     return matched

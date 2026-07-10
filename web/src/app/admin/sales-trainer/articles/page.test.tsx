@@ -176,8 +176,15 @@ describe("LearningArticlesPage", () => {
         expect(await screen.findByText("学习专题")).toBeTruthy();
         expect(await screen.findByText("商务礼仪规范")).toBeTruthy();
         expect(screen.getByText("当前文章：见客户前商务礼仪（已发布）")).toBeTruthy();
-        expect(screen.getByRole("link", { name: /进入专题配置/ }).getAttribute("href")).toBe(
+        expect(screen.getByText("客户常见问答")).toBeTruthy();
+        expect(screen.getByText("待导入卡片")).toBeTruthy();
+        expect(screen.getByText("问答卡片：0 张已发布")).toBeTruthy();
+        const topicLinks = screen.getAllByRole("link", { name: /进入专题配置/ });
+        expect(topicLinks[0]?.getAttribute("href")).toBe(
             "/admin/sales-trainer/learning-topics/business-etiquette",
+        );
+        expect(topicLinks[1]?.getAttribute("href")).toBe(
+            "/admin/sales-trainer/learning-topics/customer-faq",
         );
     });
 
@@ -197,7 +204,9 @@ describe("LearningArticlesPage", () => {
 
         render(<LearningArticlesPage />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "生成商务礼仪规范草稿" }));
+        expect(await screen.findByText("商务礼仪规范")).toBeTruthy();
+        expect(screen.getByText("客户常见问答")).toBeTruthy();
+        fireEvent.click(await screen.findByRole("button", { name: "从路径生成草稿" }));
 
         await waitFor(() => {
             expect(generateDraftMock).toHaveBeenCalledWith({

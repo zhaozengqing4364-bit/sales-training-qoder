@@ -1,0 +1,7 @@
+{"file":"AGENTS.md","reason":"实现阶段持续约束：中文、CodeGraph First、不以能跑为完成标准。"}
+{"file":"docs/api-contract/sales-trainer.md","reason":"实现后必须同步新增客户常见问答学习专题、卡片库、录音场景和 API 契约。"}
+{"file":".trellis/spec/backend/sales-trainer-learning-topic-governance.md","reason":"后端实现以 newcomer_learning_topics asset revision 为主，不新增并行治理面。"}
+{"file":".trellis/spec/backend/sales-trainer-audio-evaluation-scenarios.md","reason":"客户问答口播演练应作为录音场景配置，评分标准和材料在同页治理。"}
+{"file":".trellis/spec/frontend/admin-console-patterns.md","reason":"后台客户常见问答页按一页式治理、选择优先、失败显眼、权限 fail-closed 实现。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"新增 DTO、Domain/ViewModel 和页面类型必须显式映射。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"每个功能点需要核对前台、后台、API、权限、审计和测试闭环。"}

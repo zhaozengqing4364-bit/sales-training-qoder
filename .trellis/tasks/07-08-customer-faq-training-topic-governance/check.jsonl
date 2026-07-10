@@ -1,0 +1,20 @@
+{"file":"AGENTS.md","reason":"仓库级中文输出、CodeGraph First、上下文内完成、权限/审计/AI治理/DoD要求。"}
+{"file":"web/AGENTS.md","reason":"前端分层、页面状态、组件与测试约束。"}
+{"file":"web/src/app/admin/sales-trainer/AGENTS.md","reason":"新人训练后台信息架构与学习专题治理边界。"}
+{"file":"backend/AGENTS.md","reason":"后端分层、事务、权限、审计和测试约束。"}
+{"file":"backend/src/sales_trainer/AGENTS.md","reason":"sales_trainer 子域接口、模型、任务与治理边界。"}
+{"file":"docs/api-contract/sales-trainer.md","reason":"新人训练路径、学习专题、录音管理、发布/回滚契约。"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端规范入口。"}
+{"file":".trellis/spec/frontend/admin-console-patterns.md","reason":"后台管理页面、发布治理、权限失败、避免 raw JSON 泄露。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复用组件、表单、状态和可访问性要求。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"页面状态、草稿和提交防重约束。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"DTO 到 ViewModel 的类型安全约束。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"测试、lint、build 和 UI 质量门槛。"}
+{"file":".trellis/spec/backend/index.md","reason":"后端规范入口。"}
+{"file":".trellis/spec/backend/sales-trainer-learning-topic-governance.md","reason":"学习专题 asset revision、future-only 发布、非阻塞规则。"}
+{"file":".trellis/spec/backend/sales-trainer-audio-evaluation-scenarios.md","reason":"录音场景作为能力/载体解耦的治理约束。"}
+{"file":".trellis/spec/backend/business-rule-configs.md","reason":"业务规则配置、默认值、校验、灰度/回滚约束。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"统一错误结构与 fail-closed 要求。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"测试、影响分析和可观测性约束。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"前后端契约、权限、状态和发布链路一致性检查。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"优先复用现有学习专题、题库、考卷、AI Coach、录音治理实现。"}

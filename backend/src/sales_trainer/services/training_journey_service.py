@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
 from pydantic import ValidationError
-from sqlalchemy import func, inspect, select
+from sqlalchemy import and_, func, inspect, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.auth.service import DEV_LOGIN_EMAIL, DEV_LOGIN_WECHAT_USER_ID
 from common.business_rules.defaults import (
     SALES_TRAINER_LEARNER_LEVEL_POLICY_KEY,
     SALES_TRAINER_ROLE_LEVEL_POLICY_KEY,
@@ -367,7 +369,7 @@ class TrainingJourneyService:
         if team_department is not None and department and department != team_department:
             return [], 0
         effective_department = team_department or department
-        base_filters = [User.role == "user", User.is_active.is_(True)]
+        base_filters = [_team_visible_learner_role_filter(), User.is_active.is_(True)]
         if effective_department:
             base_filters.append(User.department == effective_department)
         total = int(
@@ -399,9 +401,10 @@ class TrainingJourneyService:
             )
         path_payload = payload_from_revision(active)
         modules = self._journey_modules(path_payload.modules)
-        learning_topics = await LearningTopicProjectionService(
-            self._db
-        ).learner_topics(user_id=str(learner.user_id))
+        learning_topics = await LearningTopicProjectionService(self._db).learner_topics(
+            user_id=str(learner.user_id)
+        )
+        modules = self._without_learning_topic_source_modules(modules, learning_topics)
         outcomes = await self._outcomes_for_active_revision(
             learner_id=str(learner.user_id),
             path_revision_id=str(active.revision_id),
@@ -484,6 +487,25 @@ class TrainingJourneyService:
             if ai_module is not None:
                 modules.append(ai_module)
         return modules
+
+    def _without_learning_topic_source_modules(
+        self,
+        modules: list[JourneyModule],
+        learning_topics: list[dict[str, Any]],
+    ) -> list[JourneyModule]:
+        source_module_keys = {
+            str(topic.get("source_module_key") or "")
+            for topic in learning_topics
+            if topic.get("source_module_key")
+        }
+        if not source_module_keys:
+            return modules
+        return [
+            module
+            for module in modules
+            if module.base_module_key not in source_module_keys
+            and module.module_key not in source_module_keys
+        ]
 
     def _base_module(
         self,
@@ -1349,7 +1371,9 @@ class TrainingJourneyService:
                 }
             return {
                 "action_key": action_key,
-                "label": default_label if action_key == "retry_quiz_attempt" else start_label,
+                "label": default_label
+                if action_key == "retry_quiz_attempt"
+                else start_label,
                 "target_path": target_path,
                 "disabled": False,
                 "disabled_reason": None,
@@ -2567,6 +2591,22 @@ class TrainingJourneyService:
         return float(value) if value is not None else None
 
 
+def _team_visible_learner_role_filter() -> Any:
+    learner_filter = User.role == "user"
+    if os.getenv("ENVIRONMENT", "development").strip().lower() != "development":
+        return learner_filter
+    return or_(
+        learner_filter,
+        and_(
+            User.role == "admin",
+            or_(
+                User.email == DEV_LOGIN_EMAIL,
+                User.wechat_user_id == DEV_LOGIN_WECHAT_USER_ID,
+            ),
+        ),
+    )
+
+
 def _journey_matches_filters(
     journey: dict[str, Any],
     *,
@@ -2581,13 +2621,17 @@ def _journey_matches_filters(
     role_level = _normalise_filter_value(role_level)
     if training_stage and journey.get("training_stage") != training_stage:
         return False
-    if module_key and not any(
-        module.get("module_key") == module_key
-        for module in journey.get("modules") or []
-    ) and not any(
-        topic.get("topic_key") == module_key
-        or topic.get("source_module_key") == module_key
-        for topic in journey.get("learning_topics") or []
+    if (
+        module_key
+        and not any(
+            module.get("module_key") == module_key
+            for module in journey.get("modules") or []
+        )
+        and not any(
+            topic.get("topic_key") == module_key
+            or topic.get("source_module_key") == module_key
+            for topic in journey.get("learning_topics") or []
+        )
     ):
         return False
     if learner_level:
@@ -2615,10 +2659,7 @@ def _module_practice_path(module: JourneyModule) -> str | None:
     if module.kind == "quiz_attempt":
         if module.base_module_key == "business_skills":
             if target_unit_id:
-                return (
-                    "/sales-trainer/business-skills"
-                    f"?unitId={target_unit_id}"
-                )
+                return f"/sales-trainer/business-skills?unitId={target_unit_id}"
             return "/sales-trainer/business-skills"
         if target_unit_id:
             return f"/sales-trainer/quiz/{target_unit_id}"
@@ -2628,6 +2669,8 @@ def _module_practice_path(module: JourneyModule) -> str | None:
 def _learning_topic_practice_path(topic_key: str) -> str | None:
     if topic_key == "business_etiquette":
         return "/sales-trainer/learning-topics/business-etiquette"
+    if topic_key == "customer_faq":
+        return "/sales-trainer/learning-topics/customer-faq"
     return None
 
 
@@ -2704,8 +2747,9 @@ def _retraining_target_learning_topics(
         capability_matched = bool(capability_set.intersection(topic_capability_keys))
         if not evidence_matched and not capability_matched:
             continue
-        ai_coach = topic.get("ai_coach")
-        ai_available = isinstance(ai_coach, dict) and bool(ai_coach.get("available"))
+        raw_ai_coach = topic.get("ai_coach")
+        ai_coach = raw_ai_coach if isinstance(raw_ai_coach, dict) else {}
+        ai_available = bool(ai_coach.get("available"))
         coach_path = (
             str(ai_coach.get("coach_path"))
             if ai_available and ai_coach.get("coach_path")

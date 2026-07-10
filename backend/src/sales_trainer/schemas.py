@@ -1189,6 +1189,7 @@ class BusinessEtiquetteTrainingUnitConfig(BaseModel):
     order_index: int = Field(1, ge=1)
     enabled: bool = True
     source_chapter_orders: list[int] = Field(default_factory=list)
+    source_card_keys: list[str] = Field(default_factory=list)
     capability_keys: list[str] = Field(default_factory=list)
     unlock_after_unit_keys: list[str] = Field(default_factory=list)
     require_reading: bool = True
@@ -1222,10 +1223,19 @@ class BusinessEtiquetteTrainingUnitConfig(BaseModel):
     def validate_training_unit(self) -> BusinessEtiquetteTrainingUnitConfig:
         if len(self.source_chapter_orders) > 20:
             raise ValueError("source_chapter_orders must contain <= 20 items")
+        if len(self.source_card_keys) > 80:
+            raise ValueError("source_card_keys must contain <= 80 items")
         if any(order < 1 for order in self.source_chapter_orders):
             raise ValueError("source_chapter_orders values must be >= 1")
         if len(set(self.source_chapter_orders)) != len(self.source_chapter_orders):
             raise ValueError("source_chapter_orders cannot contain duplicates")
+        if len(set(self.source_card_keys)) != len(self.source_card_keys):
+            raise ValueError("source_card_keys cannot contain duplicates")
+        for value in self.source_card_keys:
+            if not isinstance(value, str) or not value.strip() or len(value) > 120:
+                raise ValueError(
+                    "source_card_keys items must be non-empty strings <= 120 chars"
+                )
         if len(self.capability_keys) > 20 or len(self.unlock_after_unit_keys) > 20:
             raise ValueError("learning unit list fields must contain <= 20 items")
         if len(self.ai_coach_required_capability_keys) > 20:
@@ -1629,19 +1639,165 @@ class NewcomerPathRevisionListResponse(BaseModel):
 
 
 LearningTopicScoreDisplayPolicy = Literal["quiz_attempt_score"]
-NewcomerLearningTopicKey = Literal["business_etiquette"]
+NewcomerLearningTopicKey = Literal["business_etiquette", "customer_faq"]
+NewcomerLearningTopicContentKind = Literal["article", "faq_cards"]
+CustomerFaqCardStatus = Literal["draft", "published", "archived"]
+CustomerFaqDifficultyLevel = Literal["newcomer", "advanced", "high_risk"]
+
+
+class CustomerFaqEvidenceCase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    case_key: str = Field(..., min_length=1, max_length=120)
+    title: str = Field(..., min_length=1, max_length=120)
+    summary: str | None = Field(None, max_length=1000)
+    source_question_numbers: list[int] = Field(default_factory=list, max_length=20)
+
+
+class CustomerFaqCard(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    card_key: str = Field(..., min_length=1, max_length=120)
+    source_question_number: int | None = Field(None, ge=1, le=1000)
+    question: str = Field(..., min_length=1, max_length=500)
+    short_answer: str = Field(..., min_length=1, max_length=1000)
+    detailed_answer: str = Field(..., min_length=1, max_length=5000)
+    scenario: str = Field(..., min_length=1, max_length=80)
+    category: str = Field(..., min_length=1, max_length=80)
+    customer_intent: str | None = Field(None, max_length=500)
+    key_points: list[str] = Field(default_factory=list, max_length=20)
+    evidence_cases: list[str] = Field(default_factory=list, max_length=20)
+    forbidden_claims: list[str] = Field(default_factory=list, max_length=20)
+    escalation_required: bool = False
+    difficulty_level: CustomerFaqDifficultyLevel = "newcomer"
+    tags: list[str] = Field(default_factory=list, max_length=30)
+    duplicate_group_key: str | None = Field(None, min_length=1, max_length=120)
+    status: CustomerFaqCardStatus = "published"
+
+    @model_validator(mode="after")
+    def validate_card_lists(self) -> CustomerFaqCard:
+        for values in (
+            self.key_points,
+            self.evidence_cases,
+            self.forbidden_claims,
+            self.tags,
+        ):
+            if len(set(values)) != len(values):
+                raise ValueError(
+                    "customer faq card list fields cannot contain duplicates"
+                )
+            for value in values:
+                if not isinstance(value, str) or not value.strip() or len(value) > 200:
+                    raise ValueError(
+                        "customer faq card list values must be non-empty strings <= 200 chars"
+                    )
+        return self
+
+
+class CustomerFaqDuplicateGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    group_key: str = Field(..., min_length=1, max_length=120)
+    title: str = Field(..., min_length=1, max_length=200)
+    card_keys: list[str] = Field(default_factory=list, min_length=2, max_length=20)
+    reason: str = Field(..., min_length=1, max_length=500)
+
+
+class CustomerFaqImportParseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    raw_text: str = Field(..., min_length=1, max_length=300000)
+
+
+class CustomerFaqImportParseResponse(BaseModel):
+    cards: list[CustomerFaqCard] = Field(default_factory=list)
+    duplicate_groups: list[CustomerFaqDuplicateGroup] = Field(default_factory=list)
+    evidence_cases: list[CustomerFaqEvidenceCase] = Field(default_factory=list)
+    total_questions: int
+    high_risk_count: int
+    escalation_count: int
+
+
+class CustomerFaqGenerateDraftRequest(CustomerFaqImportParseRequest):
+    overwrite_working: bool = False
+    reason: str | None = Field(None, max_length=500)
+
+
+class CustomerFaqLearningTopicResponse(BaseModel):
+    topic_key: Literal["customer_faq"] = "customer_faq"
+    title: str
+    description: str | None = None
+    revision_id: str
+    revision_no: int
+    units: list[BusinessEtiquetteTrainingUnitConfig] = Field(default_factory=list)
+    cards: list[CustomerFaqCard] = Field(default_factory=list)
+    duplicate_groups: list[CustomerFaqDuplicateGroup] = Field(default_factory=list)
+    evidence_cases: list[CustomerFaqEvidenceCase] = Field(default_factory=list)
+    audio_scenario_key: str | None = None
+    quiz_paper_id: str | None = None
+    ai_coach: AiCoachConfig | None = None
+
+
+class CustomerFaqShortAnswerSubmit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    card_key: str = Field(..., min_length=1, max_length=120)
+    answer_text: str = Field(..., min_length=1, max_length=5000)
+
+
+class CustomerFaqShortAnswerSubmitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answers: list[CustomerFaqShortAnswerSubmit] = Field(
+        default_factory=list,
+        min_length=1,
+        max_length=10,
+    )
+
+
+class CustomerFaqShortAnswerResult(BaseModel):
+    card_key: str
+    question: str
+    answer_text: str
+    score: float
+    max_score: float = 100.0
+    passed: bool
+    feedback: str
+    reason: str | None = None
+    scoring_source: str
+    scoring_provider: str | None = None
+    scoring_model: str | None = None
+    scoring_latency_ms: int | None = None
+
+
+class CustomerFaqShortAnswerAttemptResponse(BaseModel):
+    topic_key: Literal["customer_faq"] = "customer_faq"
+    learning_unit_key: str
+    learning_unit_title: str
+    total_score: float
+    max_score: float
+    passed: bool | None = None
+    pass_threshold: float | None = None
+    answers: list[CustomerFaqShortAnswerResult] = Field(default_factory=list)
 
 
 class NewcomerLearningTopicConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     topic_key: NewcomerLearningTopicKey = "business_etiquette"
-    source_module_key: Literal["business_skills"] = "business_skills"
+    source_module_key: str = Field("business_skills", min_length=1, max_length=80)
+    content_kind: NewcomerLearningTopicContentKind = "article"
     enabled: bool = True
+    disabled_reason: str | None = Field(None, max_length=300)
     title: str = Field("商务礼仪规范", min_length=1, max_length=120)
     description: str | None = Field(None, max_length=1000)
     order_index: int = Field(1, ge=1)
     learning_content_id: str | None = Field(None, min_length=1, max_length=36)
+    faq_cards: list[CustomerFaqCard] = Field(default_factory=list)
+    duplicate_groups: list[CustomerFaqDuplicateGroup] = Field(default_factory=list)
+    evidence_cases: list[CustomerFaqEvidenceCase] = Field(default_factory=list)
+    audio_scenario_key: str | None = Field(None, min_length=1, max_length=80)
+    quiz_paper_id: str | None = Field(None, min_length=1, max_length=36)
     learning_units: list[BusinessEtiquetteTrainingUnitConfig] = Field(
         default_factory=list
     )
@@ -1657,7 +1813,31 @@ class NewcomerLearningTopicConfig(BaseModel):
             raise ValueError("learning_units cannot contain duplicate unit_key values")
         order_indexes = [unit.order_index for unit in self.learning_units]
         if len(set(order_indexes)) != len(order_indexes):
-            raise ValueError("learning_units cannot contain duplicate order_index values")
+            raise ValueError(
+                "learning_units cannot contain duplicate order_index values"
+            )
+        if self.topic_key == "business_etiquette":
+            if self.content_kind != "article":
+                raise ValueError(
+                    "business_etiquette topic must use article content_kind"
+                )
+            if self.source_module_key != "business_skills":
+                raise ValueError(
+                    "business_etiquette source_module_key must be business_skills"
+                )
+        if self.topic_key == "customer_faq":
+            if self.content_kind != "faq_cards":
+                raise ValueError("customer_faq topic must use faq_cards content_kind")
+            if self.source_module_key != "customer_faq":
+                raise ValueError("customer_faq source_module_key must be customer_faq")
+            card_keys = [card.card_key for card in self.faq_cards]
+            if len(set(card_keys)) != len(card_keys):
+                raise ValueError("faq_cards cannot contain duplicate card_key values")
+            group_keys = [group.group_key for group in self.duplicate_groups]
+            if len(set(group_keys)) != len(group_keys):
+                raise ValueError(
+                    "duplicate_groups cannot contain duplicate group_key values"
+                )
         return self
 
 
@@ -1674,9 +1854,9 @@ class NewcomerLearningTopicsPayload(BaseModel):
         keys = [topic.topic_key for topic in self.topics]
         if len(set(keys)) != len(keys):
             raise ValueError("topics cannot contain duplicate topic_key values")
-        unsupported = sorted(set(keys) - {"business_etiquette"})
+        unsupported = sorted(set(keys) - {"business_etiquette", "customer_faq"})
         if unsupported:
-            raise ValueError("only business_etiquette is supported in the first version")
+            raise ValueError("unsupported learning topic keys")
         return self
 
 
@@ -1737,7 +1917,7 @@ class NewcomerLearningTopicsConfigResponse(BaseModel):
     source: Literal["active_revision", "not_configured"]
     fallback_reason: str | None = None
     legacy_snapshot_only: Literal[False] = False
-    management_entry: Literal["/admin/sales-trainer/articles"]
+    management_entry: Literal["/admin/sales-trainer/learning-topics"]
     permission: Literal["sales_trainer.manage_modules"]
     payload: NewcomerLearningTopicsPayload
     active_revision_id: str | None = None
@@ -3377,9 +3557,9 @@ class TrainingJourneyAnalyticsResponse(BaseModel):
     module_summaries: list[TrainingJourneyAnalyticsModuleSummary] = Field(
         default_factory=list
     )
-    learning_topic_summaries: list[
-        TrainingJourneyAnalyticsLearningTopicSummary
-    ] = Field(default_factory=list)
+    learning_topic_summaries: list[TrainingJourneyAnalyticsLearningTopicSummary] = (
+        Field(default_factory=list)
+    )
     weakness_heatmap: list[TrainingJourneyAnalyticsWeaknessHeatmapEntry] = Field(
         default_factory=list
     )
@@ -3632,9 +3812,7 @@ class ReadinessDossierResponse(BaseModel):
     evidence: list[ReadinessDossierEvidence] = Field(default_factory=list)
     review_actions: list[ReadinessDossierReviewAction] = Field(default_factory=list)
     latest_review_action: ReadinessDossierReviewAction | None = None
-    retraining_tasks: list[ReadinessDossierRetrainingTask] = Field(
-        default_factory=list
-    )
+    retraining_tasks: list[ReadinessDossierRetrainingTask] = Field(default_factory=list)
     realtime_gate: ReadinessDossierRealtimeGate
     diagnostics: list[TrainingJourneyDiagnostic] = Field(default_factory=list)
     next_actions: list[ReadinessDossierNextAction] = Field(default_factory=list)

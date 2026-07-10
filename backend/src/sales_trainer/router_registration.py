@@ -15,6 +15,7 @@ from sales_trainer.business_etiquette_api import (
     business_etiquette_admin_router,
     business_etiquette_router,
 )
+from sales_trainer.customer_faq_api import customer_faq_router
 from sales_trainer.dashboard_recommendation import (
     register_sales_trainer_dashboard_recommendation_provider,
 )
@@ -90,6 +91,12 @@ def register_sales_trainer_routers(app: FastAPI) -> None:
         business_etiquette_router,
         prefix="/api/v1",
         tags=["newcomer-training-business-etiquette"],
+        dependencies=[Depends(require_role(["admin", "user"]))],
+    )
+    app.include_router(
+        customer_faq_router,
+        prefix="/api/v1",
+        tags=["newcomer-training-customer-faq"],
         dependencies=[Depends(require_role(["admin", "user"]))],
     )
     app.include_router(

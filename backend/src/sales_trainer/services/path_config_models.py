@@ -36,6 +36,7 @@ CANONICAL_NEWCOMER_MODULE_KEYS: Final = frozenset(
         "company_product_demo",
         "business_skills",
         "elevator_pitch",
+        "customer_faq_oral_drill",
         "realtime_roleplay",
         "realtime_roleplay_placeholder",
     }
@@ -45,6 +46,7 @@ CANONICAL_NEWCOMER_MODULE_TYPES: Final = {
     "company_product_demo": "audio_scoring",
     "business_skills": "article_exam",
     "elevator_pitch": "audio_scoring_group",
+    "customer_faq_oral_drill": "audio_scoring",
     "realtime_roleplay": "realtime_roleplay",
     "realtime_roleplay_placeholder": "realtime_placeholder",
 }
@@ -220,7 +222,8 @@ def module_from_unit(
         learning_content_id=config.learning_content_id,
         exam_paper_id=config.exam_paper_id,
         material_id=config.material_id or audio_refs.material_id,
-        material_version_id=config.material_version_id or audio_refs.material_version_id,
+        material_version_id=config.material_version_id
+        or audio_refs.material_version_id,
         scoring_prompt_id=config.scoring_prompt_id or audio_refs.scoring_prompt_id,
         disabled_reason=config.disabled_reason,
         unlock_after_unit_ids=config.unlock_after_unit_ids,
@@ -381,7 +384,6 @@ def _module_refs(payload: NewcomerPathConfigPayload) -> list[PathModuleBindingRe
         )
         for module in sorted(payload.modules, key=lambda item: item.order_index)
     ]
-
 
 
 def _infer_module_key(

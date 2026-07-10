@@ -20,7 +20,47 @@ import type {
     SalesTrainerAdminCapabilities,
 } from "@/lib/api/types";
 
-const BUSINESS_ETIQUETTE_DETAIL_PATH = "/admin/sales-trainer/learning-topics/business-etiquette";
+const TOPIC_DETAIL_PATHS: Record<string, string> = {
+    business_etiquette: "/admin/sales-trainer/learning-topics/business-etiquette",
+    customer_faq: "/admin/sales-trainer/learning-topics/customer-faq",
+};
+
+const TOPIC_STARTERS: readonly NewcomerLearningTopicConfig[] = [
+    {
+        topic_key: "business_etiquette",
+        source_module_key: "business_skills",
+        content_kind: "article",
+        enabled: true,
+        title: "商务礼仪规范",
+        description: "管理商务礼仪学习文章、7 个小单元、小测和可选 AI 教练。",
+        order_index: 1,
+        learning_content_id: null,
+        learning_units: [],
+        ai_coach: null,
+        required: false,
+        blocks_next: false,
+        score_display_policy: "quiz_attempt_score",
+    },
+    {
+        topic_key: "customer_faq",
+        source_module_key: "customer_faq",
+        content_kind: "faq_cards",
+        enabled: true,
+        title: "客户常见问答",
+        description: "把客户常见问题拆成问答卡片、案例依据、禁答边界和口播演练素材。",
+        order_index: 2,
+        learning_content_id: null,
+        faq_cards: [],
+        duplicate_groups: [],
+        evidence_cases: [],
+        audio_scenario_key: "customer_faq_oral_drill",
+        learning_units: [],
+        ai_coach: null,
+        required: false,
+        blocks_next: false,
+        score_display_policy: "quiz_attempt_score",
+    },
+] as const;
 
 function statusLabel(status: string): string {
     if (status === "published") return "已发布";
@@ -31,6 +71,12 @@ function statusLabel(status: string): string {
 
 function topicStatusLabel(topic: NewcomerLearningTopicConfig): string {
     if (!topic.enabled) return "已停用";
+    if ((topic.content_kind ?? "article") === "faq_cards") {
+        const publishedCards = (topic.faq_cards ?? []).filter((card) => card.status === "published");
+        if (publishedCards.length === 0) return "待导入卡片";
+        if (topic.learning_units.length === 0) return "待配置小单元";
+        return "可发布";
+    }
     if (!topic.learning_content_id) return "待绑定文章";
     if (topic.learning_units.length === 0) return "待配置小单元";
     return "可发布";
@@ -49,10 +95,16 @@ export default function LearningArticlesPage() {
     const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
     const canAccessArticles = isSalesTrainerAdminPathAllowedForCapabilities(pathname, capabilities);
 
-    const topics = useMemo(
-        () => [...(config?.payload.topics ?? [])].sort((left, right) => left.order_index - right.order_index),
-        [config],
-    );
+    const topics = useMemo(() => {
+        if (!config) return [];
+        const configuredTopics = config?.payload.topics ?? [];
+        const configuredByKey = new Map(configuredTopics.map((topic) => [topic.topic_key, topic]));
+        const starterKeys = new Set(TOPIC_STARTERS.map((topic) => topic.topic_key));
+        return [
+            ...TOPIC_STARTERS.map((starter) => configuredByKey.get(starter.topic_key) ?? starter),
+            ...configuredTopics.filter((topic) => !starterKeys.has(topic.topic_key)),
+        ].sort((left, right) => left.order_index - right.order_index);
+    }, [config]);
     const contentsById = useMemo(
         () => new Map(contents.map((item) => [item.learning_content_id, item])),
         [contents],
@@ -237,7 +289,7 @@ export default function LearningArticlesPage() {
                                                 </div>
                                                 <h2 className="text-xl font-black text-slate-900">{topic.title}</h2>
                                                 <p className="text-sm leading-6 text-slate-500">
-                                                    {topic.description || "管理商务礼仪规范文章、7 个小单元、测验规则和可选 AI 教练。"}
+                                                    {topic.description || "管理学习专题内容、小单元、测验规则和可选 AI 教练。"}
                                                 </p>
                                             </div>
                                             <div className="rounded-2xl bg-slate-50 px-4 py-3 text-right">
@@ -246,10 +298,12 @@ export default function LearningArticlesPage() {
                                             </div>
                                         </div>
                                         <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
-                                            当前文章：{content ? `${content.title}（${statusLabel(content.status)}）` : "未绑定"}
+                                            {(topic.content_kind ?? "article") === "faq_cards"
+                                                ? `问答卡片：${(topic.faq_cards ?? []).filter((card) => card.status === "published").length} 张已发布`
+                                                : `当前文章：${content ? `${content.title}（${statusLabel(content.status)}）` : "未绑定"}`}
                                         </div>
                                         <Button asChild>
-                                            <Link href={BUSINESS_ETIQUETTE_DETAIL_PATH}>
+                                            <Link href={TOPIC_DETAIL_PATHS[topic.topic_key] ?? "/admin/sales-trainer/learning-topics"}>
                                                 <ArrowRight className="mr-2 h-4 w-4" />
                                                 进入专题配置
                                             </Link>

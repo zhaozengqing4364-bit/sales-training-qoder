@@ -172,13 +172,13 @@ describe("SalesTrainerPathsPage", () => {
             screen.getAllByRole("link", { name: "选择材料版本" })[0].querySelector("button"),
         ).toBeNull();
         expect(screen.getByRole("link", { name: "治理PPT 讲解" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/training-tasks/ppt-explanation",
+            "/admin/sales-trainer/audio/ppt-explanation",
         );
         expect(
             screen.getByRole("link", { name: "治理PPT 讲解" }).querySelector("button"),
         ).toBeNull();
         expect(screen.getByRole("link", { name: "配置学习专题" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/articles",
+            "/admin/sales-trainer/learning-topics",
         );
         expect(screen.getByRole("link", { name: "查看配置健康" }).getAttribute("href")).toBe(
             "/admin/sales-trainer/settings",
@@ -229,7 +229,7 @@ describe("SalesTrainerPathsPage", () => {
         ).toBeTruthy();
         expect(screen.queryByText("缺少已发布学习专题内容绑定。")).toBeNull();
         expect(screen.getByRole("link", { name: "配置学习专题" }).getAttribute("href")).toBe(
-            "/admin/sales-trainer/articles",
+            "/admin/sales-trainer/learning-topics",
         );
     });
 

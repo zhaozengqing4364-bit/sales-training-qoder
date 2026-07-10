@@ -20,8 +20,11 @@ from sales_trainer.schemas import (
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
+from sales_trainer.services.customer_faq_parser import parse_customer_faq_material
 from sales_trainer.services.learning_topic_config_service import (
     BUSINESS_ETIQUETTE_TOPIC_KEY,
+    CUSTOMER_FAQ_AUDIO_SCENARIO_KEY,
+    CUSTOMER_FAQ_TOPIC_KEY,
     NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
     NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
     NewcomerLearningTopicConfigService,
@@ -31,6 +34,19 @@ from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_RESOURCE_TYPE,
 )
 from sales_trainer.services.training_journey_service import TrainingJourneyService
+
+CUSTOMER_FAQ_SAMPLE = """
+场景一：初次拜访
+3. 问题：石犀科技的价格是多少？
+详细答案：价格需要根据客户 API 数量、部署范围、服务要求正式报价，不应现场承诺固定折扣。案例：深圳航空先完成 POC 后再确认采购范围。
+10. 问题：石犀和 WAF 是替代关系吗？
+详细答案：石犀不是简单替代 WAF，而是补齐 API 资产发现、数据流动治理、风险审计和业务侧解释能力。
+23. 问题：已经有 WAF 了还需要石犀吗？
+详细答案：WAF 侧重流量防护，石犀侧重 API 资产、敏感数据、访问行为和合规治理，两者可以协同。
+场景二：部署架构
+35. 问题：多云环境能统一治理吗？
+详细答案：可以按租户、业务系统、云账号和 API 资产统一纳管，但具体网络接入和权限边界需要售前确认。
+"""
 
 
 def _user(role: str = "admin") -> User:
@@ -44,7 +60,9 @@ def _user(role: str = "admin") -> User:
     )
 
 
-def _business_unit(unit_key: str = "trust_foundation") -> BusinessEtiquetteTrainingUnitConfig:
+def _business_unit(
+    unit_key: str = "trust_foundation",
+) -> BusinessEtiquetteTrainingUnitConfig:
     return BusinessEtiquetteTrainingUnitConfig(
         unit_key=unit_key,
         title="职业信任底座",
@@ -150,6 +168,65 @@ async def test_generate_learning_topic_draft_from_active_business_skills(
     assert topic["score_display_policy"] == "quiz_attempt_score"
 
 
+def test_parse_customer_faq_material_extracts_cards_risks_and_duplicates() -> None:
+    parsed = parse_customer_faq_material(CUSTOMER_FAQ_SAMPLE)
+
+    assert parsed.total_questions == 4
+    assert parsed.high_risk_count == 1
+    assert parsed.escalation_count == 1
+    assert [group.group_key for group in parsed.duplicate_groups] == ["waf_boundary"]
+    assert parsed.duplicate_groups[0].card_keys == [
+        "customer_faq_q010",
+        "customer_faq_q023",
+    ]
+    price_card = next(
+        card for card in parsed.cards if card.card_key == "customer_faq_q003"
+    )
+    assert price_card.category == "商务政策"
+    assert price_card.difficulty_level == "high_risk"
+    assert price_card.escalation_required is True
+    assert (
+        "不得给出固定价格或折扣承诺，需按项目范围正式报价。"
+        in price_card.forbidden_claims
+    )
+    assert parsed.evidence_cases[0].title == "深圳航空"
+
+
+@pytest.mark.asyncio
+async def test_generate_customer_faq_topic_draft_from_material(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    test_db.add(admin)
+    await test_db.commit()
+
+    service = NewcomerLearningTopicConfigService(test_db)
+    await service.generate_customer_faq_draft(
+        raw_text=CUSTOMER_FAQ_SAMPLE,
+        actor=admin,
+    )
+    response = await service.get_config()
+
+    assert response["management_entry"] == "/admin/sales-trainer/learning-topics"
+    assert response["active_revision_id"] is None
+    assert response["working_revision_id"] is not None
+    topic = next(
+        item
+        for item in response["payload"]["topics"]
+        if item["topic_key"] == CUSTOMER_FAQ_TOPIC_KEY
+    )
+    assert topic["source_module_key"] == "customer_faq"
+    assert topic["content_kind"] == "faq_cards"
+    assert topic["audio_scenario_key"] == CUSTOMER_FAQ_AUDIO_SCENARIO_KEY
+    assert topic["required"] is False
+    assert topic["blocks_next"] is False
+    assert len(topic["faq_cards"]) == 4
+    assert topic["duplicate_groups"][0]["group_key"] == "waf_boundary"
+    assert topic["evidence_cases"][0]["title"] == "深圳航空"
+    assert len(topic["learning_units"]) == 8
+    assert any(unit["source_card_keys"] for unit in topic["learning_units"])
+
+
 @pytest.mark.asyncio
 async def test_learning_topic_is_projected_separately_and_not_path_blocking(
     test_db: AsyncSession,
@@ -211,7 +288,9 @@ async def test_learning_topic_is_projected_separately_and_not_path_blocking(
         viewer=learner,
     )
 
-    assert {module["module_key"] for module in journey["modules"]} == {"ppt_explanation"}
+    assert {module["module_key"] for module in journey["modules"]} == {
+        "ppt_explanation"
+    }
     assert journey["overall_progress"]["total_modules"] == 1
     assert journey["training_stage"] == "not_started"
     assert journey["learning_topics"][0]["topic_key"] == BUSINESS_ETIQUETTE_TOPIC_KEY

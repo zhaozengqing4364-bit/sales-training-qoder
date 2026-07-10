@@ -34,7 +34,12 @@ class LearningTopicProjectionService:
             ],
         )
         return [
-            self._topic_payload(topic, attempts, revision_id=str(revision.revision_id), revision_no=int(revision.revision_no))
+            self._topic_payload(
+                topic,
+                attempts,
+                revision_id=str(revision.revision_id),
+                revision_no=int(revision.revision_no),
+            )
             for topic in sorted(topics, key=lambda item: item.order_index)
         ]
 
@@ -50,7 +55,9 @@ class LearningTopicProjectionService:
             select(SalesTrainerBusinessEtiquetteQuizAttempt)
             .where(
                 SalesTrainerBusinessEtiquetteQuizAttempt.user_id == user_id,
-                SalesTrainerBusinessEtiquetteQuizAttempt.learning_unit_key.in_(unit_keys),
+                SalesTrainerBusinessEtiquetteQuizAttempt.learning_unit_key.in_(
+                    unit_keys
+                ),
             )
             .order_by(SalesTrainerBusinessEtiquetteQuizAttempt.submitted_at.desc())
         )
@@ -76,20 +83,24 @@ class LearningTopicProjectionService:
         status = _topic_status(units)
         ai_coach = None
         if topic.ai_coach is not None:
-            configured = bool(topic.ai_coach.prompt_template_id) if topic.ai_coach.enabled else False
+            configured = (
+                bool(topic.ai_coach.prompt_template_id)
+                if topic.ai_coach.enabled
+                else False
+            )
             ai_coach = {
                 "enabled": topic.ai_coach.enabled,
                 "configured": configured,
                 "available": topic.ai_coach.enabled and configured,
-                "coach_path": (
-                    "/sales-trainer/business-skills/coach"
-                    if topic.ai_coach.enabled and configured
-                    else None
-                ),
+                "coach_path": _coach_path(topic.topic_key)
+                if topic.ai_coach.enabled and configured
+                else None,
                 "disabled_reason": None
                 if topic.ai_coach.enabled
                 else "学习专题未启用 AI 教练。",
-                "allowed_interaction_types": list(topic.ai_coach.allowed_interaction_types),
+                "allowed_interaction_types": list(
+                    topic.ai_coach.allowed_interaction_types
+                ),
             }
         return {
             "topic_key": topic.topic_key,
@@ -114,7 +125,17 @@ class LearningTopicProjectionService:
         }
 
 
-def _unit_payload(unit: Any, attempt: SalesTrainerBusinessEtiquetteQuizAttempt | None) -> dict[str, Any]:
+def _coach_path(topic_key: str) -> str | None:
+    if topic_key == "business_etiquette":
+        return "/sales-trainer/business-skills/coach"
+    if topic_key == "customer_faq":
+        return "/sales-trainer/learning-topics/customer-faq/coach"
+    return None
+
+
+def _unit_payload(
+    unit: Any, attempt: SalesTrainerBusinessEtiquetteQuizAttempt | None
+) -> dict[str, Any]:
     passed = attempt.passed if attempt is not None else None
     status = "not_started"
     if attempt is not None:
@@ -133,8 +154,12 @@ def _unit_payload(unit: Any, attempt: SalesTrainerBusinessEtiquetteQuizAttempt |
         "require_quiz": unit.require_quiz,
         "quiz_question_count": unit.quiz_question_count,
         "quiz_pass_threshold": unit.quiz_pass_threshold,
-        "score": float(attempt.total_score) if attempt and attempt.total_score is not None else None,
-        "max_score": float(attempt.max_score) if attempt and attempt.max_score is not None else None,
+        "score": float(attempt.total_score)
+        if attempt and attempt.total_score is not None
+        else None,
+        "max_score": float(attempt.max_score)
+        if attempt and attempt.max_score is not None
+        else None,
         "passed": passed,
         "status": status,
         "latest_attempt_id": str(attempt.attempt_id) if attempt else None,

@@ -641,7 +641,7 @@ export default function AdminLearningContentDetailPage() {
                             </div>
                         ) : null}
                         <div className="mt-4 flex flex-wrap gap-2">
-                            <Link href="/admin/sales-trainer/articles" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                            <Link href="/admin/sales-trainer/learning-topics" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
                                 商务技巧文章绑定
                                 <ExternalLink className="h-3.5 w-3.5" />
                             </Link>

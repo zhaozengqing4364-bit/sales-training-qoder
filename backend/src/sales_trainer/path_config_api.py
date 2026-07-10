@@ -22,6 +22,9 @@ from sales_trainer.permissions import (
     can_manage_sales_trainer_prompts,
 )
 from sales_trainer.schemas import (
+    CustomerFaqGenerateDraftRequest,
+    CustomerFaqImportParseRequest,
+    CustomerFaqImportParseResponse,
     NewcomerDeadDataDiagnosticsResponse,
     NewcomerLearningTopicRevisionSummary,
     NewcomerLearningTopicsActionRequest,
@@ -40,6 +43,7 @@ from sales_trainer.schemas import (
     NewcomerPathRollbackPreviewRequest,
     NewcomerPathRollbackPreviewResponse,
 )
+from sales_trainer.services.customer_faq_parser import parse_customer_faq_material
 from sales_trainer.services.learning_topic_config_service import (
     LearningTopicConfigError,
     NewcomerLearningTopicConfigService,
@@ -103,7 +107,9 @@ async def get_path_config(
         payload = await SalesTrainerPathConfigService(db).get_config()
     except SalesTrainerPathConfigError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(NewcomerPathConfigResponse.model_validate(payload).model_dump())
+    return success_response(
+        NewcomerPathConfigResponse.model_validate(payload).model_dump()
+    )
 
 
 @newcomer_admin_path_config_router.put("/path-config", response_model=None)
@@ -166,7 +172,9 @@ async def save_path_config(
     )
 
 
-@newcomer_admin_path_config_router.post("/path-config/publish/preview", response_model=None)
+@newcomer_admin_path_config_router.post(
+    "/path-config/publish/preview", response_model=None
+)
 async def preview_path_config_publish(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -374,6 +382,58 @@ async def generate_business_etiquette_learning_topic_draft(
 
 
 @newcomer_admin_path_config_router.post(
+    "/learning-topics/customer-faq/parse",
+    response_model=None,
+)
+async def parse_customer_faq_learning_topic_material(
+    payload: CustomerFaqImportParseRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any] | JSONResponse:
+    if error := _require_manager(current_user):
+        return error
+    result = parse_customer_faq_material(payload.raw_text)
+    return success_response(
+        CustomerFaqImportParseResponse.model_validate(result).model_dump(mode="json")
+    )
+
+
+@newcomer_admin_path_config_router.post(
+    "/learning-topics/customer-faq/generate-draft",
+    response_model=None,
+)
+async def generate_customer_faq_learning_topic_draft(
+    payload: CustomerFaqGenerateDraftRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if error := _require_manager(current_user):
+        return error
+    trace_id = get_trace_id()
+    service = NewcomerLearningTopicConfigService(db)
+    try:
+        await service.generate_customer_faq_draft(
+            raw_text=payload.raw_text,
+            actor=current_user,
+            overwrite_working=payload.overwrite_working,
+            reason=payload.reason,
+            trace_id=trace_id,
+        )
+        response = await service.get_config()
+    except LearningTopicConfigError as exc:
+        await db.rollback()
+        return _api_error(
+            exc.code,
+            status_code=exc.status_code,
+            message=exc.message,
+            trace_id=trace_id,
+        )
+    return success_response(
+        NewcomerLearningTopicsConfigResponse.model_validate(response).model_dump(),
+        trace_id=trace_id,
+    )
+
+
+@newcomer_admin_path_config_router.post(
     "/learning-topics/publish/preview",
     response_model=None,
 )
@@ -437,7 +497,9 @@ async def publish_learning_topics_config(
     )
 
 
-@newcomer_admin_path_config_router.get("/learning-topics/revisions", response_model=None)
+@newcomer_admin_path_config_router.get(
+    "/learning-topics/revisions", response_model=None
+)
 async def list_learning_topics_revisions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -490,7 +552,9 @@ async def preview_learning_topics_rollback(
     )
 
 
-@newcomer_admin_path_config_router.post("/learning-topics/rollback", response_model=None)
+@newcomer_admin_path_config_router.post(
+    "/learning-topics/rollback", response_model=None
+)
 async def rollback_learning_topics_config(
     payload: NewcomerLearningTopicsActionRequest,
     current_user: User = Depends(get_current_user),

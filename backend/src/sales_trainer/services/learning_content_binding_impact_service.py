@@ -23,7 +23,7 @@ from sales_trainer.services.path_config_models import (
     payload_from_revision,
 )
 
-ARTICLE_BINDING_ENTRY = "/admin/sales-trainer/articles"
+ARTICLE_BINDING_ENTRY = "/admin/sales-trainer/learning-topics"
 PATH_CONFIG_ENTRY = "/admin/sales-trainer/paths"
 QUESTION_DRAFT_ENTRY = "/admin/sales-trainer/questions/drafts"
 
@@ -74,7 +74,7 @@ class LearningContentBindingImpactService:
         block_reason = None
         if not can_archive:
             block_reason = (
-                "该学习内容正在被新人训练路径引用。请先到商务技巧文章或路径配置中"
+                "该学习内容正在被新人训练路径引用。请先到学习专题或路径配置中"
                 "替换绑定并发布路径配置，再归档学习内容。"
             )
         return LearningContentBindingImpactResponse(

@@ -18,6 +18,8 @@ Admin APIs:
 GET  /api/v1/admin/newcomer-training/learning-topics/config
 PUT  /api/v1/admin/newcomer-training/learning-topics/config
 POST /api/v1/admin/newcomer-training/learning-topics/business-etiquette/generate-draft
+POST /api/v1/admin/newcomer-training/learning-topics/customer-faq/parse
+POST /api/v1/admin/newcomer-training/learning-topics/customer-faq/generate-draft
 POST /api/v1/admin/newcomer-training/learning-topics/publish/preview
 POST /api/v1/admin/newcomer-training/learning-topics/publish
 GET  /api/v1/admin/newcomer-training/learning-topics/revisions
@@ -38,12 +40,16 @@ class NewcomerLearningTopicsPayload(BaseModel):
 
 ### 3. Contracts
 
-- First version supports only `topic_key="business_etiquette"` sourced from `source_module_key="business_skills"`.
+- Supported topic keys are explicit and schema validated:
+  - `business_etiquette`: `content_kind="article"`, `source_module_key="business_skills"`.
+  - `customer_faq`: `content_kind="faq_cards"`, `source_module_key="customer_faq"`.
 - Active learning-topic revision controls learner visibility. Working/draft revisions are admin-only.
 - `required` and `blocks_next` must remain `false`. Required path progress, readiness gate, and next-stage access must not depend on learning topic completion.
 - Score display uses historical quiz attempt score fields: `score`, `max_score`, `passed`, `latest_attempt_id`.
 - AI Coach under a learning topic is optional. If enabled, prompt/model bindings must validate before publish or runtime start.
 - Readiness may include learning topic quiz attempts as evidence, but learning topic failures must not change required path `training_stage`.
+- FAQ-card topics must publish only reviewed cards (`status="published"`), valid duplicate groups, valid unit `source_card_keys`, and no invented promise such as fixed price/performance/version commitments.
+- Recording scenarios such as PPT explanation, company product demo, and customer FAQ oral drill are instances of the shared audio-evaluation capability. The scenario/carrier must not be modeled as the capability level.
 
 ### 4. Validation & Error Matrix
 
@@ -53,18 +59,21 @@ class NewcomerLearningTopicsPayload(BaseModel):
 | Topic disabled or missing | Learner topic hidden; business-etiquette endpoints return `[LEARNING_TOPIC_NOT_CONFIGURED]` / 404. |
 | Topic sets `required=true` or `blocks_next=true` | Reject save/publish with `[LEARNING_TOPIC_CONFIG_INVALID]` / 422. |
 | Enabled topic has no published article | Publish rejects with `[LEARNING_TOPIC_CONTENT_MISSING]` or `[LEARNING_TOPIC_CONTENT_INVALID]`. |
+| FAQ-card topic has no published cards or unit card bindings point to missing cards | Publish rejects with `[LEARNING_TOPIC_FAQ_CARDS_MISSING]` or `[LEARNING_TOPIC_UNIT_CARD_BINDING_INVALID]`. |
 | AI Coach enabled without valid prompt bindings | Publish/runtime rejects with existing AI Coach prompt config errors. |
 | Admin publishes or rolls back | Future learner display changes only; historical attempts and scores are preserved. |
 
 ### 5. Good/Base/Bad Cases
 
 - Good: admin generates a draft from active path `business_skills`, binds a published learning article, previews impact, publishes, and learner Journey shows one non-blocking learning topic.
+- Good: admin parses customer FAQ material, reviews duplicate/risk cards on one page, generates a `customer_faq` draft, publishes it, and learner sees non-blocking card learning plus a customer FAQ oral-drill recording entry.
 - Base: no learning topic is published; required path still works and no fallback topic is invented.
 - Bad: `business_skills` remains in `TrainingJourney.modules` as a required quiz module, causing article completion to block PPT/realtime progress.
 
 ### 6. Tests Required
 
 - Unit: generate draft from active `business_skills`, publish active topic, and project it under `TrainingJourney.learning_topics`.
+- Unit: parse customer FAQ material into cards, high-risk flags, duplicate groups, evidence cases, and generate a `customer_faq` working revision.
 - Unit: required path excludes `business_skills` from `modules`, `overall_progress`, and readiness gate.
 - Unit: learning topic quiz attempts appear as non-blocking readiness evidence and can complete a retraining task by capability.
 - Unit: AI Coach session creation for `business_skills` resolves active learning-topic config instead of required path config.
@@ -84,7 +93,8 @@ This keeps learning articles inside the blocking path and makes article/quiz sco
 #### Correct
 
 ```python
-modules = [module for module in active_path.modules if module.module_key != "business_skills"]
+learning_source_keys = {topic.source_module_key for topic in active_topics}
+modules = [module for module in active_path.modules if module.module_key not in learning_source_keys]
 learning_topics = await LearningTopicProjectionService(db).learner_topics(user_id=user_id)
 ```
 

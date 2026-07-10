@@ -41,6 +41,7 @@ const READINESS_CAPABILITY_KEYS_BY_MODULE: Record<string, readonly string[]> = {
     ],
     elevator_pitch: ["expression_clarity", "structured_presentation", "customer_perspective"],
     company_product_demo: ["expression_clarity", "structured_presentation", "product_understanding"],
+    customer_faq_oral_drill: ["customer_perspective", "objection_handling", "expression_clarity"],
 };
 
 export function isAudioEditableModuleKey(

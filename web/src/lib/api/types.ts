@@ -5688,6 +5688,7 @@ export interface BusinessEtiquetteTrainingUnitConfig {
     order_index: number;
     enabled: boolean;
     source_chapter_orders: number[];
+    source_card_keys?: string[];
     capability_keys: string[];
     unlock_after_unit_keys: string[];
     require_reading: boolean;
@@ -6146,14 +6147,127 @@ export interface NewcomerPathConfigResponse {
     readonly diagnostics: NewcomerPathConfigDiagnostics;
 }
 
+export type NewcomerLearningTopicKey = "business_etiquette" | "customer_faq";
+export type NewcomerLearningTopicContentKind = "article" | "faq_cards";
+export type CustomerFaqCardStatus = "draft" | "published" | "archived";
+export type CustomerFaqDifficultyLevel = "newcomer" | "advanced" | "high_risk";
+
+export interface CustomerFaqEvidenceCase {
+    readonly case_key: string;
+    readonly title: string;
+    readonly summary: string | null;
+    readonly source_question_numbers: readonly number[];
+}
+
+export interface CustomerFaqCard {
+    readonly card_key: string;
+    readonly source_question_number: number | null;
+    readonly question: string;
+    readonly short_answer: string;
+    readonly detailed_answer: string;
+    readonly scenario: string;
+    readonly category: string;
+    readonly customer_intent: string | null;
+    readonly key_points: readonly string[];
+    readonly evidence_cases: readonly string[];
+    readonly forbidden_claims: readonly string[];
+    readonly escalation_required: boolean;
+    readonly difficulty_level: CustomerFaqDifficultyLevel;
+    readonly tags: readonly string[];
+    readonly duplicate_group_key: string | null;
+    readonly status: CustomerFaqCardStatus;
+}
+
+export interface CustomerFaqDuplicateGroup {
+    readonly group_key: string;
+    readonly title: string;
+    readonly card_keys: readonly string[];
+    readonly reason: string;
+}
+
+export interface CustomerFaqImportParseRequest {
+    readonly raw_text: string;
+}
+
+export interface CustomerFaqImportParseResponse {
+    readonly cards: readonly CustomerFaqCard[];
+    readonly duplicate_groups: readonly CustomerFaqDuplicateGroup[];
+    readonly evidence_cases: readonly CustomerFaqEvidenceCase[];
+    readonly total_questions: number;
+    readonly high_risk_count: number;
+    readonly escalation_count: number;
+}
+
+export interface CustomerFaqGenerateDraftRequest extends CustomerFaqImportParseRequest {
+    readonly overwrite_working?: boolean;
+    readonly reason?: string | null;
+}
+
+export interface CustomerFaqLearningTopicResponse {
+    readonly topic_key: "customer_faq";
+    readonly title: string;
+    readonly description: string | null;
+    readonly revision_id: string;
+    readonly revision_no: number;
+    readonly units: readonly BusinessEtiquetteTrainingUnitConfig[];
+    readonly cards: readonly CustomerFaqCard[];
+    readonly duplicate_groups: readonly CustomerFaqDuplicateGroup[];
+    readonly evidence_cases: readonly CustomerFaqEvidenceCase[];
+    readonly audio_scenario_key: string | null;
+    readonly quiz_paper_id: string | null;
+    readonly ai_coach?: AiCoachAdminConfigLike | null;
+}
+
+export interface CustomerFaqShortAnswerSubmit {
+    readonly card_key: string;
+    readonly answer_text: string;
+}
+
+export interface CustomerFaqShortAnswerSubmitRequest {
+    readonly answers: readonly CustomerFaqShortAnswerSubmit[];
+}
+
+export interface CustomerFaqShortAnswerResult {
+    readonly card_key: string;
+    readonly question: string;
+    readonly answer_text: string;
+    readonly score: number;
+    readonly max_score: number;
+    readonly passed: boolean | null;
+    readonly feedback: string;
+    readonly reason?: string | null;
+    readonly scoring_source: string;
+    readonly scoring_provider?: string | null;
+    readonly scoring_model?: string | null;
+    readonly scoring_latency_ms?: number | null;
+}
+
+export interface CustomerFaqShortAnswerAttemptResponse {
+    readonly topic_key: "customer_faq";
+    readonly learning_unit_key: string;
+    readonly learning_unit_title: string;
+    readonly total_score: number;
+    readonly max_score: number;
+    readonly passed: boolean | null;
+    readonly pass_threshold: number | null;
+    readonly answers: readonly CustomerFaqShortAnswerResult[];
+}
+
 export interface NewcomerLearningTopicConfig {
-    readonly topic_key: "business_etiquette";
-    readonly source_module_key: "business_skills";
+    readonly topic_key: NewcomerLearningTopicKey;
+    readonly source_module_key: string;
+    readonly content_kind?: NewcomerLearningTopicContentKind;
     readonly enabled: boolean;
+    readonly disabled_reason?: string | null;
     readonly title: string;
     readonly description: string | null;
     readonly order_index: number;
     readonly learning_content_id: string | null;
+    readonly faq_cards?: readonly CustomerFaqCard[];
+    readonly duplicate_groups?: readonly CustomerFaqDuplicateGroup[];
+    readonly evidence_cases?: readonly CustomerFaqEvidenceCase[];
+    readonly audio_scenario_key?: string | null;
+    readonly quiz_paper_id?: string | null;
     readonly learning_units: readonly BusinessEtiquetteTrainingUnitConfig[];
     readonly ai_coach?: AiCoachAdminConfigLike | null;
     readonly required: false;

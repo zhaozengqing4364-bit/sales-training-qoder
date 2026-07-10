@@ -595,20 +595,8 @@ async def test_should_aggregate_audio_quiz_and_ai_coach_from_active_revision(
     assert business_topic["ai_coach"]["coach_path"] == (
         "/sales-trainer/business-skills/coach"
     )
-    quiz_module = modules[("quiz_attempt", "business_skills")]
-    assert quiz_module["required"] is False
-    assert quiz_module["status"] == "passed"
-    assert quiz_module["passed"] is True
-    assert quiz_module["completion_satisfied"] is True
-    ai_module = modules[("ai_coach", "business_skills")]
-    assert ai_module["latest_outcome"]["record_type"] == "ai_coach_session"
-    assert ai_module["status"] == "failed"
-    assert ai_module["passed"] is False
-    assert any(
-        reason["code"] == "[AI_COACH_NOT_MASTERED]"
-        for reason in ai_module["unmet_reasons"]
-    )
-    assert journey["training_stage"] == "needs_remediation"
+    assert not any(module_key == "business_skills" for _, module_key in modules)
+    assert journey["training_stage"] == "in_progress"
     realtime_module = modules[("realtime_roleplay", "realtime_roleplay")]
     assert realtime_module["locked"] is True
     assert realtime_module["status"] == "disabled"
@@ -703,7 +691,9 @@ async def test_should_project_readiness_retraining_request_to_learner_journey(
     assert request.primary_target_path == "/sales-trainer/business-skills/coach"
     assert request.target_modules[0].module_key == "business_skills"
     assert request.target_modules[0].kind == "ai_coach"
-    assert request.target_modules[0].target_path == "/sales-trainer/business-skills/coach"
+    assert (
+        request.target_modules[0].target_path == "/sales-trainer/business-skills/coach"
+    )
 
     await OperationLogService(test_db).record(
         actor=admin,
@@ -927,13 +917,7 @@ async def test_should_mark_journey_passed_when_submitted_realtime_completion_is_
     assert (
         modules[("audio_submission", "ppt_explanation")]["completion_satisfied"] is True
     )
-    quiz_module = modules[("quiz_attempt", "business_skills")]
-    assert quiz_module["required"] is False
-    assert quiz_module["completion_satisfied"] is True
-    ai_module = modules[("ai_coach", "business_skills")]
-    assert ai_module["status"] == "passed"
-    assert ai_module["passed"] is True
-    assert ai_module["completion_satisfied"] is True
+    assert not any(module_key == "business_skills" for _, module_key in modules)
     business_topic = journey["learning_topics"][0]
     assert business_topic["source_module_key"] == "business_skills"
     assert business_topic["blocks_next"] is False
@@ -1185,21 +1169,9 @@ async def test_should_enforce_learner_level_required_in_journey_path_and_unit_ac
         if topic["source_module_key"] == "business_skills"
     )
     assert journey["learner_level"]["level_key"] == "unassigned"
-    ai_module = next(
-        module
-        for module in journey["modules"]
-        if module["kind"] == "ai_coach" and module["module_key"] == "business_skills"
+    assert not any(
+        module["module_key"] == "business_skills" for module in journey["modules"]
     )
-    assert ai_module["locked"] is True
-    assert ai_module["status"] == "disabled"
-    quiz_module = next(
-        module
-        for module in journey["modules"]
-        if module["kind"] == "quiz_attempt" and module["module_key"] == "business_skills"
-    )
-    assert quiz_module["required"] is False
-    assert quiz_module["locked"] is True
-    assert quiz_module["status"] == "disabled"
     assert business_topic["required"] is False
     assert business_topic["blocks_next"] is False
     assert business_topic["status"] == "not_started"
@@ -1211,7 +1183,7 @@ async def test_should_enforce_learner_level_required_in_journey_path_and_unit_ac
         level for level in paths[0]["levels"] if level["unit_id"] == quiz_unit_id
     )
     assert business_level["learner_level_required"] == ["ready"]
-    assert business_level["locked"] is True
+    assert business_level["locked"] is False
 
     with pytest.raises(LearnerUnitAccessError) as exc_info:
         await require_learner_active_path_unit_access(
@@ -1263,6 +1235,72 @@ async def test_should_reject_non_learner_roles_from_learner_path_gates(
         )
     assert module_exc.value.code == "[NEWCOMER_LEARNER_ROLE_REQUIRED]"
     assert module_exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_training_manager_development_team_includes_dev_login_admin(
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    publisher = _user("admin", department="总部")
+    manager = _user("training_manager", department="新人训练路径")
+    learner = _user("user", department="新人训练路径")
+    dev_admin = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id="dev_wechat_user",
+        name="Developer",
+        email="dev@example.com",
+        department="新人训练路径",
+        role="admin",
+        is_active=True,
+    )
+    same_department_admin = _user("admin", department="新人训练路径")
+    audio_unit_id = str(uuid.uuid4())
+    quiz_unit_id = str(uuid.uuid4())
+    test_db.add_all(
+        [
+            publisher,
+            manager,
+            learner,
+            dev_admin,
+            same_department_admin,
+            _unit(audio_unit_id, unit_type="audio_scoring", name="PPT 讲解"),
+            _unit(quiz_unit_id, unit_type="quiz", name="商务技巧"),
+        ]
+    )
+    await test_db.commit()
+    await _publish_path(
+        test_db,
+        actor=publisher,
+        audio_unit_id=audio_unit_id,
+        quiz_unit_id=quiz_unit_id,
+    )
+
+    listing = await TrainingJourneyService(test_db).list_admin_journeys(
+        viewer=manager,
+        team_department="新人训练路径",
+        limit=50,
+        offset=0,
+    )
+
+    learner_ids = {item["learner_id"] for item in listing["items"]}
+    assert listing["total"] == 2
+    assert str(learner.user_id) in learner_ids
+    assert str(dev_admin.user_id) in learner_ids
+    assert str(same_department_admin.user_id) not in learner_ids
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    production_listing = await TrainingJourneyService(test_db).list_admin_journeys(
+        viewer=manager,
+        team_department="新人训练路径",
+        limit=50,
+        offset=0,
+    )
+    assert production_listing["total"] == 1
+    assert [item["learner_id"] for item in production_listing["items"]] == [
+        str(learner.user_id)
+    ]
 
 
 @pytest.mark.asyncio
@@ -1374,60 +1412,8 @@ async def test_should_apply_configured_learner_level_and_filter_admin_analytics(
         "limit": 1,
     }
     assert analytics["summary"]["loaded_learner_count"] == 1
-    assert analytics["module_summaries"] == [
-        {
-            "module_key": "business_skills",
-            "title": "商务技巧 AI Coach",
-            "kind": "ai_coach",
-            "learner_count": 1,
-            "passed_count": 1,
-            "failed_count": 0,
-            "status_counts": {"passed": 1},
-            "pass_rate": 100.0,
-            "average_score": 90.0,
-        },
-        {
-            "module_key": "business_skills",
-            "title": "商务技巧",
-            "kind": "quiz_attempt",
-            "learner_count": 1,
-            "passed_count": 1,
-            "failed_count": 0,
-            "status_counts": {"passed": 1},
-            "pass_rate": 100.0,
-            "average_score": 92.0,
-        },
-    ]
-    assert analytics["weakness_heatmap"] == [
-        {
-            "heatmap_key": "business_skills:ai_coach",
-            "module_key": "business_skills",
-            "title": "商务技巧 AI Coach",
-            "kind": "ai_coach",
-            "module_type": "ai_coach",
-            "learner_count": 1,
-            "risk_count": 0,
-            "passed_count": 1,
-            "status_counts": {"passed": 1},
-            "risk_rate": 0.0,
-            "pass_rate": 100.0,
-            "average_score": 90.0,
-        },
-        {
-            "heatmap_key": "business_skills:quiz_attempt",
-            "module_key": "business_skills",
-            "title": "商务技巧",
-            "kind": "quiz_attempt",
-            "module_type": "article_exam",
-            "learner_count": 1,
-            "risk_count": 0,
-            "passed_count": 1,
-            "status_counts": {"passed": 1},
-            "risk_rate": 0.0,
-            "pass_rate": 100.0,
-            "average_score": 92.0,
-        },
-    ]
+    assert analytics["module_summaries"] == []
+    assert analytics["weakness_heatmap"] == []
     assert analytics["learning_topic_summaries"][0] == {
         "topic_key": "business_etiquette",
         "source_module_key": "business_skills",
@@ -1838,9 +1824,7 @@ async def test_training_record_detail_audit_logs_include_journey_level_context(
     assert record["operation_logs"][0]["metadata"] == {"unit_id": quiz_unit.unit_id}
     response = SalesTrainerTrainingRecordResponse.model_validate(record)
     assert response.operation_logs[0].training_context is not None
-    assert (
-        response.operation_logs[0].training_context.training_stage == "not_started"
-    )
+    assert response.operation_logs[0].training_context.training_stage == "not_started"
 
 
 @pytest.mark.asyncio
@@ -1924,19 +1908,9 @@ async def test_should_ignore_legacy_business_skills_regrade_in_required_journey_
         viewer=learner,
     )
 
-    ai_module = next(
-        module
-        for module in journey["modules"]
-        if module["kind"] == "ai_coach" and module["module_key"] == "business_skills"
+    assert not any(
+        module["module_key"] == "business_skills" for module in journey["modules"]
     )
-    assert ai_module["status"] == "not_started"
-    quiz_module = next(
-        module
-        for module in journey["modules"]
-        if module["kind"] == "quiz_attempt" and module["module_key"] == "business_skills"
-    )
-    assert quiz_module["required"] is False
-    assert quiz_module["status"] == "failed"
     assert journey["training_stage"] == "not_started"
     assert journey["learning_topics"][0]["topic_key"] == "business_etiquette"
     assert journey["learning_topics"][0]["status"] == "not_started"

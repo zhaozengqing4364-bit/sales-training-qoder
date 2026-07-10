@@ -164,7 +164,7 @@ function makeBindingImpact(
         can_archive: true,
         archive_block_reason: null,
         management_entries: {
-            article_binding: "/admin/sales-trainer/articles",
+            article_binding: "/admin/sales-trainer/learning-topics",
             path_config: "/admin/sales-trainer/paths",
             question_drafts: "/admin/sales-trainer/questions/drafts",
         },

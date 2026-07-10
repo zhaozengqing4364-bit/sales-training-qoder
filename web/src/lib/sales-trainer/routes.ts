@@ -135,7 +135,7 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
         key: "articles",
         label: "学习专题",
         icon: BookOpen,
-        href: "/admin/sales-trainer/articles",
+        href: "/admin/sales-trainer/learning-topics",
     },
     papers: {
         key: "papers",

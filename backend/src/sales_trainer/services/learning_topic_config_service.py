@@ -21,6 +21,7 @@ from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
 from sales_trainer.services.curriculum_practice_adapter import get_learning_content
+from sales_trainer.services.customer_faq_parser import parse_customer_faq_material
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
@@ -34,7 +35,10 @@ NEWCOMER_LEARNING_TOPICS_LOGICAL_ID = "newcomer_learning_topics_v1"
 NEWCOMER_LEARNING_TOPICS_SCHEMA_VERSION = "newcomer_learning_topics_v1"
 BUSINESS_ETIQUETTE_TOPIC_KEY = "business_etiquette"
 BUSINESS_SKILLS_SOURCE_MODULE_KEY = "business_skills"
-LEARNING_TOPICS_MANAGEMENT_ENTRY = "/admin/sales-trainer/articles"
+CUSTOMER_FAQ_TOPIC_KEY = "customer_faq"
+CUSTOMER_FAQ_SOURCE_MODULE_KEY = "customer_faq"
+CUSTOMER_FAQ_AUDIO_SCENARIO_KEY = "customer_faq_oral_drill"
+LEARNING_TOPICS_MANAGEMENT_ENTRY = "/admin/sales-trainer/learning-topics"
 
 
 class LearningTopicConfigError(Exception):
@@ -73,19 +77,28 @@ class NewcomerLearningTopicConfigService:
             "working_revision_id": str(working.revision_id) if working else None,
             "working_revision_no": working.revision_no if working else None,
             "has_unpublished_revision": working is not None,
-            "diagnostics": self._diagnostics(active=active, working=working, payload=payload),
+            "diagnostics": self._diagnostics(
+                active=active, working=working, payload=payload
+            ),
         }
 
-    async def active_payload(self) -> tuple[
-        NewcomerLearningTopicsPayload,
-        SalesTrainerAssetRevision,
-    ] | None:
+    async def active_payload(
+        self,
+    ) -> (
+        tuple[
+            NewcomerLearningTopicsPayload,
+            SalesTrainerAssetRevision,
+        ]
+        | None
+    ):
         active = await self._active_revision()
         if active is None:
             return None
         return payload_from_learning_topic_revision(active), active
 
-    async def active_business_etiquette_topic(self) -> tuple[
+    async def active_business_etiquette_topic(
+        self,
+    ) -> tuple[
         NewcomerLearningTopicConfig,
         SalesTrainerAssetRevision,
     ]:
@@ -106,7 +119,32 @@ class NewcomerLearningTopicConfigService:
             )
         return topic, revision
 
-    async def active_business_etiquette_module_config(self) -> tuple[
+    async def active_customer_faq_topic(
+        self,
+    ) -> tuple[
+        NewcomerLearningTopicConfig,
+        SalesTrainerAssetRevision,
+    ]:
+        active = await self.active_payload()
+        if active is None:
+            raise LearningTopicConfigError(
+                "[LEARNING_TOPIC_ACTIVE_REVISION_MISSING]",
+                "学习专题尚未发布，当前不可展示客户常见问答。",
+                404,
+            )
+        payload, revision = active
+        topic = customer_faq_topic_from_payload(payload)
+        if topic is None or not topic.enabled:
+            raise LearningTopicConfigError(
+                "[LEARNING_TOPIC_NOT_CONFIGURED]",
+                "客户常见问答学习专题未启用或未发布。",
+                404,
+            )
+        return topic, revision
+
+    async def active_business_etiquette_module_config(
+        self,
+    ) -> tuple[
         str,
         int,
         NewcomerPathModuleConfig,
@@ -161,7 +199,9 @@ class NewcomerLearningTopicConfigService:
                 trace_id=trace_id,
             )
         except SalesTrainerAssetRevisionError as exc:
-            raise LearningTopicConfigError(exc.code, exc.message, exc.status_code) from exc
+            raise LearningTopicConfigError(
+                exc.code, exc.message, exc.status_code
+            ) from exc
         await self._record_event(
             actor=actor,
             action="newcomer_learning_topics.save_working",
@@ -248,7 +288,9 @@ class NewcomerLearningTopicConfigService:
                 trace_id=trace_id,
             )
         except SalesTrainerAssetRevisionError as exc:
-            raise LearningTopicConfigError(exc.code, exc.message, exc.status_code) from exc
+            raise LearningTopicConfigError(
+                exc.code, exc.message, exc.status_code
+            ) from exc
         await self._record_event(
             actor=actor,
             action="newcomer_learning_topics.generate_business_etiquette_draft",
@@ -261,6 +303,73 @@ class NewcomerLearningTopicConfigService:
                 "source_path_revision_id": str(active_path.revision_id),
                 "source_path_revision_no": active_path.revision_no,
                 "overwrite_working": overwrite_working,
+            },
+        )
+        await self._db.commit()
+        return revision
+
+    async def generate_customer_faq_draft(
+        self,
+        *,
+        raw_text: str,
+        actor: User,
+        overwrite_working: bool = False,
+        reason: str | None = None,
+        trace_id: str | None = None,
+    ) -> SalesTrainerAssetRevision:
+        working = await self._working_revision()
+        if working is not None and not overwrite_working:
+            raise LearningTopicConfigError(
+                "[LEARNING_TOPIC_WORKING_REVISION_EXISTS]",
+                "学习专题已有未发布草稿，请预览后发布，或明确覆盖草稿。",
+                409,
+            )
+        parsed = parse_customer_faq_material(raw_text)
+        if not parsed.cards:
+            raise LearningTopicConfigError(
+                "[CUSTOMER_FAQ_IMPORT_EMPTY]",
+                "未从材料中解析到客户问答，请检查材料格式。",
+                422,
+            )
+        active = await self._active_revision()
+        base_payload = (
+            payload_from_learning_topic_revision(working or active)
+            if (working or active)
+            else NewcomerLearningTopicsPayload()
+        )
+        topic_payload = _upsert_customer_faq_topic(base_payload, parsed)
+        self._validate_payload_for_write(topic_payload)
+        await self._validate_ai_coach_prompt_bindings(topic_payload)
+        change_class = classify_learning_topic_change(active, topic_payload)
+        try:
+            revision = await self._revisions.save_working_revision(
+                resource_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+                logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+                payload=topic_payload.model_dump(mode="json"),
+                actor=actor,
+                change_class=change_class,
+                source_revision_id=str(active.revision_id) if active else None,
+                reason=reason or "导入客户常见问答并生成学习专题草稿",
+                trace_id=trace_id,
+            )
+        except SalesTrainerAssetRevisionError as exc:
+            raise LearningTopicConfigError(
+                exc.code, exc.message, exc.status_code
+            ) from exc
+        await self._record_event(
+            actor=actor,
+            action="newcomer_learning_topics.generate_customer_faq_draft",
+            before_revision_id=str(active.revision_id) if active else None,
+            after_revision_id=str(revision.revision_id),
+            reason=reason,
+            trace_id=trace_id,
+            change_class=change_class,
+            extra_metadata={
+                "topic_key": CUSTOMER_FAQ_TOPIC_KEY,
+                "card_count": len(parsed.cards),
+                "duplicate_group_count": len(parsed.duplicate_groups),
+                "high_risk_count": parsed.high_risk_count,
+                "escalation_count": parsed.escalation_count,
             },
         )
         await self._db.commit()
@@ -293,7 +402,9 @@ class NewcomerLearningTopicConfigService:
                 trace_id=trace_id,
             )
         except SalesTrainerAssetRevisionError as exc:
-            raise LearningTopicConfigError(exc.code, exc.message, exc.status_code) from exc
+            raise LearningTopicConfigError(
+                exc.code, exc.message, exc.status_code
+            ) from exc
         await self._record_event(
             actor=actor,
             action="newcomer_learning_topics.publish",
@@ -327,7 +438,9 @@ class NewcomerLearningTopicConfigService:
         trace_id: str | None = None,
     ) -> AssetPublishResult:
         target = await self._revision_by_id(revision_id)
-        await self._validate_payload_for_publish(payload_from_learning_topic_revision(target))
+        await self._validate_payload_for_publish(
+            payload_from_learning_topic_revision(target)
+        )
         try:
             result = await self._revisions.rollback_to_revision(
                 target,
@@ -338,7 +451,9 @@ class NewcomerLearningTopicConfigService:
                 expected_logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
             )
         except SalesTrainerAssetRevisionError as exc:
-            raise LearningTopicConfigError(exc.code, exc.message, exc.status_code) from exc
+            raise LearningTopicConfigError(
+                exc.code, exc.message, exc.status_code
+            ) from exc
         await self._record_event(
             actor=actor,
             action="newcomer_learning_topics.rollback",
@@ -358,7 +473,10 @@ class NewcomerLearningTopicConfigService:
             resource_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
             logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
         )
-        return [learning_topic_revision_summary(revision, active_id) for revision in revisions]
+        return [
+            learning_topic_revision_summary(revision, active_id)
+            for revision in revisions
+        ]
 
     async def changed_high_risk_fields_for_publish(self) -> set[str]:
         active = await self._active_revision()
@@ -366,7 +484,9 @@ class NewcomerLearningTopicConfigService:
         if working is None:
             return set()
         return changed_learning_topic_ai_coach_high_risk_fields(
-            payload_from_learning_topic_revision(active) if active is not None else None,
+            payload_from_learning_topic_revision(active)
+            if active is not None
+            else None,
             payload_from_learning_topic_revision(working),
         )
 
@@ -374,7 +494,9 @@ class NewcomerLearningTopicConfigService:
         active = await self._active_revision()
         target = await self._revision_by_id(revision_id)
         return changed_learning_topic_ai_coach_high_risk_fields(
-            payload_from_learning_topic_revision(active) if active is not None else None,
+            payload_from_learning_topic_revision(active)
+            if active is not None
+            else None,
             payload_from_learning_topic_revision(target),
         )
 
@@ -409,7 +531,9 @@ class NewcomerLearningTopicConfigService:
             )
         return revision
 
-    async def _prepare_publish_target(self) -> tuple[
+    async def _prepare_publish_target(
+        self,
+    ) -> tuple[
         SalesTrainerAssetRevision | None,
         SalesTrainerAssetRevision,
         NewcomerLearningTopicsPayload,
@@ -424,7 +548,9 @@ class NewcomerLearningTopicConfigService:
             )
         return active, working, payload_from_learning_topic_revision(working)
 
-    def _validate_payload_for_write(self, payload: NewcomerLearningTopicsPayload) -> None:
+    def _validate_payload_for_write(
+        self, payload: NewcomerLearningTopicsPayload
+    ) -> None:
         for topic in payload.topics:
             if topic.required or topic.blocks_next:
                 raise LearningTopicConfigError(
@@ -446,6 +572,38 @@ class NewcomerLearningTopicConfigService:
         self._validate_payload_for_write(payload)
         for topic in payload.topics:
             if not topic.enabled:
+                continue
+            if topic.content_kind == "faq_cards":
+                published_cards = [
+                    card for card in topic.faq_cards if card.status == "published"
+                ]
+                if not published_cards:
+                    raise LearningTopicConfigError(
+                        "[LEARNING_TOPIC_CARDS_MISSING]",
+                        f"{topic.title} 缺少已发布问答卡片。",
+                        409,
+                    )
+                card_keys = {card.card_key for card in published_cards}
+                enabled_units = [unit for unit in topic.learning_units if unit.enabled]
+                if not enabled_units:
+                    raise LearningTopicConfigError(
+                        "[LEARNING_TOPIC_UNITS_MISSING]",
+                        f"{topic.title} 缺少启用的小单元配置。",
+                        409,
+                    )
+                for unit in enabled_units:
+                    unknown_card_keys = sorted(set(unit.source_card_keys) - card_keys)
+                    if unknown_card_keys:
+                        raise LearningTopicConfigError(
+                            "[LEARNING_TOPIC_UNIT_CARDS_INVALID]",
+                            f"{topic.title} 小单元“{unit.title}”绑定了不存在或未发布的问答卡片。",
+                            409,
+                        )
+                if topic.ai_coach is not None and topic.ai_coach.enabled:
+                    module = module_config_from_learning_topic(topic)
+                    await SalesTrainerPathConfigService(
+                        self._db
+                    ).validate_ai_coach_prompt_bindings_for_modules([module])
                 continue
             if not topic.learning_content_id:
                 raise LearningTopicConfigError(
@@ -498,10 +656,14 @@ class NewcomerLearningTopicConfigService:
         target: SalesTrainerAssetRevision,
         target_payload: NewcomerLearningTopicsPayload,
     ) -> dict[str, Any]:
-        active_payload = payload_from_learning_topic_revision(active) if active else None
+        active_payload = (
+            payload_from_learning_topic_revision(active) if active else None
+        )
         changed_topic_keys = _changed_topic_keys(active_payload, target_payload)
         risk_reasons = []
-        if any(topic.ai_coach and topic.ai_coach.enabled for topic in target_payload.topics):
+        if any(
+            topic.ai_coach and topic.ai_coach.enabled for topic in target_payload.topics
+        ):
             risk_reasons.append("AI Coach 配置将影响后续学习专题入口。")
         return {
             "action": action,
@@ -562,11 +724,16 @@ class NewcomerLearningTopicConfigService:
                 }
             )
         for topic in payload.topics:
-            if topic.enabled and len([unit for unit in topic.learning_units if unit.enabled]) != 7:
+            expected_unit_count = 8 if topic.topic_key == CUSTOMER_FAQ_TOPIC_KEY else 7
+            if (
+                topic.enabled
+                and len([unit for unit in topic.learning_units if unit.enabled])
+                != expected_unit_count
+            ):
                 diagnostics.append(
                     {
                         "code": "[LEARNING_TOPIC_UNIT_COUNT_REVIEW]",
-                        "message": f"{topic.title} 当前启用小单元不是 7 个，请确认是否符合培训设计。",
+                        "message": f"{topic.title} 当前启用小单元不是 {expected_unit_count} 个，请确认是否符合培训设计。",
                         "severity": "warning",
                         "terminal": False,
                     }
@@ -635,6 +802,19 @@ def business_etiquette_topic_from_payload(
     )
 
 
+def customer_faq_topic_from_payload(
+    payload: NewcomerLearningTopicsPayload,
+) -> NewcomerLearningTopicConfig | None:
+    return next(
+        (
+            topic
+            for topic in payload.topics
+            if topic.topic_key == CUSTOMER_FAQ_TOPIC_KEY
+        ),
+        None,
+    )
+
+
 def module_config_from_learning_topic(
     topic: NewcomerLearningTopicConfig,
 ) -> NewcomerPathModuleConfig:
@@ -653,6 +833,100 @@ def module_config_from_learning_topic(
         ai_coach=topic.ai_coach,
         learning_units=list(topic.learning_units),
     )
+
+
+def _upsert_customer_faq_topic(
+    payload: NewcomerLearningTopicsPayload,
+    parsed: Any,
+) -> NewcomerLearningTopicsPayload:
+    cards_by_category = _customer_faq_cards_by_category(parsed.cards)
+    units = _customer_faq_learning_units(cards_by_category)
+    topic = NewcomerLearningTopicConfig(
+        topic_key=CUSTOMER_FAQ_TOPIC_KEY,
+        source_module_key=CUSTOMER_FAQ_SOURCE_MODULE_KEY,
+        content_kind="faq_cards",
+        enabled=True,
+        title="客户常见问答",
+        description="按客户真实问题训练新人标准口径、案例表达、风险边界和现场应答。",
+        order_index=2,
+        faq_cards=list(parsed.cards),
+        duplicate_groups=list(parsed.duplicate_groups),
+        evidence_cases=list(parsed.evidence_cases),
+        audio_scenario_key=CUSTOMER_FAQ_AUDIO_SCENARIO_KEY,
+        learning_units=units,
+        required=False,
+        blocks_next=False,
+        score_display_policy="quiz_attempt_score",
+    )
+    topics = [
+        item for item in payload.topics if item.topic_key != CUSTOMER_FAQ_TOPIC_KEY
+    ]
+    topics.append(topic)
+    topics.sort(key=lambda item: item.order_index)
+    return payload.model_copy(update={"topics": topics})
+
+
+def _customer_faq_cards_by_category(cards: list[Any]) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for card in cards:
+        if getattr(card, "status", None) == "archived":
+            continue
+        category = str(getattr(card, "category", "") or "产品能力")
+        result.setdefault(category, []).append(str(card.card_key))
+    return result
+
+
+def _customer_faq_learning_units(
+    cards_by_category: dict[str, list[str]],
+) -> list[Any]:
+    from sales_trainer.schemas import BusinessEtiquetteTrainingUnitConfig
+
+    unit_specs = [
+        ("company_value", "公司与核心价值", ["产品能力", "行业案例"]),
+        ("product_capability", "产品能力基础", ["产品能力", "合规审计"]),
+        ("deployment_architecture", "部署与架构", ["部署架构"]),
+        ("industry_cases", "行业案例", ["行业案例"]),
+        ("competition_boundary", "竞品与替代关系", ["竞品关系"]),
+        ("poc_delivery", "POC 与交付", ["交付问题", "商务政策"]),
+        ("high_risk_technology", "高风险技术问题", ["技术限制", "部署架构"]),
+        ("field_expression", "客户现场表达训练", ["商务政策", "竞品关系", "合规审计"]),
+    ]
+    all_card_keys = [
+        card_key for card_keys in cards_by_category.values() for card_key in card_keys
+    ]
+    units = []
+    for index, (unit_key, title, categories) in enumerate(unit_specs, start=1):
+        card_keys: list[str] = []
+        for category in categories:
+            card_keys.extend(cards_by_category.get(category, []))
+        if not card_keys and all_card_keys:
+            card_keys = all_card_keys[(index - 1) :: len(unit_specs)]
+        units.append(
+            BusinessEtiquetteTrainingUnitConfig(
+                unit_key=unit_key,
+                title=title,
+                description=f"学习并演练{title}相关客户问答。",
+                order_index=index,
+                enabled=True,
+                source_card_keys=list(dict.fromkeys(card_keys))[:20],
+                source_chapter_orders=[],
+                capability_keys=["customer_perspective", "objection_handling"],
+                require_reading=True,
+                require_quiz=True,
+                require_ai_coach=index in {5, 7, 8},
+                ai_coach_required_capability_keys=[
+                    "customer_perspective",
+                    "objection_handling",
+                ],
+                ai_coach_block_next_until_passed=False,
+                quiz_question_count=5,
+                quiz_pass_threshold=80,
+                allow_skip_reading=True,
+                block_next_until_complete=False,
+                empty_state_message="当前单元尚未绑定问答卡片，请管理员在客户常见问答专题中补齐。",
+            )
+        )
+    return units
 
 
 def classify_learning_topic_change(
@@ -699,7 +973,9 @@ def changed_learning_topic_ai_coach_high_risk_fields(
     current_payload: NewcomerLearningTopicsPayload | None,
     incoming_payload: NewcomerLearningTopicsPayload,
 ) -> set[str]:
-    current_by_key = _ai_coach_by_topic(current_payload or NewcomerLearningTopicsPayload())
+    current_by_key = _ai_coach_by_topic(
+        current_payload or NewcomerLearningTopicsPayload()
+    )
     incoming_by_key = _ai_coach_by_topic(incoming_payload)
     changed: set[str] = set()
     for topic_key, previous in current_by_key.items():
@@ -719,7 +995,9 @@ def _ai_coach_by_topic(
     payload: NewcomerLearningTopicsPayload,
 ) -> dict[str, dict[str, Any]]:
     return {
-        topic.topic_key: topic.ai_coach.model_dump(mode="json") if topic.ai_coach else {}
+        topic.topic_key: topic.ai_coach.model_dump(mode="json")
+        if topic.ai_coach
+        else {}
         for topic in payload.topics
     }
 
@@ -738,13 +1016,16 @@ def _topic_refs(payload: NewcomerLearningTopicsPayload | None) -> list[tuple[Any
                     unit.enabled,
                     unit.order_index,
                     tuple(unit.source_chapter_orders),
+                    tuple(unit.source_card_keys),
                     tuple(unit.capability_keys),
                     unit.quiz_question_count,
                     unit.quiz_pass_threshold,
                     unit.quiz_allow_retake,
                     unit.quiz_max_attempts,
                 )
-                for unit in sorted(topic.learning_units, key=lambda item: item.order_index)
+                for unit in sorted(
+                    topic.learning_units, key=lambda item: item.order_index
+                )
             ),
         )
         for topic in sorted(payload.topics, key=lambda item: item.order_index)
@@ -755,8 +1036,10 @@ def _changed_topic_keys(
     previous: NewcomerLearningTopicsPayload | None,
     current: NewcomerLearningTopicsPayload,
 ) -> list[str]:
-    previous_topics = {topic.topic_key: topic for topic in (previous.topics if previous else [])}
-    changed = []
+    previous_topics = {
+        topic.topic_key: topic for topic in (previous.topics if previous else [])
+    }
+    changed: list[str] = []
     for topic in current.topics:
         if previous_topics.get(topic.topic_key) != topic:
             changed.append(topic.topic_key)
