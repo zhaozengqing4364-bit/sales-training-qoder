@@ -430,3 +430,38 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: 模块化单体 2.0 Gate 0C 前端回归真相
+
+**Date**: 2026-07-10
+**Task**: 模块化单体 2.0 Gate 0C 前端回归真相
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+清零 17 项 Vitest 失败，迁移 Business Etiquette Learning Topic 测试合同，修复跨时区本地日历 fixture，证明 209 files 全绿并自然退出，完成独立 Trellis Check、规范同步和归档。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a1d852f1` | (see git log) |
+| `dd5cf226` | (see git log) |
+| `9b0e1e6a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
