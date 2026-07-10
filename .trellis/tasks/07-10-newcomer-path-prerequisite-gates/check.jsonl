@@ -1,0 +1,10 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "检查 PRD、计划、真实类型和调用方一致性。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查 config、Journey、旧投影和直接 API 的同一锁定结论。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查稳定错误码、历史坏 revision fail-closed 和资源隐藏。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "执行定向测试、Ruff 和 release gate。"}
+{"file": ".trellis/spec/backend/sales-trainer-learning-topic-governance.md", "reason": "检查学习专题继续 required=false、blocks_next=false。"}
+{"file": ".trellis/tasks/07-10-newcomer-path-prerequisite-gates/design-audit.md", "reason": "复核已发现的重复 key、循环依赖和 legacy group 漂移是否回归。"}
+{"file": "docs/superpowers/plans/2026-07-10-newcomer-path-prerequisite-gates.md", "reason": "逐条检查四个切片和最终验收标准。"}
+{"file": "docs/api-contract/sales-trainer.md", "reason": "检查三个 prerequisite 错误码契约。"}
+{"file": "scripts/critical-quality-gate.sh", "reason": "检查关键回归进入发布门禁。"}

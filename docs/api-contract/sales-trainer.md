@@ -177,6 +177,7 @@ interface NewcomerTrainingPathModuleConfig {
   scenario_key?: string | null;
   target_unit_id?: string | null;
   target_unit_ids?: string[];
+  unlock_after_unit_ids?: string[];
   learning_content_id?: string | null;
   exam_paper_id?: string | null;
   material_binding_group?: string | null;
@@ -307,6 +308,10 @@ StepAudio 2.5 provider migration 语义：
 - `"realtime_roleplay"` 默认 disabled；启用并发布前必须通过 runtime binding 校验、provider readiness 校验和 rollback preview。learner start 时还必须读取 `sales_trainer.realtime_provider.registry` 当前 active 配置再次校验 provider 未被停用、descriptor 未被回滚替换且 readiness 仍然通过。任一校验失败返回 `[NEWCOMER_REALTIME_BINDING_INVALID]`、`[NEWCOMER_REALTIME_PROVIDER_REGISTRY_DISABLED]`、`[NEWCOMER_REALTIME_PROVIDER_DESCRIPTOR_MISSING]`、`[NEWCOMER_REALTIME_PROVIDER_DISABLED]`、`[NEWCOMER_REALTIME_PROVIDER_NOT_READY]` 或更具体错误，learner 不得进入实时运行时。
 - 已完成实时会话只有在 runtime authority 冻结 `voice_policy_snapshot.external_binding` 后才可进入 TrainingJourney。该 binding 至少包含 `owner="sales_trainer"`、`path_revision_id`、`path_revision_no`、`module_key` 和 `binding_key`；缺少这些字段时，`sales_trainer` 不得从 WebSocket 状态、前端 URL 或最新 active revision 反推完成结果。
 - `"realtime_placeholder"` 只作为历史 disabled 配置兼容读取；不得作为新的 active revision 正式发布，也不得调用 `/api/v1/practice/sessions`。
+- `unlock_after_unit_ids` 只能引用同一 payload 中顺序更早、enabled、非 realtime、非学习专题 source 的必修模块 target unit；audio group 可以拥有多个唯一 target，但同一个 target unit 被多个模块绑定时属于 owner 歧义，禁止作为 prerequisite 引用。Audio group 的完成证据必须精确属于被引用的 duration target，完成同组其他档位不得代替。另禁止未知、空白、重复、自引用和同序/未来引用。保存/更新 working revision 和发布边界都必须执行同一校验；非法请求返回 HTTP 422 `[NEWCOMER_PATH_PREREQUISITE_INVALID]`，非法 working revision 不落盘，active pointer 不得移动。
+- 运行时只接受当前 active path revision 上属于前置 target unit 的通过证据。旧 revision、legacy snapshot、其他单元或未通过记录均不得解锁；正常等待前置时模块保持 locked、`stage="not_started"`，返回非 terminal `[NEWCOMER_PREREQUISITE_NOT_COMPLETED]`。历史 active payload 若含非法前置引用，必须 fail-closed 为 locked / `error_terminal` 并返回 terminal `[NEWCOMER_PATH_PREREQUISITE_CONFIG_INVALID]`，不得抛出 500 或猜测放行。
+- prerequisite 锁只允许收紧，不得覆盖 learner-level、disabled 或其他既有锁；AI Coach 派生项继承 base module 的最终锁定结果。学习专题独立投影且 `required=false`、`blocks_next=false`，不得被主路径 prerequisite 错锁，也不得作为 prerequisite owner。
+- learner 直达 unit/brief、录音提交、材料下载和 realtime start 必须复用 TrainingJourney 的同一 prerequisite 判定。被锁对象统一按“不可见”处理：unit/audio/realtime 返回 404 `[SALES_TRAINER_UNIT_NOT_FOUND]`，材料文件返回 404 `[MATERIAL_FILE_NOT_FOUND]`，且不得创建 submission/session；只有当前 active revision 的通过证据出现后，同一次请求链才可解锁。
 - 非法 `module_type`、未知 `completion_rule`、重复 `module_key`、重复 `order_index` 或绑定不存在时，后台保存/发布返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` 并写操作日志。
 - 配置读取失败或配置缺失时 learner 不展示伪成功；返回空路径、诊断错误或 disabled 模块，由 UI 显示可配置空状态。
 
@@ -1567,6 +1572,7 @@ interface ModuleOutcome {
   source_record_id: string;
   module_key: string;
   module_type: NewcomerModuleType;
+  target_unit_id?: string | null; // 产生该 outcome 的真实 unit；audio group/regrade 按此字段与 level 精确对齐
   status: TrainingStage;
   score?: number | null;
   max_score?: number | null;
@@ -1591,6 +1597,7 @@ interface ModuleProgress {
   order_index: number;
   target_unit_id?: string | null;
   target_unit_ids?: string[];
+  unlock_after_unit_ids?: string[];
   learning_content_id?: string | null;
   exam_paper_id?: string | null;
   enabled: boolean;
@@ -1724,6 +1731,7 @@ interface TrainingJourney {
 - 学员等级由 `LearnerLevel` 表达，影响内容可见性、模块启用、推荐训练和管理筛选。首版等级来源未冻结时，后端必须在 `source` 和 `config_revision_id` 中暴露来源，不得由前端本地推断。`modules[].learner_level_required` 是后端执行字段：TrainingJourney 必须把不匹配等级的模块置为 locked 并返回 `[NEWCOMER_LEARNER_LEVEL_NOT_ALLOWED]`；learner `/paths` 只能展示同一 locked 状态；直链 unit detail/brief、audio submit、quiz submit 必须复用后端 Journey 判定 fail-closed。
 - 训练阶段等级由 `TrainingStage` 表达，前端只渲染后端状态和 `unmet_reasons`，不得自行把 `passed=null` 推断为失败。
 - `completion_satisfied` 表示该模块的完成规则是否满足，独立于考核通过语义。`completion_rule="passed"` 必须 `passed=true`；`completion_rule="submitted"` 只要求有受治理的 outcome 记录。前端不得用本地规则重算该字段。
+- `unlock_after_unit_ids` 是 active path revision 的后端执行字段；TrainingJourney、legacy `/paths` 和所有 learner 直达入口必须使用同一判定。前端不得读取 `outcome_history` 后本地解锁，也不得把旧 revision 的更晚结果当作当前证据。`ModuleOutcome.target_unit_id` 用于 audio group 和 regrade 精确归属；audio group 的 prerequisite 只接受被引用 target 自身满足完成规则的 evidence，其他档位不能代替；缺失旧记录只能按 legacy evidence 展示，不得复制到多个 target。
 - `learning_topics[]` 是非阻塞学习证据投影，不属于 `modules[]`，不得计入 `overall_progress.total_modules`、`completed_modules`、`passed_modules` 或下一关阻断。管理端筛选 `module_key=business_skills` 时可以匹配学习专题 evidence，但 funnel/readiness 主结果仍只基于 required modules。
 - `ModuleOutcome` 必须覆盖录音、普通试卷、商务礼仪小测、AI Coach、realtime、补救、重评。历史展示 snapshot-first：优先读取记录创建时冻结的 snapshot/revision refs；旧数据只能标记 `legacy_snapshot_only=true`，不得从 latest active revision 伪造历史解释。
 - 重评必须以 append-only `ModuleOutcome(record_type="regrade", snapshot_ref.snapshot_type="regrade_snapshot")` 进入对应 audio/quiz 模块的 `outcome_history`。`source_record_id` 指向被重评的原始训练记录，`evidence.record_id` 指向 `sales_trainer_regrade_runs.run_id`；原始 audio/quiz outcome 必须继续保留在 history 中，不得被重评结果覆盖或改写。重评失败或 `after_snapshot.error_code` 存在时 outcome 为 `error_terminal`，成功重评分数按 `after_snapshot.total_score/max_score/passed` 投影。
@@ -4538,6 +4546,9 @@ interface OperationLogListResponse {
 | `[NEWCOMER_PATH_CONFIG_MISSING]` | 404/409 | 新人训练路径配置缺失或未启用 |
 | `[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]` | 409 | learner 路径、journey、AI Coach 或实时对练运行入口缺少 active revision；不得使用 unit backfill 或默认配置伪成功 |
 | `[NEWCOMER_PATH_WORKING_REVISION_REQUIRED]` | 409 | 发布或发布预览前缺少 working revision；不得从 legacy backfill 直接发布或预览发布 |
+| `[NEWCOMER_PATH_PREREQUISITE_INVALID]` | 422 | 保存/更新 working revision 或发布时，`unlock_after_unit_ids` 含未知、重复、自引用、同序/未来、disabled、realtime、学习专题 source，或引用的同一 target unit 被多个模块绑定；非法 working revision 不落盘，active pointer 不移动 |
+| `[NEWCOMER_PATH_PREREQUISITE_CONFIG_INVALID]` | Journey terminal diagnostic / 运行入口 404 | 历史 active revision 的前置引用非法；模块 fail-closed 为 locked / `error_terminal`，不得抛 500 或放行直达入口 |
+| `[NEWCOMER_PREREQUISITE_NOT_COMPLETED]` | Journey nonterminal diagnostic / 运行入口 404 | 当前 active revision 的前置任务尚无通过证据；模块保持 locked / `not_started`，旧 revision 证据不能解锁 |
 | `[NEWCOMER_MODULE_CONFIG_INVALID]` | 422 | 新人训练路径模块配置非法，例如未知 `module_type`、重复排序或绑定不存在 |
 | `[NEWCOMER_MODULE_BINDING_MISSING]` | 409 | 模块必要绑定缺失，例如文章、考卷、材料、评分提示词或目标单元 |
 | `[NEWCOMER_MODULE_DISABLED]` | 409 | learner 尝试进入已停用模块 |
@@ -4639,6 +4650,7 @@ interface OperationLogListResponse {
 | `newcomer_path.modules[].display_name` | 默认模块矩阵名称 | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | 1-120 字符；缺失使用默认值并标记 `fallback_applied=true` |
 | `newcomer_path.modules[].enabled` | 模块 1-3 `true`，模块 4 `false` | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | disabled 模块 learner 只展示停用状态，不允许提交或进入运行时 |
 | `newcomer_path.modules[].target_unit_id(s)` | 无 | learner 模块入口、完成状态聚合 | admin 新人训练路径配置 | 必须指向已发布训练单元；缺失返回 `[NEWCOMER_MODULE_BINDING_MISSING]` |
+| `newcomer_path.modules[].unlock_after_unit_ids` | 空数组 | TrainingJourney、legacy `/paths`、unit/brief、录音提交、材料下载、realtime start | admin 新人训练路径配置 | 仅允许引用同一路径 payload 中顺序更早、enabled、非 realtime、非学习专题 source 的 target；audio group 可有多个唯一 target，但同一 target 被多个模块绑定时拒绝引用，且只有被引用档位自身的完成证据可解锁；保存/发布非法返回 `[NEWCOMER_PATH_PREREQUISITE_INVALID]` 且不写入非法 working revision、不移动 active pointer；运行时历史非法 fail-closed 为 `[NEWCOMER_PATH_PREREQUISITE_CONFIG_INVALID]`；只有当前 active revision 的通过证据可解除 `[NEWCOMER_PREREQUISITE_NOT_COMPLETED]` |
 | `newcomer_path.modules[].learning_content_id` | 无 | 旧 `article_exam` 模块文章入口；商务礼仪规范不再读取此字段作为 learner 真源 | admin 新人训练路径文章绑定 | 必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` |
 | `newcomer_path.modules[].exam_paper_id` | 无 | 旧 `article_exam` 模块考卷入口 | admin 新人训练路径考卷管理 | 必须指向已发布考卷；缺失或草稿返回 `[PAPER_NOT_PUBLISHED]` |
 | `newcomer_learning_topics_v1.topics[]` | 空；当前显式支持 `business_etiquette`、`customer_faq` | learner `TrainingJourney.learning_topics`、商务礼仪文章/小单元/小测/AI Coach、客户问答卡片学习 | `/admin/sales-trainer/learning-topics` | 必须通过 `SalesTrainerAssetRevision` 发布治理；`required=false`、`blocks_next=false`；未发布不展示；发布后只影响未来 learner；非法返回 `[LEARNING_TOPIC_CONFIG_INVALID]` |
