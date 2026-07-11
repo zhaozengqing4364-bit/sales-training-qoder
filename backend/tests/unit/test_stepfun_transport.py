@@ -4,6 +4,12 @@ import asyncio
 import json
 
 import pytest
+from websockets.exceptions import (
+    ConnectionClosed,
+    ConnectionClosedError,
+    ConnectionClosedOK,
+)
+from websockets.frames import Close
 
 import training_runtime.stepfun_transport as stepfun_transport_module
 from training_runtime.stepfun_transport import (
@@ -71,6 +77,18 @@ class PingRaisesRuntimeErrorWebSocket:
 class SlowPongWebSocket:
     async def ping(self) -> object:
         await asyncio.sleep(0.05)
+
+
+class ConnectionClosedWebSocket:
+    def __init__(self, exception: ConnectionClosed) -> None:
+        self.exception = exception
+
+    async def send_json(self, payload: dict[str, object]) -> None:
+        del payload
+        raise self.exception
+
+    async def ping(self) -> object:
+        raise self.exception
 
 
 @pytest.mark.asyncio
@@ -245,6 +263,42 @@ async def test_send_failure_log_should_use_closed_fields_without_raw_exception(
     assert "provider.example" not in rendered
 
 
+@pytest.mark.parametrize(
+    ("exception_type", "close_code"),
+    [(ConnectionClosedOK, 1000), (ConnectionClosedError, 1011)],
+)
+@pytest.mark.asyncio
+async def test_send_should_close_real_websocket_exceptions_without_raw_reason(
+    exception_type: type[ConnectionClosed],
+    close_code: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret = "wss://provider.example/realtime?token=secret-token raw-body"
+    closed = exception_type(Close(close_code, secret), None)
+    captured: list[tuple[str, dict[str, object]]] = []
+
+    class CapturingLogger:
+        def error(self, event: str, **fields: object) -> None:
+            captured.append((event, fields))
+
+        def debug(self, event: str, **fields: object) -> None:
+            del event, fields
+
+    monkeypatch.setattr(stepfun_transport_module, "logger", CapturingLogger())
+
+    result = await StepFunTransport().send_json(
+        ConnectionClosedWebSocket(closed),
+        {"type": "session.update"},
+    )
+
+    assert result.status is StepFunSendStatus.FAILED
+    assert result.error_type == exception_type.__name__
+    rendered = f"{result!r} {captured!r}"
+    assert "provider.example" not in rendered
+    assert "secret-token" not in rendered
+    assert "raw-body" not in rendered
+
+
 @pytest.mark.asyncio
 async def test_should_report_healthy_when_keepalive_ping_succeeds() -> None:
     transport = StepFunTransport()
@@ -272,6 +326,30 @@ async def test_should_report_unhealthy_when_keepalive_ping_times_out() -> None:
 
     assert result.status == StepFunHealthStatus.UNHEALTHY
     assert result.error_type == "TimeoutError"
+
+
+@pytest.mark.parametrize(
+    ("exception_type", "close_code"),
+    [(ConnectionClosedOK, 1000), (ConnectionClosedError, 1011)],
+)
+@pytest.mark.asyncio
+async def test_health_should_close_real_websocket_exceptions_without_raw_reason(
+    exception_type: type[ConnectionClosed],
+    close_code: int,
+) -> None:
+    secret = "wss://provider.example/realtime?token=secret-token raw-body"
+    closed = exception_type(Close(close_code, secret), None)
+
+    result = await StepFunTransport().check_health(
+        ConnectionClosedWebSocket(closed),
+    )
+
+    assert result.status is StepFunHealthStatus.UNHEALTHY
+    assert result.error_type == exception_type.__name__
+    rendered = repr(result)
+    assert "provider.example" not in rendered
+    assert "secret-token" not in rendered
+    assert "raw-body" not in rendered
 
 
 def test_should_drop_audio_append_when_pending_bytes_exceed_backpressure_watermark() -> (

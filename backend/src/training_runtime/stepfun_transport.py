@@ -12,7 +12,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import websockets
-from websockets.exceptions import InvalidStatus
+from websockets.exceptions import ConnectionClosed, InvalidStatus
 
 from common.monitoring.logger import get_logger
 
@@ -223,7 +223,7 @@ class StepFunTransport:
             result = close()
             if inspect.isawaitable(result):
                 await result
-        except (RuntimeError, ValueError, OSError):
+        except (ConnectionClosed, RuntimeError, ValueError, OSError):
             pass
 
     async def send_json(
@@ -257,7 +257,14 @@ class StepFunTransport:
                 transport_method = "send"
             if inspect.isawaitable(result):
                 await result
-        except (AttributeError, RuntimeError, TypeError, ValueError, OSError) as exc:
+        except (
+            ConnectionClosed,
+            AttributeError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+            OSError,
+        ) as exc:
             logger.error(
                 "stepfun_upstream_send_failed",
                 event_type=event_type,
@@ -299,7 +306,7 @@ class StepFunTransport:
                 status=StepFunHealthStatus.UNHEALTHY,
                 error_type=type(exc).__name__,
             )
-        except (RuntimeError, ValueError, OSError) as exc:
+        except (ConnectionClosed, RuntimeError, ValueError, OSError) as exc:
             return StepFunHealthResult(
                 status=StepFunHealthStatus.UNHEALTHY,
                 error_type=type(exc).__name__,

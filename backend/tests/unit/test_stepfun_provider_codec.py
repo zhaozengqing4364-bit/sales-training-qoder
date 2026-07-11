@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections import deque
 from collections.abc import Mapping
@@ -21,6 +22,7 @@ from training_runtime.realtime.provider import (
     ProviderCommandKind,
     ProviderErrorCategory,
     ProviderErrorReason,
+    ProviderEvent,
     ProviderEventKind,
     RealtimeProviderError,
     RealtimeProviderPort,
@@ -35,6 +37,7 @@ from training_runtime.stepfun_transport import (
     StepFunHealthStatus,
     StepFunSendResult,
     StepFunSendStatus,
+    StepFunTransport,
     StepFunUpstreamConnectError,
 )
 
@@ -607,6 +610,10 @@ class FakeTransport:
     ) -> None:
         self.connection = connection or FakeConnection()
         self.connect_error = connect_error
+        self.connect_exception: BaseException | None = None
+        self.send_exception: BaseException | None = None
+        self.health_exception: BaseException | None = None
+        self.close_exception: BaseException | None = None
         self.connect_calls: list[dict[str, str]] = []
         self.sent: list[dict[str, object]] = []
         self.send_result = StepFunSendResult(status=StepFunSendStatus.SENT)
@@ -615,6 +622,8 @@ class FakeTransport:
 
     async def connect(self, *, api_key: str, url: str, model: str) -> FakeConnection:
         self.connect_calls.append({"api_key": api_key, "url": url, "model": model})
+        if self.connect_exception is not None:
+            raise self.connect_exception
         if self.connect_error is not None:
             raise self.connect_error
         return self.connection
@@ -625,6 +634,8 @@ class FakeTransport:
         payload: dict[str, object],
     ) -> StepFunSendResult:
         self.sent.append(payload)
+        if self.send_exception is not None:
+            raise self.send_exception
         return self.send_result
 
     async def check_health(
@@ -634,6 +645,8 @@ class FakeTransport:
         timeout_seconds: float | None = None,
     ) -> StepFunHealthResult:
         del timeout_seconds
+        if self.health_exception is not None:
+            raise self.health_exception
         return self.health_result
 
     def decide_backpressure(
@@ -654,6 +667,8 @@ class FakeTransport:
     async def close(self, connection: FakeConnection) -> None:
         self.close_calls += 1
         await connection.close()
+        if self.close_exception is not None:
+            raise self.close_exception
 
 
 @pytest.mark.asyncio
@@ -758,6 +773,146 @@ async def test_adapter_should_map_connect_status_without_leaking_raw_message(
     assert "api-secret" not in repr(provider)
 
 
+def _assert_safe_provider_error(
+    error: RealtimeProviderError,
+    *,
+    category: ProviderErrorCategory,
+    reason: ProviderErrorReason,
+) -> None:
+    assert error.category is category
+    assert error.reason is reason
+    assert error.__cause__ is None
+    rendered = f"{error!s} {error!r}"
+    assert "provider.example" not in rendered
+    assert "secret-token" not in rendered
+    assert "raw-body" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_adapter_connect_should_fail_safe_for_unknown_exception() -> None:
+    transport = FakeTransport()
+    transport.connect_exception = Exception(
+        "wss://provider.example/realtime?token=secret-token raw-body"
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="api-secret",
+        url="wss://provider.example/realtime?region=cn",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(RealtimeProviderError) as captured:
+        await provider.connect(_session_config())
+
+    _assert_safe_provider_error(
+        captured.value,
+        category=ProviderErrorCategory.UNAVAILABLE,
+        reason=ProviderErrorReason.UPSTREAM_UNAVAILABLE,
+    )
+
+
+@pytest.mark.asyncio
+async def test_adapter_connect_should_preserve_cancellation() -> None:
+    transport = FakeTransport()
+    transport.connect_exception = asyncio.CancelledError()
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await provider.connect(_session_config())
+
+
+@pytest.mark.asyncio
+async def test_adapter_initial_send_should_close_socket_and_preserve_cancellation() -> (
+    None
+):
+    connection = FakeConnection()
+    transport = FakeTransport(connection=connection)
+    transport.send_exception = asyncio.CancelledError()
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await provider.connect(_session_config())
+
+    assert transport.close_calls == 1
+    assert connection.close_count == 1
+    assert "connected=False" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_initial_send_should_close_socket_on_unknown_io_failures() -> (
+    None
+):
+    connection = FakeConnection()
+    transport = FakeTransport(connection=connection)
+    transport.send_exception = Exception(
+        "wss://provider.example/realtime?token=secret-token raw-body-send"
+    )
+    transport.close_exception = Exception("raw-body-close secret-token")
+    provider = StepFunRealtimeProvider(
+        api_key="api-secret",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(RealtimeProviderError) as captured:
+        await provider.connect(_session_config())
+
+    _assert_safe_provider_error(
+        captured.value,
+        category=ProviderErrorCategory.DISCONNECTED,
+        reason=ProviderErrorReason.CONNECTION_CLOSED,
+    )
+    assert transport.close_calls == 1
+    assert connection.close_count == 1
+    assert "connected=False" in repr(provider)
+
+
+@pytest.mark.parametrize(
+    ("exception_type", "close_code"),
+    [(ConnectionClosedOK, 1000), (ConnectionClosedError, 1011)],
+)
+@pytest.mark.asyncio
+async def test_adapter_initial_session_update_should_close_real_connection_closed(
+    exception_type: type[ConnectionClosed],
+    close_code: int,
+) -> None:
+    secret = "wss://provider.example/realtime?token=secret-token raw-body"
+    closed = exception_type(Close(close_code, secret), None)
+
+    class InitialSendClosedConnection(FakeConnection):
+        async def send_json(self, payload: dict[str, object]) -> None:
+            del payload
+            raise closed
+
+    connection = InitialSendClosedConnection()
+    transport = StepFunTransport(
+        local_provider_enabled=lambda: True,
+        local_provider_factory=lambda: connection,
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="api-secret",
+        url="wss://provider.example/realtime",
+        transport=transport,
+    )
+
+    with pytest.raises(RealtimeProviderError) as captured:
+        await provider.connect(_session_config())
+
+    _assert_safe_provider_error(
+        captured.value,
+        category=ProviderErrorCategory.DISCONNECTED,
+        reason=ProviderErrorReason.CONNECTION_CLOSED,
+    )
+    assert connection.close_count == 1
+
+
 @pytest.mark.parametrize(
     ("exception_type", "close_code"),
     [(ConnectionClosedOK, 1000), (ConnectionClosedError, 1011)],
@@ -825,6 +980,95 @@ async def test_adapter_should_send_receive_and_map_transport_failures() -> None:
 
 
 @pytest.mark.asyncio
+async def test_adapter_send_should_fail_safe_for_unknown_exception() -> None:
+    transport = FakeTransport()
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    transport.send_exception = Exception(
+        "wss://provider.example/realtime?token=secret-token raw-body"
+    )
+
+    result = await provider.send(
+        ProviderCommand(
+            kind=ProviderCommandKind.APPEND_AUDIO,
+            data={"audio": "AAE="},
+        )
+    )
+
+    assert result.accepted is False
+    assert result.error_category is ProviderErrorCategory.DISCONNECTED
+    assert result.error_reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert "secret-token" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_adapter_receive_should_fail_safe_for_unknown_exception() -> None:
+    class UnknownFailureConnection(FakeConnection):
+        async def recv(self) -> str | bytes:
+            raise Exception(
+                "wss://provider.example/realtime?token=secret-token raw-body"
+            )
+
+    transport = FakeTransport(connection=UnknownFailureConnection())
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    with pytest.raises(RealtimeProviderError) as captured:
+        await provider.receive(connection_epoch=3)
+
+    _assert_safe_provider_error(
+        captured.value,
+        category=ProviderErrorCategory.DISCONNECTED,
+        reason=ProviderErrorReason.CONNECTION_CLOSED,
+    )
+
+
+@pytest.mark.asyncio
+async def test_adapter_receive_should_fail_safe_when_codec_raises_on_invalid_frame() -> (
+    None
+):
+    class InvalidFrameConnection(FakeConnection):
+        async def recv(self) -> object:  # type: ignore[override]
+            return object()
+
+    class UnknownFailureCodec(StepFunEventCodec):
+        def decode_event(
+            self,
+            raw: str | bytes,
+            *,
+            connection_epoch: int,
+        ) -> ProviderEvent:
+            del raw, connection_epoch
+            raise Exception("raw-body secret-token")
+
+    transport = FakeTransport(connection=InvalidFrameConnection())
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+        codec=UnknownFailureCodec(),
+    )
+    await provider.connect(_session_config())
+
+    with pytest.raises(RealtimeProviderError) as captured:
+        await provider.receive(connection_epoch=3)
+
+    _assert_safe_provider_error(
+        captured.value,
+        category=ProviderErrorCategory.DISCONNECTED,
+        reason=ProviderErrorReason.CONNECTION_CLOSED,
+    )
+
+
+@pytest.mark.asyncio
 async def test_adapter_should_map_health_timeout_and_disconnect() -> None:
     transport = FakeTransport()
     provider = StepFunRealtimeProvider(
@@ -845,6 +1089,27 @@ async def test_adapter_should_map_health_timeout_and_disconnect() -> None:
     assert timed_out.healthy is False
     assert timed_out.error_category is ProviderErrorCategory.TIMEOUT
     assert timed_out.error_reason is ProviderErrorReason.IDLE_TIMEOUT
+
+
+@pytest.mark.asyncio
+async def test_adapter_health_should_fail_safe_for_unknown_exception() -> None:
+    transport = FakeTransport()
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    transport.health_exception = Exception(
+        "wss://provider.example/realtime?token=secret-token raw-body"
+    )
+
+    result = await provider.check_health(timeout_seconds=0.1)
+
+    assert result.healthy is False
+    assert result.error_category is ProviderErrorCategory.DISCONNECTED
+    assert result.error_reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert "secret-token" not in repr(result)
 
 
 def test_adapter_should_delegate_backpressure_to_transport() -> None:
@@ -891,3 +1156,33 @@ async def test_adapter_close_should_be_idempotent_and_allow_reconnect() -> None:
     assert connection.close_count == 1
     await provider.connect(_session_config())
     assert len(transport.connect_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_adapter_close_should_clear_state_and_sanitize_unknown_exception() -> (
+    None
+):
+    connection = FakeConnection()
+    transport = FakeTransport(connection=connection)
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    transport.close_exception = Exception(
+        "wss://provider.example/realtime?token=secret-token raw-body"
+    )
+
+    with pytest.raises(RealtimeProviderError) as captured:
+        await provider.close()
+
+    _assert_safe_provider_error(
+        captured.value,
+        category=ProviderErrorCategory.DISCONNECTED,
+        reason=ProviderErrorReason.CONNECTION_CLOSED,
+    )
+    assert transport.close_calls == 1
+    assert connection.close_count == 1
+    assert "connected=False" in repr(provider)
+    await provider.close()

@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import cast
 
-from websockets.exceptions import ConnectionClosed
-
 from training_runtime.stepfun_transport import (
     STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES,
     StepFunBackpressurePolicy,
@@ -96,41 +94,35 @@ class StepFunRealtimeProvider:
             )
         except StepFunUpstreamConnectError as exc:
             raise _connect_error(exc.status_code) from None
-        except (RuntimeError, ValueError, OSError):
-            raise RealtimeProviderError(
-                category=ProviderErrorCategory.UNAVAILABLE,
-                reason=ProviderErrorReason.UPSTREAM_UNAVAILABLE,
-                retryable=True,
-            ) from None
+        except Exception:
+            raise _unavailable_error() from None
 
         payload = build_stepfun_session_update_payload(_session_config(config))
-        send_result = await self._transport.send_json(connection, payload)
+        try:
+            send_result = await self._transport.send_json(connection, payload)
+        except Exception:
+            await _close_failed_connection(self._transport, connection)
+            raise _disconnected_error() from None
+        except BaseException:
+            await _close_failed_connection(self._transport, connection)
+            raise
         if send_result.status is not StepFunSendStatus.SENT:
-            await self._transport.close(connection)
-            raise RealtimeProviderError(
-                category=ProviderErrorCategory.DISCONNECTED,
-                reason=ProviderErrorReason.CONNECTION_CLOSED,
-                retryable=True,
-            )
+            await _close_failed_connection(self._transport, connection)
+            raise _disconnected_error()
         self._connection = connection
 
     async def send(self, command: ProviderCommand) -> ProviderSendResult:
         connection = self._connection
         if connection is None:
-            return ProviderSendResult(
-                accepted=False,
-                error_category=ProviderErrorCategory.DISCONNECTED,
-                error_reason=ProviderErrorReason.CONNECTION_CLOSED,
-            )
+            return _disconnected_send_result()
         payload = self._codec.encode_command(command)
-        result = await self._transport.send_json(connection, payload)
-        if result.status is StepFunSendStatus.SENT:
-            return ProviderSendResult(accepted=True)
-        return ProviderSendResult(
-            accepted=False,
-            error_category=ProviderErrorCategory.DISCONNECTED,
-            error_reason=ProviderErrorReason.CONNECTION_CLOSED,
-        )
+        try:
+            result = await self._transport.send_json(connection, payload)
+            if result.status is StepFunSendStatus.SENT:
+                return ProviderSendResult(accepted=True)
+        except Exception:
+            pass
+        return _disconnected_send_result()
 
     async def receive(self, *, connection_epoch: int) -> ProviderEvent:
         connection = self._connection
@@ -140,7 +132,10 @@ class StepFunRealtimeProvider:
                 reason=ProviderErrorReason.CONNECTION_CLOSED,
                 retryable=True,
             )
-        recv = getattr(connection, "recv", None)
+        try:
+            recv = getattr(connection, "recv", None)
+        except Exception:
+            raise _disconnected_error() from None
         if not callable(recv):
             raise RealtimeProviderError(
                 category=ProviderErrorCategory.PROTOCOL,
@@ -149,18 +144,16 @@ class StepFunRealtimeProvider:
             )
         try:
             raw = await cast(Callable[[], Awaitable[object]], recv)()
-        except (ConnectionClosed, RuntimeError, ValueError, OSError):
-            raise RealtimeProviderError(
-                category=ProviderErrorCategory.DISCONNECTED,
-                reason=ProviderErrorReason.CONNECTION_CLOSED,
-                retryable=True,
-            ) from None
-        if type(raw) not in {str, bytes}:
-            return self._codec.decode_event("", connection_epoch=connection_epoch)
-        return self._codec.decode_event(
-            cast(str | bytes, raw),
-            connection_epoch=connection_epoch,
-        )
+        except Exception:
+            raise _disconnected_error() from None
+        normalized_raw = cast(str | bytes, raw) if type(raw) in {str, bytes} else ""
+        try:
+            return self._codec.decode_event(
+                normalized_raw,
+                connection_epoch=connection_epoch,
+            )
+        except Exception:
+            raise _disconnected_error() from None
 
     async def check_health(
         self,
@@ -174,23 +167,22 @@ class StepFunRealtimeProvider:
                 error_category=ProviderErrorCategory.DISCONNECTED,
                 error_reason=ProviderErrorReason.CONNECTION_CLOSED,
             )
-        result = await self._transport.check_health(
-            connection,
-            timeout_seconds=timeout_seconds,
-        )
-        if result.status is StepFunHealthStatus.HEALTHY:
-            return ProviderHealthResult(healthy=True)
-        if result.error_type == "TimeoutError":
-            return ProviderHealthResult(
-                healthy=False,
-                error_category=ProviderErrorCategory.TIMEOUT,
-                error_reason=ProviderErrorReason.IDLE_TIMEOUT,
+        try:
+            result = await self._transport.check_health(
+                connection,
+                timeout_seconds=timeout_seconds,
             )
-        return ProviderHealthResult(
-            healthy=False,
-            error_category=ProviderErrorCategory.DISCONNECTED,
-            error_reason=ProviderErrorReason.CONNECTION_CLOSED,
-        )
+            if result.status is StepFunHealthStatus.HEALTHY:
+                return ProviderHealthResult(healthy=True)
+            if result.error_type == "TimeoutError":
+                return ProviderHealthResult(
+                    healthy=False,
+                    error_category=ProviderErrorCategory.TIMEOUT,
+                    error_reason=ProviderErrorReason.IDLE_TIMEOUT,
+                )
+        except Exception:
+            pass
+        return _disconnected_health_result()
 
     def decide_backpressure(
         self,
@@ -215,7 +207,10 @@ class StepFunRealtimeProvider:
         if connection is None:
             return
         self._connection = None
-        await self._transport.close(connection)
+        try:
+            await self._transport.close(connection)
+        except Exception:
+            raise _disconnected_error() from None
 
     def __repr__(self) -> str:
         return (
@@ -289,6 +284,48 @@ def _connect_error(status_code: int) -> RealtimeProviderError:
         reason=ProviderErrorReason.UPSTREAM_UNAVAILABLE,
         retryable=True,
     )
+
+
+def _unavailable_error() -> RealtimeProviderError:
+    return RealtimeProviderError(
+        category=ProviderErrorCategory.UNAVAILABLE,
+        reason=ProviderErrorReason.UPSTREAM_UNAVAILABLE,
+        retryable=True,
+    )
+
+
+def _disconnected_error() -> RealtimeProviderError:
+    return RealtimeProviderError(
+        category=ProviderErrorCategory.DISCONNECTED,
+        reason=ProviderErrorReason.CONNECTION_CLOSED,
+        retryable=True,
+    )
+
+
+def _disconnected_send_result() -> ProviderSendResult:
+    return ProviderSendResult(
+        accepted=False,
+        error_category=ProviderErrorCategory.DISCONNECTED,
+        error_reason=ProviderErrorReason.CONNECTION_CLOSED,
+    )
+
+
+def _disconnected_health_result() -> ProviderHealthResult:
+    return ProviderHealthResult(
+        healthy=False,
+        error_category=ProviderErrorCategory.DISCONNECTED,
+        error_reason=ProviderErrorReason.CONNECTION_CLOSED,
+    )
+
+
+async def _close_failed_connection(
+    transport: StepFunTransport,
+    connection: object,
+) -> None:
+    try:
+        await transport.close(connection)
+    except Exception:
+        pass
 
 
 __all__ = ["StepFunRealtimeProvider"]
