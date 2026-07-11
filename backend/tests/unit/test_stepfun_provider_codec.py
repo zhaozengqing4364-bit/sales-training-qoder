@@ -2009,27 +2009,36 @@ class BacklogDrainTransport(SequencedTransport):
         *,
         stale_connection: FakeConnection,
         fail_current_close: bool,
+        block_current_close: bool = False,
     ) -> None:
         super().__init__(connections)
         self.stale_connection = stale_connection
         self.current_connection = connections[0]
         self.fail_current_close = fail_current_close
+        self.block_current_close = block_current_close
         self.stale_close_started = asyncio.Event()
         self.release_stale_close = asyncio.Event()
+        self.current_close_started = asyncio.Event()
+        self.release_current_close = asyncio.Event()
 
     async def close(self, connection: FakeConnection) -> None:
         self.close_calls += 1
         if connection is self.stale_connection:
             self.stale_close_started.set()
             await self.release_stale_close.wait()
-        elif connection is self.current_connection and self.fail_current_close:
-            raise Exception("wss://provider.example?token=secret-token raw-body")
+        elif connection is self.current_connection:
+            self.current_close_started.set()
+            if self.block_current_close:
+                await self.release_current_close.wait()
+            if self.fail_current_close:
+                raise Exception("wss://provider.example?token=secret-token raw-body")
         await connection.close()
 
 
 async def _provider_with_stale_cleanup_and_current_connection(
     *,
     fail_current_close: bool,
+    block_current_close: bool = False,
 ) -> tuple[
     StepFunRealtimeProvider,
     BacklogDrainTransport,
@@ -2044,6 +2053,7 @@ async def _provider_with_stale_cleanup_and_current_connection(
         (current_connection, reconnect_connection),
         stale_connection=stale_connection,
         fail_current_close=fail_current_close,
+        block_current_close=block_current_close,
     )
     provider = StepFunRealtimeProvider(
         api_key="key",
@@ -2120,6 +2130,86 @@ async def test_adapter_public_close_drain_failure_should_remain_retryable() -> N
         await provider.connect(_session_config())
 
     transport.fail_current_close = False
+    await provider.close()
+    assert transport.close_calls == 3
+    assert current_connection.close_count == 1
+    await provider.connect(_session_config())
+    assert reconnect_connection.close_count == 0
+
+
+@pytest.mark.asyncio
+async def test_adapter_cancelled_public_close_should_finish_all_drain_batches() -> None:
+    (
+        provider,
+        transport,
+        stale_connection,
+        current_connection,
+        reconnect_connection,
+    ) = await _provider_with_stale_cleanup_and_current_connection(
+        fail_current_close=False
+    )
+
+    closing = asyncio.create_task(provider.close())
+    await asyncio.sleep(0)
+    closing.cancel("first-close-cancel")
+    await asyncio.sleep(0)
+    assert closing.done() is False
+    transport.release_stale_close.set()
+
+    with pytest.raises(asyncio.CancelledError) as captured:
+        await closing
+
+    assert captured.value.args == ("first-close-cancel",)
+    assert transport.close_calls == 2
+    assert stale_connection.close_count == 1
+    assert current_connection.close_count == 1
+    await provider.connect(_session_config())
+    assert reconnect_connection.close_count == 0
+
+
+@pytest.mark.asyncio
+async def test_adapter_repeated_close_cancel_with_drain_failure_should_keep_retry() -> (
+    None
+):
+    (
+        provider,
+        transport,
+        stale_connection,
+        current_connection,
+        reconnect_connection,
+    ) = await _provider_with_stale_cleanup_and_current_connection(
+        fail_current_close=True,
+        block_current_close=True,
+    )
+
+    closing = asyncio.create_task(provider.close())
+    await asyncio.sleep(0)
+    closing.cancel("first-close-cancel")
+    transport.release_stale_close.set()
+    try:
+        await asyncio.wait_for(transport.current_close_started.wait(), timeout=0.1)
+        current_close_started = True
+    except TimeoutError:
+        current_close_started = False
+    if current_close_started:
+        closing.cancel("second-close-cancel")
+        await asyncio.sleep(0)
+        assert closing.done() is False
+        transport.release_current_close.set()
+
+    with pytest.raises(asyncio.CancelledError) as captured:
+        await closing
+
+    assert current_close_started is True
+    assert captured.value.args == ("first-close-cancel",)
+    assert transport.close_calls == 2
+    assert stale_connection.close_count == 1
+    assert current_connection.close_count == 0
+    with pytest.raises(RealtimeProviderError):
+        await provider.connect(_session_config())
+
+    transport.fail_current_close = False
+    transport.block_current_close = False
     await provider.close()
     assert transport.close_calls == 3
     assert current_connection.close_count == 1

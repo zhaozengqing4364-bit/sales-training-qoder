@@ -258,17 +258,29 @@ class StepFunRealtimeProvider:
         )
 
     async def close(self) -> None:
-        async with self._lifecycle_lock:
-            cleanup_task = self._schedule_public_close_locked()
+        cancellation: asyncio.CancelledError | None = None
+        cleanup_task, cancellation = await self._schedule_public_close_cleanup(
+            cancellation
+        )
         while cleanup_task is not None:
-            result = await self._await_close_cleanup(cleanup_task)
+            result, cancellation = await self._wait_close_cleanup(
+                cleanup_task,
+                cancellation,
+            )
             failed_connections, cleanup_base_error = result
             if cleanup_base_error is not None:
+                if cancellation is not None:
+                    raise cancellation
                 raise cleanup_base_error
             if failed_connections:
+                if cancellation is not None:
+                    raise cancellation
                 raise _disconnected_error() from None
-            async with self._lifecycle_lock:
-                cleanup_task = self._schedule_public_close_locked()
+            cleanup_task, cancellation = await self._schedule_public_close_cleanup(
+                cancellation
+            )
+        if cancellation is not None:
+            raise cancellation
 
     async def _begin_connect_attempt(self) -> int:
         async with self._lifecycle_lock:
@@ -345,18 +357,52 @@ class StepFunRealtimeProvider:
             pending_connection,
         )
 
+    async def _schedule_public_close_cleanup(
+        self,
+        cancellation: asyncio.CancelledError | None,
+    ) -> tuple[
+        asyncio.Task[_CloseCleanupResult] | None,
+        asyncio.CancelledError | None,
+    ]:
+        while True:
+            try:
+                async with self._lifecycle_lock:
+                    return self._schedule_public_close_locked(), cancellation
+            except asyncio.CancelledError as error:
+                if cancellation is None:
+                    cancellation = error
+
     async def _await_close_cleanup(
         self,
         cleanup_task: asyncio.Task[_CloseCleanupResult],
     ) -> _CloseCleanupResult:
-        try:
-            result = await asyncio.shield(cleanup_task)
-        except asyncio.CancelledError:
-            result = await cleanup_task
-            await self._finalize_close_cleanup(cleanup_task, result)
-            raise
-        await self._finalize_close_cleanup(cleanup_task, result)
+        result, cancellation = await self._wait_close_cleanup(cleanup_task, None)
+        if cancellation is not None:
+            raise cancellation
         return result
+
+    async def _wait_close_cleanup(
+        self,
+        cleanup_task: asyncio.Task[_CloseCleanupResult],
+        cancellation: asyncio.CancelledError | None,
+    ) -> tuple[_CloseCleanupResult, asyncio.CancelledError | None]:
+        while True:
+            try:
+                result = await asyncio.shield(cleanup_task)
+                break
+            except asyncio.CancelledError as error:
+                if cancellation is None:
+                    cancellation = error
+        finalize_task = asyncio.create_task(
+            self._finalize_close_cleanup(cleanup_task, result)
+        )
+        while True:
+            try:
+                await asyncio.shield(finalize_task)
+                return result, cancellation
+            except asyncio.CancelledError as error:
+                if cancellation is None:
+                    cancellation = error
 
     async def _retire_connect_connection(
         self,
