@@ -31,3 +31,15 @@
   class inventory and the canonical 98-table metadata SHA-256 pass; frontend `2 failed, 1 passed`
   (definitions and sessions transport still global) while UI callers already stay on the outward client
   façade. Existing behavior baselines remain `31/39/91 passed`.
+- Task 2 moved all declarations into eight physical registry Modules. `common.db.models` is now a
+  274-line explicit compatibility registry; all 65 class/enum exports plus `Base` keep object identity
+  and `common.db.models.*` qualified names. The complete 98-table metadata digest, 52-table fresh import
+  order and SQLite model tests are unchanged.
+- The full backend unit+contract inventory after the move was `3290 passed, 1 skipped` plus the two
+  intentional Gate 5 Red tests. It exposed one unrelated guard-parser defect: a relative
+  `from .evaluation` inside `common` was incorrectly classified as the absolute top-level Evaluation
+  package because the AST helper ignored `ImportFrom.level`. The existing reverse-dependency test was
+  the Red reproduction; ignoring only relative imports made it Green without an allowlist.
+- Model-focused cross-domain matrix was `189 passed`; full Ruff passed; full mypy passed for 671 source
+  files; architecture guard passed. CodeGraph conservatively selected 512 tests because the compatibility
+  registry has system-wide fan-in, so the full unit+contract run was used rather than a narrow claim.

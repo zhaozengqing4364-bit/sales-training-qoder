@@ -77,7 +77,7 @@ def _imported_modules(path: Path) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imported.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
             imported.add(node.module)
             imported.update(f"{node.module}.{alias.name}" for alias in node.names)
     return imported

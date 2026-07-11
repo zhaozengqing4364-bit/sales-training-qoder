@@ -114,18 +114,18 @@
 - Consumes: frozen symbol and metadata snapshot from Task 1.
 - Produces: identity-preserving `common.db.models` compatibility registry and owner-specific model imports.
 
-- [ ] **Step 1: Move `Base`, JSONB helper and enums**
+- [x] **Step 1: Move `Base`, JSONB helper and enums**
 
   `base.py` owns the only `DeclarativeBase`; `enums.py` imports no entity Module. No second metadata object is
   allowed.
 
-- [ ] **Step 2: Move entity groups without rewriting declarations**
+- [x] **Step 2: Move entity groups without rewriting declarations**
 
   Copy declarations byte-for-byte except imports. Keep every `__tablename__`, SQL type, nullable/default,
   FK, index, constraint and string relationship unchanged. Cross-group relationships use existing string
   names and never import another entity only to satisfy typing.
 
-- [ ] **Step 3: Build the ordered registry and compatibility façade**
+- [x] **Step 3: Build the ordered registry and compatibility façade**
 
   `model_registry/__init__.py` imports every group and defines explicit `__all__`; `models.py` re-exports the
   same objects and preserve compatibility-qualified names. Assert, for example:
@@ -135,18 +135,18 @@
   assert common.db.models.ComprehensiveReport is common.db.model_registry.evaluation.ComprehensiveReport
   ```
 
-- [ ] **Step 4: Prove import-order and metadata parity**
+- [x] **Step 4: Prove import-order and metadata parity**
 
   Run fresh interpreter subprocesses importing `models`, group modules and Alembic env in different orders.
   Compare the Task 1 snapshot, run SQLite `create_all/drop_all`, and run Alembic metadata comparison against
   the repository head; expected schema operations list is empty.
 
-- [ ] **Step 5: Run broad model consumers**
+- [x] **Step 5: Run broad model consumers**
 
   Run model, auth, config, session, evaluation, knowledge and architecture suites selected by CodeGraph;
   run full Ruff and mypy for all moved files.
 
-- [ ] **Step 6: Commit physical registry**
+- [x] **Step 6: Commit physical registry**
 
   Commit as `refactor(db): split shared model registry`.
 

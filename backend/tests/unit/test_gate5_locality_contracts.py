@@ -4,6 +4,8 @@ import ast
 import hashlib
 import importlib
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -195,6 +197,34 @@ def test_common_model_registry_is_an_identity_preserving_facade() -> None:
     for name in EXPECTED_PUBLIC_MODEL_CLASSES:
         assert getattr(models, name) is getattr(registry, name)
         assert getattr(models, name).__module__ == "common.db.models"
+
+
+def test_model_registry_import_order_preserves_identity_and_local_metadata() -> None:
+    for first_import in (
+        "common.db.model_registry.identity",
+        "common.db.model_registry.training",
+        "common.db.model_registry.evaluation",
+        "common.db.models",
+    ):
+        script = f"""
+import importlib
+import sys
+sys.path.insert(0, "src")
+importlib.import_module({first_import!r})
+from common.db import models
+from common.db.model_registry import User
+assert models.User is User
+assert models.User.__module__ == "common.db.models"
+assert len(models.Base.metadata.tables) == 52
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=REPO_ROOT / "backend",
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 0, completed.stderr
 
 
 def test_journey_and_readiness_application_modules_do_not_import_foreign_orm() -> None:
