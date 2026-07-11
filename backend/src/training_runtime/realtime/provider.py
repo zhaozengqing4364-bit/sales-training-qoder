@@ -540,7 +540,7 @@ _COMMAND_FIELDS: dict[
     ProviderCommandKind.CLEAR_AUDIO: (frozenset(), frozenset()),
     ProviderCommandKind.CREATE_RESPONSE: (
         frozenset({"modalities"}),
-        frozenset({"instructions"}),
+        frozenset({"instructions", "request_id", "stream_id"}),
     ),
     ProviderCommandKind.CANCEL_RESPONSE: (
         frozenset(),
@@ -597,6 +597,16 @@ def _validate_command_data(
                 data["instructions"],
                 "provider_command_instructions",
                 allow_empty=True,
+            )
+        if "request_id" in data:
+            _require_non_negative_integer(
+                data["request_id"],
+                "provider_command_request_id",
+            )
+        if "stream_id" in data:
+            _require_identifier(
+                data["stream_id"],
+                "provider_command_stream_id",
             )
     elif kind is ProviderCommandKind.CANCEL_RESPONSE:
         if "response_id" in data:
@@ -717,16 +727,6 @@ _EVENT_FIELDS: dict[
     ProviderEventKind.UNKNOWN: _NO_EVENT_DATA,
 }
 
-_RESPONSE_EVENT_KINDS = frozenset(
-    {
-        ProviderEventKind.RESPONSE_CREATED,
-        ProviderEventKind.RESPONSE_TEXT_DELTA,
-        ProviderEventKind.RESPONSE_TRANSCRIPT_DELTA,
-        ProviderEventKind.RESPONSE_AUDIO_DELTA,
-        ProviderEventKind.THINKING_DELTA,
-        ProviderEventKind.THINKING_DONE,
-    }
-)
 _FUNCTION_EVENT_KINDS = frozenset(
     {
         ProviderEventKind.FUNCTION_ARGUMENTS_DELTA,
@@ -882,8 +882,6 @@ class ProviderEvent(_ImmutableValue):
         _validate_event_data(self.kind, frozen_data)
         object.__setattr__(self, "data", frozen_data)
 
-        if self.kind in _RESPONSE_EVENT_KINDS and self.response_id is None:
-            raise ValueError("provider_event_response_id_required")
         if self.kind in _FUNCTION_EVENT_KINDS and self.call_id is None:
             raise ValueError("provider_event_call_id_required")
         if self.kind is ProviderEventKind.ERROR:

@@ -1171,6 +1171,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 raw = await self.upstream_ws.recv()
                 self._mark_upstream_activity()
                 event = json.loads(raw)
+                event = self._correlate_trusted_legacy_raw_event(event)
                 await self._handle_upstream_event(event)
             except asyncio.CancelledError:
                 raise
@@ -1250,6 +1251,89 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                     "[STEPFUN_UPSTREAM_ERROR]", "Realtime 上游连接异常"
                 )
                 self.running = False
+
+    def _correlate_trusted_legacy_raw_event(
+        self,
+        event: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Attach local authority only at the authenticated legacy receive seam."""
+        event_type = str(event.get("type") or "")
+        active = self._active_response
+
+        if event_type in {
+            "response.function_call_arguments.delta",
+            "response.function_call_arguments.done",
+        }:
+            call_id, _name, _arguments = parse_function_call_event(event)
+            authority = self._function_call_authorities.get(call_id)
+            if authority is None or not self._function_call_authority_is_current(
+                authority
+            ):
+                return event
+            return self._legacy_event_with_authority(
+                event,
+                request_id=authority.request_id,
+                response_id=authority.response_id,
+                stream_id=authority.stream_id,
+            )
+
+        is_function_item = bool(
+            event_type == "conversation.item.created"
+            and extract_function_call_from_item_created(event) is not None
+        )
+        if active is None or (
+            not event_type.startswith("response.") and not is_function_item
+        ):
+            return event
+        if event_type != "response.created" and active.response_id is None:
+            return event
+
+        _request_id, response_id, _stream_id = self._function_event_authority(event)
+        if event_type == "response.created":
+            if response_id is None:
+                return event
+        elif response_id is not None and response_id != active.response_id:
+            return event
+        return self._legacy_event_with_authority(
+            event,
+            request_id=active.request_id,
+            response_id=(
+                response_id
+                if event_type == "response.created"
+                else active.response_id
+            ),
+            stream_id=active.stream_id,
+        )
+
+    @staticmethod
+    def _legacy_event_with_authority(
+        event: dict[str, Any],
+        *,
+        request_id: int,
+        response_id: str | None,
+        stream_id: str,
+    ) -> dict[str, Any]:
+        explicit_request_id = event.get("request_id")
+        explicit_stream_id = event.get("stream_id")
+        explicit_response_id = event.get("response_id")
+        response = event.get("response")
+        if explicit_response_id is None and isinstance(response, dict):
+            explicit_response_id = response.get("id")
+        if (
+            explicit_request_id is not None and explicit_request_id != request_id
+        ) or (explicit_stream_id is not None and explicit_stream_id != stream_id):
+            return event
+        if (
+            explicit_response_id is not None
+            and explicit_response_id != response_id
+        ):
+            return event
+        correlated = dict(event)
+        correlated["request_id"] = request_id
+        correlated["stream_id"] = stream_id
+        if response_id is not None:
+            correlated["response_id"] = response_id
+        return correlated
 
     async def _handle_provider_event(self, event: ProviderEvent) -> None:
         """Project one canonical Provider event into the legacy delivery adapter."""
@@ -1369,6 +1453,8 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         disposition = _RESPONSE_EVENT_ACTIVE_MATRIX[(event_class, active_state)]
         if event_class is _ResponseEventClass.NON_RESPONSE:
             return disposition
+        if not self._explicit_response_authority_fields_are_valid(event):
+            return _UpstreamEventDisposition.REJECT
 
         request_id, response_id, stream_id = self._function_event_authority(event)
         active = self._active_response
@@ -1401,6 +1487,35 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             event_type=event_type,
             disposition=disposition,
         )
+
+    @staticmethod
+    def _explicit_response_authority_fields_are_valid(
+        event: dict[str, Any],
+    ) -> bool:
+        request_id = event.get("request_id")
+        if request_id is not None and (
+            type(request_id) is not int or request_id < 0
+        ):
+            return False
+        stream_id = event.get("stream_id")
+        if stream_id is not None and (
+            not isinstance(stream_id, str) or not stream_id.strip()
+        ):
+            return False
+        response_id = event.get("response_id")
+        if response_id is not None and (
+            not isinstance(response_id, str) or not response_id.strip()
+        ):
+            return False
+        response = event.get("response")
+        if isinstance(response, dict):
+            nested_response_id = response.get("id")
+            if nested_response_id is not None and (
+                not isinstance(nested_response_id, str)
+                or not nested_response_id.strip()
+            ):
+                return False
+        return True
 
     def _preflight_function_call_authority(
         self,
@@ -1581,13 +1696,6 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         function_calls = extract_response_done_function_calls(event)
         if not function_calls:
             return []
-        _request_id, response_id, _stream_id = self._function_event_authority(event)
-        active = self._active_response
-        allow_register = bool(
-            active is not None
-            and active.response_id is not None
-            and response_id == active.response_id
-        )
         return [
             function_call
             for function_call in function_calls
@@ -1595,7 +1703,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 event,
                 call_id=function_call["call_id"],
                 name=function_call["name"],
-                allow_register=allow_register,
+                allow_register=False,
             )
         ]
 
@@ -3193,6 +3301,18 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             if provider is None:
                 return False
             command = self._provider_command_from_legacy_payload(payload)
+            if (
+                command.kind is ProviderCommandKind.CREATE_RESPONSE
+                and self._active_response is not None
+            ):
+                command = ProviderCommand(
+                    kind=command.kind,
+                    data={
+                        **dict(command.data),
+                        "request_id": self._active_response.request_id,
+                        "stream_id": self._active_response.stream_id,
+                    },
+                )
             result = await provider.send(command)
             if result.accepted:
                 self._mark_upstream_activity()

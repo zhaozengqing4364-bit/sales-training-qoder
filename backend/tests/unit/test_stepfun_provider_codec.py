@@ -117,7 +117,12 @@ def _session_config() -> RealtimeProviderSessionConfig:
         (
             ProviderCommand(
                 kind=ProviderCommandKind.CREATE_RESPONSE,
-                data={"modalities": ("audio", "text"), "instructions": "grounded"},
+                data={
+                    "modalities": ("audio", "text"),
+                    "instructions": "grounded",
+                    "request_id": 7,
+                    "stream_id": "stream-local-7",
+                },
             ),
             {
                 "type": "response.create",
@@ -883,6 +888,167 @@ async def test_adapter_should_connect_and_send_one_existing_session_update_paylo
     assert "provider.example" not in rendered
 
 
+@pytest.mark.asyncio
+async def test_adapter_correlates_real_sparse_response_and_tool_events_then_cleans_done() -> (
+    None
+):
+    connection = FakeConnection(
+        events=(
+            '{"type":"response.created","response":{"id":"response-7"}}',
+            '{"type":"response.text.delta","delta":"hello"}',
+            '{"type":"conversation.item.created","item":{"type":"function_call","call_id":"call-7","name":"search_internal_knowledge"}}',
+            '{"type":"response.function_call_arguments.done","call_id":"call-7","name":"search_internal_knowledge","arguments":"{}"}',
+            '{"type":"response.done","response":{"output":[{"type":"function_call","call_id":"call-7","name":"search_internal_knowledge","arguments":"{}"}]}}',
+            '{"type":"response.function_call_arguments.done","call_id":"call-7","name":"search_internal_knowledge","arguments":"{}"}',
+        )
+    )
+    transport = FakeTransport(connection=connection)
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    result = await provider.send(
+        ProviderCommand(
+            kind=ProviderCommandKind.CREATE_RESPONSE,
+            data={
+                "modalities": ("audio", "text"),
+                "request_id": 7,
+                "stream_id": "stream-7",
+            },
+        )
+    )
+
+    assert result.accepted is True
+    assert transport.sent[-1] == {
+        "type": "response.create",
+        "response": {"modalities": ["audio", "text"]},
+    }
+    created = await provider.receive(connection_epoch=3)
+    text_delta = await provider.receive(connection_epoch=3)
+    item_created = await provider.receive(connection_epoch=3)
+    arguments_done = await provider.receive(connection_epoch=3)
+    response_done = await provider.receive(connection_epoch=3)
+    late_arguments = await provider.receive(connection_epoch=3)
+
+    for event in (
+        created,
+        text_delta,
+        item_created,
+        arguments_done,
+        response_done,
+    ):
+        assert event.request_id == 7
+        assert event.response_id == "response-7"
+        assert event.stream_id == "stream-7"
+    assert item_created.call_id == "call-7"
+    assert arguments_done.call_id == "call-7"
+    assert late_arguments.request_id is None
+    assert late_arguments.response_id is None
+    assert late_arguments.stream_id is None
+
+
+@pytest.mark.asyncio
+async def test_adapter_does_not_register_failed_or_mismatched_response_authority() -> None:
+    stale_connection = FakeConnection()
+    current_connection = FakeConnection(
+        events=(
+            '{"type":"response.created","request_id":99,"response":{"id":"response-wrong"}}',
+            '{"type":"response.created","response":{"id":"response-current"}}',
+        )
+    )
+    transport = SequencedTransport((stale_connection, current_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    transport.send_result = StepFunSendResult(
+        status=StepFunSendStatus.FAILED,
+        error_type="ConnectionClosed",
+    )
+
+    rejected = await provider.send(
+        ProviderCommand(
+            kind=ProviderCommandKind.CREATE_RESPONSE,
+            data={
+                "modalities": ("audio", "text"),
+                "request_id": 7,
+                "stream_id": "stream-7",
+            },
+        )
+    )
+    assert rejected.accepted is False
+
+    transport.send_result = StepFunSendResult(status=StepFunSendStatus.SENT)
+    await provider.connect(_session_config())
+    accepted = await provider.send(
+        ProviderCommand(
+            kind=ProviderCommandKind.CREATE_RESPONSE,
+            data={
+                "modalities": ("audio", "text"),
+                "request_id": 8,
+                "stream_id": "stream-8",
+            },
+        )
+    )
+    assert accepted.accepted is True
+
+    mismatched = await provider.receive(connection_epoch=4)
+    correlated = await provider.receive(connection_epoch=4)
+
+    assert mismatched.request_id == 99
+    assert mismatched.stream_id is None
+    assert correlated.request_id == 8
+    assert correlated.response_id == "response-current"
+    assert correlated.stream_id == "stream-8"
+
+
+@pytest.mark.asyncio
+async def test_adapter_cancel_command_clears_response_and_call_correlation() -> None:
+    connection = FakeConnection(
+        events=(
+            '{"type":"response.created","response":{"id":"response-7"}}',
+            '{"type":"response.text.delta","delta":"late"}',
+        )
+    )
+    transport = FakeTransport(connection=connection)
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    await provider.send(
+        ProviderCommand(
+            kind=ProviderCommandKind.CREATE_RESPONSE,
+            data={
+                "modalities": ("audio", "text"),
+                "request_id": 7,
+                "stream_id": "stream-7",
+            },
+        )
+    )
+    created = await provider.receive(connection_epoch=3)
+    assert created.request_id == 7
+
+    cancelled = await provider.send(
+        ProviderCommand(
+            kind=ProviderCommandKind.CANCEL_RESPONSE,
+            data={"response_id": "response-7"},
+        )
+    )
+    late = await provider.receive(connection_epoch=3)
+
+    assert cancelled.accepted is True
+    assert late.request_id is None
+    assert late.response_id is None
+    assert late.stream_id is None
+
+
 @pytest.mark.parametrize(
     ("status_code", "category", "reason", "retryable"),
     [
@@ -1533,7 +1699,10 @@ class LateSendTransport(SequencedTransport):
     ) -> StepFunSendResult:
         del connection
         self.sent.append(payload)
-        if payload.get("type") != "input_audio_buffer.append":
+        if payload.get("type") not in {
+            "input_audio_buffer.append",
+            "response.create",
+        }:
             return StepFunSendResult(status=StepFunSendStatus.SENT)
         self.send_started.set()
         await self.release_send.wait()
@@ -1647,7 +1816,10 @@ class StaleSuccessTransport(SequencedTransport):
     ) -> StepFunSendResult:
         del connection
         self.sent.append(payload)
-        if payload.get("type") != "input_audio_buffer.append":
+        if payload.get("type") not in {
+            "input_audio_buffer.append",
+            "response.create",
+        }:
             return StepFunSendResult(status=StepFunSendStatus.SENT)
         self.send_started.set()
         await self.release_send.wait()
@@ -1678,7 +1850,13 @@ async def test_adapter_stale_success_and_nonterminal_results_should_fail_closed(
         stale_connection = LateReceiveConnection()
     else:
         stale_connection = FakeConnection()
-    current_connection = FakeConnection()
+    current_connection = FakeConnection(
+        events=(
+            '{"type":"response.created","response":{"id":"response-current"}}',
+        )
+        if operation == "send"
+        else ()
+    )
     transport = StaleSuccessTransport((stale_connection, current_connection))
     if operation == "health_timeout":
         transport.late_health_result = StepFunHealthResult(
@@ -1696,8 +1874,12 @@ async def test_adapter_stale_success_and_nonterminal_results_should_fail_closed(
         pending = asyncio.create_task(
             provider.send(
                 ProviderCommand(
-                    kind=ProviderCommandKind.APPEND_AUDIO,
-                    data={"audio": "AAE="},
+                    kind=ProviderCommandKind.CREATE_RESPONSE,
+                    data={
+                        "modalities": ("audio", "text"),
+                        "request_id": 7,
+                        "stream_id": "stream-stale",
+                    },
                 )
             )
         )
@@ -1717,6 +1899,10 @@ async def test_adapter_stale_success_and_nonterminal_results_should_fail_closed(
         send_result = await pending
         assert isinstance(send_result, ProviderSendResult)
         assert send_result.accepted is False
+        uncorrelated = await provider.receive(connection_epoch=5)
+        assert uncorrelated.response_id == "response-current"
+        assert uncorrelated.request_id is None
+        assert uncorrelated.stream_id is None
     elif operation == "receive":
         stale_connection.release_receive.set()
         with pytest.raises(RealtimeProviderError) as captured:
@@ -2055,7 +2241,11 @@ async def test_adapter_cancelled_send_should_retire_current_generation_before_ra
     repeat_cancel: bool,
 ) -> None:
     cancelled_connection = FakeConnection()
-    reconnect_connection = FakeConnection()
+    reconnect_connection = FakeConnection(
+        events=(
+            '{"type":"response.created","response":{"id":"response-after-cancel"}}',
+        )
+    )
     transport = CancelledSendTransport((cancelled_connection, reconnect_connection))
     provider = StepFunRealtimeProvider(
         api_key="key",
@@ -2067,8 +2257,12 @@ async def test_adapter_cancelled_send_should_retire_current_generation_before_ra
     sending = asyncio.create_task(
         provider.send(
             ProviderCommand(
-                kind=ProviderCommandKind.APPEND_AUDIO,
-                data={"audio": "AAE="},
+                kind=ProviderCommandKind.CREATE_RESPONSE,
+                data={
+                    "modalities": ("audio", "text"),
+                    "request_id": 7,
+                    "stream_id": "stream-cancelled",
+                },
             )
         )
     )
@@ -2096,8 +2290,12 @@ async def test_adapter_cancelled_send_should_retire_current_generation_before_ra
     assert transport.close_calls == 1
     assert cancelled_connection.close_count == 1
     await provider.connect(_session_config())
+    uncorrelated = await provider.receive(connection_epoch=9)
     assert len(transport.connect_calls) == 2
     assert reconnect_connection.close_count == 0
+    assert uncorrelated.response_id == "response-after-cancel"
+    assert uncorrelated.request_id is None
+    assert uncorrelated.stream_id is None
     assert "connected=True" in repr(provider)
 
 

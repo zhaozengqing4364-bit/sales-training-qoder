@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Mapping
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
@@ -22,9 +21,7 @@ from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstrea
 from sales_bot.websocket.stepfun_runtime_types import RealtimeResponseState
 from training_runtime import (
     PresentationScenarioPlugin,
-    StepFunSessionConfig,
     TrainingRuntimeDescriptor,
-    build_stepfun_session_update_payload,
 )
 from training_runtime.realtime import (
     GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
@@ -40,7 +37,7 @@ from training_runtime.realtime import (
     RealtimeSessionState,
     TurnPhase,
 )
-from training_runtime.realtime.stepfun_codec import StepFunEventCodec
+from training_runtime.realtime.stepfun_provider import StepFunRealtimeProvider
 from training_runtime.stepfun_transport import (
     StepFunBackpressureResult,
     StepFunBackpressureStatus,
@@ -766,49 +763,28 @@ class GoldenRawUpstream:
 
 class GoldenCanonicalProvider:
     def __init__(self, upstream_events: list[dict[str, Any]]) -> None:
-        self._upstream_events = upstream_events
-        self._queue: asyncio.Queue[ProviderEvent] = asyncio.Queue()
-        self._codec = StepFunEventCodec()
-        self._stop_after_batch: Any = None
+        self._transport = GoldenStepFunTransport(upstream_events)
+        self._provider = StepFunRealtimeProvider(
+            api_key="golden-key",
+            url="wss://golden.example/realtime",
+            transport=self._transport,  # type: ignore[arg-type]
+        )
         self.received_events: list[ProviderEvent] = []
         self.close_calls = 0
 
     @property
     def capabilities(self) -> RealtimeProviderCapabilities:
-        return RealtimeProviderCapabilities(supported=frozenset())
+        return self._provider.capabilities
 
     async def connect(self, config: RealtimeProviderSessionConfig) -> None:
-        self._upstream_events.append(
-            build_stepfun_session_update_payload(
-                StepFunSessionConfig(
-                    voice=config.voice,
-                    temperature=config.temperature,
-                    input_audio_format=config.input_audio_format,
-                    output_audio_format=config.output_audio_format,
-                    modalities=tuple(config.modalities),
-                    turn_detection=(
-                        dict(config.turn_detection)
-                        if config.turn_detection is not None
-                        else None
-                    ),
-                    input_transcription_enabled=config.input_transcription_enabled,
-                    input_transcription_language=config.input_transcription_language,
-                    input_transcription_model=config.input_transcription_model,
-                    instructions=config.instructions,
-                    tools=[_plain_golden_provider_value(tool) for tool in config.tools],
-                )
-            )
-        )
+        await self._provider.connect(config)
 
     async def send(self, command: ProviderCommand) -> ProviderSendResult:
-        self._upstream_events.append(deepcopy(self._codec.encode_command(command)))
-        return ProviderSendResult(accepted=True)
+        return await self._provider.send(command)
 
     async def receive(self, *, connection_epoch: int) -> ProviderEvent:
-        event = await self._queue.get()
+        event = await self._provider.receive(connection_epoch=connection_epoch)
         self.received_events.append(event)
-        if self._queue.empty() and self._stop_after_batch is not None:
-            self._stop_after_batch()
         return event
 
     async def deliver(
@@ -817,17 +793,17 @@ class GoldenCanonicalProvider:
         raw_events: list[dict[str, Any]],
     ) -> None:
         for raw_event in raw_events:
-            encoded = json.dumps(raw_event, ensure_ascii=False)
-            await self._queue.put(
-                self._codec.decode_event(
-                    encoded,
-                    connection_epoch=handler._connection_epoch,
-                )
+            await self._transport.upstream._queue.put(
+                json.dumps(raw_event, ensure_ascii=False)
             )
         handler.running = True
-        self._stop_after_batch = lambda: setattr(handler, "running", False)
+        self._transport.upstream._stop_after_batch = lambda: setattr(
+            handler,
+            "running",
+            False,
+        )
         await handler._receive_upstream_events()
-        self._stop_after_batch = None
+        self._transport.upstream._stop_after_batch = None
         handler.running = True
 
     async def check_health(
@@ -835,8 +811,7 @@ class GoldenCanonicalProvider:
         *,
         timeout_seconds: float | None = None,
     ) -> ProviderHealthResult:
-        del timeout_seconds
-        return ProviderHealthResult(healthy=True)
+        return await self._provider.check_health(timeout_seconds=timeout_seconds)
 
     def decide_backpressure(
         self,
@@ -844,22 +819,14 @@ class GoldenCanonicalProvider:
         *,
         pending_bytes: int,
     ) -> ProviderBackpressureResult:
-        del command, pending_bytes
-        return ProviderBackpressureResult(accepted=True)
+        return self._provider.decide_backpressure(
+            command,
+            pending_bytes=pending_bytes,
+        )
 
     async def close(self) -> None:
         self.close_calls += 1
-
-
-def _plain_golden_provider_value(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {
-            str(key): _plain_golden_provider_value(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, tuple | list):
-        return [_plain_golden_provider_value(item) for item in value]
-    return value
+        await self._provider.close()
 
 
 def _normalize_golden_value(value: Any) -> Any:
@@ -1040,6 +1007,11 @@ async def _drive_real_golden_conversation(
     )
     raw_fixture = json.loads(raw_fixture_path.read_text(encoding="utf-8"))
     assert raw_fixture["schema_version"] == 1
+    assert all(
+        "request_id" not in event and "stream_id" not in event
+        for batch in raw_fixture["batches"].values()
+        for event in batch
+    )
 
     async def save_message(**kwargs: Any) -> bool:
         persistence_writes.append(

@@ -3,11 +3,11 @@
   "provider": "stepfun",
   "batches": {
     "first_response": [
-      {"type": "response.created", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response": {"id": "response-1"}},
-      {"type": "response.thinking.delta", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response_id": "response-1", "delta": "梳理产品价值"},
-      {"type": "response.text.delta", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response_id": "response-1", "delta": "第一轮回应"},
-      {"type": "response.audio.delta", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response_id": "response-1", "delta": "Z29sZGVuLWF1ZGlv"},
-      {"type": "response.done", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response": {"id": "response-1", "output": []}},
+      {"type": "response.created", "response": {"id": "response-1"}},
+      {"type": "response.thinking.delta", "response_id": "response-1", "delta": "梳理产品价值"},
+      {"type": "response.text.delta", "response_id": "response-1", "delta": "第一轮回应"},
+      {"type": "response.audio.delta", "response_id": "response-1", "delta": "Z29sZGVuLWF1ZGlv"},
+      {"type": "response.done", "response": {"id": "response-1", "output": []}},
       {"type": "vendor.unknown.event"},
       {"type": "error", "error": {"code": "invalid_event", "message": "Realtime 服务返回无效事件"}}
     ],
@@ -19,18 +19,18 @@
       {"type": "conversation.item.input_audio_transcription.completed", "event_id": "asr-final-2-duplicate", "turn_id": "turn-2", "duration_ms": 1200, "transcript": "补充客户收益"}
     ],
     "second_response": [
-      {"type": "response.created", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response": {"id": "response-2"}},
-      {"type": "response.thinking.done", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response_id": "response-2", "thinking": "完成思考"},
-      {"type": "response.text.delta", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response_id": "response-2", "delta": "第二轮回应"},
-      {"type": "conversation.item.created", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response_id": "response-2", "item": {"type": "function_call", "call_id": "call-current", "name": "search_internal_knowledge"}},
+      {"type": "response.created", "response": {"id": "response-2"}},
+      {"type": "response.thinking.done", "response_id": "response-2", "thinking": "完成思考"},
+      {"type": "response.text.delta", "response_id": "response-2", "delta": "第二轮回应"},
+      {"type": "conversation.item.created", "item": {"type": "function_call", "call_id": "call-current", "name": "search_internal_knowledge"}},
       {"type": "response.function_call_arguments.delta", "call_id": "call-current", "delta": "{\"query\":"},
       {"type": "response.function_call_arguments.done", "call_id": "call-current", "name": "search_internal_knowledge", "arguments": "{\"query\":\"产品价值\"}"},
-      {"type": "response.done", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response": {"id": "response-2", "output": [{"type": "function_call", "call_id": "call-current", "name": "search_internal_knowledge", "arguments": "{\"query\":\"产品价值\"}"}]}}
+      {"type": "response.done", "response": {"id": "response-2", "output": [{"type": "function_call", "call_id": "call-current", "name": "search_internal_knowledge", "arguments": "{\"query\":\"产品价值\"}"}]}}
     ],
     "followup_response": [
-      {"type": "response.created", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response": {"id": "response-3"}},
-      {"type": "response.text.delta", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response_id": "response-3", "delta": "工具跟进回应"},
-      {"type": "response.done", "request_id": "{{request_id}}", "stream_id": "{{stream_id}}", "response": {"id": "response-3", "output": []}}
+      {"type": "response.created", "response": {"id": "response-3"}},
+      {"type": "response.text.delta", "response_id": "response-3", "delta": "工具跟进回应"},
+      {"type": "response.done", "response": {"id": "response-3", "output": []}}
     ],
     "reconnect": [
       {"type": "session.updated"},

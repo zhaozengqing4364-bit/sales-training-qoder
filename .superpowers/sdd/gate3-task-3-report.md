@@ -6,7 +6,8 @@
 - Review 修复 commit：`e9df6d8d fix(realtime): enforce provider rollout and event authority`
 - Review 2 修复 commit：`cff26400 fix(realtime): verify raw differential and tool authority`
 - Review 3 修复 commit：`d9797c88 fix(realtime): close response authority and golden oracle`
-- Review 4 修复 commit：本提交 `fix(realtime): guard raw events before side effects`
+- Review 4 修复 commit：`c060c927 fix(realtime): guard raw events before side effects`
+- Review 5 修复 commit：本提交 `fix(realtime): correlate provider response authority`
 - 风险等级：P1（共享 Sales/Presentation realtime 生产 Provider 路径默认切换；保留 server-only
   Legacy 回滚）。
 - 严格只完成 Task 3：未实现 Grounding Module/单 cache（Task 4+），未调用真实收费 Provider，未改
@@ -37,24 +38,29 @@
   canonical projection 统一进入同一个 response preflight，在 transcript capture、emotion/thinking、
   persistence、TTS、tool 和 turn side effect 前校验 request/response/stream/call authority；父子 handler
   不再重复 preflight，也不再由子类先调用 transcript hook。
-- Review 2 新增独立 `_function_call_authorities`：只有携带至少一个显式 authority ID、且所有已提供
-  request/response/stream 均匹配当前 active response 的首个 call event，才能注册完整
-  `call_id -> (request_id, response_id, stream_id)` binding。后续 sparse delta/done 可依 call binding
-  继续；空 registry sparse call 与旧 binding 一律 fail closed；`response.done` 首事件规则由 Review 3
-  进一步收口为“done 自身必须显式匹配 active response”。
-- Review 3 收紧 response authority：active response 尚未由 `response.created` 绑定 ID 时，所有携带
-  `response_id` 的 text/audio/thinking/done/function-call 事件均在副作用前拒绝；`response.created` 是唯一
-  response ID 绑定入口。已明确匹配 active response 的 `response.done` 可作为某个 call 的首个显式
-  authority 事件；同一 done 中真正属于旧 response 的 call 只过滤 tool side effect，当前 response 仍会
-  flush、持久化、结束 turn 并回到 listening，不再因一个非法 call 整事件 return 而悬挂。
+- Review 5 将 response/call wire correlation 收回 Provider Adapter：canonical `response.create` 携带本地
+  `request_id/stream_id`，codec 明确不编码这两个本地字段；只有 transport accepted 且 generation 仍 current
+  才登记 outstanding authority。真实 `response.created` 只需 wire `response.id`，Adapter 将它与 outstanding
+  authority 绑定；后续 response 事件按 `response_id` 或 current response 补全，function item 将
+  `call_id` 绑定到同一 authority，sparse function arguments/response.done 再按 call binding 补全。
+- correlation 与 lifecycle 共用同一 lock/generation；send failure、send cancellation、stale accepted send、
+  mismatched created 均不登记，`response.done`、accepted cancel、invalidate、close、new connect 全部清理。
+  Handler 不维护第二份 Port correlation map；既有 `_function_call_authorities` 只消费 Adapter 已补全的业务
+  authority。Legacy rollback 仅在真实 raw receive seam 为 created/function item/后续 sparse call 补本地
+  authority，直接调用 raw handler 的不可信事件仍 fail closed。
+- `response.done` 不再注册从未见过的 call；合法 tool 必须先经过受信 `conversation.item.created` 绑定。
+  done 中未知/stale call 只过滤 tool side effect，当前 response 仍会 flush、持久化、结束 turn 并回到
+  listening。
 - Review 4 用显式 `event class × active authority state` 矩阵统一 Legacy/Port：non-response 正常处理；
-  `response.created` 是唯一 bind 入口，active 存在时必须显式匹配 request_id、stream_id、response_id 与
-  已绑定 ID；无 active 的 unexpected created 仅进入既有 KB-lock 安全 cancel；无 active 的完全 sparse
+  `response.created` 是唯一 bind 入口，进入 shared preflight 前必须已有本地 request/stream authority 与
+  wire response ID（Port 由 Adapter 补全，Legacy 由受信 raw receive seam 补全）；无 active 的 unexpected
+  created 仅进入既有 KB-lock 安全 cancel；无 active 的完全 sparse
   `response.done` 仅执行 cleanup-only（清 pending follow-up、回 listening），不解析内容或执行 tool；其余
   无 active response-scoped 事件全部拒绝。stale raw assistant transcript 现在在 sink 之前被拒绝。
 - handler close 与主连接 lifecycle 采用 shielded cleanup：单次或重复 cancellation 都先完成 Provider
   close、本地 upstream/timing reset、snapshot save 与 manager disconnect，再传播首次
-  `CancelledError`；清理步骤发生普通错误时仍继续尝试其余步骤并上抛首个错误。
+  `CancelledError`；Review 5 补齐 cancel 与普通 cleanup error 同时发生时的优先级：保存 cleanup error 供
+  无 cancellation 时安全传播，有 cancellation 时始终传播首次 cancellation，finally 仍复位本地状态。
 - Provider closed reason 映射为既有安全 ASR fallback、voice unavailable、idle-timeout recovery、
   401/402/403/429 guidance；UNKNOWN 固定为 `Realtime 服务返回错误`，不恢复 raw Provider message。
 - sanitized diagnostics 增加 `provider_port_enabled` 与 `selected_provider_path`；Presentation façade 只
@@ -62,8 +68,10 @@
   `presentation_coach -> training_runtime` 静态 import。
 - Golden 已重写为真正的 Engine × Provider 四组合，并新增版本化、独立于生产 projector 的
   `stepfun_raw_conversation_v1.json` 与 `stepfun_raw_conversation_expected_v1.json`。Provider=false 直接把
-  同一 raw JSON fixture 送入 Fake raw websocket；Provider=true 仅通过真实 `StepFunEventCodec.decode_event`
-  解码同一 raw fixture 后进入 canonical Fake queue。两条路径都运行生产 `_receive_upstream_events()`，覆盖
+  同一 raw JSON fixture 送入 Fake raw websocket；Provider=true 通过真实 `StepFunRealtimeProvider` 的
+  codec + Adapter correlation 消费同一 raw fixture，不再使用人工 canonical queue。raw fixture 已删除
+  人工 request/stream 字段，保留 inventory 允许的真实 response/call shape。两条路径都运行生产
+  `_receive_upstream_events()`，覆盖
   ASR delta/final、speech timing/emotion、TTS、thinking、persistence、合法 call binding、tool
   output/follow-up、reconnect、UNKNOWN/error；stale authority 由独立 fail-closed tests 覆盖。独立 expected
   oracle 锁定 ordered downstream/upstream key payload、ASR text、TTS audio/text、status、persistence、tool
@@ -141,6 +149,21 @@ Review 4 Red/Green：
    unexpected created 无法进入 KB-lock cancel；Legacy sparse thinking 又被过宽放行。三个定向用例结果
    `3 failed, 169 deselected`，Green 为 `3 passed`；三文件定向回归 `220 passed`。
 
+Review 5 Red/Green：
+
+1. canonical authority Red：带本地 `request_id/stream_id` 的 `CREATE_RESPONSE` 在 DTO closed-field 校验时
+   直接报 `provider_command_data_field_unknown:request_id`；Green 后 codec wire 仍只有标准
+   `response.create.response`，Adapter 在 accepted send 后登记本地 authority。
+2. real sparse wire Red：`response.created` 只有 `response.id` 时无法绑定，后续 sparse text/function item/
+   arguments/done 无 authority；Green 后同一 generation 内补全 request/response/stream，call 只由 function
+   item 注册，done 后 late sparse call 不再补全。failed/cancelled/stale send、mismatched created、accepted
+   cancel 均由独立测试证明不产生或会清除 correlation。
+3. done 首注册 Red：旧测试允许 matching `response.done` 首次注册并执行未见 call；Green 后该 call 被过滤，
+   合法 Golden 流程通过先到达的 sparse `conversation.item.created(function_call)` 绑定，并且 tool 恰好执行
+   一次。
+4. close 组合 Red：outer cancellation 后 cleanup task 抛普通错误时，普通错误越过首次 cancellation；Green
+   后首次 `CancelledError("first-cancel")` 优先传播，本地 socket/timing 状态仍在 finally 复位。
+
 ## 最终验证
 
 Brief 全量 pytest（14 个 unit/integration 文件）：
@@ -149,11 +172,20 @@ Brief 全量 pytest（14 个 unit/integration 文件）：
 324 passed, 1 warning in 13.74s
 ```
 
+Review 5 的 Task 1/2 Provider 合同 + Task 3 全集（18 个文件）：
+
+```text
+608 passed, 1 warning in 14.81s
+```
+
 CodeGraph affected 全集（20 个 contract/e2e/integration/unit 文件）：
 
 ```text
 797 passed, 1 warning in 43.34s
 ```
+
+Review 5 CodeGraph affected 55 个文件重新收集 `1136 items`，使用 repo 标准
+`python -m pytest -c pyproject.toml -o addopts=--import-mode=importlib --no-cov` 跑完，exit 0。
 
 其中 payload snapshots 独立复核：
 
@@ -176,7 +208,7 @@ git diff --check: exit 0
 
 - 开发前 `codegraph explore/node` 定位 shared handler connect、raw receive/router、send、keepalive、
   backpressure、recovery、Presentation adapter/Engine 与 persistence/tool/emotion/thinking consumers。
-- `codegraph sync .`：同步 12 个 changed files。
+- `codegraph sync .`：Review 5 修改后的索引同步完成。
 - `_connect_upstream --depth 3`：18 affected symbols；覆盖 connect、refresh、recovery、binary/text input
   及两个 session payload snapshots。
 - `_using_provider_port --depth 3`：50 affected symbols；覆盖 send/receive/health/backpressure/close、
@@ -189,10 +221,12 @@ git diff --check: exit 0
   canonical drivers 与 response/transcript/tool consumers。
 - `_authorize_function_call_event --depth 3`：18 affected symbols；覆盖 Provider/Legacy 首事件注册、
   sparse delta/done、response.done、tool execution 与 reconnect reset。
-- `_receive_upstream_events --depth 3`：8 affected symbols；由 canonical Fake Provider queue 与 Fake raw
-  websocket 两条真实 receive loop 覆盖。
-- `_send_upstream --depth 3`：48 affected symbols；覆盖 response/audio/tool/interrupt/lifecycle、Sales、
-  Presentation evidence、payload snapshots 与 Golden mutation tests。
+- Review 5 `_send_upstream --depth 3`：51 affected symbols；覆盖本地 create authority 注入、
+  response/audio/tool/interrupt/lifecycle、Sales、Presentation Golden 与 rollback。
+- Review 5 `_receive_upstream_events --depth 3`：8 affected symbols；覆盖 Port Adapter 与 Legacy 受信 raw
+  correlation seam。
+- Review 5 `_close_upstream --depth 3`：23 affected symbols；覆盖 cleanup error × cancellation 组合。
+- Review 5 changed-source affected：55 个 test files / 1136 collected items，exit 0。
 - architecture guard 证明未新增未治理 edge；Presentation subtree静态 `training_runtime` import 搜索为空。
 
 ## 假设、兼容性与回滚

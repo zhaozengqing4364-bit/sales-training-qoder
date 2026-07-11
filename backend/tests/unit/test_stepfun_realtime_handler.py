@@ -291,6 +291,42 @@ async def test_provider_send_facade_constructs_every_canonical_command(
     assert [command.kind for command in provider.commands] == [expected_kind]
 
 
+@pytest.mark.asyncio
+async def test_provider_response_create_injects_local_authority_without_legacy_payload_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+    provider = RecordingRealtimeProvider()
+    handler = StepFunRealtimeHandler(provider_factory=lambda **_kwargs: provider)
+    handler._realtime_provider = provider
+    handler.upstream_ws = provider
+    handler._active_response = RealtimeResponseState(
+        request_id=7,
+        stream_id="stream-7",
+    )
+    payload = {
+        "type": "response.create",
+        "response": {"modalities": ["text", "audio"]},
+    }
+
+    assert await handler._send_upstream(payload) is True
+
+    assert payload == {
+        "type": "response.create",
+        "response": {"modalities": ["text", "audio"]},
+    }
+    assert provider.commands == [
+        ProviderCommand(
+            kind=ProviderCommandKind.CREATE_RESPONSE,
+            data={
+                "modalities": ("text", "audio"),
+                "request_id": 7,
+                "stream_id": "stream-7",
+            },
+        )
+    ]
+
+
 def test_provider_port_false_constructs_only_legacy_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -424,6 +460,71 @@ async def test_handler_close_preserves_repeated_cancellation_and_resets_local_st
     assert handler._upstream_connected_at == 0.0
     assert handler._upstream_last_activity_at == 0.0
     legacy_transport.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handler_close_prioritizes_first_cancel_over_late_cleanup_error_and_resets_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+
+    class FailingAfterReleaseProvider(BlockingCloseRealtimeProvider):
+        async def close(self) -> None:
+            self.close_calls += 1
+            self.close_started.set()
+            await self.allow_close.wait()
+            raise RuntimeError("late-cleanup-error")
+
+    provider = FailingAfterReleaseProvider()
+    handler = StepFunRealtimeHandler(provider_factory=lambda **_kwargs: provider)
+    handler._realtime_provider = provider
+    handler.upstream_ws = provider
+    handler._upstream_connected_at = 11.0
+    handler._upstream_last_activity_at = 12.0
+    handler._stop_upstream_keepalive_task = AsyncMock()
+
+    close_task = asyncio.create_task(handler._close_upstream())
+    await provider.close_started.wait()
+    close_task.cancel("first-cancel")
+    await asyncio.sleep(0)
+    provider.allow_close.set()
+
+    with pytest.raises(asyncio.CancelledError) as captured:
+        await close_task
+
+    assert captured.value.args == ("first-cancel",)
+    assert provider.close_calls == 1
+    assert handler.upstream_ws is None
+    assert handler._upstream_connected_at == 0.0
+    assert handler._upstream_last_activity_at == 0.0
+
+
+@pytest.mark.asyncio
+async def test_handler_close_raises_cleanup_error_without_cancel_and_resets_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+
+    class FailingCloseProvider(RecordingRealtimeProvider):
+        async def close(self) -> None:
+            self.close_calls += 1
+            raise RuntimeError("safe-cleanup-error")
+
+    provider = FailingCloseProvider()
+    handler = StepFunRealtimeHandler(provider_factory=lambda **_kwargs: provider)
+    handler._realtime_provider = provider
+    handler.upstream_ws = provider
+    handler._upstream_connected_at = 11.0
+    handler._upstream_last_activity_at = 12.0
+    handler._stop_upstream_keepalive_task = AsyncMock()
+
+    with pytest.raises(RuntimeError, match="safe-cleanup-error"):
+        await handler._close_upstream()
+
+    assert provider.close_calls == 1
+    assert handler.upstream_ws is None
+    assert handler._upstream_connected_at == 0.0
+    assert handler._upstream_last_activity_at == 0.0
 
 
 @pytest.mark.asyncio
@@ -717,6 +818,61 @@ async def test_sparse_function_done_without_call_binding_fails_closed() -> None:
     handler._execute_function_call.assert_not_awaited()
 
 
+def test_trusted_legacy_sparse_call_does_not_overwrite_explicit_stale_response() -> None:
+    handler = StepFunRealtimeHandler()
+    handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+        response_id="response-current",
+    )
+    handler._function_call_authorities = {
+        "call-current": FunctionCallAuthority(
+            request_id=5,
+            response_id="response-current",
+            stream_id="stream-current",
+        )
+    }
+    stale = {
+        "type": "response.function_call_arguments.done",
+        "response_id": "response-stale",
+        "call_id": "call-current",
+        "name": "search_internal_knowledge",
+        "arguments": "{}",
+    }
+
+    assert handler._correlate_trusted_legacy_raw_event(stale) == stale
+
+
+@pytest.mark.asyncio
+async def test_bound_sparse_call_rejects_explicit_malformed_authority() -> None:
+    handler = StepFunRealtimeHandler()
+    handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+        response_id="response-current",
+    )
+    handler._function_call_authorities = {
+        "call-current": FunctionCallAuthority(
+            request_id=5,
+            response_id="response-current",
+            stream_id="stream-current",
+        )
+    }
+    handler._execute_function_call = AsyncMock(return_value=True)  # type: ignore[method-assign]
+
+    await handler._handle_upstream_event(
+        {
+            "type": "response.function_call_arguments.done",
+            "response_id": "",
+            "call_id": "call-current",
+            "name": "search_internal_knowledge",
+            "arguments": "{}",
+        }
+    )
+
+    handler._execute_function_call.assert_not_awaited()
+
+
 @pytest.mark.asyncio
 async def test_function_call_first_event_binds_explicit_active_authority() -> None:
     handler = StepFunRealtimeHandler()
@@ -780,7 +936,7 @@ async def test_function_call_first_event_binds_explicit_active_authority() -> No
 
 
 @pytest.mark.asyncio
-async def test_matching_provider_response_done_can_bind_first_tool_and_finalize() -> None:
+async def test_matching_provider_response_done_cannot_register_unseen_tool() -> None:
     handler = StepFunRealtimeHandler()
     handler._connection_epoch = 8
     handler.current_request_id = 5
@@ -818,19 +974,13 @@ async def test_matching_provider_response_done_can_bind_first_tool_and_finalize(
         )
     )
 
-    assert handler._active_response is not None
-    assert handler._active_response.request_id == 6
+    assert handler._active_response is None
     handler._persist_message.assert_awaited_once()
-    handler._execute_function_call.assert_awaited_once_with(
-        call_id="call-unbound",
-        function_name="search_internal_knowledge",
-        raw_arguments="{}",
-        trigger_followup_response=False,
-    )
+    handler._execute_function_call.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_matching_response_done_can_bind_first_tool_call_and_finalize() -> None:
+async def test_matching_raw_response_done_cannot_register_unseen_tool_call() -> None:
     handler = StepFunRealtimeHandler()
     handler.turn_count = 1
     handler._active_response = RealtimeResponseState(
@@ -867,22 +1017,11 @@ async def test_matching_response_done_can_bind_first_tool_call_and_finalize() ->
     )
 
     assert handler._active_response is None
-    assert handler._function_call_authorities["call-from-done"] == (
-        FunctionCallAuthority(
-            request_id=5,
-            response_id="response-current",
-            stream_id="stream-current",
-        )
-    )
+    assert "call-from-done" not in handler._function_call_authorities
     handler._persist_message.assert_awaited_once()
     handler._send_status.assert_awaited_with("listening")
-    handler._execute_function_call.assert_awaited_once_with(
-        call_id="call-from-done",
-        function_name="search_internal_knowledge",
-        raw_arguments='{"query":"产品"}',
-        trigger_followup_response=False,
-    )
-    handler._create_response.assert_awaited_once_with()
+    handler._execute_function_call.assert_not_awaited()
+    handler._create_response.assert_not_awaited()
 
 
 @pytest.mark.asyncio

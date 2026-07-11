@@ -193,7 +193,7 @@ def test_inventory_should_lock_exact_wire_type_and_discriminator_pairs() -> None
         ("response.create", None): (
             "create_response",
             ("modalities",),
-            ("instructions",),
+            ("instructions", "request_id", "stream_id"),
         ),
         ("response.cancel", None): ("cancel_response", (), ("response_id",)),
         ("conversation.item.create", ("item.type", "message")): (
@@ -452,6 +452,18 @@ def test_inventory_should_include_high_risk_event_semantics() -> None:
             ProviderCommandKind.CREATE_RESPONSE,
             {"modalities": ("audio",), "raw_prompt": "must not cross"},
         ),
+        (
+            ProviderCommandKind.CREATE_RESPONSE,
+            {"modalities": ("audio",), "request_id": -1},
+        ),
+        (
+            ProviderCommandKind.CREATE_RESPONSE,
+            {"modalities": ("audio",), "request_id": True},
+        ),
+        (
+            ProviderCommandKind.CREATE_RESPONSE,
+            {"modalities": ("audio",), "stream_id": "unsafe/stream"},
+        ),
         (ProviderCommandKind.CANCEL_RESPONSE, {"response_id": 1}),
         (
             ProviderCommandKind.CREATE_CONVERSATION_ITEM,
@@ -476,8 +488,18 @@ def test_command_should_validate_closed_fields_by_kind(
     ).data == {"audio": "AAE="}
     assert ProviderCommand(
         kind=ProviderCommandKind.CREATE_RESPONSE,
-        data={"modalities": ("audio", "text"), "instructions": "grounded"},
-    ).data["modalities"] == ("audio", "text")
+        data={
+            "modalities": ("audio", "text"),
+            "instructions": "grounded",
+            "request_id": 7,
+            "stream_id": "stream-7",
+        },
+    ).data == {
+        "modalities": ("audio", "text"),
+        "instructions": "grounded",
+        "request_id": 7,
+        "stream_id": "stream-7",
+    }
     assert (
         ProviderCommand(
             kind=ProviderCommandKind.CREATE_CONVERSATION_ITEM,
@@ -545,13 +567,13 @@ def test_event_should_validate_closed_fields_and_normalized_function_outputs() -
             response_id="response-1",
             data={"function_outputs": [{"call_id": "call-1", "name": "tool"}]},
         )
-    with pytest.raises(ValueError, match="provider_event_response_id_required"):
-        ProviderEvent(
-            kind=ProviderEventKind.RESPONSE_AUDIO_DELTA,
-            provider_event_type="response.audio.delta",
-            connection_epoch=1,
-            data={"audio": "AAE="},
-        )
+    sparse_audio = ProviderEvent(
+        kind=ProviderEventKind.RESPONSE_AUDIO_DELTA,
+        provider_event_type="response.audio.delta",
+        connection_epoch=1,
+        data={"audio": "AAE="},
+    )
+    assert sparse_audio.response_id is None
     with pytest.raises(ValueError, match="provider_event_call_id_required"):
         ProviderEvent(
             kind=ProviderEventKind.FUNCTION_ARGUMENTS_DONE,

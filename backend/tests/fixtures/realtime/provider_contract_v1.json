@@ -40,7 +40,7 @@
       "raw_type": "response.create",
       "canonical_kind": "create_response",
       "required_fields": ["modalities"],
-      "optional_fields": ["instructions"],
+      "optional_fields": ["instructions", "request_id", "stream_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._create_response"],
       "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },

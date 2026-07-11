@@ -1364,6 +1364,7 @@ class StepFunRealtimeSharedHandler(
 
         cleanup_task = asyncio.create_task(close_selected_upstream())
         cancellation: asyncio.CancelledError | None = None
+        cleanup_error: BaseException | None = None
         try:
             while True:
                 try:
@@ -1374,12 +1375,17 @@ class StepFunRealtimeSharedHandler(
                         cancellation = error
                     if cleanup_task.done():
                         break
+                except BaseException as error:  # noqa: BLE001
+                    cleanup_error = error
+                    break
         finally:
             self.upstream_ws = None
             self._upstream_connected_at = 0.0
             self._upstream_last_activity_at = 0.0
         if cancellation is not None:
             raise cancellation
+        if cleanup_error is not None:
+            raise cleanup_error
 
     def _using_provider_port(self) -> bool:
         """Return the constructor-frozen rollout choice, not connection health."""

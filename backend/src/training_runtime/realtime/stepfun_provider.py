@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass, replace
 from typing import TypeAlias, TypeVar, cast
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
@@ -25,6 +26,7 @@ from .provider import (
     ProviderBackpressureResult,
     ProviderCapability,
     ProviderCommand,
+    ProviderCommandKind,
     ProviderErrorCategory,
     ProviderErrorReason,
     ProviderEvent,
@@ -51,6 +53,28 @@ _STEPFUN_CAPABILITIES = RealtimeProviderCapabilities(
 )
 
 
+@dataclass(frozen=True, slots=True)
+class _ResponseAuthority:
+    generation: int
+    request_id: int
+    stream_id: str
+    response_id: str | None = None
+
+
+_CORRELATABLE_RESPONSE_EVENT_KINDS = frozenset(
+    {
+        ProviderEventKind.RESPONSE_CREATED,
+        ProviderEventKind.RESPONSE_TEXT_DELTA,
+        ProviderEventKind.RESPONSE_TRANSCRIPT_DELTA,
+        ProviderEventKind.RESPONSE_TRANSCRIPT_FINAL,
+        ProviderEventKind.RESPONSE_AUDIO_DELTA,
+        ProviderEventKind.THINKING_DELTA,
+        ProviderEventKind.THINKING_DONE,
+        ProviderEventKind.RESPONSE_DONE,
+    }
+)
+
+
 class StepFunRealtimeProvider:
     """Compose ``StepFunTransport`` without exposing its raw connection or JSON."""
 
@@ -60,12 +84,16 @@ class StepFunRealtimeProvider:
         "_codec",
         "_close_cleanup_task",
         "_close_retry_connections",
+        "_call_authorities",
         "_connection",
         "_connecting",
+        "_current_response_id",
         "_lifecycle_generation",
         "_lifecycle_lock",
         "_pending_connection",
         "_pending_generation",
+        "_pending_response_authority",
+        "_response_authorities",
         "_sensitive_identifier_fragments",
         "_sensitive_query_values",
         "_transport",
@@ -90,12 +118,16 @@ class StepFunRealtimeProvider:
         self._codec = StepFunEventCodec() if codec is None else codec
         self._close_cleanup_task: asyncio.Task[_CloseCleanupResult] | None = None
         self._close_retry_connections: tuple[object, ...] = ()
+        self._call_authorities: dict[str, _ResponseAuthority] = {}
         self._connection: object | None = None
         self._connecting = False
+        self._current_response_id: str | None = None
         self._lifecycle_generation = 0
         self._lifecycle_lock = asyncio.Lock()
         self._pending_connection: object | None = None
         self._pending_generation: int | None = None
+        self._pending_response_authority: _ResponseAuthority | None = None
+        self._response_authorities: dict[str, _ResponseAuthority] = {}
         self._sensitive_query_values = _sensitive_query_values(url)
         self._sensitive_identifier_fragments = _sensitive_identifier_fragments(
             api_key,
@@ -206,7 +238,11 @@ class StepFunRealtimeProvider:
         try:
             result = await self._transport.send_json(connection, payload)
             if result.status is StepFunSendStatus.SENT:
-                if await self._connection_is_current(connection, generation):
+                if await self._accept_sent_command(
+                    connection,
+                    generation,
+                    command,
+                ):
                     return ProviderSendResult(accepted=True)
                 return _disconnected_send_result()
         except asyncio.CancelledError as cancellation:
@@ -267,9 +303,14 @@ class StepFunRealtimeProvider:
             sensitive_query_values=self._sensitive_query_values,
         ):
             event = _sensitive_event_error(connection_epoch)
-        if not await self._connection_is_current(connection, generation):
+        correlated_event = await self._correlate_received_event(
+            connection,
+            generation,
+            event,
+        )
+        if correlated_event is None:
             raise _disconnected_error()
-        return event
+        return correlated_event
 
     async def check_health(
         self,
@@ -356,6 +397,7 @@ class StepFunRealtimeProvider:
                     retryable=False,
                 )
             self._lifecycle_generation += 1
+            self._clear_correlations_locked()
             self._connecting = True
             return self._lifecycle_generation
 
@@ -415,6 +457,7 @@ class StepFunRealtimeProvider:
         self._connection = None
         self._pending_connection = None
         self._pending_generation = None
+        self._clear_correlations_locked()
         return self._schedule_close_cleanup_locked(
             connection,
             pending_connection,
@@ -526,6 +569,201 @@ class StepFunRealtimeProvider:
                 and self._lifecycle_generation == generation
             )
 
+    async def _accept_sent_command(
+        self,
+        connection: object,
+        generation: int,
+        command: ProviderCommand,
+    ) -> bool:
+        async with self._lifecycle_lock:
+            if (
+                self._connection is not connection
+                or self._lifecycle_generation != generation
+            ):
+                return False
+            if command.kind is ProviderCommandKind.CANCEL_RESPONSE:
+                self._clear_correlations_locked()
+                return True
+            if command.kind is not ProviderCommandKind.CREATE_RESPONSE:
+                return True
+            request_id = command.data.get("request_id")
+            stream_id = command.data.get("stream_id")
+            if type(request_id) is int and type(stream_id) is str:
+                self._pending_response_authority = _ResponseAuthority(
+                    generation=generation,
+                    request_id=request_id,
+                    stream_id=stream_id,
+                )
+            return True
+
+    async def _correlate_received_event(
+        self,
+        connection: object,
+        generation: int,
+        event: ProviderEvent,
+    ) -> ProviderEvent | None:
+        async with self._lifecycle_lock:
+            if (
+                self._connection is not connection
+                or self._lifecycle_generation != generation
+            ):
+                return None
+            return self._correlate_event_locked(event, generation=generation)
+
+    def _correlate_event_locked(
+        self,
+        event: ProviderEvent,
+        *,
+        generation: int,
+    ) -> ProviderEvent:
+        if event.kind is ProviderEventKind.RESPONSE_CREATED:
+            return self._correlate_response_created_locked(
+                event,
+                generation=generation,
+            )
+
+        authority = self._event_authority_locked(event, generation=generation)
+        if authority is None or not _event_matches_authority(event, authority):
+            return event
+        correlated = _event_with_authority(event, authority)
+
+        if (
+            correlated.kind is ProviderEventKind.CONVERSATION_ITEM
+            and correlated.call_id is not None
+            and correlated.data.get("item_type") == "function_call"
+        ):
+            existing = self._call_authorities.get(correlated.call_id)
+            if existing is None or existing == authority:
+                self._call_authorities[correlated.call_id] = authority
+
+        if correlated.kind is ProviderEventKind.RESPONSE_DONE:
+            self._clear_response_authority_locked(authority)
+        return correlated
+
+    def _correlate_response_created_locked(
+        self,
+        event: ProviderEvent,
+        *,
+        generation: int,
+    ) -> ProviderEvent:
+        response_id = event.response_id
+        if response_id is None:
+            return event
+        existing = self._response_authorities.get(response_id)
+        if existing is not None:
+            return (
+                _event_with_authority(event, existing)
+                if _event_matches_authority(event, existing)
+                else event
+            )
+        pending = self._pending_response_authority
+        if (
+            pending is None
+            or pending.generation != generation
+            or (
+                event.request_id is not None
+                and event.request_id != pending.request_id
+            )
+            or (
+                event.stream_id is not None
+                and event.stream_id != pending.stream_id
+            )
+        ):
+            return event
+        authority = replace(pending, response_id=response_id)
+        self._pending_response_authority = None
+        self._response_authorities[response_id] = authority
+        self._current_response_id = response_id
+        return _event_with_authority(event, authority)
+
+    def _event_authority_locked(
+        self,
+        event: ProviderEvent,
+        *,
+        generation: int,
+    ) -> _ResponseAuthority | None:
+        if event.response_id is not None:
+            authority = self._response_authorities.get(event.response_id)
+            return (
+                authority
+                if authority is not None and authority.generation == generation
+                else None
+            )
+        if event.kind in {
+            ProviderEventKind.FUNCTION_ARGUMENTS_DELTA,
+            ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
+        }:
+            authority = (
+                self._call_authorities.get(event.call_id)
+                if event.call_id is not None
+                else None
+            )
+            return (
+                authority
+                if authority is not None and authority.generation == generation
+                else None
+            )
+        if event.kind is ProviderEventKind.RESPONSE_DONE:
+            output_authority = self._response_done_output_authority_locked(event)
+            if output_authority is not None:
+                return output_authority
+        if event.kind is ProviderEventKind.CONVERSATION_ITEM:
+            if event.data.get("item_type") != "function_call":
+                return None
+        elif event.kind not in _CORRELATABLE_RESPONSE_EVENT_KINDS:
+            return None
+        current = (
+            self._response_authorities.get(self._current_response_id)
+            if self._current_response_id is not None
+            else None
+        )
+        return (
+            current
+            if current is not None and current.generation == generation
+            else None
+        )
+
+    def _response_done_output_authority_locked(
+        self,
+        event: ProviderEvent,
+    ) -> _ResponseAuthority | None:
+        outputs = event.data.get("function_outputs")
+        if type(outputs) is not tuple or not outputs:
+            return None
+        authorities: list[_ResponseAuthority] = []
+        for output in outputs:
+            if not isinstance(output, Mapping):
+                return None
+            call_id = output.get("call_id")
+            if type(call_id) is not str:
+                return None
+            authority = self._call_authorities.get(call_id)
+            if authority is None:
+                return None
+            authorities.append(authority)
+        first = authorities[0]
+        return first if all(item == first for item in authorities) else None
+
+    def _clear_response_authority_locked(
+        self,
+        authority: _ResponseAuthority,
+    ) -> None:
+        if authority.response_id is not None:
+            self._response_authorities.pop(authority.response_id, None)
+            if self._current_response_id == authority.response_id:
+                self._current_response_id = None
+        self._call_authorities = {
+            call_id: item
+            for call_id, item in self._call_authorities.items()
+            if item != authority
+        }
+
+    def _clear_correlations_locked(self) -> None:
+        self._pending_response_authority = None
+        self._response_authorities.clear()
+        self._current_response_id = None
+        self._call_authorities.clear()
+
     async def _invalidate_current_connection(
         self,
         connection: object,
@@ -539,6 +777,7 @@ class StepFunRealtimeProvider:
                 return False
             self._connection = None
             self._lifecycle_generation += 1
+            self._clear_correlations_locked()
             cleanup_task = self._schedule_close_cleanup_locked(connection)
         if cleanup_task is None:
             return True
@@ -556,6 +795,29 @@ class StepFunRealtimeProvider:
             f"connected={self._connection is not None!r}"
             ")"
         )
+
+
+def _event_matches_authority(
+    event: ProviderEvent,
+    authority: _ResponseAuthority,
+) -> bool:
+    return bool(
+        (event.request_id is None or event.request_id == authority.request_id)
+        and (event.response_id is None or event.response_id == authority.response_id)
+        and (event.stream_id is None or event.stream_id == authority.stream_id)
+    )
+
+
+def _event_with_authority(
+    event: ProviderEvent,
+    authority: _ResponseAuthority,
+) -> ProviderEvent:
+    return replace(
+        event,
+        request_id=authority.request_id,
+        response_id=authority.response_id,
+        stream_id=authority.stream_id,
+    )
 
 
 def _session_config(config: RealtimeProviderSessionConfig) -> StepFunSessionConfig:
