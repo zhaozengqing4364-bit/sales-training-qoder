@@ -252,7 +252,7 @@ class StepFunTransport:
                         status=StepFunSendStatus.FAILED,
                         error_type="AttributeError",
                     )
-                message = json.dumps(payload, ensure_ascii=False)
+                message = json.dumps(payload, ensure_ascii=False, allow_nan=False)
                 result = send(message)
                 transport_method = "send"
             if inspect.isawaitable(result):

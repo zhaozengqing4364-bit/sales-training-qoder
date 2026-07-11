@@ -1187,7 +1187,9 @@ async def test_adapter_close_should_clear_state_and_sanitize_unknown_exception()
     assert transport.close_calls == 1
     assert connection.close_count == 1
     assert "connected=False" in repr(provider)
+    transport.close_exception = None
     await provider.close()
+    assert transport.close_calls == 2
 
 
 class SequencedTransport(FakeTransport):
@@ -1708,3 +1710,130 @@ async def test_adapter_pending_connect_cancellation_after_close_should_not_doubl
     assert pending_connection.close_count == 1
     assert current_connection.close_count == 0
     assert "connected=True" in repr(provider)
+
+
+class BlockingCloseTransport(SequencedTransport):
+    def __init__(self, connections: tuple[FakeConnection, ...]) -> None:
+        super().__init__(connections)
+        self.close_started = asyncio.Event()
+        self.release_close = asyncio.Event()
+
+    async def close(self, connection: FakeConnection) -> None:
+        self.close_calls += 1
+        self.close_started.set()
+        await self.release_close.wait()
+        await connection.close()
+
+
+class RetryableCloseTransport(SequencedTransport):
+    def __init__(self, connections: tuple[FakeConnection, ...]) -> None:
+        super().__init__(connections)
+        self.fail_close = True
+
+    async def close(self, connection: FakeConnection) -> None:
+        self.close_calls += 1
+        if self.fail_close:
+            raise Exception("wss://provider.example?token=secret-token raw-body")
+        await connection.close()
+
+
+@pytest.mark.asyncio
+async def test_adapter_cancelled_public_close_should_finish_physical_cleanup() -> None:
+    closing_connection = FakeConnection()
+    reconnect_connection = FakeConnection()
+    transport = BlockingCloseTransport((closing_connection, reconnect_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    closing = asyncio.create_task(provider.close())
+    await transport.close_started.wait()
+    closing.cancel()
+    await asyncio.sleep(0)
+    close_done_before_release = closing.done()
+    transport.release_close.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await closing
+
+    assert close_done_before_release is False
+    assert closing_connection.close_count == 1
+    assert transport.close_calls == 1
+    assert "connected=False" in repr(provider)
+    await provider.close()
+    await provider.connect(_session_config())
+    assert reconnect_connection.close_count == 0
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_failed_public_close_should_require_safe_cleanup_retry() -> None:
+    failed_connection = FakeConnection()
+    reconnect_connection = FakeConnection()
+    transport = RetryableCloseTransport((failed_connection, reconnect_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    with pytest.raises(RealtimeProviderError) as captured:
+        await provider.close()
+
+    assert captured.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert captured.value.__cause__ is None
+    assert "secret-token" not in repr(captured.value)
+    assert failed_connection.close_count == 0
+    with pytest.raises(RealtimeProviderError) as reconnect_blocked:
+        await provider.connect(_session_config())
+    assert reconnect_blocked.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+
+    transport.fail_close = False
+    await provider.close()
+    assert failed_connection.close_count == 1
+    await provider.connect(_session_config())
+    assert reconnect_connection.close_count == 0
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.parametrize(
+    "constant",
+    ["NaN", "Infinity", "-Infinity", "1e400"],
+)
+def test_codec_should_reject_nested_non_finite_json_constants(constant: str) -> None:
+    raw = '{"type":"session.created","nested":{"values":[0,' + constant + "]}}"
+
+    event = StepFunEventCodec().decode_event(raw, connection_epoch=8)
+
+    assert event.kind is ProviderEventKind.ERROR
+    assert event.error_category is ProviderErrorCategory.PROTOCOL
+    assert event.error_reason is ProviderErrorReason.INVALID_EVENT
+
+
+def test_codec_command_encode_should_reject_nested_non_finite_number() -> None:
+    unsafe_command = object.__new__(ProviderCommand)
+    object.__setattr__(
+        unsafe_command,
+        "kind",
+        ProviderCommandKind.CREATE_CONVERSATION_ITEM,
+    )
+    object.__setattr__(
+        unsafe_command,
+        "data",
+        {
+            "role": "user",
+            "content": (
+                {
+                    "type": "input_text",
+                    "text": {"unsafe": float("nan")},
+                },
+            ),
+        },
+    )
+
+    with pytest.raises(ValueError, match="finite"):
+        StepFunEventCodec().encode_command(unsafe_command)

@@ -318,7 +318,11 @@ class StepFunEventCodec:
 
 
 def _to_raw_json(value: JsonValue) -> _RawJsonValue:
-    if value is None or type(value) in {str, bool, int, float}:
+    if type(value) is float:
+        if not isfinite(value):
+            raise ValueError("stepfun_json_number_must_be_finite")
+        return value
+    if value is None or type(value) in {str, bool, int}:
         return cast(_RawJsonScalar, value)
     if isinstance(value, Mapping):
         return {key: _to_raw_json(item) for key, item in value.items()}
@@ -330,7 +334,10 @@ def _decode_raw_object(raw: str | bytes) -> dict[str, _RawJsonValue]:
     text = raw.decode("utf-8") if type(raw) is bytes else raw
     if type(text) is not str:
         raise TypeError("stepfun_raw_event_must_be_text_or_bytes")
-    decoded = cast(object, json.loads(text))
+    decoded = cast(
+        object,
+        json.loads(text, parse_constant=_reject_json_constant),
+    )
     if not isinstance(decoded, dict):
         raise ValueError("stepfun_raw_event_must_be_object")
     typed = cast(dict[str, _RawJsonValue], decoded)
@@ -348,6 +355,13 @@ def _validate_raw_json_depth(value: _RawJsonValue) -> None:
             pending.extend((item, depth + 1) for item in current.values())
         elif isinstance(current, list):
             pending.extend((item, depth + 1) for item in current)
+        elif type(current) is float and not isfinite(current):
+            raise ValueError("stepfun_raw_event_number_must_be_finite")
+
+
+def _reject_json_constant(value: str) -> None:
+    del value
+    raise ValueError("stepfun_raw_event_constant_invalid")
 
 
 def _safe_raw_type(value: str) -> str:
@@ -706,7 +720,7 @@ def _decode_function_arguments(
         else payload.get("arguments")
     )
     if isinstance(value, dict):
-        arguments = json.dumps(value, ensure_ascii=False)
+        arguments = json.dumps(value, ensure_ascii=False, allow_nan=False)
     elif type(value) is str:
         arguments = value
     elif value is None:
@@ -748,7 +762,11 @@ def _extract_function_outputs(
         name = _string_value(item.get("name")) or "unknown"
         arguments_value = item.get("arguments")
         if isinstance(arguments_value, dict):
-            arguments = json.dumps(arguments_value, ensure_ascii=False)
+            arguments = json.dumps(
+                arguments_value,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
         elif type(arguments_value) is str:
             arguments = arguments_value
         else:

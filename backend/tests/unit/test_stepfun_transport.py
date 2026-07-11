@@ -201,6 +201,20 @@ async def test_should_fallback_to_send_when_upstream_has_no_send_json() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fallback_send_should_reject_non_finite_json_number() -> None:
+    websocket = SendOnlyWebSocket()
+
+    result = await StepFunTransport().send_json(
+        websocket,
+        {"type": "session.update", "unsafe": float("nan")},
+    )
+
+    assert result.status is StepFunSendStatus.FAILED
+    assert result.error_type == "ValueError"
+    assert websocket.messages == []
+
+
+@pytest.mark.asyncio
 async def test_should_send_json_event_when_websocket_accepts_payload() -> None:
     transport = StepFunTransport()
     websocket = RecordingWebSocket()
