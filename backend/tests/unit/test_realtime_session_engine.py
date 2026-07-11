@@ -8,6 +8,7 @@ import pytest
 
 from training_runtime.realtime import (
     ENGINE_STATE_VERSION,
+    GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
     ConnectionPhase,
     ConnectionState,
     EvidenceState,
@@ -81,6 +82,7 @@ def test_should_round_trip_state_without_sharing_mutable_data() -> None:
     state = RealtimeSessionState(scenario_type="presentation")
     state.connection.session_id = "session-1"
     state.connection.epoch = 3
+    state.grounding.diagnostics["schema_version"] = GROUNDING_DIAGNOSTICS_SCHEMA_VERSION
     state.grounding.diagnostics["source"] = "frozen_policy"
     assert state.evidence.record(
         evidence_key="transcript:1:user",
@@ -97,7 +99,10 @@ def test_should_round_trip_state_without_sharing_mutable_data() -> None:
     payload["connection"]["epoch"] = 99  # type: ignore[index]
     payload["grounding"]["diagnostics"]["source"] = "mutated"  # type: ignore[index]
     assert state.connection.epoch == 3
-    assert state.grounding.diagnostics == {"source": "frozen_policy"}
+    assert state.grounding.diagnostics == {
+        "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+        "source": "frozen_policy",
+    }
 
 
 def test_should_reject_unsupported_future_state_version() -> None:
@@ -136,13 +141,27 @@ def test_should_restore_version_one_payload_with_optional_fields_absent() -> Non
     assert restored == RealtimeSessionState(scenario_type="presentation")
 
 
-def test_should_accept_only_json_safe_non_sensitive_grounding_diagnostics() -> None:
+def test_should_accept_versioned_grounding_diagnostics_allowlist() -> None:
     diagnostics: dict[str, object] = {
+        "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+        "status": "ready",
+        "reason_code": "kb_hit",
         "source": "frozen_policy",
-        "attempt": 2,
+        "mode": "grounded",
+        "error_type": "none",
+        "fallback_reason": "not_required",
         "latency_ms": 3.5,
+        "result_count": 4,
+        "kb_count": 2,
+        "hit_count": 3,
+        "miss_count": 1,
+        "cache_size": 8,
         "cache_hit": False,
-        "fallback_code": None,
+        "timeout": False,
+        "degraded": True,
+        "blocked": False,
+        "confidence": 0.75,
+        "answerability_score": 1.0,
     }
     engine = RealtimeSessionEngine(
         scenario_type="presentation",
@@ -161,48 +180,165 @@ def test_should_accept_only_json_safe_non_sensitive_grounding_diagnostics() -> N
 
 
 @pytest.mark.parametrize(
-    "sensitive_key",
+    "unknown_field",
     [
-        "",
-        " Token ",
-        "AUTHORIZATION",
-        "api-Key",
-        "client_secret",
-        "PASSWORD",
-        "raw_payload",
-        "raw_transcript",
-        "audio",
-        "SystemPrompt",
+        "draw_count",
+        "crawl_status",
+        "tokenizer_version",
+        "credential",
+        "bearer",
+        "cookie",
+        "request_body",
+        "note",
     ],
 )
-def test_should_reject_empty_or_sensitive_grounding_diagnostic_keys(
-    sensitive_key: str,
+def test_should_reject_unknown_grounding_diagnostic_fields_deterministically(
+    unknown_field: str,
 ) -> None:
-    with pytest.raises(ValueError, match="grounding_diagnostic_key"):
-        GroundingState(diagnostics={sensitive_key: "unsafe"})
+    with pytest.raises(
+        ValueError,
+        match=f"grounding_diagnostic_field_unknown:{unknown_field}",
+    ):
+        GroundingState(
+            diagnostics={
+                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+                unknown_field: "unsafe",
+            }
+        )
 
 
-def test_should_reject_non_string_grounding_diagnostic_key() -> None:
-    with pytest.raises(ValueError, match="grounding_diagnostic_key"):
-        GroundingState(diagnostics={1: "unsafe"})  # type: ignore[dict-item]
+def test_should_not_apply_substring_blacklist_to_allowlisted_values() -> None:
+    diagnostics = {
+        "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+        "status": "draw_count",
+        "reason_code": "crawl_status",
+        "source": "tokenizer_version",
+    }
+
+    assert GroundingState(diagnostics=diagnostics).diagnostics == diagnostics
+
+
+def test_should_require_schema_version_for_non_empty_diagnostics() -> None:
+    with pytest.raises(
+        ValueError, match="grounding_diagnostics_schema_version_required"
+    ):
+        GroundingState(diagnostics={"status": "ready"})
+
+
+@pytest.mark.parametrize("invalid_version", [True, False, 1.0, "1", 2, None])
+def test_should_require_exact_grounding_diagnostics_schema_version(
+    invalid_version: object,
+) -> None:
+    with pytest.raises(ValueError, match="grounding_diagnostics_schema_version"):
+        GroundingState(
+            diagnostics={"schema_version": invalid_version}  # type: ignore[dict-item]
+        )
 
 
 @pytest.mark.parametrize(
-    "unsafe_value",
+    "invalid_identifier",
+    ["", "contains spaces", "Bearer abc.def", "中文", "x" * 129, b"bytes"],
+)
+def test_should_reject_free_text_or_invalid_diagnostic_identifiers(
+    invalid_identifier: object,
+) -> None:
+    with pytest.raises(ValueError, match="grounding_diagnostic_identifier"):
+        GroundingState(
+            diagnostics={
+                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+                "status": invalid_identifier,
+            }  # type: ignore[dict-item]
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
     [
-        b"bytes",
-        {"nested": "value"},
-        ["value"],
-        object(),
-        float("nan"),
-        float("inf"),
+        ("latency_ms", True),
+        ("result_count", -1),
+        ("kb_count", float("nan")),
+        ("hit_count", float("inf")),
+        ("miss_count", "1"),
+        ("cache_size", -0.1),
     ],
 )
-def test_should_reject_non_scalar_grounding_diagnostic_values(
-    unsafe_value: object,
+def test_should_reject_invalid_count_or_latency_metadata(
+    field_name: str,
+    invalid_value: object,
 ) -> None:
-    with pytest.raises(ValueError, match="grounding_diagnostic_value"):
-        GroundingState(diagnostics={"source": unsafe_value})
+    with pytest.raises(ValueError, match="grounding_diagnostic_non_negative_number"):
+        GroundingState(
+            diagnostics={
+                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+                field_name: invalid_value,
+            }  # type: ignore[dict-item]
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("confidence", True),
+        ("confidence", -0.1),
+        ("confidence", 1.1),
+        ("answerability_score", float("nan")),
+        ("answerability_score", float("inf")),
+        ("answerability_score", "0.5"),
+    ],
+)
+def test_should_reject_invalid_bounded_score_metadata(
+    field_name: str,
+    invalid_value: object,
+) -> None:
+    with pytest.raises(ValueError, match="grounding_diagnostic_unit_interval"):
+        GroundingState(
+            diagnostics={
+                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+                field_name: invalid_value,
+            }  # type: ignore[dict-item]
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("cache_hit", 1),
+        ("timeout", 0),
+        ("degraded", "true"),
+        ("blocked", None),
+    ],
+)
+def test_should_require_strict_boolean_diagnostic_metadata(
+    field_name: str,
+    invalid_value: object,
+) -> None:
+    with pytest.raises(ValueError, match="grounding_diagnostic_boolean"):
+        GroundingState(
+            diagnostics={
+                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+                field_name: invalid_value,
+            }  # type: ignore[dict-item]
+        )
+
+
+def test_should_reject_non_string_grounding_diagnostic_key() -> None:
+    with pytest.raises(ValueError, match="grounding_diagnostic_field_must_be_string"):
+        GroundingState(
+            diagnostics={
+                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+                1: "unsafe",
+            }  # type: ignore[dict-item]
+        )
+
+
+def test_should_revalidate_diagnostics_during_serialization() -> None:
+    grounding = GroundingState(
+        diagnostics={"schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION}
+    )
+    grounding.diagnostics["note"] = "free_text"  # type: ignore[assignment]
+
+    with pytest.raises(ValueError, match="grounding_diagnostic_field_unknown:note"):
+        grounding.to_dict()
 
 
 def test_should_reject_unsafe_diagnostics_before_mutating_grounding_state() -> None:
@@ -210,11 +346,16 @@ def test_should_reject_unsafe_diagnostics_before_mutating_grounding_state() -> N
     engine = RealtimeSessionEngine(scenario_type="presentation", hooks=hooks)
     engine.begin_grounding(decision_id="g-1", policy_hash="sha256:policy")
 
-    with pytest.raises(ValueError, match="grounding_diagnostic_key"):
+    with pytest.raises(
+        ValueError, match="grounding_diagnostic_field_unknown:authorization"
+    ):
         engine.resolve_grounding(
             outcome="ready",
             mode="grounded",
-            diagnostics={"Authorization": "unsafe"},
+            diagnostics={
+                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+                "authorization": "unsafe",
+            },
         )
 
     assert engine.state.grounding.phase is GroundingPhase.PREPARING

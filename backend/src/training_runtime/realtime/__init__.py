@@ -6,6 +6,7 @@ from .engine import (
 )
 from .state import (
     ENGINE_STATE_VERSION,
+    GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
     ConnectionPhase,
     ConnectionState,
     EvidenceRecord,
@@ -20,6 +21,7 @@ from .state import (
 
 __all__ = [
     "ENGINE_STATE_VERSION",
+    "GROUNDING_DIAGNOSTICS_SCHEMA_VERSION",
     "ConnectionPhase",
     "ConnectionState",
     "EvidenceRecord",

@@ -5,23 +5,48 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum
 from math import isfinite
+from re import compile as compile_pattern
 from typing import Any, cast
 
 ENGINE_STATE_VERSION = 1
-GroundingDiagnosticValue = str | int | float | bool | None
-_SENSITIVE_GROUNDING_DIAGNOSTIC_KEY_PARTS = frozenset(
-    {
-        "token",
-        "authorization",
-        "apikey",
-        "secret",
-        "password",
-        "raw",
-        "transcript",
-        "audio",
-        "prompt",
-    }
+GROUNDING_DIAGNOSTICS_SCHEMA_VERSION = 1
+GroundingDiagnosticValue = str | int | float | bool
+_GROUNDING_DIAGNOSTIC_IDENTIFIER_FIELDS = (
+    "status",
+    "reason_code",
+    "source",
+    "mode",
+    "error_type",
+    "fallback_reason",
 )
+_GROUNDING_DIAGNOSTIC_NON_NEGATIVE_NUMBER_FIELDS = (
+    "latency_ms",
+    "result_count",
+    "kb_count",
+    "hit_count",
+    "miss_count",
+    "cache_size",
+)
+_GROUNDING_DIAGNOSTIC_BOOLEAN_FIELDS = (
+    "cache_hit",
+    "timeout",
+    "degraded",
+    "blocked",
+)
+_GROUNDING_DIAGNOSTIC_UNIT_INTERVAL_FIELDS = (
+    "confidence",
+    "answerability_score",
+)
+_GROUNDING_DIAGNOSTIC_ALLOWED_FIELDS = frozenset(
+    (
+        "schema_version",
+        *_GROUNDING_DIAGNOSTIC_IDENTIFIER_FIELDS,
+        *_GROUNDING_DIAGNOSTIC_NON_NEGATIVE_NUMBER_FIELDS,
+        *_GROUNDING_DIAGNOSTIC_BOOLEAN_FIELDS,
+        *_GROUNDING_DIAGNOSTIC_UNIT_INTERVAL_FIELDS,
+    )
+)
+_GROUNDING_DIAGNOSTIC_IDENTIFIER_PATTERN = compile_pattern(r"[A-Za-z0-9._:-]{1,128}")
 
 
 class RealtimeStateTransitionError(ValueError):
@@ -71,6 +96,12 @@ def _validate_engine_state_version(value: object) -> int:
     if value != ENGINE_STATE_VERSION:
         raise ValueError("unsupported_engine_state_version")
     return value
+
+
+def _is_finite_number(value: object) -> bool:
+    if type(value) is int:
+        return True
+    return type(value) is float and isfinite(value)
 
 
 @dataclass(slots=True)
@@ -175,28 +206,61 @@ class GroundingState:
     def validate_diagnostics(
         diagnostics: Mapping[Any, Any],
     ) -> dict[str, GroundingDiagnosticValue]:
-        validated: dict[str, GroundingDiagnosticValue] = {}
-        for key, value in diagnostics.items():
-            if not isinstance(key, str) or not key.strip():
-                raise ValueError("grounding_diagnostic_key_must_be_non_empty_string")
-            clean_key = key.strip()
-            compact_key = "".join(
-                character for character in clean_key.casefold() if character.isalnum()
-            )
-            if any(
-                sensitive_part in compact_key
-                for sensitive_part in _SENSITIVE_GROUNDING_DIAGNOSTIC_KEY_PARTS
+        if not diagnostics:
+            return {}
+        for key in diagnostics:
+            if not isinstance(key, str):
+                raise ValueError("grounding_diagnostic_field_must_be_string")
+        unknown_fields = sorted(set(diagnostics) - _GROUNDING_DIAGNOSTIC_ALLOWED_FIELDS)
+        if unknown_fields:
+            raise ValueError(f"grounding_diagnostic_field_unknown:{unknown_fields[0]}")
+        if "schema_version" not in diagnostics:
+            raise ValueError("grounding_diagnostics_schema_version_required")
+        schema_version = diagnostics["schema_version"]
+        if type(schema_version) is not int:
+            raise ValueError("grounding_diagnostics_schema_version_must_be_integer")
+        if schema_version != GROUNDING_DIAGNOSTICS_SCHEMA_VERSION:
+            raise ValueError("unsupported_grounding_diagnostics_schema_version")
+
+        validated: dict[str, GroundingDiagnosticValue] = {
+            "schema_version": schema_version
+        }
+        for field_name in _GROUNDING_DIAGNOSTIC_IDENTIFIER_FIELDS:
+            if field_name not in diagnostics:
+                continue
+            value = diagnostics[field_name]
+            if not isinstance(value, str) or not (
+                _GROUNDING_DIAGNOSTIC_IDENTIFIER_PATTERN.fullmatch(value)
             ):
-                raise ValueError("grounding_diagnostic_key_is_sensitive")
-            if clean_key in validated:
-                raise ValueError("grounding_diagnostic_key_is_duplicated")
-            if value is None or type(value) in {str, int, bool}:
-                validated[clean_key] = cast(GroundingDiagnosticValue, value)
+                raise ValueError(
+                    f"grounding_diagnostic_identifier_invalid:{field_name}"
+                )
+            validated[field_name] = value
+        for field_name in _GROUNDING_DIAGNOSTIC_NON_NEGATIVE_NUMBER_FIELDS:
+            if field_name not in diagnostics:
                 continue
-            if type(value) is float and isfinite(value):
-                validated[clean_key] = cast(float, value)
+            value = diagnostics[field_name]
+            if not _is_finite_number(value) or value < 0:
+                raise ValueError(
+                    f"grounding_diagnostic_non_negative_number_invalid:{field_name}"
+                )
+            validated[field_name] = cast(int | float, value)
+        for field_name in _GROUNDING_DIAGNOSTIC_BOOLEAN_FIELDS:
+            if field_name not in diagnostics:
                 continue
-            raise ValueError("grounding_diagnostic_value_must_be_json_scalar")
+            value = diagnostics[field_name]
+            if type(value) is not bool:
+                raise ValueError(f"grounding_diagnostic_boolean_invalid:{field_name}")
+            validated[field_name] = value
+        for field_name in _GROUNDING_DIAGNOSTIC_UNIT_INTERVAL_FIELDS:
+            if field_name not in diagnostics:
+                continue
+            value = diagnostics[field_name]
+            if not _is_finite_number(value) or not 0 <= value <= 1:
+                raise ValueError(
+                    f"grounding_diagnostic_unit_interval_invalid:{field_name}"
+                )
+            validated[field_name] = cast(int | float, value)
         return validated
 
     def to_dict(self) -> dict[str, object]:
