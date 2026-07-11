@@ -1589,6 +1589,10 @@ async def test_adapter_connect_cleanup_should_preserve_original_cancellation() -
     assert captured.value.args == ("primary-cancel",)
     transport.send_exception = None
     transport.close_exception = None
+    with pytest.raises(RealtimeProviderError) as reconnect_blocked:
+        await provider.connect(_session_config())
+    assert reconnect_blocked.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    await provider.close()
     await provider.connect(_session_config())
     assert "connected=True" in repr(provider)
 
@@ -1615,6 +1619,10 @@ async def test_adapter_connect_cleanup_base_exception_should_release_reservation
     assert captured.value.args == ("cleanup-base",)
     transport.send_exception = None
     transport.close_exception = None
+    with pytest.raises(RealtimeProviderError) as reconnect_blocked:
+        await provider.connect(_session_config())
+    assert reconnect_blocked.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    await provider.close()
     await provider.connect(_session_config())
     assert "connected=True" in repr(provider)
 
@@ -1947,3 +1955,48 @@ async def test_adapter_terminal_retirement_failure_should_retry_before_reconnect
     await provider.connect(_session_config())
     assert len(transport.connect_calls) == 2
     assert reconnect_connection.close_count == 0
+
+
+@pytest.mark.parametrize("primary_outcome", ["failed", "cancelled"])
+@pytest.mark.asyncio
+async def test_adapter_initial_send_cleanup_failure_should_block_until_close_retry(
+    primary_outcome: str,
+) -> None:
+    failed_connection = FakeConnection()
+    reconnect_connection = FakeConnection()
+    transport = RetryableCloseTransport((failed_connection, reconnect_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    if primary_outcome == "failed":
+        transport.send_result = StepFunSendResult(
+            status=StepFunSendStatus.FAILED,
+            error_type="ConnectionClosedError",
+        )
+        with pytest.raises(RealtimeProviderError) as captured:
+            await provider.connect(_session_config())
+        assert captured.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    else:
+        transport.send_exception = asyncio.CancelledError()
+        with pytest.raises(asyncio.CancelledError):
+            await provider.connect(_session_config())
+
+    assert failed_connection.close_count == 0
+    assert transport.close_calls == 1
+    transport.send_result = StepFunSendResult(status=StepFunSendStatus.SENT)
+    transport.send_exception = None
+    with pytest.raises(RealtimeProviderError) as reconnect_blocked:
+        await provider.connect(_session_config())
+    assert reconnect_blocked.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert len(transport.connect_calls) == 1
+
+    transport.fail_close = False
+    await provider.close()
+    assert failed_connection.close_count == 1
+    assert transport.close_calls == 2
+    await provider.connect(_session_config())
+    assert len(transport.connect_calls) == 2
+    assert reconnect_connection.close_count == 0
+    assert "connected=True" in repr(provider)

@@ -137,16 +137,16 @@ class StepFunRealtimeProvider:
             cleanup_error: BaseException | None = None
             try:
                 if connection is not None:
-                    should_close = not pending_registered
-                    if pending_registered:
-                        should_close = await self._claim_pending_connection(
-                            generation,
-                            connection,
-                        )
-                    if should_close:
-                        await self._transport.close(connection)
-            except Exception:
-                pass
+                    cleanup_task = await self._retire_connect_connection(
+                        generation,
+                        connection,
+                        pending_registered=pending_registered,
+                    )
+                    if cleanup_task is not None:
+                        (
+                            _failed_connections,
+                            cleanup_error,
+                        ) = await self._await_close_cleanup(cleanup_task)
             except BaseException as error:
                 cleanup_error = error
             finally:
@@ -352,20 +352,23 @@ class StepFunRealtimeProvider:
         await self._finalize_close_cleanup(cleanup_task, result)
         return result
 
-    async def _claim_pending_connection(
+    async def _retire_connect_connection(
         self,
         generation: int,
         connection: object,
-    ) -> bool:
+        *,
+        pending_registered: bool,
+    ) -> asyncio.Task[_CloseCleanupResult] | None:
         async with self._lifecycle_lock:
-            if (
-                self._pending_connection is not connection
-                or self._pending_generation != generation
-            ):
-                return False
-            self._pending_connection = None
-            self._pending_generation = None
-            return True
+            if pending_registered:
+                if (
+                    self._pending_connection is not connection
+                    or self._pending_generation != generation
+                ):
+                    return None
+                self._pending_connection = None
+                self._pending_generation = None
+            return self._schedule_close_cleanup_locked(connection)
 
     async def _publish_connection(
         self,
