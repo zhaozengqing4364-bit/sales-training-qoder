@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, cast
 
@@ -291,9 +292,9 @@ def _version_label(value: dict[str, Any], version: int | None) -> str:
     return f"v{version}" if version is not None else "default"
 
 
-def _sales_combination_overview(snapshot: dict[str, Any]) -> dict[str, Any]:
+def _sales_combination_overview(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     combinations = [
-        item for item in snapshot.get("combinations", []) if isinstance(item, dict)
+        item for item in snapshot.get("combinations", []) if isinstance(item, Mapping)
     ]
     enabled_count = sum(1 for item in combinations if item.get("enabled", True) is not False)
     return {
@@ -333,8 +334,8 @@ def _scoring_ruleset_overview(
     }
 
 
-def _roleplay_situation_pack_overview(snapshot: dict[str, Any]) -> dict[str, Any]:
-    packs = [item for item in snapshot.get("packs", []) if isinstance(item, dict)]
+def _roleplay_situation_pack_overview(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    packs = [item for item in snapshot.get("packs", []) if isinstance(item, Mapping)]
     published = [
         item for item in packs if str(item.get("status") or "") == "published"
     ]
@@ -348,15 +349,15 @@ def _roleplay_situation_pack_overview(snapshot: dict[str, Any]) -> dict[str, Any
     }
 
 
-def _realtime_provider_registry_overview(snapshot: dict[str, Any]) -> dict[str, Any]:
+def _realtime_provider_registry_overview(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     descriptors = [
-        item for item in snapshot.get("descriptors", []) if isinstance(item, dict)
+        item for item in snapshot.get("descriptors", []) if isinstance(item, Mapping)
     ]
     enabled = [item for item in descriptors if item.get("enabled") is True]
     ready = [
         item
         for item in enabled
-        if isinstance(item.get("readiness"), dict)
+        if isinstance(item.get("readiness"), Mapping)
         and item["readiness"].get("ready") is True
     ]
     return {

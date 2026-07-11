@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +14,15 @@ from common.business_rules.service import BusinessRuleConfigService
 from common.db.models import ConfigBundle, ConfigBundleAuditLog, ConfigVersion
 from common.monitoring.logger import get_logger, get_trace_id
 from configuration_governance.contracts import (
+    ConfigAuditDecision,
+    ConfigAuditRecord,
     ConfigBundleAdapter,
     ConfigLifecycleResult,
+    ConfigVersionRecord,
+    FrozenJson,
+    LifecycleAction,
+    freeze_json_mapping,
+    thaw_json,
 )
 
 logger = get_logger(__name__)
@@ -32,6 +39,161 @@ class SqlAlchemyConfigLifecycleAdapter:
     ) -> None:
         self._db = db
         self._adapters = tuple(adapters)
+
+    async def ensure_bundle(self, bundle_key: str) -> None:
+        self._adapter_for(bundle_key)
+
+    async def create_draft_version(
+        self,
+        *,
+        bundle_key: str,
+        value: dict[str, Any],
+        actor_id: str,
+        reason: str | None,
+    ) -> ConfigVersionRecord:
+        row = await BusinessRuleConfigService(self._db).create_or_update_draft(
+            key=bundle_key,
+            value=value,
+            actor_id=actor_id,
+            reason=reason,
+        )
+        return self._version_record(
+            await self._sync_business_rule_version(bundle_key, row)
+        )
+
+    async def validate_value(
+        self,
+        *,
+        bundle_key: str,
+        value: dict[str, Any],
+        actor_id: str,
+    ) -> dict[str, FrozenJson]:
+        normalized = await BusinessRuleConfigService(self._db).validate_config_value(
+            key=bundle_key,
+            value=value,
+            actor_id=actor_id,
+            audit=False,
+        )
+        return dict(freeze_json_mapping(normalized))
+
+    async def preview_value(
+        self,
+        *,
+        bundle_key: str,
+        value: dict[str, Any],
+        reason: str | None,
+    ) -> dict[str, FrozenJson]:
+        preview = await BusinessRuleConfigService(self._db).preview(
+            key=bundle_key,
+            value=value,
+            actor_id=None,
+            reason=reason,
+        )
+        return dict(freeze_json_mapping(preview))
+
+    async def load_active_version(
+        self, bundle_key: str
+    ) -> ConfigVersionRecord | None:
+        row = await self._active_version(bundle_key)
+        return self._version_record(row) if row is not None else None
+
+    async def publish_version(
+        self,
+        *,
+        bundle_key: str,
+        actor_id: str,
+        config_id: str | None,
+        reason: str | None,
+    ) -> ConfigVersionRecord:
+        row = await BusinessRuleConfigService(self._db).publish(
+            key=bundle_key,
+            actor_id=actor_id,
+            config_id=config_id,
+            reason=reason,
+        )
+        version = await self._sync_business_rule_version(bundle_key, row)
+        await self._sync_active_history(bundle_key)
+        return self._version_record(version)
+
+    async def rollback_version(
+        self,
+        *,
+        bundle_key: str,
+        actor_id: str,
+        target_config_id: str | None,
+        target_version: int | None,
+        reason: str | None,
+    ) -> ConfigVersionRecord:
+        row = await BusinessRuleConfigService(self._db).rollback(
+            key=bundle_key,
+            actor_id=actor_id,
+            target_config_id=target_config_id,
+            target_version=target_version,
+            reason=reason,
+        )
+        version = await self._sync_business_rule_version(bundle_key, row)
+        await self._sync_active_history(bundle_key)
+        return self._version_record(version)
+
+    async def disable_version(
+        self,
+        *,
+        bundle_key: str,
+        actor_id: str,
+        reason: str | None,
+    ) -> ConfigVersionRecord:
+        row = await BusinessRuleConfigService(self._db).disable(
+            key=bundle_key,
+            actor_id=actor_id,
+            reason=reason,
+        )
+        return self._version_record(
+            await self._sync_business_rule_version(bundle_key, row)
+        )
+
+    async def sync_projection(
+        self,
+        *,
+        bundle_key: str,
+        actor_id: str,
+        version: ConfigVersionRecord,
+        lifecycle_action: Literal["publish", "rollback"],
+    ) -> dict[str, FrozenJson] | None:
+        result = await self._sync_situation_pack_head_projection(
+            bundle_key=bundle_key,
+            actor_id=actor_id,
+            snapshot=thaw_json(version.snapshot),
+            lifecycle_action=lifecycle_action,
+        )
+        return dict(freeze_json_mapping(result)) if result is not None else None
+
+    async def append_audit(
+        self, decision: ConfigAuditDecision
+    ) -> ConfigAuditRecord:
+        audit = ConfigBundleAuditLog(
+            bundle_key=decision.bundle_key,
+            version_id=decision.version_id,
+            action=decision.action,
+            actor_id=decision.actor_id,
+            before_version=decision.before_version,
+            after_version=decision.after_version,
+            before_snapshot_json=(
+                thaw_json(decision.before_snapshot)
+                if decision.before_snapshot is not None
+                else None
+            ),
+            after_snapshot_json=(
+                thaw_json(decision.after_snapshot)
+                if decision.after_snapshot is not None
+                else None
+            ),
+            reason=decision.reason,
+            trace_id=get_trace_id(),
+            created_at=datetime.now(UTC),
+        )
+        self._db.add(audit)
+        await self._db.flush()
+        return self._audit_record(audit)
 
     async def create_draft(
         self,
@@ -54,11 +216,15 @@ class SqlAlchemyConfigLifecycleAdapter:
             bundle_key=bundle_key,
             actor_id=actor_id,
             before_snapshot=None,
-            after_snapshot=self.version_snapshot(version),
+            after_snapshot=self._version_payload_from_row(version),
             reason=reason,
             version=version,
         )
-        return ConfigLifecycleResult(version=version, audit=audit)
+        await self._db.flush()
+        return ConfigLifecycleResult(
+            version=self._version_record(version),
+            audit=self._audit_record(audit),
+        )
 
     async def validate(
         self,
@@ -84,10 +250,13 @@ class SqlAlchemyConfigLifecycleAdapter:
             reason=reason,
             version=None,
         )
+        await self._db.flush()
         return ConfigLifecycleResult(
             version=None,
-            audit=audit,
-            validation={"valid": True, "normalized_value": normalized},
+            audit=self._audit_record(audit),
+            validation=freeze_json_mapping(
+                {"valid": True, "normalized_value": normalized}
+            ),
         )
 
     async def preview(
@@ -110,12 +279,17 @@ class SqlAlchemyConfigLifecycleAdapter:
             action="preview",
             bundle_key=bundle_key,
             actor_id=actor_id,
-            before_snapshot=self.version_snapshot(active),
+            before_snapshot=self._version_payload_from_row(active),
             after_snapshot={"value": deepcopy(value), "summary": preview.get("summary")},
             reason=reason,
             version=active,
         )
-        return ConfigLifecycleResult(version=active, audit=audit, preview=preview)
+        await self._db.flush()
+        return ConfigLifecycleResult(
+            version=self._version_record(active) if active is not None else None,
+            audit=self._audit_record(audit),
+            preview=freeze_json_mapping(preview),
+        )
 
     async def publish(
         self,
@@ -140,19 +314,23 @@ class SqlAlchemyConfigLifecycleAdapter:
             snapshot=dict(getattr(row, "value_json") or {}),
             lifecycle_action="publish",
         )
-        after_snapshot = self.version_snapshot(version)
+        after_snapshot = self._version_payload_from_row(version)
         if projection_sync is not None and after_snapshot is not None:
             after_snapshot = {**after_snapshot, "projection_sync": projection_sync}
         audit = self._queue_audit(
             action="publish",
             bundle_key=bundle_key,
             actor_id=actor_id,
-            before_snapshot=self.version_snapshot(before),
+            before_snapshot=self._version_payload_from_row(before),
             after_snapshot=after_snapshot,
             reason=reason,
             version=version,
         )
-        return ConfigLifecycleResult(version=version, audit=audit)
+        await self._db.flush()
+        return ConfigLifecycleResult(
+            version=self._version_record(version),
+            audit=self._audit_record(audit),
+        )
 
     async def rollback(
         self,
@@ -179,19 +357,23 @@ class SqlAlchemyConfigLifecycleAdapter:
             snapshot=dict(getattr(row, "value_json") or {}),
             lifecycle_action="rollback",
         )
-        after_snapshot = self.version_snapshot(version)
+        after_snapshot = self._version_payload_from_row(version)
         if projection_sync is not None and after_snapshot is not None:
             after_snapshot = {**after_snapshot, "projection_sync": projection_sync}
         audit = self._queue_audit(
             action="rollback",
             bundle_key=bundle_key,
             actor_id=actor_id,
-            before_snapshot=self.version_snapshot(before),
+            before_snapshot=self._version_payload_from_row(before),
             after_snapshot=after_snapshot,
             reason=reason,
             version=version,
         )
-        return ConfigLifecycleResult(version=version, audit=audit)
+        await self._db.flush()
+        return ConfigLifecycleResult(
+            version=self._version_record(version),
+            audit=self._audit_record(audit),
+        )
 
     async def disable(
         self,
@@ -201,7 +383,7 @@ class SqlAlchemyConfigLifecycleAdapter:
         reason: str | None,
     ) -> ConfigLifecycleResult:
         before = await self._active_version(bundle_key)
-        before_snapshot = self.version_snapshot(before)
+        before_snapshot = self._version_payload_from_row(before)
         row = await BusinessRuleConfigService(self._db).disable(
             key=bundle_key,
             actor_id=actor_id,
@@ -213,16 +395,23 @@ class SqlAlchemyConfigLifecycleAdapter:
             bundle_key=bundle_key,
             actor_id=actor_id,
             before_snapshot=before_snapshot,
-            after_snapshot=self.version_snapshot(version),
+            after_snapshot=self._version_payload_from_row(version),
             reason=reason,
             version=version,
         )
-        return ConfigLifecycleResult(version=version, audit=audit)
+        await self._db.flush()
+        return ConfigLifecycleResult(
+            version=self._version_record(version),
+            audit=self._audit_record(audit),
+        )
 
-    async def resolve_active_version(self, bundle_key: str) -> ConfigVersion | None:
+    async def resolve_active_version(
+        self, bundle_key: str
+    ) -> ConfigVersionRecord | None:
         """Return the current active immutable ConfigVersion row for binding."""
 
-        return await self._active_version(bundle_key)
+        row = await self._active_version(bundle_key)
+        return self._version_record(row) if row is not None else None
 
     def _adapter_for(self, bundle_key: str) -> ConfigBundleAdapter:
         adapter = next(
@@ -363,7 +552,15 @@ class SqlAlchemyConfigLifecycleAdapter:
             }
 
     @staticmethod
-    def version_snapshot(version: ConfigVersion | None) -> dict[str, Any] | None:
+    def version_snapshot(
+        version: ConfigVersionRecord | None,
+    ) -> dict[str, Any] | None:
+        return version.as_payload() if version is not None else None
+
+    @staticmethod
+    def _version_payload_from_row(
+        version: ConfigVersion | None,
+    ) -> dict[str, Any] | None:
         if version is None:
             return None
         return {
@@ -377,6 +574,43 @@ class SqlAlchemyConfigLifecycleAdapter:
             if version.source_updated_at
             else None,
         }
+
+    @classmethod
+    def _version_record(cls, version: ConfigVersion) -> ConfigVersionRecord:
+        payload = cls._version_payload_from_row(version)
+        assert payload is not None
+        return ConfigVersionRecord(
+            version_id=str(payload["version_id"]),
+            source_config_id=cast(str | None, payload["source_config_id"]),
+            version_number=cast(int | None, payload["version"]),
+            version_label=str(payload["version_label"]),
+            status=str(payload["status"]),
+            snapshot=cast(dict[str, Any], payload["snapshot"]),
+            updated_at=_datetime_or_none(version.source_updated_at),
+        )
+
+    @staticmethod
+    def _audit_record(audit: ConfigBundleAuditLog) -> ConfigAuditRecord:
+        return ConfigAuditRecord(
+            audit_id=str(audit.id),
+            bundle_key=str(audit.bundle_key),
+            version_id=str(audit.version_id) if audit.version_id else None,
+            action=cast(LifecycleAction, audit.action),
+            actor_id=str(audit.actor_id) if audit.actor_id else None,
+            before_version=cast(int | None, audit.before_version),
+            after_version=cast(int | None, audit.after_version),
+            reason=str(audit.reason),
+            trace_id=str(audit.trace_id) if audit.trace_id else None,
+            created_at=_datetime_or_none(audit.created_at),
+            before_snapshot=cast(
+                dict[str, Any] | None,
+                audit.before_snapshot_json,
+            ),
+            after_snapshot=cast(
+                dict[str, Any] | None,
+                audit.after_snapshot_json,
+            ),
+        )
 
     def _queue_audit(
         self,

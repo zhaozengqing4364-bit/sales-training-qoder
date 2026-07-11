@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from types import MappingProxyType
 from typing import Any, Protocol
 
 from common.error_handling.result import Result
@@ -25,23 +26,43 @@ class EvaluationScenarioResult:
     session_id: str
     generated_at: datetime
     overall_score: float
-    dimension_scores: list[EvaluationDimensionResult] = field(default_factory=list)
-    stage_summaries: list[dict[str, Any]] = field(default_factory=list)
-    key_strengths: list[str] = field(default_factory=list)
-    key_improvements: list[str] = field(default_factory=list)
+    dimension_scores: tuple[EvaluationDimensionResult, ...] = field(default_factory=tuple)
+    stage_summaries: tuple[Mapping[str, object], ...] = field(default_factory=tuple)
+    key_strengths: tuple[str, ...] = field(default_factory=tuple)
+    key_improvements: tuple[str, ...] = field(default_factory=tuple)
     detailed_feedback: str = ""
-    recommendations: list[str] = field(default_factory=list)
+    recommendations: tuple[str, ...] = field(default_factory=tuple)
     ruleset_id: str | None = None
     ruleset_version: str | None = None
     score_basis: str | None = None
     ruleset_source: str | None = None
-    scoring_metadata: dict[str, Any] | None = None
+    scoring_metadata: Mapping[str, object] | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "dimension_scores", tuple(self.dimension_scores))
+        object.__setattr__(
+            self,
+            "stage_summaries",
+            tuple(_freeze_mapping(item) for item in self.stage_summaries),
+        )
+        object.__setattr__(self, "key_strengths", tuple(self.key_strengths))
+        object.__setattr__(self, "key_improvements", tuple(self.key_improvements))
+        object.__setattr__(self, "recommendations", tuple(self.recommendations))
+        if self.scoring_metadata is not None:
+            object.__setattr__(
+                self,
+                "scoring_metadata",
+                _freeze_mapping(self.scoring_metadata),
+            )
 
 
 @dataclass(frozen=True, slots=True)
 class EvaluationScenarioInput:
     evidence: SessionEvidence
-    options: dict[str, Any] = field(default_factory=dict)
+    options: Mapping[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "options", _freeze_mapping(self.options))
 
 
 class EvaluationScenarioPort(Protocol):
@@ -103,3 +124,17 @@ class EvaluationScenarioRegistry:
     @staticmethod
     def _normalize(scenario_type: str) -> str:
         return str(scenario_type or "").strip().lower()
+
+
+def _freeze_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        return _freeze_mapping(value)
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_value(item) for item in value)
+    return value
+
+
+def _freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
+    return MappingProxyType(
+        {str(key): _freeze_value(item) for key, item in value.items()}
+    )

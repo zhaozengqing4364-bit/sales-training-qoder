@@ -35,6 +35,18 @@ class ConfigBundleLifecycleService:
     async def disable(...) -> ConfigLifecycleResult: ...
 
 @dataclass(frozen=True, slots=True)
+class ConfigVersionRecord:
+    version_id: str
+    source_config_id: str | None
+    version_number: int | None
+    snapshot: Mapping[str, FrozenJson]
+
+class ConfigLifecyclePersistence(Protocol):
+    async def load_active_version(...) -> ConfigVersionRecord | None: ...
+    async def publish_version(...) -> ConfigVersionRecord: ...
+    async def append_audit(decision: ConfigAuditDecision) -> ConfigAuditRecord: ...
+
+@dataclass(frozen=True, slots=True)
 class SessionEvidence:
     session_id: str
     scenario_type: str | None
@@ -65,11 +77,14 @@ Legacy authority. A request constructs exactly one authority and never shadow-wr
 
 ### Configuration Governance
 
-- The neutral package owns lifecycle interfaces, rollout and immutable binding DTOs.
+- The neutral package owns lifecycle sequencing, projection invocation, audit decisions, rollout and
+  recursively immutable result/binding DTOs. A frozen dataclass containing mutable `list`/`dict`
+  fields does not satisfy this contract.
 - Admin is the delivery/composition and SQLAlchemy adapter. The neutral package imports no Admin,
   ORM or `common`, which keeps it outside the legacy SCC.
-- API routes own commit/rollback and preserve existing response envelopes. Lifecycle methods flush
-  and queue audit/version/projection rows but do not silently commit.
+- The persistence port returns `ConfigVersionRecord` / `ConfigAuditRecord`, never an ORM row or an
+  `Any` entity handle. Admin's SQLAlchemy adapter flushes version/audit/projection rows; API routes own
+  commit/rollback and preserve existing response envelopes without refreshing domain records.
 - Curriculum and Evaluation resolve immutable `bundle_id/version_id` projections through local read
   adapters; neither imports Admin lifecycle.
 
@@ -124,6 +139,9 @@ Legacy authority. A request constructs exactly one authority and never shadow-wr
   `test_roleplay_contracts.py`, `test_frozen_asset_ref_compilation.py`.
 - Config lifecycle/HTTP/RBAC/audit/projection: `test_config_bundle_roleplay_situation_packs.py`,
   `test_config_bundle_lifecycle_contract.py`, `test_situation_pack_projection_sync.py`.
+- Lifecycle ownership: a fake persistence port must prove the neutral core orders
+  `ensure -> before -> mutate -> projection -> audit`; immutable-result tests must reject nested
+  collection mutation.
 - Registry/Evidence/Presentation/report single writer: `test_gate4_domain_ownership.py`,
   `test_comprehensive_report_service.py`, `test_presentation_report_flow.py`,
   `test_report_generation_trigger.py`.

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from configuration_governance.contracts import ConfigLifecycleBackend
+from configuration_governance.contracts import ConfigLifecyclePersistence
 
 
-class AsyncConfigLifecyclePersistence(ConfigLifecycleBackend, Protocol):
+class AsyncConfigLifecyclePersistence(ConfigLifecyclePersistence, Protocol):
     """Structural contract implemented by the delivery layer's SQLAlchemy adapter."""

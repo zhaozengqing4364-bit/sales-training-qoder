@@ -1380,7 +1380,8 @@ class TestPresentationReportService:
         service._load_report_context.assert_awaited_once_with("session-report-001")
         assert report.overall_score == 88.0
         assert report.dimension_scores[0].name == "流畅连贯性"
-        assert report.stage_summaries == payload["page_summaries"]
-        assert report.key_strengths == ["表达流畅"]
-        assert report.key_improvements == ["补齐价值方案"]
-        assert report.recommendations == ["每页准备两个必须讲到的关键词。"]
+        assert report.stage_summaries[0]["page_number"] == 1
+        assert report.stage_summaries[0]["key_points"] == ("客户痛点",)
+        assert report.key_strengths == ("表达流畅",)
+        assert report.key_improvements == ("补齐价值方案",)
+        assert report.recommendations == ("每页准备两个必须讲到的关键词。",)

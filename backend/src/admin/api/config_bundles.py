@@ -29,6 +29,7 @@ from common.api.response import error_response, success_response
 from common.business_rules.validators import BusinessRuleValidationError
 from common.db.models import User
 from common.db.session import get_db
+from configuration_governance.contracts import ConfigAuditRecord, thaw_json
 
 router = APIRouter(prefix="/config-bundles", tags=["admin-config-bundles"])
 
@@ -75,7 +76,7 @@ def _version_payload(snapshot: ConfigVersionSnapshot) -> dict[str, Any]:
         "version": snapshot.version,
         "version_label": snapshot.version_label,
         "status": snapshot.status,
-        "snapshot": snapshot.snapshot,
+        "snapshot": thaw_json(snapshot.snapshot),
         "created_at": snapshot.created_at.isoformat() if snapshot.created_at else None,
         "updated_at": snapshot.updated_at.isoformat() if snapshot.updated_at else None,
     }
@@ -91,7 +92,7 @@ def _bundle_payload(bundle: ConfigBundleSnapshot) -> dict[str, Any]:
         "read_path": bundle.read_path,
         "admin_entry": bundle.admin_entry,
         "status": bundle.status,
-        "overview": bundle.overview,
+        "overview": thaw_json(bundle.overview),
         "active_version": _version_payload(bundle.active_version)
         if bundle.active_version
         else None,
@@ -108,15 +109,15 @@ def _not_found() -> JSONResponse:
     )
 
 
-def _audit_payload(audit: Any) -> dict[str, Any] | None:
+def _audit_payload(audit: ConfigAuditRecord | None) -> dict[str, Any] | None:
     if audit is None:
         return None
     return {
-        "id": str(audit.id),
+        "id": audit.audit_id,
         "bundle_key": audit.bundle_key,
         "version_id": str(audit.version_id) if audit.version_id else None,
         "action": audit.action,
-        "actor": str(audit.actor_id) if audit.actor_id else None,
+        "actor": audit.actor_id,
         "before_version": audit.before_version,
         "after_version": audit.after_version,
         "reason": audit.reason,
@@ -197,10 +198,6 @@ async def create_config_bundle_draft(
             reason=payload.reason,
         )
         await db.commit()
-        if result.version is not None:
-            await db.refresh(result.version)
-        if result.audit is not None:
-            await db.refresh(result.audit)
         return success_response(
             {
                 "version": service.version_snapshot(result.version),
@@ -228,9 +225,7 @@ async def validate_config_bundle_value(
             reason=payload.reason,
         )
         await db.commit()
-        if result.audit is not None:
-            await db.refresh(result.audit)
-        data = dict(result.validation or {})
+        data = thaw_json(result.validation or {})
         data["audit"] = _audit_payload(result.audit)
         return success_response(data)
     except (BusinessRuleValidationError, ValueError) as exc:
@@ -254,9 +249,7 @@ async def preview_config_bundle_value(
             reason=payload.reason,
         )
         await db.commit()
-        if result.audit is not None:
-            await db.refresh(result.audit)
-        data = dict(result.preview or {})
+        data = thaw_json(result.preview or {})
         data["audit"] = _audit_payload(result.audit)
         return success_response(data)
     except (BusinessRuleValidationError, ValueError) as exc:
@@ -280,10 +273,6 @@ async def publish_config_bundle_version(
             reason=payload.reason,
         )
         await db.commit()
-        if result.version is not None:
-            await db.refresh(result.version)
-        if result.audit is not None:
-            await db.refresh(result.audit)
         return success_response(
             {
                 "version": service.version_snapshot(result.version),
@@ -312,10 +301,6 @@ async def rollback_config_bundle_version(
             reason=payload.reason,
         )
         await db.commit()
-        if result.version is not None:
-            await db.refresh(result.version)
-        if result.audit is not None:
-            await db.refresh(result.audit)
         return success_response(
             {
                 "version": service.version_snapshot(result.version),
@@ -342,10 +327,6 @@ async def disable_config_bundle_version(
             reason=payload.reason,
         )
         await db.commit()
-        if result.version is not None:
-            await db.refresh(result.version)
-        if result.audit is not None:
-            await db.refresh(result.audit)
         return success_response(
             {
                 "version": service.version_snapshot(result.version),

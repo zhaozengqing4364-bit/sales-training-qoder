@@ -111,3 +111,19 @@
   Task 7 pytest working directory. Re-audit result is hard finding=0, advisory finding=0. Architecture
   plus migration-progress is 28 passed, direct guard passes, Trellis JSONL is 14/14 valid and
   `git diff --check` is clean.
+- Task 8 first Brooks audit found two structural gaps that were not visible in the dependency count:
+  Configuration Governance was a shallow forwarding façade that returned ORM entities through `Any`,
+  and frozen Evaluation DTOs still contained mutable nested collections. Regression tests first failed
+  as `2 failed, 9 passed`. The neutral core now owns ensure/load/mutate/projection/audit ordering over a
+  persistence capability, returns recursively immutable version/audit records, and the Admin HTTP layer
+  maps those records without ORM refresh. Evaluation/config DTOs recursively freeze mappings and
+  sequences, then explicitly copy at the persistence/wire boundary.
+- Task 8 Brooks repair verification: ownership suite `11 passed`; complete ConfigBundle/Situation Pack
+  focused inventory `44 passed`; Evaluation/Presentation/Gate 4 matrix `61 passed`; combined
+  config/evaluation/architecture matrix `94 passed`. Full Ruff over `src` and `tests` passed; full mypy
+  passed for 662 source files; architecture guard passed. Final Brooks re-audit is 100/100 with
+  Critical=0, Warning=0, Suggestion=0.
+- Independent Trellis check verified PRD/spec/data-flow/reuse/dependency consistency with blocking
+  finding=0. CodeGraph was synchronized and conservatively selected 208 affected tests; the focused
+  matrices above are green and the canonical gate remains the complete selection/coverage authority.
+  The durable immutable-record and lifecycle-ordering contract was added to the Gate 4 Trellis spec.

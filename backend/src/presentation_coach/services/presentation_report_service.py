@@ -166,12 +166,12 @@ class PresentationReportService:
                 session_id=session_id,
                 generated_at=datetime.now(UTC),
                 overall_score=review["overall_score"],
-                dimension_scores=dimension_scores,
-                stage_summaries=review["page_summaries"],
-                key_strengths=review["strengths"],
-                key_improvements=review["improvements"],
+                dimension_scores=tuple(dimension_scores),
+                stage_summaries=tuple(review["page_summaries"]),
+                key_strengths=tuple(review["strengths"]),
+                key_improvements=tuple(review["improvements"]),
                 detailed_feedback=review["detailed_feedback"],
-                recommendations=review["recommendations"],
+                recommendations=tuple(review["recommendations"]),
                 ruleset_id=(
                     scoring_metadata.get("ruleset_id") if scoring_metadata else None
                 ),

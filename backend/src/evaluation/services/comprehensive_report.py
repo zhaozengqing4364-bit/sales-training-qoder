@@ -332,7 +332,11 @@ class ComprehensiveReportService:
             ruleset_version=result.ruleset_version,
             score_basis=result.score_basis,
             ruleset_source=result.ruleset_source,
-            scoring_metadata=result.scoring_metadata,
+            scoring_metadata=(
+                dict(result.scoring_metadata)
+                if result.scoring_metadata is not None
+                else None
+            ),
         )
 
     async def get_report(

@@ -10,7 +10,10 @@ from admin.config_bundles.composition import (
     LegacyConfigBundleLifecycleService,
     build_config_bundle_lifecycle,
 )
-from configuration_governance.contracts import ConfigLifecycleResult
+from configuration_governance.contracts import (
+    ConfigLifecycleResult,
+    ConfigVersionRecord,
+)
 
 
 class ConfigBundleLifecycleService:
@@ -109,10 +112,14 @@ class ConfigBundleLifecycleService:
             reason=reason,
         )
 
-    async def resolve_active_version(self, bundle_key: str) -> Any | None:
+    async def resolve_active_version(
+        self, bundle_key: str
+    ) -> ConfigVersionRecord | None:
         return await self._authority.resolve_active_version(bundle_key)
 
-    def version_snapshot(self, version: Any | None) -> dict[str, Any] | None:
+    def version_snapshot(
+        self, version: ConfigVersionRecord | None
+    ) -> dict[str, Any] | None:
         return self._authority.version_snapshot(version)
 
 

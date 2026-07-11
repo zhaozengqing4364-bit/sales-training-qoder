@@ -429,12 +429,12 @@ architecture guard, Trellis, CodeGraph.
 - Consumes every prior task and the unique canonical quality gate.
 - Produces review finding=0, clean-start gate evidence, commits, archive and journal.
 
-- [ ] **Step 1: Run whole-branch Brooks Architecture Audit**
+- [x] **Step 1: Run whole-branch Brooks Architecture Audit**
 
   Audit dependency direction, deep-module interfaces, compatibility ownership, hidden coupling and test
   quality. Fix all Critical/Important findings and repeat until zero.
 
-- [ ] **Step 2: Run independent Trellis check**
+- [x] **Step 2: Run independent Trellis check**
 
   Verify PRD/spec/context compliance, cross-layer data flow, reuse, Ruff, mypy, focused tests and
   architecture. Fix/repeat until blocking finding=0.

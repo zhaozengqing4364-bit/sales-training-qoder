@@ -430,3 +430,145 @@ def test_presentation_realtime_retains_only_named_sales_handler_seam() -> None:
     assert compatibility_heartbeat is build_heartbeat_event
     assert compatibility_extract_response_text is extract_response_text
     assert compatibility_save_message is save_stepfun_message
+
+
+@pytest.mark.asyncio
+async def test_configuration_governance_core_owns_publish_orchestration() -> None:
+    from configuration_governance.contracts import (
+        ConfigAuditRecord,
+        ConfigVersionRecord,
+    )
+    from configuration_governance.lifecycle import ConfigBundleLifecycleService
+
+    before = ConfigVersionRecord(
+        version_id="version-before",
+        source_config_id="source-before",
+        version_number=1,
+        version_label="v1",
+        status="published",
+        snapshot={"version": "v1"},
+        updated_at=datetime(2026, 7, 11, tzinfo=UTC),
+    )
+    after = ConfigVersionRecord(
+        version_id="version-after",
+        source_config_id="source-after",
+        version_number=2,
+        version_label="v2",
+        status="published",
+        snapshot={"version": "v2"},
+        updated_at=datetime(2026, 7, 11, tzinfo=UTC),
+    )
+
+    class FakePersistence:
+        def __init__(self) -> None:
+            self.events: list[str] = []
+            self.audit_decision: Any | None = None
+
+        async def ensure_bundle(self, bundle_key: str) -> None:
+            self.events.append(f"ensure:{bundle_key}")
+
+        async def load_active_version(
+            self, bundle_key: str
+        ) -> ConfigVersionRecord | None:
+            self.events.append(f"active:{bundle_key}")
+            return before
+
+        async def publish_version(
+            self,
+            *,
+            bundle_key: str,
+            actor_id: str,
+            config_id: str | None,
+            reason: str | None,
+        ) -> ConfigVersionRecord:
+            assert reason == "publish v2"
+            self.events.append(f"publish:{bundle_key}:{actor_id}:{config_id}")
+            return after
+
+        async def sync_projection(
+            self,
+            *,
+            bundle_key: str,
+            actor_id: str,
+            version: ConfigVersionRecord,
+            lifecycle_action: str,
+        ) -> dict[str, Any] | None:
+            self.events.append(f"projection:{lifecycle_action}:{version.version_id}")
+            return {"status": "ok", "lifecycle_action": lifecycle_action}
+
+        async def append_audit(self, decision: Any) -> ConfigAuditRecord:
+            self.events.append(f"audit:{decision.action}")
+            self.audit_decision = decision
+            return ConfigAuditRecord(
+                audit_id="audit-1",
+                bundle_key=decision.bundle_key,
+                version_id=decision.version_id,
+                action=decision.action,
+                actor_id=decision.actor_id,
+                before_version=decision.before_version,
+                after_version=decision.after_version,
+                reason=decision.reason,
+                trace_id="trace-1",
+                created_at=datetime(2026, 7, 11, tzinfo=UTC),
+            )
+
+    persistence = FakePersistence()
+    result = await ConfigBundleLifecycleService(persistence).publish(
+        bundle_key="roleplay.situation_packs.ruleset",
+        actor_id="actor-1",
+        config_id="source-after",
+        reason="publish v2",
+    )
+
+    assert persistence.events == [
+        "ensure:roleplay.situation_packs.ruleset",
+        "active:roleplay.situation_packs.ruleset",
+        "publish:roleplay.situation_packs.ruleset:actor-1:source-after",
+        "projection:publish:version-after",
+        "audit:publish",
+    ]
+    assert result.version == after
+    assert result.audit is not None
+    assert persistence.audit_decision.before_version == 1
+    assert persistence.audit_decision.after_version == 2
+    assert persistence.audit_decision.after_snapshot["projection_sync"] == {
+        "status": "ok",
+        "lifecycle_action": "publish",
+    }
+
+
+def test_evaluation_scenario_value_objects_are_deeply_immutable() -> None:
+    from evaluation.ports.evidence import SessionEvidence
+    from evaluation.ports.scenario import (
+        EvaluationScenarioInput,
+        EvaluationScenarioResult,
+    )
+
+    result = EvaluationScenarioResult(
+        session_id="immutable-session",
+        generated_at=datetime(2026, 7, 11, tzinfo=UTC),
+        overall_score=80.0,
+        dimension_scores=[],
+        stage_summaries=[{"stage": 1, "points": ["a"]}],
+        key_strengths=["clear"],
+        scoring_metadata={"source": {"kind": "published"}},
+    )
+    scenario_input = EvaluationScenarioInput(
+        evidence=SessionEvidence(
+            session_id="immutable-session",
+            scenario_type="presentation",
+            transcript="user: hello",
+        ),
+        options={"rules": ["strict"]},
+    )
+
+    with pytest.raises(AttributeError):
+        result.dimension_scores.append(  # type: ignore[attr-defined]
+            object()
+        )
+    with pytest.raises(TypeError):
+        result.stage_summaries[0]["stage"] = 2  # type: ignore[index]
+    with pytest.raises(TypeError):
+        result.scoring_metadata["source"]["kind"] = "default"  # type: ignore[index,union-attr]
+    with pytest.raises(TypeError):
+        scenario_input.options["rules"] = ()  # type: ignore[index]
