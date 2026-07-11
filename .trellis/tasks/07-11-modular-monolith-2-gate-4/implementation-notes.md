@@ -150,3 +150,13 @@
   read a public-host `.env.local`, so login cookies and API calls targeted another host and returned
   401. `dev-smoke-up.sh` now explicitly injects loopback API/WS build inputs while preserving the user's
   `.env.local`. Script/unit regression is `7 passed`; exact generic Playwright is `3 passed`.
+- The fourth clean-start canonical attempt exited naturally with code 0. Backend unit+contract was
+  `3287 passed, 1 skipped`; full mypy checked 662 source files; Vitest was 209 files / `1329 passed,
+  6 skipped`; generic/smoke/newcomer/presentation/sales Playwright was `3/9/11/2/1 passed`, with the
+  existing newcomer real-provider case conditionally skipped; selected backend integration/E2E was
+  `598 passed, 21 skipped`. Changed executable coverage was 4898/5519 (88.75%), every critical changed
+  branch source line was covered and no adoption floor regressed. The final line was exactly
+  `Critical quality gate passed`.
+- Canonical browser/audit and NFR outputs were restored after verification because they are generated
+  evidence owned by their archived tasks, not Gate 4 source changes. The user's unrelated readiness
+  plan remains the only pre-existing working-tree modification.

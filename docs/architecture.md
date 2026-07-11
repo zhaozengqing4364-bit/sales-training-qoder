@@ -357,6 +357,14 @@ Gate 4 已在 Gate 3 Provider/Grounding 基础上迁移 message persistence、Ro
 `presentation_coach -> sales_bot` 实际依赖和 architecture policy 临时例外仍存在；Gate 6 以
 import graph 证明边消失后才能退役，不能因 Port/Module 已中立化而提前删除。
 
+Gate 4 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
+`3287 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
+generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 仅保留 1 个既有
+真实 Provider 条件 skip）；selected backend integration/E2E `598 passed, 21 skipped`；changed
+executable lines 4898/5519（88.75%），critical branch 无 changed missing line、无 adoption floor
+回退，最终输出 `Critical quality gate passed`。Brooks architecture audit 100/100 且 finding=0，
+独立 Trellis check blocking finding=0。
+
 Gate 2 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
 `2903 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
 generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 仅保留 1 个既有
@@ -1014,8 +1022,10 @@ TrainingTask 1──0..N PracticeSession 1──0..N ConversationMessage
 - 保留已经消失的临时例外；
 - 使用缺少治理字段、日期无效或已过期的例外。
 
-当前实测仍有 49 条跨包边，以及一个包含 12 个包的历史 SCC；`supervisor` 当前在该
-SCC 之外。因此这里描述的是受控迁移状态，不是声称代码已满足无环结构。历史 SCC
+Gate 4 完成后当前实测为 15 个包、52 条跨包边，以及一个包含 7 个包的历史 SCC：
+`agent, common, curriculum_practice, evaluation, prompt_templates, sales_trainer, support`。
+`roleplay` 与 `configuration_governance` 均无向外包边。因此这里描述的是受控迁移状态，
+不是声称代码已满足无环结构。历史 SCC
 允许拆分和缩小，但不得扩大。每删除一条临时边，必须在同一变更中收缩 policy。
 非字面量 plugin path 不由 AST 猜测，继续由 runtime plugin contract 测试保护。
 
@@ -1082,7 +1092,7 @@ Next.js (端口 3445)
 | `2026-05-11-architecture-boundary-domain-contract` | 领域边界与契约锁定（PRD #23） |
 | `2026-05-11-curriculum-practice-boundary-contract` | 课程考核模块边界契约 |
 | `2026-05-12-case-item-role-profile-pilot-contract` | 案例/角色/画像试点契约 |
-| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2–3 已闭环，Gate 4 实现完成/closure 待验，Gate 5–6 待完成 |
+| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2–4 已闭环，Gate 5–6 待完成 |
 
 详见 `docs/adr/`。
 

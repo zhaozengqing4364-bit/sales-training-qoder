@@ -1,7 +1,7 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，分 Gate 实施中（Gate 0A–3 已完成；Gate 4 implementation complete / closure pending）
+状态：已批准，分 Gate 实施中（Gate 0A–4 已完成；Gate 5–6 待实施）
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 
 实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
@@ -25,8 +25,13 @@ canonical gate 自然 exit 0，backend `3271 passed, 1 skipped`、Vitest 209 fil
 `3/9/11/2/1 passed`（newcomer 1 个既有真实 Provider 条件 skip）、selected backend
 `598 passed, 21 skipped`、changed executable lines 3441/3868（88.96%），critical branch 无
 changed missing line 或 adoption floor 回退，最终输出 `Critical quality gate passed`。Gate 4
-领域所有权实现已完成但仍待 closure canonical gate；Gate 5–6 按路线图推进，本文件的目标架构
-尚未整体落地。
+已于 2026-07-11 完成领域所有权迁移和 closure：clean-start canonical gate 为 backend
+`3287 passed, 1 skipped`、Vitest 209 files / `1329 passed, 6 skipped`、Playwright
+generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 1 个既有真实 Provider
+条件 skip）、selected backend `598 passed, 21 skipped`、changed executable lines
+4898/5519（88.75%），critical branch 无 changed missing line 或 adoption floor 回退，最终输出
+`Critical quality gate passed`。Brooks architecture audit 100/100、独立 Trellis check blocking
+finding=0。Gate 5–6 按路线图推进，本文件的目标架构尚未整体落地。
 
 ## 1. 背景
 

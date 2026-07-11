@@ -439,13 +439,13 @@ architecture guard, Trellis, CodeGraph.
   Verify PRD/spec/context compliance, cross-layer data flow, reuse, Ruff, mypy, focused tests and
   architecture. Fix/repeat until blocking finding=0.
 
-- [ ] **Step 3: Run one clean-start canonical gate**
+- [x] **Step 3: Run one clean-start canonical gate**
 
   Run `bash scripts/critical-quality-gate.sh` from repository root and wait for natural exit. Preserve
   exact backend/Vitest/Playwright/selected/coverage counts and final line. Diagnose any failure with
   Red → Green → Refactor; never skip or weaken assertions.
 
-- [ ] **Step 4: Close authority documents and Trellis state**
+- [x] **Step 4: Close authority documents and Trellis state**
 
   Check all PRD/plan criteria, record exact evidence, validate JSONL, commit task files excluding the
   user's readiness edit, archive the task and add the journal session. Then continue directly to Gate 5.

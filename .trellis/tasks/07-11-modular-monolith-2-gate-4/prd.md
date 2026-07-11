@@ -65,24 +65,24 @@ REST、WebSocket、冻结快照、Roleplay hash、评分和报告完全兼容。
 
 ## Acceptance Criteria
 
-- [ ] Golden fixtures 证明迁移前后 Roleplay/Situation Pack hash、frozen snapshot、disclosure、
+- [x] Golden fixtures 证明迁移前后 Roleplay/Situation Pack hash、frozen snapshot、disclosure、
       compliance decision 完全一致。
-- [ ] `roleplay` public API 可被 Curriculum、Sales、Presentation、Evaluation 使用，且其 AST
+- [x] `roleplay` public API 可被 Curriculum、Sales、Presentation、Evaluation 使用，且其 AST
       imports 不含任何场景/Admin package。
-- [ ] Neutral compiler 通过发布/legacy/缺资产/版本冲突/prompt 冲突/visible-hidden/trigger matrix；
+- [x] Neutral compiler 通过发布/legacy/缺资产/版本冲突/prompt 冲突/visible-hidden/trigger matrix；
       Legacy flag differential 无差异。
-- [ ] `configuration_governance` lifecycle 覆盖 draft/validate/preview/publish/rollback/disable、审计、
+- [x] `configuration_governance` lifecycle 覆盖 draft/validate/preview/publish/rollback/disable、审计、
       Situation Pack projection，并与现有 Admin API contract 一致。
-- [ ] Admin API 只做 delivery/permission/transaction；Evaluation/Curriculum 实际 import graph 不再
+- [x] Admin API 只做 delivery/permission/transaction；Evaluation/Curriculum 实际 import graph 不再
       指向 Admin。
-- [ ] Evaluation ports 覆盖 Sales 和 Presentation；缺 Evidence 返回 non-evaluable，报告 writer
+- [x] Evaluation ports 覆盖 Sales 和 Presentation；缺 Evidence 返回 non-evaluable，报告 writer
       仍幂等且 Presentation payload differential 一致。
-- [ ] AST inventory 中不存在 `evaluation -> admin/curriculum_practice/presentation_coach/sales_bot`。
-- [ ] 新场景可通过注册 `ScenarioEvaluationPort` 接入，无须修改 Sales runtime 或 Evaluation core。
-- [ ] architecture guard 通过、SCC 不扩大、消失 exception 同提交删除。
-- [ ] Roleplay/config/evaluation focused tests、affected tests、unit+contract、Vitest、selected E2E 和
+- [x] AST inventory 中不存在 `evaluation -> admin/curriculum_practice/presentation_coach/sales_bot`。
+- [x] 新场景可通过注册 `ScenarioEvaluationPort` 接入，无须修改 Sales runtime 或 Evaluation core。
+- [x] architecture guard 通过、SCC 不扩大、消失 exception 同提交删除。
+- [x] Roleplay/config/evaluation focused tests、affected tests、unit+contract、Vitest、selected E2E 和
       changed coverage 均满足 canonical gate。
-- [ ] Brooks audit 和 Trellis check 阻塞 finding=0，文档/ADR/roadmap/Trellis/代码事实一致。
+- [x] Brooks audit 和 Trellis check 阻塞 finding=0，文档/ADR/roadmap/Trellis/代码事实一致。
 
 ## Definition of Done
 

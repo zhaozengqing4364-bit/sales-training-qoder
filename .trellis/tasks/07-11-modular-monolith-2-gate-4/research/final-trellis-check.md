@@ -57,3 +57,18 @@ remains non-evaluable; projection failure remains attached to the audit snapshot
 
 No debug output, warning suppression, production schema change, dependency addition, external call,
 production write, route change or untracked migration was found.
+
+## Post-canonical closure recheck
+
+Canonical diagnosis added only three guarded harness/composition repairs after the first check:
+
+- scoring router composition preserves the committed OpenAPI byte-for-byte while Evaluation keeps no
+  Admin implementation import;
+- all seven Playwright invocations share one conditional local-library seam without download or skip;
+- smoke Next startup explicitly receives loopback API/WS inputs instead of inheriting `.env.local`.
+
+Their focused regression is `15 passed` for route/OpenAPI ownership, `7 passed` for harness contracts,
+and exact generic Playwright `3 passed`. The fourth clean-start canonical run then passed backend
+`3287 passed, 1 skipped`, Vitest `1329 passed, 6 skipped`, Playwright `3/9/11/2/1 passed`, selected
+backend `598 passed, 21 skipped`, and changed coverage 4898/5519 (88.75%), ending with
+`Critical quality gate passed`. Final blocking finding remains 0.

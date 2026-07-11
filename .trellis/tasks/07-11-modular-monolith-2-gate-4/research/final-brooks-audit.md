@@ -2,7 +2,7 @@
 
 **Mode:** Architecture Audit
 
-**Scope:** Incremental audit — Gate 4 modules touched since `5647155c` (82 files, excluding the user's unrelated dirty plan), with the complete 15-package dependency policy graph re-evaluated
+**Scope:** Incremental audit — final Gate 4 branch state since `5647155c` (90 files, excluding the user's unrelated dirty plan), with the complete 15-package dependency policy graph and the post-audit route/quality-harness repairs re-evaluated
 
 **Health Score:** 100/100
 
@@ -124,6 +124,11 @@ Gate 1A 的 12-package baseline SCC 已单调收缩为 7-package 历史 SCC
 倒置、隐藏具体场景导入、重复 authority 或可变 Evidence 边界。残余 7-package SCC 是已记录且
 单调缩小的 Gate 5 输入，不影响 Gate 4 的增量闭环判定。
 
+Canonical gate 期间新增的三项修复已在最终分支状态复审：root composition 仅恢复既有 scoring
+router 的 OpenAPI 顺序/标签且未让 Evaluation 反向导入 Admin；`run_playwright` 只吸收宿主动态库
+差异；smoke 入口只冻结 loopback public build inputs。它们均有聚焦合同测试，不新增领域权威、
+跨包边、运行时分支或永久 skip，因此最终 finding 仍为 0。
+
 ## Fix Summary
 
 | Finding | Tier | Target File | Action |
@@ -138,4 +143,7 @@ Gate 1A 的 12-package baseline SCC 已单调收缩为 7-package 历史 SCC
 - Config lifecycle/HTTP/projection matrix：`14 passed`。
 - Evaluation/Presentation/Gate 4 matrix：`61 passed`。
 - Combined architecture-focused matrix：`94 passed`；architecture guard satisfied。
-- Ruff passed；mypy passed for 16 focused source files。
+- Ruff passed；mypy passed for 662 source files。
+- Final clean-start canonical gate: backend `3287 passed, 1 skipped`; Vitest `1329 passed,
+  6 skipped`; Playwright `3/9/11/2/1 passed`; selected backend `598 passed, 21 skipped`; changed
+  coverage 4898/5519（88.75%）；final line `Critical quality gate passed`。

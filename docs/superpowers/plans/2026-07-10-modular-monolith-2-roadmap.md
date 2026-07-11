@@ -20,7 +20,7 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 | 1B | Completed（2026-07-11） | 唯一 release gate 从头自然 exit 0；backend 2665 passed；Vitest 209 files / 1329 passed；全部本地 Playwright、598 个 selected backend 测试和 82% changed coverage 通过 |
 | 2 | Completed（2026-07-11） | Presentation Engine tracer bullet 默认启用、单 flag 可回滚；canonical gate backend 2903 passed、Vitest 1329 passed、全部本地 Playwright、598 个 selected backend 测试和 91.34% changed coverage 通过 |
 | 3 | Completed（2026-07-11） | Provider Port/StepFun codec/Fake contract 与单 Grounding authority 已闭环；Brooks/Trellis review finding=0；canonical gate backend 3271、Vitest 1329、selected backend 598、changed coverage 88.96% 全绿 |
-| 4 | Implementation complete / closure pending | Roleplay、Config Governance、Evaluation ports 与中立 realtime helpers 已落地；5 条反向边清零，SCC 从 12 包缩至 7 包；待 Brooks/Trellis 与 canonical gate |
+| 4 | Completed（2026-07-11） | Roleplay、Config Governance、Evaluation ports 与中立 realtime helpers 已闭环；5 条反向边清零，SCC 从 12 包缩至 7 包；Brooks 100/100、Trellis blocker=0；canonical backend 3287、Vitest 1329、selected backend 598、changed coverage 88.75% 全绿 |
 | 5–6 | Not started | 按顺序实施前端/模型 Locality 和兼容层退役 |
 
 Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进度，不把已批准的目标
@@ -204,12 +204,18 @@ executable lines 3441/3868（88.96%），critical branch 无 changed missing lin
 
 ## Gate 4：Roleplay、配置与评估所有权
 
-状态：**Implementation complete / closure pending（2026-07-11）**。中立 `roleplay` 和
+状态：**Completed（2026-07-11 UTC）**。中立 `roleplay` 和
 `configuration_governance` bounded context、Evaluation Evidence/Scenario frozen registry、
 Presentation/root adapter、ConfigVersion read binding 以及 `training_runtime.realtime` 中立 helper
 已落地。`curriculum_practice -> admin` 与 Evaluation 的四条反向边全部消失；实际 SCC 从 Gate 1A
-的 12 包缩至 7 包。聚焦 Roleplay、Config、Evaluation、Realtime 与 architecture matrices 全绿，
-最终 Brooks/Trellis review 和 clean-start canonical gate 仍由 closure Task 8 执行。
+的 12 包缩至 7 包。聚焦 Roleplay、Config、Evaluation、Realtime 与 architecture matrices 全绿。
+Brooks architecture audit 100/100 且 Critical/Warning/Suggestion=0，独立 Trellis check blocking
+finding=0。最终 clean-start canonical gate 自然 exit 0：backend unit+contract
+`3287 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
+generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 保留 1 个既有真实
+Provider 条件 skip）；selected backend integration/E2E `598 passed, 21 skipped`；changed
+executable lines 4898/5519（88.75%），critical branch 无 changed missing line 或 adoption floor
+回退，最终输出 `Critical quality gate passed`。
 
 变更包建议：
 
@@ -221,7 +227,7 @@ Presentation/root adapter、ConfigVersion read binding 以及 `training_runtime.
 6. Evaluation Evidence/Scenario ports；
 7. 删除 evaluation ↔ sales/presentation/curriculum 反向边。
 
-验收：实现验收已通过；Gate closure 待最终独立审计与 canonical gate。
+验收：**通过**。领域所有权、依赖收缩、完整回归、变更覆盖和独立审计均已闭环。
 
 ## Gate 5：训练闭环与前端 Locality
 

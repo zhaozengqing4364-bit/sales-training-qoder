@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–3 已完成；Gate 4
-implementation 已完成、closure 待最终独立审计与 canonical gate；Gate 5–6 待实施。
+Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–4 已完成；Gate 5–6
+待实施。
 本文描述目标边界和迁移约束，不把尚未完成的物理迁移写成当前事实。
 
 ## 背景
@@ -156,6 +156,20 @@ integration/E2E `598 passed, 21 skipped`；changed executable lines 3441/3868（
 critical branch 无 changed missing line 或 adoption floor 回退，最终输出
 `Critical quality gate passed`。门禁首次暴露的陈旧 `.next/dev` 环境污染/ENOSPC 已以 TDD
 修复为每次 smoke 启动前清理生成 dev state，不修改用户 `.env.local` 或生产构建。
+
+Gate 4 完成事实（2026-07-11 UTC）：中立 `roleplay` 拥有 compiler/hash/freeze/disclosure/
+Situation Pack contract，`configuration_governance` 拥有 lifecycle ordering、immutable records、
+audit/projection orchestration，Evaluation 只通过 immutable Evidence/Scenario ports 和 root
+composition 消费具体场景。`curriculum_practice -> admin` 与 Evaluation 的四条反向边全部消失；
+15 包、52 条实际边中，历史 SCC 从 12 包收缩为 7 包，且两个新 bounded context 均无向外包边。
+Brooks architecture audit 100/100、Critical/Warning/Suggestion=0，独立 Trellis check blocking
+finding=0。最终 clean-start canonical gate 自然 exit 0：backend unit+contract
+`3287 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
+generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 保留 1 个既有真实
+Provider 条件 skip）；selected backend integration/E2E `598 passed, 21 skipped`；changed
+executable lines 4898/5519（88.75%），critical branch 无 changed missing line 或 adoption floor
+回退，最终输出 `Critical quality gate passed`。本地 Playwright 库与 loopback smoke build inputs
+由门禁显式注入，消除了宿主共享库和 `.env.local` 对 release truth 的环境污染。
 
 ### 8. 使用可验证变更包衡量进度
 
