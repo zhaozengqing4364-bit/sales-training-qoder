@@ -304,6 +304,11 @@ class StepFunRealtimeSharedHandler(
         self._tool_execution = StepFunToolExecutionModule()
         self._upstream_task: asyncio.Task | None = None
         self._upstream_rollover_in_progress = False
+        self._upstream_rollover_lock = asyncio.Lock()
+        self._upstream_rollover_phase = "idle"
+        self._upstream_rollover_reconnect_requested = False
+        self._upstream_rollover_task: asyncio.Task[None] | None = None
+        self._upstream_rollover_token = 0
         self._effective_policy: dict[str, Any] = {}
         self._roleplay_disclosure_state: dict[str, Any] = {}
         self._roleplay_regenerate_attempted_for_turn = False

@@ -8,7 +8,8 @@
 - Review 3 修复 commit：`d9797c88 fix(realtime): close response authority and golden oracle`
 - Review 4 修复 commit：`c060c927 fix(realtime): guard raw events before side effects`
 - Review 5 修复 commit：`c9db7f19 fix(realtime): correlate provider response authority`
-- Review 6 修复 commit：本提交 `fix(realtime): serialize provider response correlation`
+- Review 6 修复 commit：`409be9e5 fix(realtime): serialize provider response correlation`
+- Review 7 修复 commit：本提交 `fix(realtime): linearize provider rollover and receive cancellation`
 - 风险等级：P1（共享 Sales/Presentation realtime 生产 Provider 路径默认切换；保留 server-only
   Legacy 回滚）。
 - 严格只完成 Task 3：未实现 Grounding Module/单 cache（Task 4+），未调用真实收费 Provider，未改
@@ -64,6 +65,18 @@
   KB lock 开启时，顶层变体与嵌套变体保持同一安全 cancel + connection rollover 语义，避免 Provider
   barrier 生效后连接永久不可创建。版本化 Golden raw fixture 已包含顶层 created，并新增
   create-before-SENT、cancel/reconnect、late-old/new-epoch 交错用例。
+- Review 7 对 decode 后等待 provisional send completion 的 receive cancellation 采用 generation
+  fail-closed：首次 `CancelledError` 触发 lifecycle lock 内原子 invalidate，清除并 resolve provisional/
+  pending correlation，generation 立即不可再 create；物理 close 使用既有 cleanup authority 且可承受重复
+  cancellation，close 成功或失败连接进入 retry backlog 后才传播首次 cancellation。并发 send 随后无论
+  SENT/FAILED 都只能返回 rejected；reconnect 后新 generation 可正常 create/bind。
+- handler rollover 改为 lock 只保护 task/token/phase 发布、I/O 全在锁外执行的单一共享 transaction。
+  并发 cancel/interrupt 复用同一 task，只发送一次 cancel/clear、执行一次物理 close/connect、epoch 只加一；
+  caller 单次/重复 cancellation 不取消共享 task，完成后传播首次 cancellation。`draining -> closing ->
+  reconnecting -> idle` phase 保留失败位置，close 或 reconnect 失败后从该位置重试，不重复 epoch advance。
+- `_receive_upstream_events` 每轮 await 前冻结 connection epoch、upstream/provider identity 与 rollover token。
+  await 后旧连接抛出的 Provider/Legacy/JSON/runtime 异常若 identity、epoch 或 token 已变化，则仅作为 stale
+  attempt 忽略，绝不启动 recovery、发 client error 或停止已经建立的新连接。
 - `response.done` 不再注册从未见过的 call；合法 tool 必须先经过受信 `conversation.item.created` 绑定。
   done 中未知/stale call 只过滤 tool side effect，当前 response 仍会 flush、持久化、结束 turn 并回到
   listening。
@@ -198,6 +211,23 @@ Review 6 Red/Green：
    均通过。随后将 no-active safety cancel 加固为同一 close/reconnect barrier，两个 Legacy/Port parity 用例
    隔离 Red `2 failed`、Green `2 passed`，并锁定 epoch rollover。
 
+Review 7 Red/Green：
+
+1. receive cancellation Red：真实 codec 已 decode created 且 receive 正在等待 provisional completion 时，
+   cancel 直接结束 caller，未触发物理 retirement；SENT/FAILED 参数矩阵结果 `2 failed`。Green 后两项均在
+   close gate 释放前保持 pending cleanup，重复 cancel 不打断 retirement，send 结果均 rejected，同
+   generation reconnect 被阻止；close 完成后首次 cancellation 原样传播，新 generation 正常 bind。
+2. concurrent rollover Red：两个同时调用 `_clear_upstream_generation()` 各自发送 cancel/clear 并进入 close，
+   首个观察点为 send await count `4` 而非 `2`。Green 后共享 task 使 close/connect 各一次、epoch `4 -> 5`。
+3. rollover cancellation Red：第二次 caller cancel 会直接取消 rollover task，cleanup 未完成 caller 已 done；
+   Green 后 shield loop 等共享 transaction 完成再传播 `CancelledError("first-rollover-cancel")`。
+4. rollover failure Red：reconnect failure 后 upstream 已空，下一次 clear 直接 return；close failure同样丢失
+   owned cleanup 位置。两个隔离 Red 分别表现为 connect/close await count `1` 而非 `2`；Green 后 phase 从
+   `reconnecting`/`closing` 继续，只完成一次 epoch advance。
+5. stale receive Red：epoch 4 的 Provider receive 在 epoch 5 rollover 完成后才抛 close error，旧实现调用
+   recovery 并停止新连接；Green 后 start epoch/provider identity/token 判定为 stale，直接进入 epoch 5 的下一
+   receive，recovery、client error 均为零次。
+
 ## 最终验证
 
 Brief 全量 pytest（14 个 unit/integration 文件）：
@@ -206,16 +236,16 @@ Brief 全量 pytest（14 个 unit/integration 文件）：
 324 passed, 1 warning in 13.74s
 ```
 
-Review 6 的 Task 1/2 Provider 合同 + Task 3 全集（18 个文件）：
+Review 7 的 Task 1/2 Provider 合同 + Task 3 全集（18 个文件）：
 
 ```text
-799 passed, 1 warning in 13.69s
+806 passed, 1 warning in 14.79s
 ```
 
-Review 6 CodeGraph affected 全集（21 个 contract/e2e/integration/unit 文件）：
+Review 7 CodeGraph affected 全集（21 个 contract/e2e/integration/unit 文件）：
 
 ```text
-850 passed, 1 warning in 43.60s
+857 passed, 1 warning in 44.18s
 ```
 
 Review 5 CodeGraph affected 55 个文件重新收集 `1136 items`，使用 repo 标准
@@ -270,6 +300,13 @@ git diff --check: exit 0
 - Review 6 `_handle_upstream_response_created --depth 5`：41 affected symbols；覆盖 no-active KB-lock
   safety rollover、shared preflight、Sales/Presentation response consumers 与 transcript/tool side-effect tests。
 - Review 6 changed-source affected：21 个 test files / `850 passed`，exit 0。
+- Review 7 `_correlate_received_event --depth 5`：29 affected symbols；覆盖 decode 后 cancellation、
+  provisional send completion、Provider retirement 与 sensitive-event receive contracts。
+- Review 7 `_clear_upstream_generation --depth 5`：48 affected symbols；覆盖共享 rollover transaction、
+  interrupt/lifecycle/tool follow-up、Sales/Presentation 与 reconnect integration。
+- Review 7 `_receive_upstream_events --depth 5`：12 affected symbols；覆盖冻结 epoch/provider identity、
+  Golden raw/canonical driver、shared handler lifecycle 与 stale receive error。
+- Review 7 changed-source affected：21 个 test files / `857 passed`，exit 0。
 - architecture guard 证明未新增未治理 edge；Presentation subtree静态 `training_runtime` import 搜索为空。
 
 ## 假设、兼容性与回滚

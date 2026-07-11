@@ -44,6 +44,8 @@ from training_runtime.realtime import (
     ProviderBackpressureResult,
     ProviderCommand,
     ProviderCommandKind,
+    ProviderErrorCategory,
+    ProviderErrorReason,
     ProviderEvent,
     ProviderEventKind,
     ProviderHealthResult,
@@ -348,6 +350,145 @@ async def test_cancelled_generation_rolls_connection_epoch_before_new_create(
         ]
     )
     handler._close_upstream.assert_awaited_once_with()
+    handler._connect_upstream.assert_awaited_once_with()
+    assert handler._connection_epoch == 5
+
+
+@pytest.mark.asyncio
+async def test_concurrent_generation_rollovers_share_one_physical_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    handler.upstream_ws = object()
+    handler._connection_epoch = 4
+    close_started = asyncio.Event()
+    release_close = asyncio.Event()
+
+    async def close_once() -> None:
+        close_started.set()
+        await release_close.wait()
+
+    handler._send_upstream = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handler._close_upstream = AsyncMock(side_effect=close_once)  # type: ignore[method-assign]
+    handler._connect_upstream = AsyncMock()  # type: ignore[method-assign]
+
+    first = asyncio.create_task(handler._clear_upstream_generation())
+    await close_started.wait()
+    second = asyncio.create_task(handler._clear_upstream_generation())
+    await asyncio.sleep(0)
+
+    assert handler._send_upstream.await_count == 2
+    handler._close_upstream.assert_awaited_once_with()
+
+    release_close.set()
+    await asyncio.gather(first, second)
+
+    handler._connect_upstream.assert_awaited_once_with()
+    assert handler._connection_epoch == 5
+
+
+@pytest.mark.asyncio
+async def test_cancelled_generation_rollover_finishes_once_before_propagating_first_cancel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    handler.upstream_ws = object()
+    handler._connection_epoch = 4
+    close_started = asyncio.Event()
+    release_close = asyncio.Event()
+
+    async def close_once() -> None:
+        close_started.set()
+        await release_close.wait()
+
+    handler._send_upstream = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handler._close_upstream = AsyncMock(side_effect=close_once)  # type: ignore[method-assign]
+    handler._connect_upstream = AsyncMock()  # type: ignore[method-assign]
+
+    rollover = asyncio.create_task(handler._clear_upstream_generation())
+    await close_started.wait()
+    rollover.cancel("first-rollover-cancel")
+    await asyncio.sleep(0)
+
+    if rollover.done():
+        release_close.set()
+        await asyncio.gather(rollover, return_exceptions=True)
+        pytest.fail("caller cancellation aborted the shared physical rollover")
+
+    rollover.cancel("second-rollover-cancel")
+    await asyncio.sleep(0)
+    assert rollover.done() is False
+
+    release_close.set()
+    with pytest.raises(asyncio.CancelledError) as captured:
+        await rollover
+
+    assert captured.value.args == ("first-rollover-cancel",)
+    assert handler._send_upstream.await_count == 2
+    handler._close_upstream.assert_awaited_once_with()
+    handler._connect_upstream.assert_awaited_once_with()
+    assert handler._connection_epoch == 5
+
+
+@pytest.mark.asyncio
+async def test_failed_generation_rollover_retries_reconnect_without_second_epoch_advance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    handler.upstream_ws = object()
+    handler._connection_epoch = 4
+
+    async def close_once() -> None:
+        handler.upstream_ws = None
+
+    handler._send_upstream = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handler._close_upstream = AsyncMock(side_effect=close_once)  # type: ignore[method-assign]
+    handler._connect_upstream = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[RuntimeError("first reconnect failed"), None]
+    )
+
+    with pytest.raises(RuntimeError, match="first reconnect failed"):
+        await handler._clear_upstream_generation()
+
+    await handler._clear_upstream_generation()
+
+    assert handler._send_upstream.await_count == 2
+    handler._close_upstream.assert_awaited_once_with()
+    assert handler._connect_upstream.await_count == 2
+    assert handler._connection_epoch == 5
+
+
+@pytest.mark.asyncio
+async def test_failed_generation_close_retries_owned_cleanup_before_epoch_advance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    handler.upstream_ws = object()
+    handler._connection_epoch = 4
+    close_attempts = 0
+
+    async def close_with_first_failure() -> None:
+        nonlocal close_attempts
+        close_attempts += 1
+        handler.upstream_ws = None
+        if close_attempts == 1:
+            raise RuntimeError("first close failed")
+
+    handler._send_upstream = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handler._close_upstream = AsyncMock(side_effect=close_with_first_failure)  # type: ignore[method-assign]
+    handler._connect_upstream = AsyncMock()  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="first close failed"):
+        await handler._clear_upstream_generation()
+
+    await handler._clear_upstream_generation()
+
+    assert handler._send_upstream.await_count == 2
+    assert handler._close_upstream.await_count == 2
     handler._connect_upstream.assert_awaited_once_with()
     assert handler._connection_epoch == 5
 
@@ -691,6 +832,93 @@ async def test_provider_event_is_consumed_through_canonical_compatibility_facade
             },
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_old_provider_receive_error_after_rollover_cannot_recover_or_stop_new_epoch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+
+    class LateFailingProvider(RecordingRealtimeProvider):
+        def __init__(self) -> None:
+            super().__init__()
+            self.first_receive_started = asyncio.Event()
+            self.release_first_error = asyncio.Event()
+            self.second_receive_started = asyncio.Event()
+            self.receive_calls = 0
+
+        async def receive(self, *, connection_epoch: int) -> ProviderEvent:
+            self.receive_calls += 1
+            if self.receive_calls == 1:
+                assert connection_epoch == 4
+                self.first_receive_started.set()
+                await self.release_first_error.wait()
+                raise RealtimeProviderError(
+                    category=ProviderErrorCategory.DISCONNECTED,
+                    reason=ProviderErrorReason.CONNECTION_CLOSED,
+                    retryable=True,
+                )
+            assert connection_epoch == 5
+            self.second_receive_started.set()
+            await asyncio.Event().wait()
+            raise AssertionError("cancelled receive must not resume")
+
+    provider = LateFailingProvider()
+    handler = StepFunRealtimeHandler(provider_factory=lambda **_kwargs: provider)
+    handler._realtime_provider = provider
+    handler.upstream_ws = provider
+    handler._connection_epoch = 4
+    handler.running = True
+    recover_called = asyncio.Event()
+
+    async def close_old() -> None:
+        handler.upstream_ws = None
+
+    async def connect_new() -> None:
+        handler.upstream_ws = provider
+
+    async def recover_old(**_kwargs: object) -> bool:
+        recover_called.set()
+        return False
+
+    handler._send_upstream = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handler._close_upstream = AsyncMock(side_effect=close_old)  # type: ignore[method-assign]
+    handler._connect_upstream = AsyncMock(side_effect=connect_new)  # type: ignore[method-assign]
+    handler._record_upstream_disconnect_diagnostics = AsyncMock()  # type: ignore[method-assign]
+    handler._recover_upstream_after_disconnect = AsyncMock(side_effect=recover_old)  # type: ignore[method-assign]
+    handler._send_error = AsyncMock()  # type: ignore[method-assign]
+
+    receiving = asyncio.create_task(handler._receive_upstream_events())
+    await asyncio.wait_for(provider.first_receive_started.wait(), timeout=0.5)
+    await asyncio.wait_for(handler._clear_upstream_generation(), timeout=0.5)
+    provider.release_first_error.set()
+    second_started = asyncio.create_task(provider.second_receive_started.wait())
+    recovered = asyncio.create_task(recover_called.wait())
+    done, pending = await asyncio.wait_for(
+        asyncio.wait(
+            {second_started, recovered},
+            return_when=asyncio.FIRST_COMPLETED,
+        ),
+        timeout=0.5,
+    )
+
+    try:
+        assert second_started in done
+        assert recovered not in done
+        handler._recover_upstream_after_disconnect.assert_not_awaited()
+        handler._send_error.assert_not_awaited()
+        assert handler.running is True
+    finally:
+        for task in pending:
+            task.cancel()
+        receiving.cancel()
+        await asyncio.gather(
+            receiving,
+            second_started,
+            recovered,
+            return_exceptions=True,
+        )
 
 
 @pytest.mark.asyncio

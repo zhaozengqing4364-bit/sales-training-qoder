@@ -43,6 +43,11 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
     _realtime_provider: RealtimeProviderPort | None
     _upstream_task: asyncio.Task[Any] | None
     _upstream_rollover_in_progress: bool
+    _upstream_rollover_lock: asyncio.Lock
+    _upstream_rollover_phase: str
+    _upstream_rollover_reconnect_requested: bool
+    _upstream_rollover_task: asyncio.Task[None] | None
+    _upstream_rollover_token: int
     _effective_policy: dict[str, Any]
     _roleplay_disclosure_state: dict[str, Any]
     _roleplay_regenerate_attempted_for_turn: bool

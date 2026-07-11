@@ -1151,24 +1151,49 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                         error=str(exc),
                     )
 
+    def _upstream_receive_attempt_is_stale(
+        self,
+        *,
+        connection_epoch: int,
+        upstream_identity: object,
+        provider_identity: object | None,
+        rollover_token: int,
+    ) -> bool:
+        return bool(
+            self._upstream_rollover_in_progress
+            or self._connection_epoch != connection_epoch
+            or self.upstream_ws is not upstream_identity
+            or self._upstream_rollover_token != rollover_token
+            or (
+                provider_identity is not None
+                and self._realtime_provider is not provider_identity
+            )
+        )
+
     async def _receive_upstream_events(self) -> None:
         """Receive events from StepFun and map them to frontend messages."""
         while self.running:
             if self.upstream_ws is None:
                 await asyncio.sleep(0.05)
                 continue
+            connection_epoch = self._connection_epoch
+            upstream_identity = self.upstream_ws
+            provider_identity = (
+                self._realtime_provider if self._using_provider_port() else None
+            )
+            rollover_token = self._upstream_rollover_token
             try:
                 if self._using_provider_port():
-                    provider = self._realtime_provider
+                    provider = provider_identity
                     if provider is None:
                         raise RuntimeError("realtime_provider_not_constructed")
                     provider_event = await provider.receive(
-                        connection_epoch=self._connection_epoch
+                        connection_epoch=connection_epoch
                     )
                     self._mark_upstream_activity()
                     await self._handle_provider_event(provider_event)
                     continue
-                raw = await self.upstream_ws.recv()
+                raw = await upstream_identity.recv()
                 self._mark_upstream_activity()
                 event = json.loads(raw)
                 event = self._correlate_trusted_legacy_raw_event(event)
@@ -1176,7 +1201,12 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             except asyncio.CancelledError:
                 raise
             except RealtimeProviderError as error:
-                if self._upstream_rollover_in_progress:
+                if self._upstream_receive_attempt_is_stale(
+                    connection_epoch=connection_epoch,
+                    upstream_identity=upstream_identity,
+                    provider_identity=provider_identity,
+                    rollover_token=rollover_token,
+                ):
                     await asyncio.sleep(0)
                     continue
                 reason_text = error.reason.value
@@ -1206,7 +1236,12 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 )
                 self.running = False
             except ConnectionClosed as e:
-                if self._upstream_rollover_in_progress:
+                if self._upstream_receive_attempt_is_stale(
+                    connection_epoch=connection_epoch,
+                    upstream_identity=upstream_identity,
+                    provider_identity=provider_identity,
+                    rollover_token=rollover_token,
+                ):
                     await asyncio.sleep(0)
                     continue
                 code = getattr(e, "code", None)
@@ -1246,12 +1281,28 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 )
                 self.running = False
             except json.JSONDecodeError as exc:
+                if self._upstream_receive_attempt_is_stale(
+                    connection_epoch=connection_epoch,
+                    upstream_identity=upstream_identity,
+                    provider_identity=provider_identity,
+                    rollover_token=rollover_token,
+                ):
+                    await asyncio.sleep(0)
+                    continue
                 logger.warning(
                     "StepFun upstream invalid JSON",
                     session_id=self.session_id,
                     error=str(exc),
                 )
             except (RuntimeError, ValueError, OSError) as e:
+                if self._upstream_receive_attempt_is_stale(
+                    connection_epoch=connection_epoch,
+                    upstream_identity=upstream_identity,
+                    provider_identity=provider_identity,
+                    rollover_token=rollover_token,
+                ):
+                    await asyncio.sleep(0)
+                    continue
                 logger.error(f"StepFun upstream receive error: {e}", exc_info=True)
                 await self._send_error(
                     "[STEPFUN_UPSTREAM_ERROR]", "Realtime 上游连接异常"

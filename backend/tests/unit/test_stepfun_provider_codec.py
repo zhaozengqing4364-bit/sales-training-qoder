@@ -862,6 +862,35 @@ class ControlledCreateTransport(FakeTransport):
         return StepFunSendResult(status=StepFunSendStatus.SENT)
 
 
+class DecodeTrackingCodec(StepFunEventCodec):
+    def __init__(self) -> None:
+        super().__init__()
+        self.decoded = asyncio.Event()
+
+    def decode_event(
+        self,
+        raw: str | bytes,
+        *,
+        connection_epoch: int,
+    ) -> ProviderEvent:
+        event = super().decode_event(raw, connection_epoch=connection_epoch)
+        self.decoded.set()
+        return event
+
+
+class ControlledReceiveCancellationTransport(ControlledCreateTransport):
+    def __init__(self, *, connection: FakeConnection) -> None:
+        super().__init__(connection=connection)
+        self.close_started = asyncio.Event()
+        self.release_close = asyncio.Event()
+
+    async def close(self, connection: FakeConnection) -> None:
+        self.close_calls += 1
+        self.close_started.set()
+        await self.release_close.wait()
+        await connection.close()
+
+
 @pytest.mark.asyncio
 async def test_adapter_should_connect_and_send_one_existing_session_update_payload() -> (
     None
@@ -1171,6 +1200,99 @@ async def test_adapter_mismatched_created_before_send_result_still_waits_for_tra
     assert event.request_id == 99
     assert event.response_id == "response-other"
     assert event.stream_id is None
+
+
+@pytest.mark.parametrize("send_outcome", ["sent", "failed"])
+@pytest.mark.asyncio
+async def test_adapter_cancelled_receive_after_decode_retires_generation_before_send_result(
+    send_outcome: str,
+) -> None:
+    cancelled_connection = FakeConnection(
+        events=(
+            '{"type":"response.created","response":{"id":"response-cancelled"}}',
+        )
+    )
+    reconnect_connection = FakeConnection(
+        events=(
+            '{"type":"response.created","response":{"id":"response-new"}}',
+        )
+    )
+    transport = ControlledReceiveCancellationTransport(
+        connection=cancelled_connection
+    )
+    codec = DecodeTrackingCodec()
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+        codec=codec,
+    )
+    await provider.connect(_session_config())
+    create = ProviderCommand(
+        kind=ProviderCommandKind.CREATE_RESPONSE,
+        data={
+            "modalities": ("audio", "text"),
+            "request_id": 7,
+            "stream_id": "stream-cancelled",
+        },
+    )
+    sending = asyncio.create_task(provider.send(create))
+    await transport.create_started.wait()
+    receiving = asyncio.create_task(provider.receive(connection_epoch=3))
+    await codec.decoded.wait()
+
+    receiving.cancel("first-receive-cancel")
+    for _ in range(5):
+        if transport.close_started.is_set():
+            break
+        await asyncio.sleep(0)
+
+    if not transport.close_started.is_set():
+        transport.release_create.set()
+        transport.release_close.set()
+        await asyncio.gather(sending, receiving, return_exceptions=True)
+        pytest.fail("cancelled receive did not retire its decoded generation")
+    assert receiving.done() is False
+
+    if send_outcome == "failed":
+        transport.create_result = StepFunSendResult(
+            status=StepFunSendStatus.FAILED,
+            error_type="ConnectionClosed",
+        )
+    transport.release_create.set()
+    assert (await sending).accepted is False
+
+    receiving.cancel("second-receive-cancel")
+    await asyncio.sleep(0)
+    assert receiving.done() is False
+    with pytest.raises(RealtimeProviderError):
+        await provider.connect(_session_config())
+
+    transport.release_close.set()
+    with pytest.raises(asyncio.CancelledError) as captured:
+        await receiving
+
+    assert captured.value.args == ("first-receive-cancel",)
+    assert transport.close_calls == 1
+    assert cancelled_connection.close_count == 1
+    assert "connected=False" in repr(provider)
+
+    transport.connection = reconnect_connection
+    transport.create_result = StepFunSendResult(status=StepFunSendStatus.SENT)
+    await provider.connect(_session_config())
+    new_create = ProviderCommand(
+        kind=ProviderCommandKind.CREATE_RESPONSE,
+        data={
+            "modalities": ("audio", "text"),
+            "request_id": 8,
+            "stream_id": "stream-new",
+        },
+    )
+    assert (await provider.send(new_create)).accepted is True
+    created = await provider.receive(connection_epoch=4)
+    assert created.request_id == 8
+    assert created.response_id == "response-new"
+    assert created.stream_id == "stream-new"
 
 
 @pytest.mark.parametrize(

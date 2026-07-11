@@ -328,11 +328,26 @@ class StepFunRealtimeProvider:
             sensitive_query_values=self._sensitive_query_values,
         ):
             event = _sensitive_event_error(connection_epoch)
-        correlated_event = await self._correlate_received_event(
-            connection,
-            generation,
-            event,
-        )
+        try:
+            correlated_event = await self._correlate_received_event(
+                connection,
+                generation,
+                event,
+            )
+        except asyncio.CancelledError as cancellation:
+            retirement_task = asyncio.create_task(
+                self._invalidate_current_connection(connection, generation)
+            )
+            try:
+                await _wait_task_preserving_cancellation(
+                    retirement_task,
+                    cancellation,
+                )
+            except BaseException:
+                cancellation.add_note(
+                    "StepFun receive retirement cleanup failed; provider close retry required."
+                )
+            raise
         if correlated_event is None:
             raise _disconnected_error()
         return correlated_event

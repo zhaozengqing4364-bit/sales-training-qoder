@@ -244,21 +244,90 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
 
     async def _clear_upstream_generation(self, *, reconnect: bool = True) -> None:
         """Abort any active upstream response and clear buffered audio input."""
-        if self.upstream_ws is None:
-            return
+        async with self._upstream_rollover_lock:
+            task = self._upstream_rollover_task
+            if task is None or task.done():
+                if self._upstream_rollover_phase == "idle":
+                    if self.upstream_ws is None:
+                        return
+                    self._upstream_rollover_phase = "draining"
+                self._upstream_rollover_token += 1
+                token = self._upstream_rollover_token
+                self._upstream_rollover_reconnect_requested = reconnect
+                task = asyncio.create_task(self._run_upstream_rollover(token))
+                self._upstream_rollover_task = task
+            elif reconnect:
+                self._upstream_rollover_reconnect_requested = True
+        await self._wait_upstream_rollover(task)
+
+    @staticmethod
+    async def _wait_upstream_rollover(task: asyncio.Task[None]) -> None:
+        cancellation: asyncio.CancelledError | None = None
+        rollover_error: BaseException | None = None
+        while True:
+            try:
+                await asyncio.shield(task)
+                break
+            except asyncio.CancelledError as error:
+                if task.cancelled():
+                    rollover_error = error
+                    break
+                if cancellation is None:
+                    cancellation = error
+            except BaseException as error:  # noqa: BLE001
+                rollover_error = error
+                break
+        if cancellation is not None:
+            if rollover_error is not None:
+                cancellation.add_note(
+                    "StepFun upstream rollover failed after caller cancellation."
+                )
+            raise cancellation
+        if rollover_error is not None:
+            raise rollover_error
+
+    async def _run_upstream_rollover(self, token: int) -> None:
+        """Run one shared upstream generation rollover without holding its lock over I/O."""
         self._upstream_rollover_in_progress = True
         try:
-            await self._send_upstream({"type": "response.cancel"})
-            await self._send_upstream({"type": "input_audio_buffer.clear"})
-            await self._close_upstream()
-            self._connection_epoch = max(
-                1,
-                self._normalize_connection_epoch(self._connection_epoch) + 1,
-            )
-            if reconnect:
-                await self._connect_upstream()
+            async with self._upstream_rollover_lock:
+                phase = self._upstream_rollover_phase
+            if phase == "draining":
+                await self._send_upstream({"type": "response.cancel"})
+                await self._send_upstream({"type": "input_audio_buffer.clear"})
+                async with self._upstream_rollover_lock:
+                    if self._upstream_rollover_token == token:
+                        self._upstream_rollover_phase = "closing"
+                phase = "closing"
+            if phase == "closing":
+                await self._close_upstream()
+                self._connection_epoch = max(
+                    1,
+                    self._normalize_connection_epoch(self._connection_epoch) + 1,
+                )
+                async with self._upstream_rollover_lock:
+                    reconnect = self._upstream_rollover_reconnect_requested
+                    self._upstream_rollover_phase = (
+                        "reconnecting" if reconnect else "idle"
+                    )
+                phase = "reconnecting" if reconnect else "idle"
+            if phase == "reconnecting":
+                async with self._upstream_rollover_lock:
+                    reconnect = self._upstream_rollover_reconnect_requested
+                if reconnect:
+                    await self._connect_upstream()
+                async with self._upstream_rollover_lock:
+                    if self._upstream_rollover_token == token:
+                        self._upstream_rollover_phase = "idle"
         finally:
             self._upstream_rollover_in_progress = False
+            async with self._upstream_rollover_lock:
+                if (
+                    self._upstream_rollover_token == token
+                    and self._upstream_rollover_task is asyncio.current_task()
+                ):
+                    self._upstream_rollover_task = None
+                    self._upstream_rollover_reconnect_requested = False
 
     def _log_grounding_debug(self, event: str, **fields: Any) -> None:
         if not self._grounding_debug_log:
