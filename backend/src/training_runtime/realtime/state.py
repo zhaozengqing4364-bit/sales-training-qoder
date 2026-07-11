@@ -4,9 +4,24 @@ from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from math import isfinite
+from typing import Any, cast
 
 ENGINE_STATE_VERSION = 1
+GroundingDiagnosticValue = str | int | float | bool | None
+_SENSITIVE_GROUNDING_DIAGNOSTIC_KEY_PARTS = frozenset(
+    {
+        "token",
+        "authorization",
+        "apikey",
+        "secret",
+        "password",
+        "raw",
+        "transcript",
+        "audio",
+        "prompt",
+    }
+)
 
 
 class RealtimeStateTransitionError(ValueError):
@@ -47,6 +62,14 @@ def _require_non_empty(value: str | None, field_name: str) -> None:
 def _mapping(value: object, field_name: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{field_name}_must_be_mapping")
+    return value
+
+
+def _validate_engine_state_version(value: object) -> int:
+    if type(value) is not int:
+        raise ValueError("engine_state_version_must_be_integer")
+    if value != ENGINE_STATE_VERSION:
+        raise ValueError("unsupported_engine_state_version")
     return value
 
 
@@ -139,22 +162,51 @@ class GroundingState:
     decision_id: str | None = None
     frozen_policy_hash: str | None = None
     mode: str | None = None
-    diagnostics: dict[str, object] = field(default_factory=dict)
+    diagnostics: dict[str, GroundingDiagnosticValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.phase = GroundingPhase(self.phase)
         _require_non_empty(self.decision_id, "grounding_decision_id")
         _require_non_empty(self.frozen_policy_hash, "grounding_frozen_policy_hash")
         _require_non_empty(self.mode, "grounding_mode")
-        self.diagnostics = deepcopy(self.diagnostics)
+        self.diagnostics = self.validate_diagnostics(self.diagnostics)
+
+    @staticmethod
+    def validate_diagnostics(
+        diagnostics: Mapping[Any, Any],
+    ) -> dict[str, GroundingDiagnosticValue]:
+        validated: dict[str, GroundingDiagnosticValue] = {}
+        for key, value in diagnostics.items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("grounding_diagnostic_key_must_be_non_empty_string")
+            clean_key = key.strip()
+            compact_key = "".join(
+                character for character in clean_key.casefold() if character.isalnum()
+            )
+            if any(
+                sensitive_part in compact_key
+                for sensitive_part in _SENSITIVE_GROUNDING_DIAGNOSTIC_KEY_PARTS
+            ):
+                raise ValueError("grounding_diagnostic_key_is_sensitive")
+            if clean_key in validated:
+                raise ValueError("grounding_diagnostic_key_is_duplicated")
+            if value is None or type(value) in {str, int, bool}:
+                validated[clean_key] = cast(GroundingDiagnosticValue, value)
+                continue
+            if type(value) is float and isfinite(value):
+                validated[clean_key] = cast(float, value)
+                continue
+            raise ValueError("grounding_diagnostic_value_must_be_json_scalar")
+        return validated
 
     def to_dict(self) -> dict[str, object]:
+        diagnostics = self.validate_diagnostics(self.diagnostics)
         return {
             "phase": self.phase.value,
             "decision_id": self.decision_id,
             "frozen_policy_hash": self.frozen_policy_hash,
             "mode": self.mode,
-            "diagnostics": deepcopy(self.diagnostics),
+            "diagnostics": deepcopy(diagnostics),
         }
 
     @classmethod
@@ -297,8 +349,7 @@ class RealtimeSessionState:
 
     def __post_init__(self) -> None:
         _require_non_empty(self.scenario_type, "scenario_type")
-        if self.version != ENGINE_STATE_VERSION:
-            raise ValueError("unsupported_engine_state_version")
+        self.version = _validate_engine_state_version(self.version)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -312,9 +363,9 @@ class RealtimeSessionState:
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> RealtimeSessionState:
-        version = int(payload.get("version", ENGINE_STATE_VERSION))
-        if version != ENGINE_STATE_VERSION:
-            raise ValueError("unsupported_engine_state_version")
+        version = _validate_engine_state_version(
+            payload.get("version", ENGINE_STATE_VERSION)
+        )
         return cls(
             scenario_type=str(payload.get("scenario_type", "")),
             version=version,

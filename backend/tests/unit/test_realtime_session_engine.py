@@ -110,12 +110,118 @@ def test_should_reject_unsupported_future_state_version() -> None:
         )
 
 
+@pytest.mark.parametrize("invalid_version", [True, False, 1.0, "1", 2])
+def test_should_require_exact_non_boolean_integer_state_version(
+    invalid_version: object,
+) -> None:
+    with pytest.raises(ValueError, match="engine_state_version"):
+        RealtimeSessionState.from_dict(
+            {
+                "version": invalid_version,
+                "scenario_type": "presentation",
+            }
+        )
+    with pytest.raises(ValueError, match="engine_state_version"):
+        RealtimeSessionState(
+            scenario_type="presentation",
+            version=invalid_version,  # type: ignore[arg-type]
+        )
+
+
 def test_should_restore_version_one_payload_with_optional_fields_absent() -> None:
     restored = RealtimeSessionState.from_dict(
         {"version": 1, "scenario_type": "presentation"}
     )
 
     assert restored == RealtimeSessionState(scenario_type="presentation")
+
+
+def test_should_accept_only_json_safe_non_sensitive_grounding_diagnostics() -> None:
+    diagnostics: dict[str, object] = {
+        "source": "frozen_policy",
+        "attempt": 2,
+        "latency_ms": 3.5,
+        "cache_hit": False,
+        "fallback_code": None,
+    }
+    engine = RealtimeSessionEngine(
+        scenario_type="presentation",
+        hooks=NoopScenarioTurnHooks(scenario_type="presentation"),
+    )
+    engine.begin_grounding(decision_id="g-1", policy_hash="sha256:policy")
+
+    engine.resolve_grounding(
+        outcome="degraded",
+        mode="fail_closed",
+        diagnostics=diagnostics,
+    )
+
+    assert engine.state.grounding.diagnostics == diagnostics
+    json.dumps(engine.snapshot(), allow_nan=False)
+
+
+@pytest.mark.parametrize(
+    "sensitive_key",
+    [
+        "",
+        " Token ",
+        "AUTHORIZATION",
+        "api-Key",
+        "client_secret",
+        "PASSWORD",
+        "raw_payload",
+        "raw_transcript",
+        "audio",
+        "SystemPrompt",
+    ],
+)
+def test_should_reject_empty_or_sensitive_grounding_diagnostic_keys(
+    sensitive_key: str,
+) -> None:
+    with pytest.raises(ValueError, match="grounding_diagnostic_key"):
+        GroundingState(diagnostics={sensitive_key: "unsafe"})
+
+
+def test_should_reject_non_string_grounding_diagnostic_key() -> None:
+    with pytest.raises(ValueError, match="grounding_diagnostic_key"):
+        GroundingState(diagnostics={1: "unsafe"})  # type: ignore[dict-item]
+
+
+@pytest.mark.parametrize(
+    "unsafe_value",
+    [
+        b"bytes",
+        {"nested": "value"},
+        ["value"],
+        object(),
+        float("nan"),
+        float("inf"),
+    ],
+)
+def test_should_reject_non_scalar_grounding_diagnostic_values(
+    unsafe_value: object,
+) -> None:
+    with pytest.raises(ValueError, match="grounding_diagnostic_value"):
+        GroundingState(diagnostics={"source": unsafe_value})
+
+
+def test_should_reject_unsafe_diagnostics_before_mutating_grounding_state() -> None:
+    hooks = RecordingHooks()
+    engine = RealtimeSessionEngine(scenario_type="presentation", hooks=hooks)
+    engine.begin_grounding(decision_id="g-1", policy_hash="sha256:policy")
+
+    with pytest.raises(ValueError, match="grounding_diagnostic_key"):
+        engine.resolve_grounding(
+            outcome="ready",
+            mode="grounded",
+            diagnostics={"Authorization": "unsafe"},
+        )
+
+    assert engine.state.grounding.phase is GroundingPhase.PREPARING
+    assert engine.state.grounding.mode is None
+    assert [transition.event_name for transition in hooks.transitions] == [
+        "grounding.preparing"
+    ]
 
 
 def test_should_dedupe_identical_evidence_and_reject_conflicts() -> None:
@@ -342,6 +448,53 @@ def test_should_round_trip_engine_snapshot_and_reject_scenario_mismatch() -> Non
         mismatch.restore(payload)
 
 
+def test_should_reject_stale_restore_after_state_progress() -> None:
+    engine = RealtimeSessionEngine(
+        scenario_type="presentation",
+        hooks=NoopScenarioTurnHooks(scenario_type="presentation"),
+    )
+    engine.begin_connection("session-1")
+    engine.mark_connected()
+    engine.begin_close(reason="network_reset")
+    engine.mark_disconnected(reason="network_reset")
+    engine.begin_connection("session-1")
+    engine.begin_turn(request_id=2, stream_id="stream-2")
+    engine.mark_response_started(response_id="response-2")
+    engine.complete_turn(request_id=2)
+    engine.record_evidence(
+        evidence_key="transcript:2:user",
+        evidence_type="transcript",
+        turn_number=2,
+        payload=b"learner transcript",
+    )
+    engine.mark_evidence_pending("transcript:2:user")
+    engine.acknowledge_evidence("transcript:2:user")
+    engine.record_evidence(
+        evidence_key="audio:2:user",
+        evidence_type="audio",
+        turn_number=2,
+        payload=b"audio bytes",
+    )
+    engine.mark_evidence_pending("audio:2:user")
+    current = engine.snapshot()
+    stale = RealtimeSessionState(scenario_type="presentation").to_dict()
+
+    with pytest.raises(
+        RealtimeStateTransitionError, match="engine_restore_requires_pristine_state"
+    ):
+        engine.restore(stale)
+
+    assert engine.snapshot() == current
+    assert engine.state.connection.epoch == 2
+    assert engine.state.turn.request_id == 2
+    assert set(engine.state.evidence.records) == {
+        "transcript:2:user",
+        "audio:2:user",
+    }
+    assert engine.state.evidence.pending_flush_keys == {"audio:2:user"}
+    assert engine.state.evidence.acknowledged_keys == {"transcript:2:user"}
+
+
 def test_should_not_allow_callers_to_mutate_engine_state_outside_boundary() -> None:
     engine = RealtimeSessionEngine(
         scenario_type="presentation",
@@ -375,3 +528,96 @@ def test_should_reject_mismatched_scenario_hook() -> None:
             scenario_type="presentation",
             hooks=NoopScenarioTurnHooks(scenario_type="sales"),
         )
+
+
+def test_should_expose_degraded_connection_transition_matrix() -> None:
+    hooks = RecordingHooks()
+    engine = RealtimeSessionEngine(scenario_type="presentation", hooks=hooks)
+
+    with pytest.raises(
+        RealtimeStateTransitionError, match="connection_degrade_not_allowed"
+    ):
+        engine.mark_degraded(reason="backpressure")
+
+    engine.begin_connection("session-1")
+    engine.mark_degraded(reason="backpressure")
+
+    assert hooks.transitions[-1].event_name == "connection.degraded"
+    assert hooks.transitions[-1].snapshot["connection"]["phase"] == "degraded"  # type: ignore[index]
+    assert hooks.transitions[-1].snapshot["connection"]["reason"] == "backpressure"  # type: ignore[index]
+    with pytest.raises(
+        RealtimeStateTransitionError, match="connection_degrade_not_allowed"
+    ):
+        engine.mark_degraded(reason="duplicate")
+
+
+def test_should_expose_interrupted_turn_transition_matrix() -> None:
+    hooks = RecordingHooks()
+    engine = RealtimeSessionEngine(scenario_type="presentation", hooks=hooks)
+    engine.begin_turn(request_id=1, stream_id="stream-1")
+
+    engine.interrupt_turn(request_id=1, reason="learner_barge_in")
+
+    assert hooks.transitions[-1].event_name == "turn.interrupted"
+    assert hooks.transitions[-1].snapshot["turn"]["phase"] == "interrupted"  # type: ignore[index]
+    with pytest.raises(
+        RealtimeStateTransitionError, match="turn_interruption_not_allowed"
+    ):
+        engine.interrupt_turn(request_id=1, reason="duplicate")
+    with pytest.raises(RealtimeStateTransitionError, match="stale_turn_interruption"):
+        engine.interrupt_turn(request_id=0, reason="stale")
+
+
+def test_should_expose_timed_out_turn_transition_matrix() -> None:
+    hooks = RecordingHooks()
+    engine = RealtimeSessionEngine(scenario_type="presentation", hooks=hooks)
+    engine.begin_turn(request_id=1, stream_id="stream-1")
+
+    engine.timeout_turn(request_id=1, reason="provider_timeout")
+
+    assert hooks.transitions[-1].event_name == "turn.timed_out"
+    assert hooks.transitions[-1].snapshot["turn"]["phase"] == "timed_out"  # type: ignore[index]
+    with pytest.raises(RealtimeStateTransitionError, match="turn_timeout_not_allowed"):
+        engine.timeout_turn(request_id=1, reason="duplicate")
+    with pytest.raises(RealtimeStateTransitionError, match="stale_turn_timeout"):
+        engine.timeout_turn(request_id=0, reason="stale")
+
+
+def test_should_expose_evidence_pending_and_ack_transition_matrix() -> None:
+    hooks = RecordingHooks()
+    engine = RealtimeSessionEngine(scenario_type="presentation", hooks=hooks)
+    engine.record_evidence(
+        evidence_key="transcript:1:user",
+        evidence_type="transcript",
+        turn_number=1,
+        payload=b"learner transcript",
+    )
+
+    assert engine.mark_evidence_pending("transcript:1:user")
+    assert engine.acknowledge_evidence("transcript:1:user")
+
+    assert [transition.event_name for transition in hooks.transitions] == [
+        "evidence.recorded",
+        "evidence.flush_pending",
+        "evidence.flush_acknowledged",
+    ]
+    pending_snapshot = hooks.transitions[-2].snapshot["evidence"]  # type: ignore[assignment]
+    assert pending_snapshot["pending_flush_keys"] == ["transcript:1:user"]  # type: ignore[index]
+    assert pending_snapshot["acknowledged_keys"] == []  # type: ignore[index]
+    acknowledged_snapshot = hooks.transitions[-1].snapshot["evidence"]  # type: ignore[assignment]
+    assert acknowledged_snapshot["pending_flush_keys"] == []  # type: ignore[index]
+    assert acknowledged_snapshot["acknowledged_keys"] == ["transcript:1:user"]  # type: ignore[index]
+    assert not engine.mark_evidence_pending("transcript:1:user")
+    assert not engine.acknowledge_evidence("transcript:1:user")
+    assert len(hooks.transitions) == 3
+
+    with pytest.raises(RealtimeStateTransitionError, match="unknown_evidence_key"):
+        engine.mark_evidence_pending("missing")
+    engine.record_evidence(
+        evidence_key="audio:1:user",
+        evidence_type="audio",
+        turn_number=1,
+        payload=b"audio bytes",
+    )
+    with pytest.raises(RealtimeStateTransitionError, match="evidence_not_pending"):
+        engine.acknowledge_evidence("audio:1:user")

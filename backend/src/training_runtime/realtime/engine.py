@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Protocol, TypeVar
@@ -9,6 +8,7 @@ from typing import Protocol, TypeVar
 from .state import (
     ConnectionPhase,
     GroundingPhase,
+    GroundingState,
     RealtimeSessionState,
     RealtimeStateTransitionError,
     TurnPhase,
@@ -53,6 +53,9 @@ class RealtimeSessionEngine:
         return self._state.to_dict()
 
     def restore(self, payload: Mapping[str, object]) -> None:
+        pristine_state = RealtimeSessionState(scenario_type=self._state.scenario_type)
+        if self._state != pristine_state:
+            raise RealtimeStateTransitionError("engine_restore_requires_pristine_state")
         restored = RealtimeSessionState.from_dict(payload)
         if restored.scenario_type != self._state.scenario_type:
             raise ValueError("engine_snapshot_scenario_mismatch")
@@ -96,7 +99,6 @@ class RealtimeSessionEngine:
             if connection.phase not in {
                 ConnectionPhase.CONNECTING,
                 ConnectionPhase.CONNECTED,
-                ConnectionPhase.DEGRADED,
             }:
                 raise RealtimeStateTransitionError("connection_degrade_not_allowed")
             if not reason.strip():
@@ -281,9 +283,12 @@ class RealtimeSessionEngine:
                 raise RealtimeStateTransitionError("unsupported_grounding_outcome")
             if not mode.strip():
                 raise ValueError("grounding_mode_must_be_non_empty")
+            validated_diagnostics = GroundingState.validate_diagnostics(
+                diagnostics or {}
+            )
             grounding.phase = phase
             grounding.mode = mode
-            grounding.diagnostics = deepcopy(dict(diagnostics or {}))
+            grounding.diagnostics = validated_diagnostics
 
         self._transition(f"grounding.{outcome}", mutate)
 
@@ -318,7 +323,10 @@ class RealtimeSessionEngine:
 
     def mark_evidence_pending(self, evidence_key: str) -> bool:
         evidence = self._state.evidence
-        if evidence_key in evidence.pending_flush_keys:
+        if (
+            evidence_key in evidence.pending_flush_keys
+            or evidence_key in evidence.acknowledged_keys
+        ):
             return False
         return self._transition(
             "evidence.flush_pending",
