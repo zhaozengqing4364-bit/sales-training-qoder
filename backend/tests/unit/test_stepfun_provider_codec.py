@@ -529,6 +529,57 @@ def test_codec_should_fail_closed_for_invalid_and_unknown_payloads(
 
 
 @pytest.mark.parametrize(
+    "raw_event_type",
+    ["sk-live-secret", "provider.example", "query-secret"],
+)
+@pytest.mark.parametrize(
+    "invalid_metadata",
+    [
+        {"request_id": "raw-request-secret"},
+        {"response_id": ""},
+        {"stream_id": {"raw": "stream-secret"}},
+        {"call_id": ["call-secret"]},
+        {"event_id": " "},
+        {"turn_id": 123},
+    ],
+)
+def test_codec_unknown_type_should_ignore_malformed_common_metadata(
+    raw_event_type: str,
+    invalid_metadata: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    event = StepFunEventCodec().decode_event(
+        json.dumps(
+            {
+                "type": raw_event_type,
+                **invalid_metadata,
+                "raw_data": "raw-body-secret",
+            }
+        ),
+        connection_epoch=9,
+    )
+
+    assert event.kind is ProviderEventKind.UNKNOWN
+    assert event.provider_event_type == "unknown"
+    assert event.connection_epoch == 9
+    assert event.request_id is None
+    assert event.response_id is None
+    assert event.stream_id is None
+    assert event.call_id is None
+    assert event.event_id is None
+    assert event.turn_id is None
+    assert event.timestamp_ms is None
+    assert event.duration_ms is None
+    assert event.data == {}
+    rendered = f"{event!r} {event!s} {caplog.text}"
+    assert raw_event_type not in rendered
+    assert "raw-request-secret" not in rendered
+    assert "stream-secret" not in rendered
+    assert "call-secret" not in rendered
+    assert "raw-body-secret" not in rendered
+
+
+@pytest.mark.parametrize(
     ("raw_error", "category", "reason"),
     [
         (

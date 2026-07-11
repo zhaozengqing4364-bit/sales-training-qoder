@@ -69,6 +69,31 @@ _TRANSCRIPTION_FINAL_TYPES = frozenset(
         "input_audio_buffer.transcript.final",
     }
 )
+_KNOWN_EVENT_TYPES = (
+    frozenset(
+        {
+            "session.created",
+            "session.updated",
+            "input_audio_buffer.committed",
+            "conversation.item.created",
+            "input_audio_buffer.speech_started",
+            "input_audio_buffer.speech_stopped",
+            "response.created",
+            "response.text.delta",
+            "response.audio_transcript.delta",
+            "response.audio_transcript.done",
+            "response.audio.delta",
+            "response.thinking.delta",
+            "response.thinking.done",
+            "response.function_call_arguments.delta",
+            "response.function_call_arguments.done",
+            "response.done",
+            "error",
+        }
+    )
+    | _TRANSCRIPTION_DELTA_TYPES
+    | _TRANSCRIPTION_FINAL_TYPES
+)
 
 
 class StepFunEventCodec:
@@ -137,8 +162,7 @@ class StepFunEventCodec:
         event_type = payload.get("type")
         if type(event_type) is not str or not event_type:
             return _protocol_error(connection_epoch=connection_epoch)
-        safe_event_type = _safe_raw_type(event_type)
-        if safe_event_type == "unknown":
+        if event_type not in _KNOWN_EVENT_TYPES:
             return ProviderEvent(
                 kind=ProviderEventKind.UNKNOWN,
                 provider_event_type="unknown",
@@ -147,13 +171,13 @@ class StepFunEventCodec:
         try:
             return self._decode_known(
                 payload,
-                event_type=safe_event_type,
+                event_type=event_type,
                 connection_epoch=connection_epoch,
             )
         except (KeyError, RecursionError, TypeError, ValueError):
             return _protocol_error(
                 connection_epoch=connection_epoch,
-                provider_event_type=safe_event_type,
+                provider_event_type=event_type,
             )
 
     def _decode_known(
