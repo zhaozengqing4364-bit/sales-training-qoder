@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-08T18:44:18.721Z",
+  "generated_at": "2026-07-10T19:03:32.860Z",
   "scope": "newcomer-training-admin",
   "routes": [
     {
@@ -54,6 +54,21 @@
       "critical": true,
       "expectText": [
         "公司产品 Demo"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "A-03C",
+      "label": "客户问答口播录音任务",
+      "path": "/admin/sales-trainer/audio/customer-faq-oral-drill",
+      "critical": true,
+      "expectText": [
+        "客户问答口播"
       ],
       "forbiddenText": [
         {},
@@ -141,6 +156,21 @@
       "id": "A-09",
       "label": "商务礼仪专题配置",
       "path": "/admin/sales-trainer/learning-topics/business-etiquette",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "A-09B",
+      "label": "客户常见问答专题配置",
+      "path": "/admin/sales-trainer/learning-topics/customer-faq",
       "critical": true,
       "expectText": [
         {}
@@ -522,13 +552,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 695,
+      "bodyLength": 730,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-01-desktop-admin-sales-trainer.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-01-desktop-admin-sales-trainer.png"
     },
     {
       "id": "A-01",
@@ -538,13 +568,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 623,
+      "bodyLength": 658,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-01-mobile-admin-sales-trainer.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-01-mobile-admin-sales-trainer.png"
     },
     {
       "id": "A-02",
@@ -554,13 +584,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 628,
+      "bodyLength": 703,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-02-desktop-admin-sales-trainer-audio.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-02-desktop-admin-sales-trainer-audio.png"
     },
     {
       "id": "A-02",
@@ -570,13 +600,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 556,
+      "bodyLength": 631,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-02-mobile-admin-sales-trainer-audio.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-02-mobile-admin-sales-trainer-audio.png"
     },
     {
       "id": "A-03",
@@ -592,7 +622,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-03-desktop-admin-sales-trainer-audio-ppt-explanation.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-03-desktop-admin-sales-trainer-audio-ppt-explanation.png"
     },
     {
       "id": "A-03",
@@ -608,7 +638,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-03-mobile-admin-sales-trainer-audio-ppt-explanation.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-03-mobile-admin-sales-trainer-audio-ppt-explanation.png"
     },
     {
       "id": "A-03B",
@@ -624,7 +654,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-03B-desktop-admin-sales-trainer-audio-company-product-demo.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-03B-desktop-admin-sales-trainer-audio-company-product-demo.png"
     },
     {
       "id": "A-03B",
@@ -640,7 +670,39 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-03B-mobile-admin-sales-trainer-audio-company-product-demo.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-03B-mobile-admin-sales-trainer-audio-company-product-demo.png"
+    },
+    {
+      "id": "A-03C",
+      "label": "客户问答口播录音任务",
+      "path": "/admin/sales-trainer/audio/customer-faq-oral-drill",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/admin/sales-trainer/audio/customer-faq-oral-drill",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 527,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-03C-desktop-admin-sales-trainer-audio-customer-faq-oral-drill.png"
+    },
+    {
+      "id": "A-03C",
+      "label": "客户问答口播录音任务",
+      "path": "/admin/sales-trainer/audio/customer-faq-oral-drill",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/admin/sales-trainer/audio/customer-faq-oral-drill",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 455,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-03C-mobile-admin-sales-trainer-audio-customer-faq-oral-drill.png"
     },
     {
       "id": "A-04",
@@ -650,13 +712,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio/materials",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 686,
+      "bodyLength": 695,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-04-desktop-admin-sales-trainer-audio-materials.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-04-desktop-admin-sales-trainer-audio-materials.png"
     },
     {
       "id": "A-04",
@@ -666,13 +728,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio/materials",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 614,
+      "bodyLength": 623,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-04-mobile-admin-sales-trainer-audio-materials.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-04-mobile-admin-sales-trainer-audio-materials.png"
     },
     {
       "id": "A-05",
@@ -688,7 +750,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-05-desktop-admin-sales-trainer-audio-score-standards.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-05-desktop-admin-sales-trainer-audio-score-standards.png"
     },
     {
       "id": "A-05",
@@ -704,7 +766,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-05-mobile-admin-sales-trainer-audio-score-standards.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-05-mobile-admin-sales-trainer-audio-score-standards.png"
     },
     {
       "id": "A-06",
@@ -714,13 +776,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio/submissions",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1330,
+      "bodyLength": 2924,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-06-desktop-admin-sales-trainer-audio-submissions.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-06-desktop-admin-sales-trainer-audio-submissions.png"
     },
     {
       "id": "A-06",
@@ -730,13 +792,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio/submissions",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1258,
+      "bodyLength": 2852,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-06-mobile-admin-sales-trainer-audio-submissions.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-06-mobile-admin-sales-trainer-audio-submissions.png"
     },
     {
       "id": "A-07",
@@ -746,13 +808,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio/results",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 922,
+      "bodyLength": 1708,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-07-desktop-admin-sales-trainer-audio-results.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-07-desktop-admin-sales-trainer-audio-results.png"
     },
     {
       "id": "A-07",
@@ -762,13 +824,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio/results",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 850,
+      "bodyLength": 1636,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-07-mobile-admin-sales-trainer-audio-results.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-07-mobile-admin-sales-trainer-audio-results.png"
     },
     {
       "id": "A-08",
@@ -778,13 +840,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/learning-topics",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 253,
+      "bodyLength": 351,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-08-desktop-admin-sales-trainer-learning-topics.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-08-desktop-admin-sales-trainer-learning-topics.png"
     },
     {
       "id": "A-08",
@@ -794,13 +856,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/learning-topics",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 181,
+      "bodyLength": 279,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-08-mobile-admin-sales-trainer-learning-topics.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-08-mobile-admin-sales-trainer-learning-topics.png"
     },
     {
       "id": "A-09",
@@ -810,13 +872,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/learning-topics/business-etiquette",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1083,
+      "bodyLength": 1187,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-09-desktop-admin-sales-trainer-learning-topics-business-etiquette.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-09-desktop-admin-sales-trainer-learning-topics-business-etiquette.png"
     },
     {
       "id": "A-09",
@@ -826,13 +888,45 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/learning-topics/business-etiquette",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1011,
+      "bodyLength": 1115,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-09-mobile-admin-sales-trainer-learning-topics-business-etiquette.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-09-mobile-admin-sales-trainer-learning-topics-business-etiquette.png"
+    },
+    {
+      "id": "A-09B",
+      "label": "客户常见问答专题配置",
+      "path": "/admin/sales-trainer/learning-topics/customer-faq",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/admin/sales-trainer/learning-topics/customer-faq",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 8931,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-09B-desktop-admin-sales-trainer-learning-topics-customer-faq.png"
+    },
+    {
+      "id": "A-09B",
+      "label": "客户常见问答专题配置",
+      "path": "/admin/sales-trainer/learning-topics/customer-faq",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/admin/sales-trainer/learning-topics/customer-faq",
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "bodyLength": 8859,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-09B-mobile-admin-sales-trainer-learning-topics-customer-faq.png"
     },
     {
       "id": "A-10",
@@ -848,7 +942,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-10-desktop-admin-sales-trainer-learning-topics-import.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-10-desktop-admin-sales-trainer-learning-topics-import.png"
     },
     {
       "id": "A-10",
@@ -864,7 +958,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-10-mobile-admin-sales-trainer-learning-topics-import.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-10-mobile-admin-sales-trainer-learning-topics-import.png"
     },
     {
       "id": "A-11",
@@ -880,7 +974,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-11-desktop-admin-sales-trainer-learning-topics-capabilities.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-11-desktop-admin-sales-trainer-learning-topics-capabilities.png"
     },
     {
       "id": "A-11",
@@ -896,7 +990,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-11-mobile-admin-sales-trainer-learning-topics-capabilities.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-11-mobile-admin-sales-trainer-learning-topics-capabilities.png"
     },
     {
       "id": "A-12",
@@ -912,7 +1006,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-12-desktop-admin-sales-trainer-learning-topics-questions.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-12-desktop-admin-sales-trainer-learning-topics-questions.png"
     },
     {
       "id": "A-12",
@@ -928,7 +1022,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-12-mobile-admin-sales-trainer-learning-topics-questions.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-12-mobile-admin-sales-trainer-learning-topics-questions.png"
     },
     {
       "id": "A-13",
@@ -944,7 +1038,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-13-desktop-admin-sales-trainer-learning-topics-questions-new.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-13-desktop-admin-sales-trainer-learning-topics-questions-new.png"
     },
     {
       "id": "A-13",
@@ -960,7 +1054,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-13-mobile-admin-sales-trainer-learning-topics-questions-new.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-13-mobile-admin-sales-trainer-learning-topics-questions-new.png"
     },
     {
       "id": "A-14",
@@ -976,7 +1070,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-14-desktop-admin-sales-trainer-learning-topics-questions-drafts.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-14-desktop-admin-sales-trainer-learning-topics-questions-drafts.png"
     },
     {
       "id": "A-14",
@@ -992,7 +1086,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-14-mobile-admin-sales-trainer-learning-topics-questions-drafts.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-14-mobile-admin-sales-trainer-learning-topics-questions-drafts.png"
     },
     {
       "id": "A-15",
@@ -1008,7 +1102,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-15-desktop-admin-sales-trainer-learning-topics-questions-quiz-preview.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-15-desktop-admin-sales-trainer-learning-topics-questions-quiz-preview.png"
     },
     {
       "id": "A-15",
@@ -1024,7 +1118,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-15-mobile-admin-sales-trainer-learning-topics-questions-quiz-preview.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-15-mobile-admin-sales-trainer-learning-topics-questions-quiz-preview.png"
     },
     {
       "id": "A-16",
@@ -1040,7 +1134,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-16-desktop-admin-sales-trainer-learning-topics-papers.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-16-desktop-admin-sales-trainer-learning-topics-papers.png"
     },
     {
       "id": "A-16",
@@ -1056,7 +1150,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-16-mobile-admin-sales-trainer-learning-topics-papers.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-16-mobile-admin-sales-trainer-learning-topics-papers.png"
     },
     {
       "id": "A-17",
@@ -1072,7 +1166,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-17-desktop-admin-sales-trainer-learning-topics-papers-new.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-17-desktop-admin-sales-trainer-learning-topics-papers-new.png"
     },
     {
       "id": "A-17",
@@ -1088,7 +1182,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-17-mobile-admin-sales-trainer-learning-topics-papers-new.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-17-mobile-admin-sales-trainer-learning-topics-papers-new.png"
     },
     {
       "id": "A-18",
@@ -1098,13 +1192,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/paths",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1610,
+      "bodyLength": 2438,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-18-desktop-admin-sales-trainer-paths.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-18-desktop-admin-sales-trainer-paths.png"
     },
     {
       "id": "A-18",
@@ -1114,13 +1208,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/paths",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1538,
+      "bodyLength": 2366,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-18-mobile-admin-sales-trainer-paths.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-18-mobile-admin-sales-trainer-paths.png"
     },
     {
       "id": "A-19",
@@ -1130,13 +1224,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/units",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 693,
+      "bodyLength": 694,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-19-desktop-admin-sales-trainer-units.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-19-desktop-admin-sales-trainer-units.png"
     },
     {
       "id": "A-19",
@@ -1146,13 +1240,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/units",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 621,
+      "bodyLength": 622,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-19-mobile-admin-sales-trainer-units.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-19-mobile-admin-sales-trainer-units.png"
     },
     {
       "id": "A-20",
@@ -1168,7 +1262,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-20-desktop-admin-sales-trainer-ai-coach.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-20-desktop-admin-sales-trainer-ai-coach.png"
     },
     {
       "id": "A-20",
@@ -1184,7 +1278,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-20-mobile-admin-sales-trainer-ai-coach.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-20-mobile-admin-sales-trainer-ai-coach.png"
     },
     {
       "id": "A-21",
@@ -1194,13 +1288,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/readiness",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 661,
+      "bodyLength": 713,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-21-desktop-admin-sales-trainer-readiness.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-21-desktop-admin-sales-trainer-readiness.png"
     },
     {
       "id": "A-21",
@@ -1210,13 +1304,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/readiness",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 589,
+      "bodyLength": 641,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-21-mobile-admin-sales-trainer-readiness.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-21-mobile-admin-sales-trainer-readiness.png"
     },
     {
       "id": "A-22",
@@ -1226,13 +1320,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/training-records",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 4242,
+      "bodyLength": 9275,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-22-desktop-admin-sales-trainer-training-records.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-22-desktop-admin-sales-trainer-training-records.png"
     },
     {
       "id": "A-22",
@@ -1242,13 +1336,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/training-records",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 4170,
+      "bodyLength": 9203,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-22-mobile-admin-sales-trainer-training-records.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-22-mobile-admin-sales-trainer-training-records.png"
     },
     {
       "id": "A-23",
@@ -1258,13 +1352,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/analytics",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 2609,
+      "bodyLength": 2291,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-23-desktop-admin-sales-trainer-analytics.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-23-desktop-admin-sales-trainer-analytics.png"
     },
     {
       "id": "A-23",
@@ -1274,13 +1368,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/analytics",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 2537,
+      "bodyLength": 2219,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-23-mobile-admin-sales-trainer-analytics.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-23-mobile-admin-sales-trainer-analytics.png"
     },
     {
       "id": "A-24",
@@ -1290,13 +1384,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/settings",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1213,
+      "bodyLength": 1243,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-24-desktop-admin-sales-trainer-settings.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-24-desktop-admin-sales-trainer-settings.png"
     },
     {
       "id": "A-24",
@@ -1306,13 +1400,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/settings",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1141,
+      "bodyLength": 1171,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-24-mobile-admin-sales-trainer-settings.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-24-mobile-admin-sales-trainer-settings.png"
     },
     {
       "id": "A-25",
@@ -1322,13 +1416,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/operation-logs",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 11024,
+      "bodyLength": 11612,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-25-desktop-admin-sales-trainer-operation-logs.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-25-desktop-admin-sales-trainer-operation-logs.png"
     },
     {
       "id": "A-25",
@@ -1338,13 +1432,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/operation-logs",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 10952,
+      "bodyLength": 11540,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-25-mobile-admin-sales-trainer-operation-logs.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/A-25-mobile-admin-sales-trainer-operation-logs.png"
     },
     {
       "id": "C-01",
@@ -1354,13 +1448,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/articles",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 253,
+      "bodyLength": 351,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-01-desktop-admin-sales-trainer-articles.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-01-desktop-admin-sales-trainer-articles.png"
     },
     {
       "id": "C-01",
@@ -1370,13 +1464,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/articles",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 181,
+      "bodyLength": 279,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-01-mobile-admin-sales-trainer-articles.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-01-mobile-admin-sales-trainer-articles.png"
     },
     {
       "id": "C-02",
@@ -1386,13 +1480,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/materials",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 695,
+      "bodyLength": 704,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-02-desktop-admin-sales-trainer-materials.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-02-desktop-admin-sales-trainer-materials.png"
     },
     {
       "id": "C-02",
@@ -1402,13 +1496,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/materials",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 623,
+      "bodyLength": 632,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-02-mobile-admin-sales-trainer-materials.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-02-mobile-admin-sales-trainer-materials.png"
     },
     {
       "id": "C-03",
@@ -1424,7 +1518,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-03-desktop-admin-sales-trainer-score-standards.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-03-desktop-admin-sales-trainer-score-standards.png"
     },
     {
       "id": "C-03",
@@ -1440,7 +1534,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-03-mobile-admin-sales-trainer-score-standards.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-03-mobile-admin-sales-trainer-score-standards.png"
     },
     {
       "id": "C-04",
@@ -1456,7 +1550,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-04-desktop-admin-sales-trainer-papers.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-04-desktop-admin-sales-trainer-papers.png"
     },
     {
       "id": "C-04",
@@ -1472,7 +1566,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-04-mobile-admin-sales-trainer-papers.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-04-mobile-admin-sales-trainer-papers.png"
     },
     {
       "id": "C-05",
@@ -1488,7 +1582,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-05-desktop-admin-sales-trainer-questions.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-05-desktop-admin-sales-trainer-questions.png"
     },
     {
       "id": "C-05",
@@ -1504,7 +1598,7 @@
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-05-mobile-admin-sales-trainer-questions.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-05-mobile-admin-sales-trainer-questions.png"
     },
     {
       "id": "C-06",
@@ -1514,13 +1608,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio-submissions",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1330,
+      "bodyLength": 2924,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-06-desktop-admin-sales-trainer-audio-submissions.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-06-desktop-admin-sales-trainer-audio-submissions.png"
     },
     {
       "id": "C-06",
@@ -1530,13 +1624,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio-submissions",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1258,
+      "bodyLength": 2852,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-06-mobile-admin-sales-trainer-audio-submissions.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-06-mobile-admin-sales-trainer-audio-submissions.png"
     },
     {
       "id": "C-07",
@@ -1546,13 +1640,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/score-results",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1446,
+      "bodyLength": 2534,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-07-desktop-admin-sales-trainer-score-results.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-07-desktop-admin-sales-trainer-score-results.png"
     },
     {
       "id": "C-07",
@@ -1562,13 +1656,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/score-results",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 1374,
+      "bodyLength": 2462,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-07-mobile-admin-sales-trainer-score-results.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-07-mobile-admin-sales-trainer-score-results.png"
     },
     {
       "id": "C-08",
@@ -1578,13 +1672,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 628,
+      "bodyLength": 703,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-08-desktop-admin-sales-trainer-training-tasks.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-08-desktop-admin-sales-trainer-training-tasks.png"
     },
     {
       "id": "C-08",
@@ -1594,13 +1688,13 @@
       "finalUrl": "http://localhost:3445/admin/sales-trainer/audio",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 556,
+      "bodyLength": 631,
       "consoleErrors": [],
       "networkErrors": [],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
-      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-08-mobile-admin-sales-trainer-training-tasks.png"
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/C-08-mobile-admin-sales-trainer-training-tasks.png"
     }
   ],
   "excluded": [
