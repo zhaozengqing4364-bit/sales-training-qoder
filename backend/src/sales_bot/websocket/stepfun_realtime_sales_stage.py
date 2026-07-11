@@ -183,6 +183,8 @@ class StepFunRealtimeSalesStageMixin(StepFunRealtimeStateBase):
         """Initialize sales-stage capability context once per handler session."""
         if self._sales_stage_context is not None:
             return
+        if not self._sales_stage_enabled or self._sales_stage_capability is None:
+            return
 
         self._sales_stage_context = AgentContext(
             session_id=self.session_id or "",
@@ -215,7 +217,7 @@ class StepFunRealtimeSalesStageMixin(StepFunRealtimeStateBase):
         if not normalized_text:
             return None
 
-        if not self._sales_stage_enabled:
+        if not self._sales_stage_enabled or self._sales_stage_capability is None:
             return None
 
         try:

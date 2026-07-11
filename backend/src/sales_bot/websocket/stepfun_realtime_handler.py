@@ -267,8 +267,10 @@ class StepFunRealtimeSharedHandler(
         db_session_factory: Callable[[], Any] | None = None,
         knowledge_service_factory: Callable[[AsyncSession], Any] | None = None,
         transcript_capture_sink: Callable[[dict[str, Any]], Any] | None = None,
+        scenario: str = "sales",
+        sales_capabilities_enabled: bool = True,
     ) -> None:
-        super().__init__("sales")
+        super().__init__(scenario)
         self.upstream_ws = None
         self._stepfun_transport = stepfun_transport or StepFunTransport(
             local_provider_enabled=should_use_phase4_local_provider,
@@ -343,14 +345,18 @@ class StepFunRealtimeSharedHandler(
         )
         self.session_status = "preparing"
         self.ai_state = "idle"
-        self.session_scenario_type = "sales"
+        self.session_scenario_type = scenario
         self.turn_count = 0
         self._db_lock = asyncio.Lock()
         self._persisted_message_keys: set[tuple[int, str, str]] = set()
-        self._sales_stage_runtime_config: dict[str, Any] = {"enabled": True}
-        self._sales_stage_enabled = True
-        self._sales_stage_capability = SalesStageCapability(
-            self._sales_stage_runtime_config
+        self._sales_stage_runtime_config: dict[str, Any] = {
+            "enabled": sales_capabilities_enabled
+        }
+        self._sales_stage_enabled = sales_capabilities_enabled
+        self._sales_stage_capability = (
+            SalesStageCapability(self._sales_stage_runtime_config)
+            if sales_capabilities_enabled
+            else None
         )
         self._sales_stage_context: AgentContext | None = None
         self._sales_stage_lock = asyncio.Lock()
@@ -363,16 +369,24 @@ class StepFunRealtimeSharedHandler(
         self._persona_behavior_config: dict[str, Any] = {}
         self._persona_scoring_weights: list[dict[str, Any]] | None = None
 
-        self._fuzzy_detection_runtime_config: dict[str, Any] = {"enabled": True}
-        self._fuzzy_detection_enabled = True
-        self._fuzzy_detection_capability = FuzzyDetectionCapability(
-            self._fuzzy_detection_runtime_config
+        self._fuzzy_detection_runtime_config: dict[str, Any] = {
+            "enabled": sales_capabilities_enabled
+        }
+        self._fuzzy_detection_enabled = sales_capabilities_enabled
+        self._fuzzy_detection_capability = (
+            FuzzyDetectionCapability(self._fuzzy_detection_runtime_config)
+            if sales_capabilities_enabled
+            else None
         )
 
-        self._realtime_scoring_runtime_config: dict[str, Any] = {"enabled": True}
-        self._realtime_scoring_enabled = True
-        self._realtime_scoring_capability = RealtimeScoringCapability(
-            self._realtime_scoring_runtime_config
+        self._realtime_scoring_runtime_config: dict[str, Any] = {
+            "enabled": sales_capabilities_enabled
+        }
+        self._realtime_scoring_enabled = sales_capabilities_enabled
+        self._realtime_scoring_capability = (
+            RealtimeScoringCapability(self._realtime_scoring_runtime_config)
+            if sales_capabilities_enabled
+            else None
         )
         self._latest_score_snapshot: dict[str, Any] | None = None
         self._latest_live_session_summary: dict[str, Any] | None = None

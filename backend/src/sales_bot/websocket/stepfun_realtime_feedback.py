@@ -213,11 +213,17 @@ class StepFunRealtimeFeedbackMixin(StepFunRealtimeStateBase):
             turn_count=max(0, self.turn_count),
         )
 
-        if self._fuzzy_detection_enabled:
+        if (
+            self._fuzzy_detection_enabled
+            and self._fuzzy_detection_capability is not None
+        ):
             await self._fuzzy_detection_capability.on_session_start(
                 self._feedback_context
             )
-        if self._realtime_scoring_enabled:
+        if (
+            self._realtime_scoring_enabled
+            and self._realtime_scoring_capability is not None
+        ):
             await self._realtime_scoring_capability.on_session_start(
                 self._feedback_context
             )
@@ -441,7 +447,10 @@ class StepFunRealtimeFeedbackMixin(StepFunRealtimeStateBase):
 
         capability_pipeline_degraded = False
 
-        if self._fuzzy_detection_enabled:
+        if (
+            self._fuzzy_detection_enabled
+            and self._fuzzy_detection_capability is not None
+        ):
             try:
                 fuzzy_result = await self._fuzzy_detection_capability.execute(
                     self._feedback_context, text
@@ -474,7 +483,10 @@ class StepFunRealtimeFeedbackMixin(StepFunRealtimeStateBase):
                     capability_pipeline_degraded = True
 
         score_update_payload: dict[str, Any] | None = None
-        if self._realtime_scoring_enabled:
+        if (
+            self._realtime_scoring_enabled
+            and self._realtime_scoring_capability is not None
+        ):
             try:
                 score_result = await self._realtime_scoring_capability.execute(
                     self._feedback_context, text

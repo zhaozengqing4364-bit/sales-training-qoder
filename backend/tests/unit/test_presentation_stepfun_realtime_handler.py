@@ -8,7 +8,12 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from agent.capabilities.fuzzy_detection import FuzzyDetectionCapability
+from agent.capabilities.realtime_scoring import RealtimeScoringCapability
+from agent.capabilities.sales_stage import SalesStageCapability
 from common.error_handling.result import Result
+from common.websocket.base_handler import BaseWebSocketHandler
+from presentation_coach.websocket import presentation_stepfun_realtime_handler
 from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
     PresentationStepFunRealtimeHandler,
 )
@@ -61,6 +66,58 @@ def test_presentation_stepfun_handler_forwards_collaborator_factories():
     assert handler._knowledge_service_factory is knowledge_service_factory
     assert handler.scenario == "presentation"
     assert handler.session_scenario_type == "presentation"
+
+
+def test_presentation_constructor_skips_all_sales_capability_objects() -> None:
+    with (
+        patch(
+            "sales_bot.websocket.stepfun_realtime_handler.SalesStageCapability"
+        ) as sales_stage,
+        patch(
+            "sales_bot.websocket.stepfun_realtime_handler.FuzzyDetectionCapability"
+        ) as fuzzy_detection,
+        patch(
+            "sales_bot.websocket.stepfun_realtime_handler.RealtimeScoringCapability"
+        ) as realtime_scoring,
+    ):
+        handler = presentation_stepfun_realtime_handler.LegacyPresentationStepFunRealtimeHandler()
+
+    sales_stage.assert_not_called()
+    fuzzy_detection.assert_not_called()
+    realtime_scoring.assert_not_called()
+    assert handler._sales_stage_capability is None
+    assert handler._fuzzy_detection_capability is None
+    assert handler._realtime_scoring_capability is None
+
+
+def test_presentation_scenario_is_passed_to_first_base_initialization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initialized_scenarios: list[str] = []
+    original_init = BaseWebSocketHandler.__init__
+
+    def recording_init(self: BaseWebSocketHandler, scenario: str) -> None:
+        initialized_scenarios.append(scenario)
+        original_init(self, scenario)
+
+    monkeypatch.setattr(BaseWebSocketHandler, "__init__", recording_init)
+
+    handler = presentation_stepfun_realtime_handler.LegacyPresentationStepFunRealtimeHandler()
+
+    assert initialized_scenarios == ["presentation"]
+    assert handler.scenario == "presentation"
+
+
+def test_sales_constructor_defaults_keep_typed_capabilities() -> None:
+    handler = StepFunRealtimeHandler()
+
+    assert handler.scenario == "sales"
+    assert handler._sales_stage_enabled is True
+    assert isinstance(handler._sales_stage_capability, SalesStageCapability)
+    assert handler._fuzzy_detection_enabled is True
+    assert isinstance(handler._fuzzy_detection_capability, FuzzyDetectionCapability)
+    assert handler._realtime_scoring_enabled is True
+    assert isinstance(handler._realtime_scoring_capability, RealtimeScoringCapability)
 
 
 @pytest.mark.asyncio

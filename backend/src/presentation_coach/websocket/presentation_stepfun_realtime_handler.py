@@ -16,9 +16,6 @@ from fastapi import WebSocket
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.capabilities.fuzzy_detection import FuzzyDetectionCapability
-from agent.capabilities.realtime_scoring import RealtimeScoringCapability
-from agent.capabilities.sales_stage import SalesStageCapability
 from agent.models import Agent, Persona
 from agent.services.persona_policy import normalize_persona_policy
 from common.db.models import PracticeSession
@@ -54,8 +51,8 @@ from sales_bot.websocket.stepfun_realtime_handler import (
 logger = get_logger(__name__)
 
 
-class PresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
-    """StepFun realtime handler adapted for presentation scenario."""
+class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
+    """Rollback-compatible StepFun adapter for the presentation scenario."""
 
     def __init__(
         self,
@@ -64,14 +61,16 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         db_session_factory: Any | None = None,
         knowledge_service_factory: Any | None = None,
     ) -> None:
-        super_kwargs: dict[str, Any] = {"stepfun_transport": stepfun_transport}
+        super_kwargs: dict[str, Any] = {
+            "stepfun_transport": stepfun_transport,
+            "scenario": "presentation",
+            "sales_capabilities_enabled": False,
+        }
         if db_session_factory is not None:
             super_kwargs["db_session_factory"] = db_session_factory
         if knowledge_service_factory is not None:
             super_kwargs["knowledge_service_factory"] = knowledge_service_factory
         super().__init__(**super_kwargs)
-        self.scenario = "presentation"
-        self.session_scenario_type = "presentation"
         self.current_page = 1
         self.feedback_service = get_feedback_service()
         self.prompt_role_resolver = PresentationPromptRoleResolver()
@@ -80,7 +79,6 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             send_json=lambda ws, payload: self.manager.send_json(ws, payload),
             websocket_provider=lambda: self.websocket,
         )
-        self._disable_sales_capabilities()
 
     async def handle_connection(
         self,
@@ -102,26 +100,6 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
     async def _load_effective_policy(self) -> None:
         await super()._load_effective_policy()
         await self._load_presentation_ai_policy()
-
-    def _disable_sales_capabilities(self) -> None:
-        """Disable sales-only realtime capability modules."""
-        self._sales_stage_runtime_config = {"enabled": False}
-        self._sales_stage_enabled = False
-        self._sales_stage_capability = SalesStageCapability(
-            self._sales_stage_runtime_config
-        )
-
-        self._fuzzy_detection_runtime_config = {"enabled": False}
-        self._fuzzy_detection_enabled = False
-        self._fuzzy_detection_capability = FuzzyDetectionCapability(
-            self._fuzzy_detection_runtime_config
-        )
-
-        self._realtime_scoring_runtime_config = {"enabled": False}
-        self._realtime_scoring_enabled = False
-        self._realtime_scoring_capability = RealtimeScoringCapability(
-            self._realtime_scoring_runtime_config
-        )
 
     @staticmethod
     def _normalize_forbidden_words(words: list[Any]) -> list[dict[str, Any]]:
@@ -150,7 +128,15 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         self._agent_capabilities_config = {}
         self._persona_behavior_config = {}
         self._persona_scoring_weights = None
-        self._disable_sales_capabilities()
+        self._sales_stage_runtime_config = {"enabled": False}
+        self._sales_stage_enabled = False
+        self._sales_stage_capability = None
+        self._fuzzy_detection_runtime_config = {"enabled": False}
+        self._fuzzy_detection_enabled = False
+        self._fuzzy_detection_capability = None
+        self._realtime_scoring_runtime_config = {"enabled": False}
+        self._realtime_scoring_enabled = False
+        self._realtime_scoring_capability = None
         self._sales_stage_context = None
         self._feedback_context = None
         self._last_emitted_stage = None
@@ -735,3 +721,8 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             self._grounding_preparation_in_progress = False
 
         await self._create_response_from_pending_commit()
+
+
+# Temporary import compatibility only. Production rollout selection targets the
+# explicit Engine façade or the named Legacy adapter.
+PresentationStepFunRealtimeHandler = LegacyPresentationStepFunRealtimeHandler

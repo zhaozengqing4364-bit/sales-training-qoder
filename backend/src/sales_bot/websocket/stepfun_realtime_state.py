@@ -9,6 +9,9 @@ from typing import TYPE_CHECKING, Any
 from common.websocket.base_handler import BaseWebSocketHandler
 
 if TYPE_CHECKING:
+    from agent.capabilities.fuzzy_detection import FuzzyDetectionCapability
+    from agent.capabilities.realtime_scoring import RealtimeScoringCapability
+    from agent.capabilities.sales_stage import SalesStageCapability
     from agent.context import AgentContext
     from common.effectiveness.schemas import ActionCard
     from sales_bot.services.transcript_normalization import (
@@ -68,7 +71,7 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
 
     _sales_stage_runtime_config: dict[str, Any]
     _sales_stage_enabled: bool
-    _sales_stage_capability: Any
+    _sales_stage_capability: SalesStageCapability | None
     _sales_stage_context: AgentContext | None
     _sales_stage_lock: asyncio.Lock
     _last_emitted_stage: str | None
@@ -82,10 +85,10 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
 
     _fuzzy_detection_runtime_config: dict[str, Any]
     _fuzzy_detection_enabled: bool
-    _fuzzy_detection_capability: Any
+    _fuzzy_detection_capability: FuzzyDetectionCapability | None
     _realtime_scoring_runtime_config: dict[str, Any]
     _realtime_scoring_enabled: bool
-    _realtime_scoring_capability: Any
+    _realtime_scoring_capability: RealtimeScoringCapability | None
     _latest_score_snapshot: dict[str, Any] | None
     _latest_live_session_summary: dict[str, Any] | None
     _latest_claim_truth: dict[str, Any] | None

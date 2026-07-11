@@ -891,11 +891,17 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         await self._cancel_pending_response_after_commit()
         self._reset_turn_runtime_state()
         if self._feedback_context is not None:
-            if self._fuzzy_detection_enabled:
+            if (
+                self._fuzzy_detection_enabled
+                and self._fuzzy_detection_capability is not None
+            ):
                 await self._fuzzy_detection_capability.on_session_end(
                     self._feedback_context
                 )
-            if self._realtime_scoring_enabled:
+            if (
+                self._realtime_scoring_enabled
+                and self._realtime_scoring_capability is not None
+            ):
                 await self._realtime_scoring_capability.on_session_end(
                     self._feedback_context
                 )
