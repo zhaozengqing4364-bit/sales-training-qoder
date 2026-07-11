@@ -33,3 +33,12 @@ class FunctionCallState:
     name: str
     delta_arguments: str = ""
     done_arguments: str = ""
+
+
+@dataclass(frozen=True)
+class FunctionCallAuthority:
+    """Binds one upstream call id to the response that explicitly introduced it."""
+
+    request_id: int
+    response_id: str
+    stream_id: str

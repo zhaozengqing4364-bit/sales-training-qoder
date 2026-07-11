@@ -3,7 +3,8 @@
 ## 结果
 
 - 原始实现 commit：`ec7067f0 refactor(realtime): route sessions through provider port`
-- Review 修复 commit：`fix(realtime): enforce provider rollout and event authority`
+- Review 修复 commit：`e9df6d8d fix(realtime): enforce provider rollout and event authority`
+- Review 2 修复 commit：`fix(realtime): verify raw differential and tool authority`
 - 风险等级：P1（共享 Sales/Presentation realtime 生产 Provider 路径默认切换；保留 server-only
   Legacy 回滚）。
 - 严格只完成 Task 3：未实现 Grounding Module/单 cache（Task 4+），未调用真实收费 Provider，未改
@@ -31,9 +32,13 @@
 - canonical projection 覆盖 ASR delta/final、speech timing、response text/audio/transcript、thinking、
   function arguments、normalized response.done function outputs、typed error/unknown。event epoch 与当前
   connection epoch 不一致时在任何 persistence/tool/turn side effect 前忽略。Review 后 canonical boundary
-  还会在投影前复用 handler 的 `_active_response` 与 `_function_call_states`，校验同 epoch 的
+  还会在投影前复用 handler 的 `_active_response`，校验同 epoch 的
   request/response/stream/call authority；stale text/audio/thinking/done/function args/tool output 不会进入
   persistence、TTS 或 tool chain。
+- Review 2 新增独立 `_function_call_authorities`：只有携带至少一个显式 authority ID、且所有已提供
+  request/response/stream 均匹配当前 active response 的首个 call event，才能注册完整
+  `call_id -> (request_id, response_id, stream_id)` binding。后续 sparse delta/done 可依 call binding
+  继续；空 registry sparse call、旧 binding、未知 `response.done` output 一律 fail closed，不能执行 tool。
 - handler close 与主连接 lifecycle 采用 shielded cleanup：单次或重复 cancellation 都先完成 Provider
   close、本地 upstream/timing reset、snapshot save 与 manager disconnect，再传播首次
   `CancelledError`；清理步骤发生普通错误时仍继续尝试其余步骤并上抛首个错误。
@@ -42,9 +47,11 @@
 - sanitized diagnostics 增加 `provider_port_enabled` 与 `selected_provider_path`；Presentation façade 只
   allowlist 这两个 closed 字段。Presentation 只通过继承的 Sales compatibility adapter 接入，未新增
   `presentation_coach -> training_runtime` 静态 import。
-- Golden 已重写为真正的 Engine × Provider 四组合。Provider=true 使用 canonical Fake queue 和真实
-  `_receive_upstream_events()`；覆盖 ASR delta/final、speech timing/emotion、TTS、thinking、persistence、
-  tool output/follow-up、reconnect、UNKNOWN/error 以及 stale epoch/request/response/stream/call。
+- Golden 已重写为真正的 Engine × Provider 四组合。Provider=true 使用 canonical Fake queue；
+  Provider=false 使用 Fake raw websocket 投递序列化 JSON，真实经过
+  `recv -> json.loads -> _handle_upstream_event`。两条路径都运行生产 `_receive_upstream_events()`，覆盖
+  ASR delta/final、speech timing/emotion、TTS、thinking、persistence、合法 call binding、tool
+  output/follow-up、reconnect、UNKNOWN/error；stale authority 由独立 fail-closed tests 覆盖。
   四组合逐项比较 ordered downstream/upstream、snapshot/persistence、reconnect epoch、tool follow-up
   与 Engine single-writer terminal state；mutation probes 仍保留。
 
@@ -81,12 +88,22 @@ Review Changes Required Red/Green：
 4. 2×2 Golden Red：首次真实四组合 differential 在 ordered `session.update` nested canonical mapping
    上失败；修正 Fake Provider 的递归 closed DTO 投影后四组合 Golden 与 mutation tests 全绿。
 
+Review 2 Red/Green：
+
+1. raw differential Red：将 Legacy 组合改为 Fake raw websocket 后，真实 receive loop 暴露旧 Golden
+   直接调用 canonical handler 的假等价；修正 fixture 为合法共同 wire 序列后，Legacy raw JSON 与
+   Provider canonical queue 的 ordered I/O、persistence、tool follow-up、snapshot/reconnect 全量一致。
+2. call authority Red：`sparse FUNCTION_ARGUMENTS_DONE` 在空 registry 创建 state 并执行 tool；合法首事件
+   没有 authority binding 字段；未绑定的 `response.done` output 仍执行 tool，定向结果 `3 failed`。
+   Green 后三项均通过，并由真实 raw/canonical Golden 验证“首事件显式绑定 → sparse delta/done →
+   response.done 重放去重 → 单次 tool follow-up”。
+
 ## 最终验证
 
-Brief 全量 pytest（14 个 unit/integration 文件，Review 后新增 10 个回归 case）：
+Brief 全量 pytest（14 个 unit/integration 文件，Review 后新增 13 个回归 case）：
 
 ```text
-316 passed, 1 warning in 13.00s
+319 passed, 1 warning in 12.36s
 ```
 
 CodeGraph affected payload snapshots：
@@ -117,8 +134,10 @@ git diff --check: exit 0
   response/tool/audio 与 Sales/Presentation 调用链。
 - `_close_upstream --depth 3`：21 affected symbols；覆盖主 lifecycle、refresh/recovery 与取消测试。
 - `_handle_provider_event --depth 3`：9 affected symbols；覆盖 canonical queue 与 stale authority tests。
-- `_receive_upstream_events --depth 3`：7 affected symbols；由 canonical Fake Provider receive 与真实
-  Golden conversation 覆盖。
+- `_authorize_function_call_event --depth 3`：18 affected symbols；覆盖 Provider/Legacy 首事件注册、
+  sparse delta/done、response.done、tool execution 与 reconnect reset。
+- `_receive_upstream_events --depth 3`：8 affected symbols；由 canonical Fake Provider queue 与 Fake raw
+  websocket 两条真实 receive loop 覆盖。
 - `_send_upstream --depth 3`：48 affected symbols；覆盖 response/audio/tool/interrupt/lifecycle、Sales、
   Presentation evidence、payload snapshots 与 Golden mutation tests。
 - architecture guard 证明未新增未治理 edge；Presentation subtree静态 `training_runtime` import 搜索为空。

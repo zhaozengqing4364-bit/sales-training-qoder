@@ -186,6 +186,7 @@ from sales_bot.websocket.stepfun_realtime_constants import (
     TRANSCRIPTION_WAIT_GRACE_SECONDS,
 )
 from sales_bot.websocket.stepfun_runtime_types import (
+    FunctionCallAuthority,
     FunctionCallState,
     RealtimeResponseState,
 )
@@ -1252,23 +1253,32 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         if event.stream_id is not None and event.stream_id != active_response.stream_id:
             return False
 
+        legacy_event = _legacy_event_from_provider_event(event)
+        if is_function_item:
+            function_call = extract_function_call_from_item_created(legacy_event)
+            if function_call is None:
+                return False
+            call_id, name = function_call
+            return self._authorize_function_call_event(
+                legacy_event,
+                call_id=call_id,
+                name=name,
+                allow_register=True,
+            )
         if event.kind in {
             ProviderEventKind.FUNCTION_ARGUMENTS_DELTA,
             ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
         }:
-            known_calls = self._function_call_states
-            if known_calls and event.call_id not in known_calls:
-                return False
+            call_id, name, _arguments = parse_function_call_event(legacy_event)
+            return self._authorize_function_call_event(
+                legacy_event,
+                call_id=call_id,
+                name=name,
+                allow_register=True,
+            )
         if event.kind is ProviderEventKind.RESPONSE_DONE:
-            function_outputs = event.data.get("function_outputs")
-            known_calls = self._function_call_states
-            if known_calls and isinstance(function_outputs, tuple):
-                for output in function_outputs:
-                    if (
-                        isinstance(output, FrozenJsonMapping)
-                        and output.get("call_id") not in known_calls
-                    ):
-                        return False
+            return self._response_done_function_calls_are_authorized(legacy_event)
+
         return True
 
     async def _handle_upstream_event(self, event: dict[str, Any]) -> None:
@@ -1344,9 +1354,119 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             return
 
         call_id, name = function_call
-        self._function_call_states[call_id] = FunctionCallState(
+        if not self._authorize_function_call_event(
+            event,
             call_id=call_id,
             name=name,
+            allow_register=True,
+        ):
+            return
+        state = self._function_call_states[call_id]
+        if name and state.name == "unknown":
+            state.name = name
+
+    @staticmethod
+    def _function_event_authority(
+        event: dict[str, Any],
+    ) -> tuple[int | None, str | None, str | None]:
+        request_id_value = event.get("request_id")
+        request_id = (
+            request_id_value
+            if type(request_id_value) is int and request_id_value >= 0
+            else None
+        )
+        response_id_value = event.get("response_id")
+        response = event.get("response")
+        if not response_id_value and isinstance(response, dict):
+            response_id_value = response.get("id")
+        response_id = (
+            str(response_id_value).strip()
+            if isinstance(response_id_value, str) and response_id_value.strip()
+            else None
+        )
+        stream_id_value = event.get("stream_id")
+        stream_id = (
+            str(stream_id_value).strip()
+            if isinstance(stream_id_value, str) and stream_id_value.strip()
+            else None
+        )
+        return request_id, response_id, stream_id
+
+    def _function_call_authority_is_current(
+        self,
+        authority: FunctionCallAuthority,
+    ) -> bool:
+        active = self._active_response
+        return bool(
+            active is not None
+            and active.response_id is not None
+            and authority.request_id == active.request_id
+            and authority.response_id == active.response_id
+            and authority.stream_id == active.stream_id
+        )
+
+    def _authorize_function_call_event(
+        self,
+        event: dict[str, Any],
+        *,
+        call_id: str,
+        name: str,
+        allow_register: bool,
+    ) -> bool:
+        if not call_id:
+            return False
+        request_id, response_id, stream_id = self._function_event_authority(event)
+        authority = self._function_call_authorities.get(call_id)
+        if authority is not None:
+            if not self._function_call_authority_is_current(authority):
+                return False
+            if request_id is not None and request_id != authority.request_id:
+                return False
+            if response_id is not None and response_id != authority.response_id:
+                return False
+            if stream_id is not None and stream_id != authority.stream_id:
+                return False
+            return True
+        if not allow_register:
+            return False
+
+        active = self._active_response
+        if active is None or active.response_id is None:
+            return False
+        if request_id is None and response_id is None and stream_id is None:
+            return False
+        if request_id is not None and request_id != active.request_id:
+            return False
+        if response_id is not None and response_id != active.response_id:
+            return False
+        if stream_id is not None and stream_id != active.stream_id:
+            return False
+        self._function_call_authorities[call_id] = FunctionCallAuthority(
+            request_id=active.request_id,
+            response_id=active.response_id,
+            stream_id=active.stream_id,
+        )
+        self._function_call_states.setdefault(
+            call_id,
+            FunctionCallState(call_id=call_id, name=name or "unknown"),
+        )
+        return True
+
+    def _response_done_function_calls_are_authorized(
+        self,
+        event: dict[str, Any],
+    ) -> bool:
+        function_calls = extract_response_done_function_calls(event)
+        if not function_calls:
+            return True
+        return all(
+            self._authorize_function_call_event(
+                event,
+                call_id=function_call["call_id"],
+                name=function_call["name"],
+                allow_register=False,
+            )
+            for function_call in function_calls
         )
 
     async def _handle_final_user_transcript(self, transcript: str) -> None:
@@ -2472,6 +2592,12 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
 
     async def _handle_upstream_response_done(self, event: dict) -> None:
         """Finalize response and execute potential tool follow-ups."""
+        if not self._response_done_function_calls_are_authorized(event):
+            self._log_grounding_debug(
+                "stale_function_call_response_done_ignored",
+                event_type=str(event.get("type") or ""),
+            )
+            return
         expected_request_id = (
             self._active_response.request_id
             if self._active_response is not None
@@ -2598,11 +2724,15 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         if not call_id:
             return
 
-        state = self._function_call_states.get(call_id)
-        if not state:
-            state = FunctionCallState(call_id=call_id, name=name or "unknown")
-            self._function_call_states[call_id] = state
-        elif name and state.name == "unknown":
+        if not self._authorize_function_call_event(
+            event,
+            call_id=call_id,
+            name=name,
+            allow_register=True,
+        ):
+            return
+        state = self._function_call_states[call_id]
+        if name and state.name == "unknown":
             state.name = name
 
         if done:

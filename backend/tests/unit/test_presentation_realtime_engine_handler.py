@@ -18,7 +18,10 @@ from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
     LegacyPresentationStepFunRealtimeHandler,
 )
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeSharedHandler
-from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstreamMixin
+from sales_bot.websocket.stepfun_realtime_upstream import (
+    StepFunRealtimeUpstreamMixin,
+    _legacy_event_from_provider_event,
+)
 from sales_bot.websocket.stepfun_runtime_types import RealtimeResponseState
 from training_runtime import (
     PresentationScenarioPlugin,
@@ -715,7 +718,7 @@ class GoldenWebSocket:
 class GoldenStepFunTransport:
     def __init__(self, events: list[dict[str, Any]]) -> None:
         self.events = events
-        self.upstream = SimpleNamespace()
+        self.upstream = GoldenRawUpstream()
 
     async def connect(self, **_kwargs: Any) -> object:
         return self.upstream
@@ -737,6 +740,37 @@ class GoldenStepFunTransport:
         **_kwargs: Any,
     ) -> StepFunBackpressureResult:
         return StepFunBackpressureResult(status=StepFunBackpressureStatus.ALLOW)
+
+
+class GoldenRawUpstream:
+    def __init__(self) -> None:
+        self._queue: asyncio.Queue[str] = asyncio.Queue()
+        self._stop_after_batch: Any = None
+        self.received_event_types: list[str] = []
+
+    async def recv(self) -> str:
+        raw = await self._queue.get()
+        payload = json.loads(raw)
+        self.received_event_types.append(str(payload.get("type") or ""))
+        if self._queue.empty() and self._stop_after_batch is not None:
+            self._stop_after_batch()
+        return raw
+
+    async def deliver(
+        self,
+        handler: LegacyPresentationStepFunRealtimeHandler,
+        events: list[ProviderEvent],
+    ) -> None:
+        for event in events:
+            if event.connection_epoch != handler._connection_epoch:
+                continue
+            raw_event = _legacy_event_from_provider_event(event)
+            await self._queue.put(json.dumps(raw_event, ensure_ascii=False))
+        handler.running = True
+        self._stop_after_batch = lambda: setattr(handler, "running", False)
+        await handler._receive_upstream_events()
+        self._stop_after_batch = None
+        handler.running = True
 
 
 class GoldenCanonicalProvider:
@@ -859,14 +893,15 @@ def _configure_golden_handler(
     upstream_events: list[dict[str, Any]],
     mutate_transcript_event: bool,
     provider_enabled: bool,
-) -> GoldenCanonicalProvider | None:
+) -> GoldenCanonicalProvider | GoldenRawUpstream:
     handler.websocket = websocket
     handler.session_id = "session-golden"
     handler.user_id = "user-golden"
     handler.running = True
     handler._connection_epoch = 1
     handler._instruction_contract_hash = "sha256:golden-policy"
-    handler._stepfun_transport = GoldenStepFunTransport(upstream_events)
+    transport = GoldenStepFunTransport(upstream_events)
+    handler._stepfun_transport = transport
     provider = GoldenCanonicalProvider(upstream_events) if provider_enabled else None
     if provider is not None:
         handler._provider_factory = lambda **_kwargs: provider
@@ -897,9 +932,13 @@ def _configure_golden_handler(
         raw_arguments: str,
         trigger_followup_response: bool,
     ) -> bool:
+        if call_id in handler._executed_call_ids:
+            return False
         handler._golden_tool_calls.append(
             (call_id, function_name, raw_arguments, trigger_followup_response)
         )
+        handler._executed_call_ids.add(call_id)
+        handler._function_call_states.pop(call_id, None)
         await handler._send_upstream(
             {
                 "type": "conversation.item.create",
@@ -910,6 +949,8 @@ def _configure_golden_handler(
                 },
             }
         )
+        if trigger_followup_response and handler._active_response is not None:
+            handler._pending_tool_followup_response = True
         return True
 
     handler._execute_function_call = execute_golden_tool
@@ -939,19 +980,18 @@ def _configure_golden_handler(
 
         handler._presentation_event_emitter.send_transcript = send_mutated_transcript
 
-    return provider
+    return provider if provider is not None else transport.upstream
 
 
-async def _deliver_golden_provider_events(
+async def _deliver_golden_events(
     handler: LegacyPresentationStepFunRealtimeHandler,
-    provider: GoldenCanonicalProvider | None,
+    driver: GoldenCanonicalProvider | GoldenRawUpstream,
     events: list[ProviderEvent],
 ) -> None:
-    if provider is not None:
-        await provider.deliver(handler, events)
+    if isinstance(driver, GoldenCanonicalProvider):
+        await driver.deliver(handler, events)
         return
-    for event in events:
-        await handler._handle_provider_event(event)
+    await driver.deliver(handler, events)
 
 
 async def _drive_real_golden_conversation(
@@ -979,7 +1019,7 @@ async def _drive_real_golden_conversation(
         return True
 
     first_websocket = GoldenWebSocket()
-    initial_provider = _configure_golden_handler(
+    initial_driver = _configure_golden_handler(
         initial_handler,
         websocket=first_websocket,
         upstream_events=upstream_events,
@@ -1012,9 +1052,9 @@ async def _drive_real_golden_conversation(
         )
         assert initial_handler._active_response is not None
         first_response = initial_handler._active_response
-        await _deliver_golden_provider_events(
+        await _deliver_golden_events(
             initial_handler,
-            initial_provider,
+            initial_driver,
             [
                 ProviderEvent(
                     kind=ProviderEventKind.RESPONSE_CREATED,
@@ -1023,15 +1063,6 @@ async def _drive_real_golden_conversation(
                     request_id=first_response.request_id,
                     response_id="response-1",
                     stream_id=first_response.stream_id,
-                ),
-                ProviderEvent(
-                    kind=ProviderEventKind.RESPONSE_TEXT_DELTA,
-                    provider_event_type="response.text.delta",
-                    connection_epoch=1,
-                    request_id=first_response.request_id,
-                    response_id="response-stale",
-                    stream_id=first_response.stream_id,
-                    data={"text": "不得越界"},
                 ),
                 ProviderEvent(
                     kind=ProviderEventKind.THINKING_DELTA,
@@ -1059,15 +1090,6 @@ async def _drive_real_golden_conversation(
                     response_id="response-1",
                     stream_id=first_response.stream_id,
                     data={"audio": "Z29sZGVuLWF1ZGlv"},
-                ),
-                ProviderEvent(
-                    kind=ProviderEventKind.RESPONSE_TEXT_DELTA,
-                    provider_event_type="response.text.delta",
-                    connection_epoch=0,
-                    request_id=first_response.request_id,
-                    response_id="response-1",
-                    stream_id=first_response.stream_id,
-                    data={"text": "旧 epoch"},
                 ),
                 ProviderEvent(
                     kind=ProviderEventKind.RESPONSE_DONE,
@@ -1141,16 +1163,16 @@ async def _drive_real_golden_conversation(
                 data={"text": "补充客户收益"},
             ),
         ]
-        await _deliver_golden_provider_events(
+        await _deliver_golden_events(
             initial_handler,
-            initial_provider,
+            initial_driver,
             transcription_events,
         )
         assert initial_handler._active_response is not None
         second_response = initial_handler._active_response
-        await _deliver_golden_provider_events(
+        await _deliver_golden_events(
             initial_handler,
-            initial_provider,
+            initial_driver,
             [
                 ProviderEvent(
                     kind=ProviderEventKind.RESPONSE_CREATED,
@@ -1192,16 +1214,20 @@ async def _drive_real_golden_conversation(
                     },
                 ),
                 ProviderEvent(
+                    kind=ProviderEventKind.FUNCTION_ARGUMENTS_DELTA,
+                    provider_event_type="response.function_call_arguments.delta",
+                    connection_epoch=1,
+                    call_id="call-current",
+                    data={"arguments": '{"query":'},
+                ),
+                ProviderEvent(
                     kind=ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
                     provider_event_type="response.function_call_arguments.done",
                     connection_epoch=1,
-                    request_id=second_response.request_id,
-                    response_id="response-2",
-                    stream_id=second_response.stream_id,
-                    call_id="call-stale",
+                    call_id="call-current",
                     data={
                         "name": "search_internal_knowledge",
-                        "arguments": '{"query":"旧调用"}',
+                        "arguments": '{"query":"产品价值"}',
                     },
                 ),
                 ProviderEvent(
@@ -1238,9 +1264,9 @@ async def _drive_real_golden_conversation(
         )
         assert initial_handler._active_response is not None
         followup_response = initial_handler._active_response
-        await _deliver_golden_provider_events(
+        await _deliver_golden_events(
             initial_handler,
-            initial_provider,
+            initial_driver,
             [
                 ProviderEvent(
                     kind=ProviderEventKind.RESPONSE_CREATED,
@@ -1279,7 +1305,7 @@ async def _drive_real_golden_conversation(
 
         reconnect_handler, reconnect_surface = reconnect_factory()
         reconnect_websocket = GoldenWebSocket()
-        reconnect_provider = _configure_golden_handler(
+        reconnect_driver = _configure_golden_handler(
             reconnect_handler,
             websocket=reconnect_websocket,
             upstream_events=upstream_events,
@@ -1293,9 +1319,9 @@ async def _drive_real_golden_conversation(
         )
         await reconnect_handler._restore_session_state(snapshot)
         await reconnect_handler._connect_upstream()
-        await _deliver_golden_provider_events(
+        await _deliver_golden_events(
             reconnect_handler,
-            reconnect_provider,
+            reconnect_driver,
             [
                 ProviderEvent(
                     kind=ProviderEventKind.SESSION_READY,
@@ -1342,9 +1368,15 @@ async def _drive_real_golden_conversation(
         "initial_surface": type(initial_surface).__name__,
         "provider_received_kinds": [
             event.kind.value
-            for provider in (initial_provider, reconnect_provider)
-            if provider is not None
+            for provider in (initial_driver, reconnect_driver)
+            if isinstance(provider, GoldenCanonicalProvider)
             for event in provider.received_events
+        ],
+        "raw_received_types": [
+            event_type
+            for upstream in (initial_driver, reconnect_driver)
+            if isinstance(upstream, GoldenRawUpstream)
+            for event_type in upstream.received_event_types
         ],
         "tool_calls": list(initial_handler._golden_tool_calls),
     }
@@ -1502,6 +1534,7 @@ async def test_golden_differential_preserves_external_single_writer_contract(
     assert len(engine_result["tool_calls"]) == 1
     for provider_enabled in (False, True):
         provider_kinds = results[(True, provider_enabled)]["provider_received_kinds"]
+        raw_types = results[(True, provider_enabled)]["raw_received_types"]
         if provider_enabled:
             assert {
                 "transcription_delta",
@@ -1516,8 +1549,23 @@ async def test_golden_differential_preserves_external_single_writer_contract(
                 "error",
                 "session_ready",
             }.issubset(provider_kinds)
+            assert raw_types == []
         else:
             assert provider_kinds == []
+            assert {
+                "response.created",
+                "response.text.delta",
+                "response.audio.delta",
+                "conversation.item.input_audio_transcription.delta",
+                "conversation.item.input_audio_transcription.completed",
+                "conversation.item.created",
+                "response.function_call_arguments.delta",
+                "response.function_call_arguments.done",
+                "response.done",
+                "unknown",
+                "error",
+                "session.updated",
+            }.issubset(raw_types)
 
     snapshot_mutation = deepcopy(engine_result)
     snapshot_mutation["initial_snapshot"].turn_count = 999

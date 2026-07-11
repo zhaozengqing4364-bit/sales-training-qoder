@@ -239,6 +239,7 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
         self._reset_input_audio_quality()
         self._active_response = None
         self._function_call_states.clear()
+        self._function_call_authorities.clear()
         self._executed_call_ids.clear()
 
     async def _clear_upstream_generation(self) -> None:

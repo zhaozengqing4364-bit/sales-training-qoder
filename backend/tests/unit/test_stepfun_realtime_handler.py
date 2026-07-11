@@ -27,6 +27,7 @@ from sales_bot.websocket.components.stepfun_roleplay_runtime_helpers import (
 )
 from sales_bot.websocket.realtime_feedback_arbiter import RealtimeFeedbackPacingState
 from sales_bot.websocket.stepfun_realtime_handler import (
+    FunctionCallAuthority,
     FunctionCallState,
     RealtimeResponseState,
     StepFunRealtimeHandler,
@@ -506,6 +507,13 @@ async def test_provider_event_is_consumed_through_canonical_compatibility_facade
         stream_id="stream-7",
         response_id="response-7",
     )
+    handler._function_call_authorities = {
+        "call-7": FunctionCallAuthority(
+            request_id=7,
+            response_id="response-7",
+            stream_id="stream-7",
+        )
+    }
     handler._realtime_provider = provider
     handler.upstream_ws = provider
     handler.running = True
@@ -627,9 +635,6 @@ async def test_stale_provider_event_epoch_is_ignored_before_legacy_side_effects(
             kind=ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
             provider_event_type="response.function_call_arguments.done",
             connection_epoch=8,
-            request_id=5,
-            response_id="response-current",
-            stream_id="stream-current",
             call_id="call-stale",
             data={"name": "search_internal_knowledge", "arguments": "{}"},
         ),
@@ -688,11 +693,142 @@ async def test_stale_provider_authority_is_rejected_before_any_side_effect(
             name="search_internal_knowledge",
         )
     }
+    handler._function_call_authorities = {
+        "call-current": FunctionCallAuthority(
+            request_id=5,
+            response_id="response-current",
+            stream_id="stream-current",
+        )
+    }
     handler._handle_upstream_event = AsyncMock()  # type: ignore[method-assign]
 
     await handler._handle_provider_event(event)
 
     handler._handle_upstream_event.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sparse_function_done_without_call_binding_fails_closed() -> None:
+    handler = StepFunRealtimeHandler()
+    handler._connection_epoch = 8
+    handler.current_request_id = 5
+    handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+        response_id="response-current",
+    )
+    handler._execute_function_call = AsyncMock(return_value=True)  # type: ignore[method-assign]
+
+    await handler._handle_provider_event(
+        ProviderEvent(
+            kind=ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
+            provider_event_type="response.function_call_arguments.done",
+            connection_epoch=8,
+            call_id="call-unbound",
+            data={"name": "search_internal_knowledge", "arguments": "{}"},
+        )
+    )
+
+    assert handler._function_call_states == {}
+    handler._execute_function_call.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_function_call_first_event_binds_explicit_active_authority() -> None:
+    handler = StepFunRealtimeHandler()
+    handler._connection_epoch = 8
+    handler.current_request_id = 5
+    handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+        response_id="response-current",
+    )
+    handler._execute_function_call = AsyncMock(return_value=True)  # type: ignore[method-assign]
+
+    await handler._handle_provider_event(
+        ProviderEvent(
+            kind=ProviderEventKind.CONVERSATION_ITEM,
+            provider_event_type="conversation.item.created",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-current",
+            stream_id="stream-current",
+            call_id="call-bound",
+            data={
+                "item_type": "function_call",
+                "name": "search_internal_knowledge",
+            },
+        )
+    )
+    authority = handler._function_call_authorities["call-bound"]
+    assert authority.request_id == 5
+    assert authority.response_id == "response-current"
+    assert authority.stream_id == "stream-current"
+
+    await handler._handle_provider_event(
+        ProviderEvent(
+            kind=ProviderEventKind.FUNCTION_ARGUMENTS_DELTA,
+            provider_event_type="response.function_call_arguments.delta",
+            connection_epoch=8,
+            call_id="call-bound",
+            data={"arguments": '{"query":'},
+        )
+    )
+    await handler._handle_provider_event(
+        ProviderEvent(
+            kind=ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
+            provider_event_type="response.function_call_arguments.done",
+            connection_epoch=8,
+            call_id="call-bound",
+            data={
+                "name": "search_internal_knowledge",
+                "arguments": '{"query":"产品"}',
+            },
+        )
+    )
+
+    handler._execute_function_call.assert_awaited_once_with(
+        call_id="call-bound",
+        function_name="search_internal_knowledge",
+        raw_arguments='{"query":"产品"}',
+        trigger_followup_response=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_response_done_sparse_tool_output_requires_existing_current_binding() -> None:
+    handler = StepFunRealtimeHandler()
+    handler._connection_epoch = 8
+    handler.current_request_id = 5
+    handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+        response_id="response-current",
+    )
+    handler._execute_function_call = AsyncMock(return_value=True)  # type: ignore[method-assign]
+
+    await handler._handle_provider_event(
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_DONE,
+            provider_event_type="response.done",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-current",
+            stream_id="stream-current",
+            data={
+                "function_outputs": (
+                    {
+                        "call_id": "call-unbound",
+                        "name": "search_internal_knowledge",
+                        "arguments": "{}",
+                    },
+                )
+            },
+        )
+    )
+
+    assert handler._active_response is not None
+    handler._execute_function_call.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -2938,12 +3074,20 @@ async def test_execute_function_call_blocks_followup_when_bound_kb_query_is_ungr
 async def test_accumulate_function_call_arguments_prefers_done_payload_without_duplication():
     handler = StepFunRealtimeHandler()
     handler._execute_function_call = AsyncMock(return_value=True)
+    handler._active_response = RealtimeResponseState(
+        request_id=1,
+        response_id="response-1",
+        stream_id="stream-1",
+    )
 
     await handler._accumulate_function_call_arguments(
         {
             "call_id": "call-dup",
             "name": "search_internal_knowledge",
             "arguments": '{"query":"石犀',
+            "request_id": 1,
+            "response_id": "response-1",
+            "stream_id": "stream-1",
         }
     )
     await handler._accumulate_function_call_arguments(
@@ -2967,12 +3111,20 @@ async def test_accumulate_function_call_arguments_prefers_done_payload_without_d
 async def test_accumulate_function_call_arguments_falls_back_to_delta_when_done_invalid():
     handler = StepFunRealtimeHandler()
     handler._execute_function_call = AsyncMock(return_value=True)
+    handler._active_response = RealtimeResponseState(
+        request_id=1,
+        response_id="response-1",
+        stream_id="stream-1",
+    )
 
     await handler._accumulate_function_call_arguments(
         {
             "call_id": "call-fallback",
             "name": "search_internal_knowledge",
             "arguments": '{"query":"石犀产品"}',
+            "request_id": 1,
+            "response_id": "response-1",
+            "stream_id": "stream-1",
         }
     )
     await handler._accumulate_function_call_arguments(

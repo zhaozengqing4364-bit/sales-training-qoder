@@ -246,6 +246,7 @@ from sales_bot.websocket.stepfun_realtime_sales_stage import (
     StepFunRealtimeSalesStageMixin,
 )
 from sales_bot.websocket.stepfun_runtime_types import (
+    FunctionCallAuthority,
     FunctionCallState,
     RealtimeResponseState,
 )
@@ -315,6 +316,7 @@ class StepFunRealtimeSharedHandler(
         self._audio_flow = RealtimeAudioFlowModule()
         self._turn_coordinator = RealtimeTurnCoordinator()
         self._function_call_states: dict[str, FunctionCallState] = {}
+        self._function_call_authorities: dict[str, FunctionCallAuthority] = {}
         self._executed_call_ids: set[str] = set()
 
         self._stepfun_api_key = os.getenv("STEPFUN_API_KEY", "")
@@ -565,6 +567,7 @@ class StepFunRealtimeSharedHandler(
         self._turn_coordinator.reset()
         self._tool_execution.clear_turn_registry()
         self._function_call_states.clear()
+        self._function_call_authorities.clear()
         self._executed_call_ids.clear()
         self._thinking_capture.clear()
         self._turn_transcript_capture.clear()

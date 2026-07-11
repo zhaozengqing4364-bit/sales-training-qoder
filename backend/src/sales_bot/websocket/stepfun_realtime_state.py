@@ -21,6 +21,7 @@ if TYPE_CHECKING:
         RealtimeFeedbackPacingState,
     )
     from sales_bot.websocket.stepfun_runtime_types import (
+        FunctionCallAuthority,
         FunctionCallState,
         RealtimeResponseState,
     )
@@ -50,6 +51,7 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
     current_request_id: int
     _active_response: RealtimeResponseState | None
     _function_call_states: dict[str, FunctionCallState]
+    _function_call_authorities: dict[str, FunctionCallAuthority]
     _executed_call_ids: set[str]
 
     _stepfun_api_key: str
