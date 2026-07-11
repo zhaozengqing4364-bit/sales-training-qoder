@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
-from typing import TypeAlias, cast
+from typing import TypeAlias, TypeVar, cast
 
 from training_runtime.stepfun_transport import (
     STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES,
@@ -39,6 +39,7 @@ _CloseCleanupResult: TypeAlias = tuple[
     tuple[object, ...],
     BaseException | None,
 ]
+_T = TypeVar("_T")
 
 _STEPFUN_CAPABILITIES = RealtimeProviderCapabilities(
     supported=frozenset(ProviderCapability),
@@ -116,10 +117,15 @@ class StepFunRealtimeProvider:
             except Exception:
                 raise _unavailable_error() from None
 
-            pending_registered = await self._register_pending_connection(
-                generation,
-                connection,
+            registration_task = asyncio.create_task(
+                self._register_pending_connection(generation, connection)
             )
+            (
+                pending_registered,
+                registration_cancellation,
+            ) = await _wait_task_preserving_cancellation(registration_task, None)
+            if registration_cancellation is not None:
+                raise registration_cancellation
             if not pending_registered:
                 raise _disconnected_error()
 
@@ -134,23 +140,48 @@ class StepFunRealtimeProvider:
             if not published:
                 raise _disconnected_error()
         except BaseException as primary_error:
+            cancellation = (
+                primary_error
+                if isinstance(primary_error, asyncio.CancelledError)
+                else None
+            )
             cleanup_error: BaseException | None = None
             try:
                 if connection is not None:
-                    cleanup_task = await self._retire_connect_connection(
-                        generation,
-                        connection,
-                        pending_registered=pending_registered,
+                    retirement_task = asyncio.create_task(
+                        self._retire_connect_connection(
+                            generation,
+                            connection,
+                            pending_registered=pending_registered,
+                        )
+                    )
+                    (
+                        cleanup_task,
+                        cancellation,
+                    ) = await _wait_task_preserving_cancellation(
+                        retirement_task,
+                        cancellation,
                     )
                     if cleanup_task is not None:
-                        (
-                            _failed_connections,
-                            cleanup_error,
-                        ) = await self._await_close_cleanup(cleanup_task)
+                        cleanup_result, cancellation = await self._wait_close_cleanup(
+                            cleanup_task,
+                            cancellation,
+                        )
+                        _failed_connections, cleanup_error = cleanup_result
             except BaseException as error:
                 cleanup_error = error
             finally:
-                await self._finish_connect_attempt(generation)
+                finish_task = asyncio.create_task(
+                    self._finish_connect_attempt(generation)
+                )
+                _, cancellation = await _wait_task_preserving_cancellation(
+                    finish_task,
+                    cancellation,
+                )
+            if isinstance(primary_error, asyncio.CancelledError):
+                raise
+            if cancellation is not None:
+                raise cancellation
             if cleanup_error is not None and isinstance(primary_error, Exception):
                 raise cleanup_error
             raise
@@ -617,6 +648,20 @@ async def _close_owned_connections(
             cleanup_base_error = error
             break
     return _unique_connections(*failed), cleanup_base_error
+
+
+async def _wait_task_preserving_cancellation(
+    task: asyncio.Task[_T],
+    cancellation: asyncio.CancelledError | None,
+) -> tuple[_T, asyncio.CancelledError | None]:
+    while True:
+        try:
+            return await asyncio.shield(task), cancellation
+        except asyncio.CancelledError as error:
+            if task.cancelled():
+                raise
+            if cancellation is None:
+                cancellation = error
 
 
 __all__ = ["StepFunRealtimeProvider"]

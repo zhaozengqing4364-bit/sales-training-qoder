@@ -645,6 +645,22 @@ def test_event_should_reject_numeric_coercion_and_invalid_numbers(
         ProviderEvent(**kwargs)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(
+    "field_name",
+    ["response_id", "stream_id", "call_id", "event_id", "turn_id"],
+)
+def test_event_should_reject_unsafe_identifier_metadata(field_name: str) -> None:
+    kwargs: dict[str, object] = {
+        "kind": ProviderEventKind.SESSION_READY,
+        "provider_event_type": "session.created",
+        "connection_epoch": 1,
+        field_name: "wss://provider.example?api_key=secret-token raw-body",
+    }
+
+    with pytest.raises(ValueError, match=f"provider_event_{field_name}_invalid"):
+        ProviderEvent(**kwargs)  # type: ignore[arg-type]
+
+
 def test_error_contract_should_be_closed_and_safe() -> None:
     error = RealtimeProviderError(
         category=ProviderErrorCategory.UNAVAILABLE,

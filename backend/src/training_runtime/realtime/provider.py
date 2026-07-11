@@ -22,6 +22,7 @@ _JsonInputValue: TypeAlias = (
     | tuple["_JsonInputValue", ...]
 )
 _PROVIDER_EVENT_TYPE_PATTERN = compile_pattern(r"[a-z0-9][a-z0-9._:-]{0,127}")
+_PROVIDER_IDENTIFIER_PATTERN = compile_pattern(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 
 
 class FrozenJsonMapping(Mapping[str, JsonValue]):
@@ -200,9 +201,15 @@ def _require_string(
     return value
 
 
-def _require_optional_string(value: object, field_name: str) -> None:
+def _require_identifier(value: object, field_name: str) -> None:
+    _require_string(value, field_name)
+    if _PROVIDER_IDENTIFIER_PATTERN.fullmatch(cast(str, value)) is None:
+        raise ValueError(f"{field_name}_invalid")
+
+
+def _require_optional_identifier(value: object, field_name: str) -> None:
     if value is not None:
-        _require_string(value, field_name)
+        _require_identifier(value, field_name)
 
 
 def _require_boolean(value: object, field_name: str) -> None:
@@ -772,7 +779,7 @@ def _validate_function_outputs(data: FrozenJsonMapping) -> None:
             raise ValueError("provider_function_output_must_be_mapping")
         if frozenset(output) != {"call_id", "name", "arguments"}:
             raise ValueError("provider_function_output_fields_invalid")
-        _require_string(output["call_id"], "provider_function_output_call_id")
+        _require_identifier(output["call_id"], "provider_function_output_call_id")
         _require_string(output["name"], "provider_function_output_name")
         _require_string(
             output["arguments"],
@@ -857,7 +864,7 @@ class ProviderEvent(_ImmutableValue):
             "event_id",
             "turn_id",
         ):
-            _require_optional_string(
+            _require_optional_identifier(
                 getattr(self, field_name),
                 f"provider_event_{field_name}",
             )

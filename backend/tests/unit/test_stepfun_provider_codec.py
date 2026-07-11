@@ -591,6 +591,117 @@ def test_codec_should_map_safe_closed_error_reasons(
     assert "secret-token" not in repr(event)
 
 
+@pytest.mark.parametrize(
+    "identifier_field",
+    ["response_id", "stream_id", "call_id", "event_id", "turn_id"],
+)
+def test_codec_error_event_should_discard_all_upstream_identifiers(
+    identifier_field: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    polluted = "wss://provider.example/realtime?api_key=secret-token raw-body"
+    event = StepFunEventCodec().decode_event(
+        json.dumps(
+            {
+                "type": "error",
+                identifier_field: polluted,
+                "error": {"status": 429, "message": polluted},
+            }
+        ),
+        connection_epoch=2,
+    )
+
+    assert event.kind is ProviderEventKind.ERROR
+    assert event.error_category is ProviderErrorCategory.RATE_LIMIT
+    assert event.error_reason is ProviderErrorReason.RATE_LIMITED
+    assert event.request_id is None
+    assert event.response_id is None
+    assert event.stream_id is None
+    assert event.call_id is None
+    assert event.event_id is None
+    assert event.turn_id is None
+    rendered = f"{event!r} {caplog.text}"
+    assert "provider.example" not in rendered
+    assert "secret-token" not in rendered
+    assert "raw-body" not in rendered
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"response_id": "POLLUTED"},
+        {"response": {"id": "POLLUTED"}},
+        {"stream_id": "POLLUTED"},
+        {"call_id": "POLLUTED"},
+        {"item": {"call_id": "POLLUTED"}},
+        {"event_id": "POLLUTED"},
+        {"id": "POLLUTED"},
+        {"turn_id": "POLLUTED"},
+        {"item_id": "POLLUTED"},
+    ],
+)
+def test_codec_should_fail_closed_for_unsafe_event_identifier_metadata(
+    metadata: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    polluted = "wss://provider.example/realtime?api_key=secret-token raw-body"
+    raw = {
+        "type": "session.created",
+        **json.loads(json.dumps(metadata).replace("POLLUTED", polluted)),
+    }
+
+    event = StepFunEventCodec().decode_event(
+        json.dumps(raw),
+        connection_epoch=2,
+    )
+
+    assert event.kind is ProviderEventKind.ERROR
+    assert event.error_category is ProviderErrorCategory.PROTOCOL
+    assert event.error_reason is ProviderErrorReason.INVALID_EVENT
+    assert event.response_id is None
+    assert event.stream_id is None
+    assert event.call_id is None
+    assert event.event_id is None
+    assert event.turn_id is None
+    rendered = f"{event!r} {caplog.text}"
+    assert "provider.example" not in rendered
+    assert "secret-token" not in rendered
+    assert "raw-body" not in rendered
+
+
+def test_codec_should_fail_closed_for_unsafe_function_output_call_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    polluted = "wss://provider.example/realtime?api_key=secret-token raw-body"
+    event = StepFunEventCodec().decode_event(
+        json.dumps(
+            {
+                "type": "response.done",
+                "response_id": "response-safe",
+                "response": {
+                    "output": [
+                        {
+                            "type": "function_call",
+                            "call_id": polluted,
+                            "name": "safe_name",
+                            "arguments": "{}",
+                        }
+                    ]
+                },
+            }
+        ),
+        connection_epoch=2,
+    )
+
+    assert event.kind is ProviderEventKind.ERROR
+    assert event.error_category is ProviderErrorCategory.PROTOCOL
+    assert event.error_reason is ProviderErrorReason.INVALID_EVENT
+    rendered = f"{event!r} {caplog.text}"
+    assert "provider.example" not in rendered
+    assert "secret-token" not in rendered
+    assert "raw-body" not in rendered
+
+
 class FakeConnection:
     def __init__(self, events: tuple[str | bytes, ...] = ()) -> None:
         self.events = deque(events)
@@ -2214,4 +2325,65 @@ async def test_adapter_repeated_close_cancel_with_drain_failure_should_keep_retr
     assert transport.close_calls == 3
     assert current_connection.close_count == 1
     await provider.connect(_session_config())
+    assert reconnect_connection.close_count == 0
+
+
+class RegistrationWindowTransport(RetryableCloseTransport):
+    def __init__(self, connections: tuple[FakeConnection, ...]) -> None:
+        super().__init__(connections)
+        self.connect_return_ready = asyncio.Event()
+        self.release_connect_return = asyncio.Event()
+
+    async def connect(self, *, api_key: str, url: str, model: str) -> FakeConnection:
+        self.connect_calls.append({"api_key": api_key, "url": url, "model": model})
+        connection = self.connections.popleft()
+        self.connect_return_ready.set()
+        await self.release_connect_return.wait()
+        return connection
+
+
+@pytest.mark.asyncio
+async def test_adapter_repeated_cancel_before_pending_register_should_retain_socket() -> (
+    None
+):
+    unregistered_connection = FakeConnection()
+    reconnect_connection = FakeConnection()
+    transport = RegistrationWindowTransport(
+        (unregistered_connection, reconnect_connection)
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    connecting = asyncio.create_task(provider.connect(_session_config()))
+    await transport.connect_return_ready.wait()
+    await provider._lifecycle_lock.acquire()
+    transport.release_connect_return.set()
+    await asyncio.sleep(0)
+    connecting.cancel("first-register-cancel")
+    await asyncio.sleep(0)
+    connecting.cancel("second-register-cancel")
+    await asyncio.sleep(0)
+    assert connecting.done() is False
+    provider._lifecycle_lock.release()
+
+    with pytest.raises(asyncio.CancelledError) as captured:
+        await connecting
+
+    assert captured.value.args == ("first-register-cancel",)
+    assert transport.close_calls == 1
+    assert unregistered_connection.close_count == 0
+    with pytest.raises(RealtimeProviderError) as reconnect_blocked:
+        await provider.connect(_session_config())
+    assert reconnect_blocked.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert len(transport.connect_calls) == 1
+
+    transport.fail_close = False
+    await provider.close()
+    assert transport.close_calls == 2
+    assert unregistered_connection.close_count == 1
+    await provider.connect(_session_config())
+    assert len(transport.connect_calls) == 2
     assert reconnect_connection.close_count == 0

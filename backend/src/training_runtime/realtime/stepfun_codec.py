@@ -163,6 +163,15 @@ class StepFunEventCodec:
         event_type: str,
         connection_epoch: int,
     ) -> ProviderEvent:
+        if event_type == "error":
+            category, reason = _classify_error(payload)
+            return ProviderEvent(
+                kind=ProviderEventKind.ERROR,
+                provider_event_type=event_type,
+                connection_epoch=connection_epoch,
+                error_category=category,
+                error_reason=reason,
+            )
         common = _common_event_fields(payload)
         if event_type in {"session.created", "session.updated"}:
             return _event(
@@ -293,23 +302,6 @@ class StepFunEventCodec:
                 common=common,
                 data={} if not outputs else {"function_outputs": outputs},
             )
-        if event_type == "error":
-            category, reason = _classify_error(payload)
-            return ProviderEvent(
-                kind=ProviderEventKind.ERROR,
-                provider_event_type=event_type,
-                connection_epoch=connection_epoch,
-                error_category=category,
-                error_reason=reason,
-                request_id=common.request_id,
-                response_id=common.response_id,
-                stream_id=common.stream_id,
-                call_id=common.call_id,
-                event_id=common.event_id,
-                turn_id=common.turn_id,
-                timestamp_ms=common.timestamp_ms,
-                duration_ms=common.duration_ms,
-            )
         return ProviderEvent(
             kind=ProviderEventKind.UNKNOWN,
             provider_event_type=event_type,
@@ -424,17 +416,20 @@ def _common_event_fields(
             duration = max(0.0, stop - start)
     return _CommonEventFields(
         request_id=_optional_integer(payload, "request_id"),
-        response_id=_first_string(payload.get("response_id"), response.get("id")),
-        stream_id=_optional_string(payload, "stream_id"),
-        call_id=_first_string(payload.get("call_id"), item.get("call_id")),
-        event_id=_first_string(payload.get("event_id"), payload.get("id")),
-        turn_id=_first_string(payload.get("turn_id"), payload.get("item_id")),
+        response_id=_first_identifier(
+            payload.get("response_id"),
+            response.get("id"),
+        ),
+        stream_id=_optional_identifier(payload, "stream_id"),
+        call_id=_first_identifier(payload.get("call_id"), item.get("call_id")),
+        event_id=_first_identifier(payload.get("event_id"), payload.get("id")),
+        turn_id=_first_identifier(payload.get("turn_id"), payload.get("item_id")),
         timestamp_ms=timestamp,
         duration_ms=duration,
     )
 
 
-def _optional_string(
+def _optional_identifier(
     payload: Mapping[str, _RawJsonValue],
     key: str,
 ) -> str | None:
@@ -446,7 +441,7 @@ def _optional_string(
     return value
 
 
-def _first_string(*values: _RawJsonValue | None) -> str | None:
+def _first_identifier(*values: _RawJsonValue | None) -> str | None:
     for value in values:
         if value is None:
             continue
