@@ -1272,25 +1272,25 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
                 },
             )
 
-    async def _handle_binary_frame(self, data: bytes) -> None:
+    async def _handle_binary_frame(self, data: bytes) -> bool:
         """Handle binary audio frames from frontend."""
-        if len(data) < 2:
-            return
+        if not data:
+            return False
 
         frame_type = data[0]
-        payload = data[1:]
 
         if frame_type == self.BINARY_AUDIO_INTERRUPT:
             await self._handle_interrupt("user_speaking")
-            return
+            return False
 
+        payload = data[1:]
         if frame_type != self.BINARY_AUDIO_CHUNK or not payload:
-            return
+            return False
 
         if not await self._ensure_input_allowed("audio_chunk_binary"):
-            return
+            return False
         if not await self._ensure_upstream_ready_for_input("audio_chunk_binary"):
-            return
+            return False
 
         self._received_binary_audio_frame_count += 1
         quality_stats = self._summarize_pcm16_payload(payload)
@@ -1304,11 +1304,13 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
         audio_b64 = base64.b64encode(payload).decode("utf-8")
         upstream_payload = {"type": "input_audio_buffer.append", "audio": audio_b64}
         if self._should_drop_upstream_for_backpressure(upstream_payload):
-            return
+            return False
+        if await self._send_upstream(upstream_payload) is not True:
+            return False
         self._record_input_audio_quality(payload)
-        await self._send_upstream(upstream_payload)
         self._audio_flow.append_input_audio(audio_b64)
         self._has_uncommitted_audio = True
+        return True
 
     @staticmethod
     def _summarize_pcm16_payload(payload: bytes) -> dict[str, Any]:

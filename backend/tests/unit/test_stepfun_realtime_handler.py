@@ -151,8 +151,9 @@ async def test_send_upstream_delegates_to_transport_and_marks_activity_only_on_s
     handler = StepFunRealtimeHandler(stepfun_transport=transport)
     handler.upstream_ws = upstream_ws
 
-    await handler._send_upstream({"type": "session.update"})
+    accepted = await handler._send_upstream({"type": "session.update"})
 
+    assert accepted is True
     transport.send_json.assert_awaited_once_with(upstream_ws, {"type": "session.update"})
     assert handler._upstream_last_activity_at > 0
 
@@ -162,8 +163,9 @@ async def test_send_upstream_delegates_to_transport_and_marks_activity_only_on_s
     failed_handler = StepFunRealtimeHandler(stepfun_transport=failed_transport)
     failed_handler.upstream_ws = upstream_ws
 
-    await failed_handler._send_upstream({"type": "response.create"})
+    accepted = await failed_handler._send_upstream({"type": "response.create"})
 
+    assert accepted is False
     failed_transport.send_json.assert_awaited_once_with(
         upstream_ws,
         {"type": "response.create"},
@@ -471,7 +473,7 @@ async def test_binary_audio_quality_is_logged_and_reset_after_commit():
     handler.session_status = "in_progress"
     handler._ensure_input_allowed = AsyncMock(return_value=True)
     handler._ensure_upstream_ready_for_input = AsyncMock(return_value=True)
-    handler._send_upstream = AsyncMock()
+    handler._send_upstream = AsyncMock(return_value=True)
     handler._schedule_response_after_commit = AsyncMock()
     handler._log_latency_debug = MagicMock()
     payload = b"".join(
@@ -479,11 +481,12 @@ async def test_binary_audio_quality_is_logged_and_reset_after_commit():
         for sample in (0, 1000, -1000, 32767, -32768)
     )
 
-    await handler._handle_binary_frame(
+    accepted = await handler._handle_binary_frame(
         bytes([StepFunRealtimeHandler.BINARY_AUDIO_CHUNK]) + payload
     )
     await handler._commit_and_respond()
 
+    assert accepted is True
     handler._send_upstream.assert_any_await(
         {
             "type": "input_audio_buffer.append",
@@ -527,7 +530,7 @@ async def test_binary_audio_quality_debug_log_does_not_duplicate_payload_bytes()
     handler.session_status = "in_progress"
     handler._ensure_input_allowed = AsyncMock(return_value=True)
     handler._ensure_upstream_ready_for_input = AsyncMock(return_value=True)
-    handler._send_upstream = AsyncMock()
+    handler._send_upstream = AsyncMock(return_value=True)
     handler._log_latency_debug = MagicMock()
     payload = b"".join(
         sample.to_bytes(2, byteorder="little", signed=True)
@@ -569,10 +572,11 @@ async def test_binary_audio_quality_does_not_count_backpressure_dropped_audio():
         for sample in (0, 1000, -1000, 32767, -32768)
     )
 
-    await handler._handle_binary_frame(
+    accepted = await handler._handle_binary_frame(
         bytes([StepFunRealtimeHandler.BINARY_AUDIO_CHUNK]) + payload
     )
 
+    assert accepted is False
     transport.decide_backpressure.assert_called_once()
     handler._send_upstream.assert_not_awaited()
     assert handler._summarize_pending_input_audio_quality() == {
@@ -584,6 +588,48 @@ async def test_binary_audio_quality_does_not_count_backpressure_dropped_audio():
         "audio_quality_zero_ratio": 0.0,
         "audio_quality_odd_payload_frames": 0,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("case", "frame"),
+    [
+        ("empty", b""),
+        ("empty_chunk", bytes([StepFunRealtimeHandler.BINARY_AUDIO_CHUNK])),
+        ("invalid", b"\x7fnot-audio"),
+        ("interrupt", bytes([StepFunRealtimeHandler.BINARY_AUDIO_INTERRUPT])),
+        ("lifecycle_rejected", b"\x01audio"),
+        ("upstream_not_ready", b"\x01audio"),
+        ("upstream_rejected", b"\x01audio"),
+    ],
+)
+async def test_binary_audio_disposition_rejects_non_accepted_frames(
+    case: str,
+    frame: bytes,
+) -> None:
+    transport = SimpleNamespace(
+        decide_backpressure=MagicMock(
+            return_value=StepFunBackpressureResult(
+                status=StepFunBackpressureStatus.ALLOW
+            )
+        )
+    )
+    handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
+    handler.session_status = "in_progress"
+    handler._handle_interrupt = AsyncMock()
+    handler._ensure_input_allowed = AsyncMock(return_value=case != "lifecycle_rejected")
+    handler._ensure_upstream_ready_for_input = AsyncMock(
+        return_value=case != "upstream_not_ready"
+    )
+    handler._send_upstream = AsyncMock(return_value=case != "upstream_rejected")
+
+    accepted = await handler._handle_binary_frame(frame)
+
+    assert accepted is False
+    assert handler._audio_flow.get_input_buffer() == []
+    assert handler._has_uncommitted_audio is False
+    if case == "interrupt":
+        handler._handle_interrupt.assert_awaited_once_with("user_speaking")
 
 
 @pytest.mark.asyncio

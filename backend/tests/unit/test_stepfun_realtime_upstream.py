@@ -86,8 +86,13 @@ class CommitRespondingUpstream(FakeUpstream):
         self._has_uncommitted_audio = False
         self.scheduled_responses = 0
         self.created_responses = 0
+        self.commit_events: list[str] = []
+
+    async def _after_input_audio_committed_before_response(self) -> None:
+        self.commit_events.append("input_committed")
 
     async def _schedule_response_after_commit(self) -> None:
+        self.commit_events.append("response_scheduled")
         self.scheduled_responses += 1
 
     async def _create_response_from_pending_commit(self) -> bool:
@@ -273,8 +278,9 @@ async def test_upstream_delegates_send_to_transport() -> None:
     transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
     upstream = FakeUpstream(transport, upstream_ws)
 
-    await upstream._send_upstream(payload)
+    accepted = await upstream._send_upstream(payload)
 
+    assert accepted is True
     assert transport.calls == [(upstream_ws, payload)]
     assert transport.calls[0][1] is payload
 
@@ -284,8 +290,9 @@ async def test_upstream_noops_when_upstream_ws_is_none() -> None:
     transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
     upstream = FakeUpstream(transport, None)
 
-    await upstream._send_upstream({"type": "response.create"})
+    accepted = await upstream._send_upstream({"type": "response.create"})
 
+    assert accepted is False
     assert transport.calls == []
     assert upstream.activity_marks == 0
 
@@ -296,15 +303,17 @@ async def test_upstream_marks_activity_only_when_transport_send_succeeds() -> No
     sent_transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
     sent_upstream = FakeUpstream(sent_transport, upstream_ws)
 
-    await sent_upstream._send_upstream({"type": "session.update"})
+    accepted = await sent_upstream._send_upstream({"type": "session.update"})
 
+    assert accepted is True
     assert sent_upstream.activity_marks == 1
 
     failed_transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.FAILED))
     failed_upstream = FakeUpstream(failed_transport, upstream_ws)
 
-    await failed_upstream._send_upstream({"type": "response.create"})
+    accepted = await failed_upstream._send_upstream({"type": "response.create"})
 
+    assert accepted is False
     assert failed_upstream.activity_marks == 0
 
 
@@ -329,6 +338,11 @@ async def test_upstream_commit_and_respond_commits_audio_flow_input() -> None:
     assert upstream._has_uncommitted_audio is False
     assert upstream.scheduled_responses == 1
     assert upstream.created_responses == 0
+    assert upstream.commit_events == ["input_committed", "response_scheduled"]
+
+    await upstream._commit_and_respond()
+
+    assert upstream.commit_events == ["input_committed", "response_scheduled"]
 
 
 @pytest.mark.asyncio

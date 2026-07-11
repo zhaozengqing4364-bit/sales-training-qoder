@@ -706,6 +706,63 @@ def test_should_make_evidence_replay_idempotent() -> None:
         engine.record_evidence(**{**kwargs, "payload": b"different audio"})
 
 
+@pytest.mark.parametrize(
+    "invalid_digest",
+    [
+        "",
+        "sha256:stable",
+        f"sha256:{'A' * 64}",
+        f"sha512:{'a' * 64}",
+        f"sha256:{'a' * 63}",
+        f"sha256:{'a' * 65}",
+    ],
+)
+def test_should_reject_unvalidated_external_evidence_digest(
+    invalid_digest: str,
+) -> None:
+    hooks = RecordingHooks()
+    engine = RealtimeSessionEngine(scenario_type="presentation", hooks=hooks)
+
+    with pytest.raises(ValueError, match="evidence_payload_digest_must_be_sha256"):
+        engine.record_evidence_digest(
+            evidence_key="audio:1:chunks:1:bytes:4",
+            evidence_type="audio",
+            turn_number=1,
+            payload_digest=invalid_digest,
+        )
+
+    assert engine.state.evidence.records == {}
+    assert hooks.transitions == []
+
+
+def test_should_record_valid_external_evidence_digest_with_existing_boundaries() -> (
+    None
+):
+    hooks = RecordingHooks()
+    engine = RealtimeSessionEngine(scenario_type="presentation", hooks=hooks)
+    digest = f"sha256:{'a' * 64}"
+    kwargs = {
+        "evidence_key": "audio:1:chunks:1:bytes:4",
+        "evidence_type": "audio",
+        "turn_number": 1,
+        "payload_digest": digest,
+    }
+
+    assert engine.record_evidence_digest(**kwargs)
+    assert not engine.record_evidence_digest(**kwargs)
+    assert (
+        engine.state.evidence.records[kwargs["evidence_key"]].payload_digest == digest
+    )
+    assert [transition.event_name for transition in hooks.transitions] == [
+        "evidence.recorded"
+    ]
+
+    with pytest.raises(RealtimeStateTransitionError, match="evidence_key_conflict"):
+        engine.record_evidence_digest(
+            **{**kwargs, "payload_digest": f"sha256:{'b' * 64}"}
+        )
+
+
 def test_should_round_trip_engine_snapshot_and_reject_scenario_mismatch() -> None:
     engine = RealtimeSessionEngine(
         scenario_type="presentation",

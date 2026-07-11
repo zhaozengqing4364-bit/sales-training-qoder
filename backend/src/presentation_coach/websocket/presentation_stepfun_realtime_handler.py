@@ -12,6 +12,7 @@ import copy
 import json
 import uuid
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Any
 
@@ -55,6 +56,25 @@ logger = get_logger(__name__)
 GROUNDING_DIAGNOSTICS_SCHEMA_VERSION = 1
 
 
+@dataclass(slots=True)
+class _AcceptedAudioEvidenceAccumulator:
+    """Bounded metadata for one accepted, not-yet-committed user audio turn."""
+
+    turn_number: int
+    chunk_count: int = 0
+    byte_count: int = 0
+    digest: Any = field(default_factory=sha256, repr=False)
+
+    def append(self, payload: bytes) -> None:
+        self.digest.update(payload)
+        self.chunk_count += 1
+        self.byte_count += len(payload)
+
+    @property
+    def payload_digest(self) -> str:
+        return f"sha256:{self.digest.hexdigest()}"
+
+
 class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
     """Rollback-compatible StepFun adapter for the presentation scenario."""
 
@@ -77,6 +97,7 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             super_kwargs["knowledge_service_factory"] = knowledge_service_factory
         super().__init__(**super_kwargs)
         self._runtime_engine = runtime_engine
+        self._accepted_audio_evidence: _AcceptedAudioEvidenceAccumulator | None = None
         self._grounding_decision_sequence = 0
         self.current_page = 1
         self.feedback_service = get_feedback_service()
@@ -289,23 +310,37 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         ):
             self._runtime_engine.complete_turn(request_id=expected_request_id)
 
-    async def _handle_binary_frame(self, data: bytes) -> None:
-        await super()._handle_binary_frame(data)
-        if (
-            self._runtime_engine is None
-            or not data
-            or data[0] != self.BINARY_AUDIO_CHUNK
-        ):
-            return
+    async def _handle_binary_frame(self, data: bytes) -> bool:
+        accepted = await super()._handle_binary_frame(data)
+        if not accepted:
+            return False
         audio = data[1:]
-        digest = sha256(audio).hexdigest()
-        turn_number = self._resolve_user_turn_number_for_transcript()
-        self._runtime_engine.record_evidence(
-            evidence_key=f"audio:{turn_number}:{len(audio)}:{digest}",
-            evidence_type="audio",
-            turn_number=turn_number,
-            payload=audio,
-        )
+        if self._accepted_audio_evidence is None:
+            self._accepted_audio_evidence = _AcceptedAudioEvidenceAccumulator(
+                turn_number=self._resolve_user_turn_number_for_transcript()
+            )
+        self._accepted_audio_evidence.append(audio)
+        return True
+
+    async def _after_input_audio_committed_before_response(self) -> None:
+        accumulator = self._accepted_audio_evidence
+        if accumulator is None:
+            return
+        if self._runtime_engine is not None:
+            self._runtime_engine.record_evidence_digest(
+                evidence_key=(
+                    f"audio:{accumulator.turn_number}:"
+                    f"chunks:{accumulator.chunk_count}:bytes:{accumulator.byte_count}"
+                ),
+                evidence_type="audio",
+                turn_number=accumulator.turn_number,
+                payload_digest=accumulator.payload_digest,
+            )
+        self._accepted_audio_evidence = None
+
+    def _reset_turn_runtime_state(self) -> None:
+        super()._reset_turn_runtime_state()
+        self._accepted_audio_evidence = None
 
     async def _prepare_grounding_context(self, user_text: str) -> None:
         if self._runtime_engine is None:

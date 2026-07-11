@@ -204,6 +204,9 @@ def _handler_symbol(name: str, fallback: Any) -> Any:
 
 
 class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
+    async def _after_input_audio_committed_before_response(self) -> None:
+        """Allow scenario adapters to finalize locally committed audio metadata."""
+
     async def _commit_and_respond(self) -> None:
         """Commit buffered user audio and trigger model response."""
         if not self._has_uncommitted_audio:
@@ -231,6 +234,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         reset_input_audio_quality = getattr(self, "_reset_input_audio_quality", None)
         if callable(reset_input_audio_quality):
             reset_input_audio_quality()
+        await self._after_input_audio_committed_before_response()
         await self._schedule_response_after_commit()
 
     async def _prepare_grounding_context(self, query: str) -> None:
@@ -2778,15 +2782,15 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             ]
         return filtered_tools
 
-    async def _send_upstream(self, payload: dict[str, Any]) -> None:
+    async def _send_upstream(self, payload: dict[str, Any]) -> bool:
         """Send one event to StepFun upstream."""
         if self.upstream_ws is None:
-            return
+            return False
         event_type = str(payload.get("type") or "")
         result = await self._stepfun_transport.send_json(self.upstream_ws, payload)
         if result.status == StepFunSendStatus.SENT:
             self._mark_upstream_activity()
-            return
+            return True
         logger.error(
             "stepfun_upstream_send_rejected",
             session_id=self.session_id,
@@ -2797,3 +2801,4 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             raise RuntimeError(
                 f"StepFun session.update failed ({result.error_type or 'unknown'})"
             )
+        return False

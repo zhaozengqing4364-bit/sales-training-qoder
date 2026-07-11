@@ -301,6 +301,29 @@ class RealtimeSessionEngine:
         payload: bytes,
     ) -> bool:
         payload_digest = f"sha256:{sha256(payload).hexdigest()}"
+        return self.record_evidence_digest(
+            evidence_key=evidence_key,
+            evidence_type=evidence_type,
+            turn_number=turn_number,
+            payload_digest=payload_digest,
+        )
+
+    def record_evidence_digest(
+        self,
+        *,
+        evidence_key: str,
+        evidence_type: str,
+        turn_number: int,
+        payload_digest: str,
+    ) -> bool:
+        if (
+            len(payload_digest) != 71
+            or not payload_digest.startswith("sha256:")
+            or any(
+                character not in "0123456789abcdef" for character in payload_digest[7:]
+            )
+        ):
+            raise ValueError("evidence_payload_digest_must_be_sha256")
         evidence = self._state.evidence
         existing = evidence.records.get(evidence_key)
         if existing is not None:

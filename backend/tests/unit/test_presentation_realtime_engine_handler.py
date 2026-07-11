@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -15,7 +16,6 @@ from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
     LegacyPresentationStepFunRealtimeHandler,
 )
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeSharedHandler
-from sales_bot.websocket.stepfun_realtime_policy import StepFunRealtimePolicyMixin
 from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstreamMixin
 from sales_bot.websocket.stepfun_runtime_types import RealtimeResponseState
 from training_runtime import PresentationScenarioPlugin, TrainingRuntimeDescriptor
@@ -346,39 +346,63 @@ async def test_adapter_maps_grounding_to_closed_diagnostics_vocabulary() -> None
     assert "provider token" not in repr(engine.snapshot())
 
 
+def _configure_accepted_audio_input(
+    adapter: LegacyPresentationStepFunRealtimeHandler,
+) -> None:
+    adapter.session_status = "in_progress"
+    adapter._ensure_input_allowed = AsyncMock(return_value=True)
+    adapter._ensure_upstream_ready_for_input = AsyncMock(return_value=True)
+    adapter._should_drop_upstream_for_backpressure = Mock(return_value=False)
+    adapter._send_upstream = AsyncMock(return_value=True)
+    adapter._schedule_response_after_commit = AsyncMock()
+
+
 @pytest.mark.asyncio
-async def test_adapter_records_binary_audio_as_length_and_digest_metadata_only() -> (
-    None
-):
+async def test_adapter_aggregates_accepted_audio_once_at_real_commit_boundary() -> None:
+    transitions: list[str] = []
     engine = RealtimeSessionEngine(
         scenario_type="presentation",
         hooks=SimpleNamespace(
             scenario_type="presentation",
-            on_transition=lambda _transition: None,
+            on_transition=lambda transition: transitions.append(transition.event_name),
         ),
     )
     adapter = LegacyPresentationStepFunRealtimeHandler(runtime_engine=engine)
     adapter.turn_count = 0
-    frame = bytes([adapter.BINARY_AUDIO_CHUNK]) + b"sensitive-audio"
+    _configure_accepted_audio_input(adapter)
+    payloads = [index.to_bytes(4, byteorder="little") for index in range(1000)]
+    snapshot_size_after_first_frame = 0
 
-    with patch.object(
-        StepFunRealtimePolicyMixin,
-        "_handle_binary_frame",
-        new=AsyncMock(),
-    ) as base_binary:
-        await adapter._handle_binary_frame(frame)
+    for index, payload in enumerate(payloads):
+        accepted = await adapter._handle_binary_frame(
+            bytes([adapter.BINARY_AUDIO_CHUNK]) + payload
+        )
+        assert accepted is True
+        if index == 0:
+            snapshot_size_after_first_frame = len(json.dumps(engine.snapshot()))
 
-    base_binary.assert_awaited_once_with(frame)
-    [evidence_key] = engine.state.evidence.records
-    assert evidence_key.startswith(f"audio:1:{len(frame) - 1}:")
-    assert engine.state.evidence.records[evidence_key].payload_digest.startswith(
-        "sha256:"
+    assert engine.state.evidence.records == {}
+    assert transitions == []
+    assert len(json.dumps(engine.snapshot())) == snapshot_size_after_first_frame
+
+    await adapter._commit_and_respond()
+
+    evidence_key = "audio:1:chunks:1000:bytes:4000"
+    assert set(engine.state.evidence.records) == {evidence_key}
+    assert engine.state.evidence.records[evidence_key].payload_digest == (
+        f"sha256:{sha256(b''.join(payloads)).hexdigest()}"
     )
+    assert transitions == ["evidence.recorded"]
     assert "sensitive-audio" not in repr(engine.snapshot())
+
+    await adapter._commit_and_respond()
+
+    assert set(engine.state.evidence.records) == {evidence_key}
+    assert transitions == ["evidence.recorded"]
 
 
 @pytest.mark.asyncio
-async def test_adapter_scopes_identical_audio_evidence_to_resolved_user_turn() -> None:
+async def test_adapter_scopes_committed_identical_audio_to_frozen_user_turn() -> None:
     engine = RealtimeSessionEngine(
         scenario_type="presentation",
         hooks=SimpleNamespace(
@@ -387,23 +411,79 @@ async def test_adapter_scopes_identical_audio_evidence_to_resolved_user_turn() -
         ),
     )
     adapter = LegacyPresentationStepFunRealtimeHandler(runtime_engine=engine)
+    _configure_accepted_audio_input(adapter)
     frame = bytes([adapter.BINARY_AUDIO_CHUNK]) + b"same-audio"
 
-    with patch.object(
-        StepFunRealtimePolicyMixin,
-        "_handle_binary_frame",
-        new=AsyncMock(),
-    ):
-        adapter.turn_count = 0
-        await adapter._handle_binary_frame(frame)
-        await adapter._handle_binary_frame(frame)
-        adapter.turn_count = 1
-        await adapter._handle_binary_frame(frame)
+    adapter.turn_count = 0
+    assert await adapter._handle_binary_frame(frame) is True
+    await adapter._commit_and_respond()
+    adapter.turn_count = 1
+    assert await adapter._handle_binary_frame(frame) is True
+    await adapter._commit_and_respond()
 
-    assert len(engine.state.evidence.records) == 2
+    assert set(engine.state.evidence.records) == {
+        "audio:1:chunks:1:bytes:10",
+        "audio:2:chunks:1:bytes:10",
+    }
     assert {
         record.turn_number for record in engine.state.evidence.records.values()
     } == {1, 2}
+    assert (
+        len(
+            {record.payload_digest for record in engine.state.evidence.records.values()}
+        )
+        == 1
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("case", "frame"),
+    [
+        ("empty", b""),
+        (
+            "empty_chunk",
+            bytes([LegacyPresentationStepFunRealtimeHandler.BINARY_AUDIO_CHUNK]),
+        ),
+        ("invalid", b"\x7fnot-audio"),
+        (
+            "interrupt",
+            bytes([LegacyPresentationStepFunRealtimeHandler.BINARY_AUDIO_INTERRUPT]),
+        ),
+        ("paused", b"\x01audio"),
+        ("upstream_not_ready", b"\x01audio"),
+        ("upstream_rejected", b"\x01audio"),
+        ("backpressure", b"\x01audio"),
+    ],
+)
+async def test_adapter_records_no_evidence_for_rejected_audio(
+    case: str,
+    frame: bytes,
+) -> None:
+    engine = RealtimeSessionEngine(
+        scenario_type="presentation",
+        hooks=SimpleNamespace(
+            scenario_type="presentation",
+            on_transition=lambda _transition: None,
+        ),
+    )
+    adapter = LegacyPresentationStepFunRealtimeHandler(runtime_engine=engine)
+    adapter.session_status = "in_progress"
+    adapter._handle_interrupt = AsyncMock()
+    adapter._ensure_input_allowed = AsyncMock(return_value=case != "paused")
+    adapter._ensure_upstream_ready_for_input = AsyncMock(
+        return_value=case != "upstream_not_ready"
+    )
+    adapter._should_drop_upstream_for_backpressure = Mock(
+        return_value=case == "backpressure"
+    )
+    adapter._send_upstream = AsyncMock(return_value=case != "upstream_rejected")
+    adapter._schedule_response_after_commit = AsyncMock()
+
+    assert await adapter._handle_binary_frame(frame) is False
+    await adapter._commit_and_respond()
+
+    assert engine.state.evidence.records == {}
 
 
 @pytest.mark.asyncio
@@ -667,7 +747,7 @@ async def _drive_real_golden_conversation(
         frame = bytes([initial_handler.BINARY_AUDIO_CHUNK]) + b"golden-audio"
         await initial_handler._handle_binary_frame(frame)
         await initial_handler._handle_binary_frame(frame)
-        initial_handler._pending_response_after_commit = True
+        await initial_handler._commit_and_respond()
         transcription_event = {
             "type": "conversation.item.input_audio_transcription.completed",
             "transcript": "补充客户收益",
@@ -775,12 +855,16 @@ def _assert_golden_engine_terminal_state(result: dict[str, Any]) -> None:
     )
 
     records = engine_snapshot["evidence"]["records"]
-    audio_keys = [key for key in records if key.startswith("audio:2:")]
+    audio_key = "audio:2:chunks:2:bytes:24"
+    audio_keys = [key for key in records if key == audio_key]
     transcript_keys = [key for key in records if key == "transcript:2:user"]
     assert len(audio_keys) == 1
     assert len(transcript_keys) == 1
     assert len(records) == 2
-    assert records[audio_keys[0]]["turn_number"] == 2
+    assert records[audio_key]["turn_number"] == 2
+    assert records[audio_key]["payload_digest"] == (
+        f"sha256:{sha256(b'golden-audiogolden-audio').hexdigest()}"
+    )
     assert records[transcript_keys[0]]["turn_number"] == 2
 
 
