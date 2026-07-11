@@ -1280,6 +1280,121 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(scrollIntoView).toHaveBeenCalledTimes(1);
     });
 
+    it("deduplicates microphone permission requests while the browser prompt is pending", async () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        let settlePermission!: (granted: boolean) => void;
+        const requestPermission = vi.fn(() => new Promise<boolean>((resolve) => {
+            settlePermission = resolve;
+        }));
+        useAudioRecorderMock.mockReturnValue(buildAudioRecorderMock({
+            hasPermission: false,
+            requestPermission,
+        }));
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        const recordButton = screen.getByRole("button", { name: "点击重新请求麦克风权限" });
+        fireEvent.click(recordButton);
+        fireEvent.click(recordButton);
+
+        expect(requestPermission).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            settlePermission(false);
+            await Promise.resolve();
+        });
+
+        fireEvent.click(recordButton);
+        expect(requestPermission).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not start recording when connection readiness changes during permission prompt", async () => {
+        let settlePermission!: (granted: boolean) => void;
+        const requestPermission = vi.fn(() => new Promise<boolean>((resolve) => {
+            settlePermission = resolve;
+        }));
+        const startRecording = vi.fn();
+        useAudioRecorderMock.mockReturnValue(buildAudioRecorderMock({
+            hasPermission: false,
+            requestPermission,
+            startRecording,
+        }));
+
+        const { rerender } = render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "点击重新请求麦克风权限" }),
+        );
+        usePracticeWebSocketMock.mockReturnValue(buildPracticeWebSocketMock({
+            connectionState: "reconnecting",
+            isConnected: false,
+        }));
+        rerender(<PracticeSessionPage />);
+
+        await act(async () => {
+            settlePermission(true);
+            await Promise.resolve();
+        });
+
+        expect(startRecording).not.toHaveBeenCalled();
+        expect(screen.getByText("连接未就绪，请等待“已连接”后再录音。")).toBeTruthy();
+    });
+
+    it("starts recording and continuous upload once after permission is granted", async () => {
+        let settlePermission!: (granted: boolean) => void;
+        const requestPermission = vi.fn(() => new Promise<boolean>((resolve) => {
+            settlePermission = resolve;
+        }));
+        const startRecording = vi.fn().mockResolvedValue(undefined);
+        const startUpload = vi.fn();
+        useAudioRecorderMock.mockReturnValue(buildAudioRecorderMock({
+            hasPermission: false,
+            requestPermission,
+            startRecording,
+        }));
+        useContinuousAudioUploaderMock.mockReturnValue({
+            isUploading: false,
+            segmentCount: 0,
+            pendingUploads: 0,
+            lastError: null,
+            uploadStatus: "idle",
+            startUpload,
+            stopUpload: vi.fn(),
+            flushAndStop: vi.fn(),
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        const recordButton = screen.getByRole(
+            "button",
+            { name: "点击重新请求麦克风权限" },
+        );
+        fireEvent.click(recordButton);
+        fireEvent.click(recordButton);
+
+        await act(async () => {
+            settlePermission(true);
+            await Promise.resolve();
+        });
+
+        await waitFor(() => {
+            expect(requestPermission).toHaveBeenCalledTimes(1);
+            expect(startRecording).toHaveBeenCalledTimes(1);
+            expect(startUpload).toHaveBeenCalledTimes(1);
+        });
+    });
+
     it("allows immediate retry after microphone permission is denied without a fixed 300ms dead zone", async () => {
         usePracticeRuntimeLockMock.mockReturnValue({
             lockedScenarioType: "sales",
@@ -1305,6 +1420,9 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         fireEvent.click(recordButton);
         await waitFor(() => {
             expect(requestPermission).toHaveBeenCalledTimes(1);
+        });
+        await waitFor(() => {
+            expect((recordButton as HTMLButtonElement).disabled).toBe(false);
         });
 
         fireEvent.click(recordButton);

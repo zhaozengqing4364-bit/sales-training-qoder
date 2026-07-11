@@ -1,0 +1,130 @@
+version: 1
+codegraph:
+  required_version: 1.2.0
+adoption_anchor:
+  commit: d96ec87f
+  owner: architecture-governance
+  reason: Avoid charging the first Gate 1B run for changes made before changed-coverage governance existed.
+  retire_when: The requested CI base contains the Gate 1B adoption commit.
+  expires_on: 2026-08-10
+families:
+  backend_integration:
+    prefix: backend/tests/integration/
+    glob: backend/tests/integration/**/test_*.py
+    codegraph_filter: backend/tests/integration/test_*.py
+    critical:
+      - backend/tests/integration/test_auth_login_api.py
+      - backend/tests/integration/test_history_evidence_flow.py
+      - backend/tests/integration/test_replay_api.py
+      - backend/tests/integration/test_sales_realtime_reconnect_flow.py
+      - backend/tests/integration/test_support_runtime_api.py
+      - backend/tests/integration/test_observability_surfaces.py
+      - backend/tests/integration/test_admin_business_rules_api.py
+      - backend/tests/integration/test_admin_model_configs_api.py
+      - backend/tests/integration/test_scoring_rulesets_api.py
+      - backend/tests/integration/test_supervisor_retraining_api.py
+      - backend/tests/integration/test_business_etiquette_quiz_api.py
+      - backend/tests/integration/test_business_etiquette_ai_coach_progress_api.py
+      - backend/tests/integration/test_newcomer_training_journey_api.py
+      - backend/tests/integration/test_newcomer_training_path_article_api.py
+      - backend/tests/integration/test_newcomer_training_path_config_api.py
+      - backend/tests/integration/test_newcomer_training_path_material_api.py
+      - backend/tests/integration/test_newcomer_training_path_rbac_api.py
+      - backend/tests/integration/test_practice_session_object_permissions.py
+      - backend/tests/integration/test_sales_trainer_persisted_path_unlock.py
+  backend_e2e:
+    prefix: backend/tests/e2e/
+    glob: backend/tests/e2e/**/test_*.py
+    codegraph_filter: backend/tests/e2e/test_*.py
+    critical: []
+  playwright:
+    prefix: web/tests/e2e/
+    glob: web/tests/e2e/**/*.spec.ts
+    codegraph_filter: web/tests/e2e/**
+    critical:
+      - web/tests/e2e/smoke.spec.ts
+      - web/tests/e2e/newcomer-training-closed-loop.spec.ts
+      - web/tests/e2e/presentation-phase4.spec.ts
+      - web/tests/e2e/sales-phase4.spec.ts
+global_fallback_patterns:
+  - .github/workflows/release-truth-gate.yml
+  - backend/tests/conftest.py
+  - backend/tests/e2e/fixtures/**
+  - backend/pyproject.toml
+  - backend/requirements*.txt
+  - backend/alembic/**
+  - backend/src/app_factory.py
+  - backend/src/router_registry.py
+  - backend/src/http_routes.py
+  - backend/src/common/auth/**
+  - backend/src/common/db/**
+  - backend/src/common/websocket/**
+  - web/vitest.config.ts
+  - web/playwright.config.ts
+  - web/package.json
+  - web/package-lock.json
+  - web/tests/e2e/fixtures/**
+  - web/tests/e2e/global-*.ts
+  - scripts/critical-quality-gate.sh
+  - scripts/dev-smoke-up.sh
+  - scripts/dev-smoke-stop.sh
+  - scripts/select_quality_tests.py
+  - scripts/check_changed_coverage.py
+  - docs/architecture/quality-test-selection-policy.yaml
+  - docs/architecture/changed-coverage-policy.yaml
+production_roots:
+  - backend/src/
+  - web/src/
+path_rules:
+  - id: sales-trainer-path
+    patterns:
+      - backend/src/sales_trainer/services/path_*.py
+      - backend/src/sales_trainer/services/*progress*.py
+      - backend/src/sales_trainer/services/audio_*.py
+      - backend/src/sales_trainer/services/quiz_*.py
+    select:
+      backend_integration:
+        - backend/tests/integration/test_newcomer_training_journey_api.py
+        - backend/tests/integration/test_newcomer_training_path_config_api.py
+        - backend/tests/integration/test_newcomer_training_path_material_api.py
+      playwright:
+        - web/tests/e2e/newcomer-training-closed-loop.spec.ts
+  - id: session-runtime
+    patterns:
+      - backend/src/sales_bot/websocket/**
+      - backend/src/common/db/session_lifecycle.py
+      - web/src/hooks/use-practice-websocket*.ts
+      - web/src/app/(user)/practice/[[]sessionId[]]/**
+    select:
+      backend_integration:
+        - backend/tests/integration/test_sales_realtime_reconnect_flow.py
+        - backend/tests/integration/test_session_lifecycle_api.py
+      playwright:
+        - web/tests/e2e/newcomer-training-closed-loop.spec.ts
+        - web/tests/e2e/presentation-phase4.spec.ts
+        - web/tests/e2e/sales-phase4.spec.ts
+  - id: public-api
+    patterns:
+      - backend/src/**/api.py
+      - backend/src/**/api/**
+      - backend/src/**/schemas.py
+      - backend/src/common/db/schemas.py
+      - specs/001-ai-practice-system/contracts/openapi.yaml
+      - web/src/lib/api/**
+    select:
+      backend_integration:
+        - backend/tests/integration/test_admin_users_api.py
+      playwright:
+        - web/tests/e2e/smoke.spec.ts
+    full_fallback_families:
+      - backend_integration
+  - id: frontend-practice
+    patterns:
+      - web/src/app/(user)/practice/**
+      - web/src/hooks/use-audio-recorder.ts
+      - web/src/hooks/use-practice-websocket*.ts
+    select:
+      playwright:
+        - web/tests/e2e/newcomer-training-closed-loop.spec.ts
+        - web/tests/e2e/presentation-phase4.spec.ts
+        - web/tests/e2e/sales-phase4.spec.ts

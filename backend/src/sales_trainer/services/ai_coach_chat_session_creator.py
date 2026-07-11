@@ -65,10 +65,12 @@ class AiCoachChatSessionCreator:
                     )
             else:
                 path_response = await SalesTrainerPathConfigService(self._db).get_config()
+                active_revision_id = path_response.get("active_revision_id")
+                active_revision_no = path_response.get("active_revision_no")
                 if (
                     path_response.get("path") is None
-                    or not path_response.get("active_revision_id")
-                    or path_response.get("active_revision_no") is None
+                    or not active_revision_id
+                    or active_revision_no is None
                 ):
                     raise AiCoachChatRuntimeError(
                         "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
@@ -79,8 +81,8 @@ class AiCoachChatSessionCreator:
                     path_response.get("path"),
                     module_key,
                 )
-                path_revision_id = path_response.get("active_revision_id")
-                path_revision_no = path_response.get("active_revision_no")
+                path_revision_id = str(active_revision_id)
+                path_revision_no = int(active_revision_no)
             self._runtime.validate_chat_config(config)
             article_snapshot = await self._runtime.article_snapshot(module)
         except LearningTopicConfigError as exc:

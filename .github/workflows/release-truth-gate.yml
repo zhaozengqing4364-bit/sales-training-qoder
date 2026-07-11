@@ -34,7 +34,7 @@ jobs:
   release-truth:
     name: release-truth
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     services:
       postgres:
@@ -71,10 +71,18 @@ jobs:
       AUTO_START_INFRA: "0"
       PORTS_TO_CLEAN: 3444,3445
       PLAYWRIGHT_SKIP_BROWSER_INSTALL: "1"
+      QUALITY_GATE_SELECTION_MODE: ${{ github.event_name == 'pull_request' && 'pr' || github.event_name == 'push' && 'push' || github.event_name == 'schedule' && 'schedule' || 'full' }}
+      QUALITY_GATE_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || '' }}
+      # Coverage line numbers must describe the checked-out tree. For PRs the
+      # default checkout is GitHub's synthetic merge commit (`github.sha`), not
+      # `pull_request.head.sha`.
+      QUALITY_GATE_HEAD_SHA: ${{ github.sha }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node from web/package-lock.json authority
         uses: actions/setup-node@v4
@@ -123,10 +131,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: t9-quality-gate-evidence
+          if-no-files-found: error
           path: |
             .sisyphus/evidence/task-9-quality-gate.txt
+            .sisyphus/evidence/quality-test-selection.json
+            .sisyphus/evidence/backend-coverage.json
+            .sisyphus/evidence/changed-coverage-report.json
             .sisyphus/evidence/task-9-playwright-report.html
             .sisyphus/evidence/task-9-playwright-report/
+            web/coverage/coverage-final.json
+            web/coverage/coverage-summary.json
 
   newcomer-real-provider:
     name: newcomer-real-provider
@@ -181,6 +195,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node from web/package-lock.json authority
         uses: actions/setup-node@v4
@@ -278,6 +294,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node from web/package-lock.json authority
         uses: actions/setup-node@v4

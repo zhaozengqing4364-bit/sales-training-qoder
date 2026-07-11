@@ -17,6 +17,13 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "json-summary", "html"],
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.{test,spec}.{ts,tsx}",
+        "src/**/*.d.ts",
+        "src/**/__tests__/**",
+        "src/**/*.stories.{ts,tsx}",
+      ],
       thresholds: {
         lines: 30,
         functions: 30,

@@ -67,25 +67,63 @@ bash scripts/critical-quality-gate.sh
 ```
 
 固定顺序：
-1. secret / environment checks
-2. backend ruff
-3. OpenAPI contract parity
-4. web typecheck
-5. web lint
-6. vitest coverage gate
-7. dev smoke stack + DB ready + `alembic upgrade head` + smoke bootstrap / seed
-8. Playwright smoke matrix
-9. Playwright newcomer closed-loop E2E
-10. Playwright presentation / sales Phase 4 E2E
-11. optional real-provider focused gates
-12. backend newcomer coverage + mypy
-13. backend targeted tests + smoke regression
+1. secret / environment checks 与 policy selector manifest；
+2. backend ruff、architecture guard、OpenAPI parity、全量 `mypy src`；
+3. backend `tests/unit tests/contract` 自动发现并启动 branch coverage；
+4. web typecheck、lint、全量 Vitest coverage 自动发现；
+5. dev smoke stack + DB ready + `alembic upgrade head` + smoke bootstrap / seed；
+6. selector 选择的 Playwright：四条关键 spec 保留各自 provider 环境，其余 spec 使用通用 runner；
+7. optional real-provider focused gates；
+8. selector 选择的 backend integration/E2E 以 `--cov-append --cov-branch` 合并覆盖率；
+9. changed-line 80% 与关键状态机 branch baseline guard。
 
 说明：
 - 这里的 Playwright 包含 smoke matrix、新人训练 closed-loop E2E 以及 presentation/sales Phase 4 E2E；真实 provider 仍由专项模式或显式开关验证。
 - 默认门禁使用 deterministic local provider，不依赖外部 StepFun 或真实 LLM；真实 provider 由 release/nightly 专项模式验证。
 - realtime 真实 provider 专项模式默认不会在缺凭证时通过；会输出 classified skip 证据并失败。只有人工明确设置 `NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1` 时，缺凭证才可作为可追踪跳过项通过；发布前仍可用 `NEWCOMER_REAL_PROVIDER_REQUIRED=1` 强制缺凭证失败。
 - AI Coach 真实 provider 专项模式同样默认 fail-closed；缺 `LLM_API_KEY` / `OPENAI_API_KEY` 时会输出 classified skip 证据并失败，只有人工明确设置 `NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1` 才允许可追踪跳过。
+
+### 影响测试选择与覆盖率
+
+本地默认收集 committed diff、staged、unstaged 和 untracked 变更：
+
+```bash
+bash scripts/critical-quality-gate.sh
+```
+
+CI 必须显式传稳定的事件语义：PR 使用 base SHA 到实际 checkout SHA（GitHub 默认是 synthetic
+merge commit）的 triple-dot，确保 coverage 行号与被测试工作树一致；push 使用 double-dot；定时和
+手工完整门禁使用 full fallback。
+
+```bash
+QUALITY_GATE_SELECTION_MODE=pr \
+QUALITY_GATE_BASE_SHA=<pull-request-base-sha> \
+QUALITY_GATE_HEAD_SHA=<checked-out-merge-sha> \
+bash scripts/critical-quality-gate.sh
+```
+
+选择权威在 `docs/architecture/quality-test-selection-policy.yaml`。critical baseline、直接改动、
+path policy 构成稳定底座；健康 CodeGraph 结果只允许增加测试。CI 缺 CodeGraph 时记录 degraded
+原因但保留 policy 选择；版本错误、malformed/empty 结果、不可信 base、未知生产路径、删除/重命名
+和全局横切改动会 fail closed 到 family/full fallback。runner 只消费 selector 校验后、相对各自
+工作目录的数组，原 repo path 和 reason 始终保留在 manifest。
+
+覆盖率权威在 `docs/architecture/changed-coverage-policy.yaml`。backend unit+contract 的 coverage
+data 会与 selected integration/E2E 追加合并后才生成最终 JSON；frontend `coverage.include`
+覆盖全部生产 `src`。guard 仅计算报告确认的 executable changed lines，同时执行关键 branch
+不回退检查。两份 policy 的临时 adoption anchor 必须完全一致，过期或漂移直接失败。
+
+门禁证据：
+
+- `.sisyphus/evidence/quality-test-selection.json`
+- `.sisyphus/evidence/backend-coverage.json`
+- `.sisyphus/evidence/changed-coverage-report.json`
+- `web/coverage/coverage-final.json`
+- `web/coverage/coverage-summary.json`
+
+selector 或报告为空、schema 非法、coverage 不足、suite 超过 1200 秒都会非零退出。排障时先看
+manifest 的 `selection_mode`、`fallback_reasons`、`degraded_reasons` 和每条测试的 `reasons`，
+再看 changed coverage report 的 `violations`，不要手工缩小 runner 清单。
 
 ### OpenAPI 合同
 

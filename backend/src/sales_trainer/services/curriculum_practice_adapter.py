@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from importlib import import_module
@@ -189,12 +190,12 @@ class LearningProgressAdapter:
         *,
         user_id: str,
         content_id: str,
-        chapters: list[object],
+        chapters: Sequence[object],
     ) -> Any:
         return await self._service.progress_for_user(
             user_id=user_id,
             content_id=content_id,
-            chapters=chapters,
+            chapters=list(chapters),
         )
 
     async def complete_chapter(

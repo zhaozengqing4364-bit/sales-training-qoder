@@ -1,0 +1,47 @@
+version: 1
+changed_line_threshold: 80.0
+adoption_anchor:
+  commit: d96ec87f
+  owner: architecture-governance
+  reason: Avoid charging the first Gate 1B run for changes made before changed-coverage governance existed.
+  retire_when: The requested CI base contains the Gate 1B adoption commit.
+  expires_on: 2026-08-10
+production_roots:
+  backend: backend/src/
+  frontend: web/src/
+critical_branch_files:
+  backend:
+    backend/src/common/db/session_lifecycle.py:
+      covered: 44
+      total: 64
+    backend/src/sales_trainer/services/path_progress_service.py:
+      covered: 2
+      total: 8
+    backend/src/sales_trainer/services/path_projection_payloads.py:
+      covered: 22
+      total: 24
+    backend/src/sales_trainer/services/path_service.py:
+      covered: 18
+      total: 22
+    backend/src/sales_bot/websocket/session_control_adapter.py:
+      covered: 8
+      total: 10
+    backend/src/sales_trainer/services/training_journey_service.py:
+      covered: 290
+      total: 434
+    backend/src/sales_bot/services/roleplay_state_card.py:
+      covered: 14
+      total: 20
+  frontend:
+    web/src/app/(user)/practice/[sessionId]/use-recording-state-machine.ts:
+      covered: 19
+      total: 20
+    web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.ts:
+      covered: 58
+      total: 68
+    web/src/app/(user)/practice/[sessionId]/runtime-lock.ts:
+      covered: 26
+      total: 47
+    web/src/hooks/use-audio-recorder.ts:
+      covered: 19
+      total: 135

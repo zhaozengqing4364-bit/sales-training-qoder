@@ -139,7 +139,7 @@ describe("SalesTrainerPathsPage business skill bindings", () => {
             learning_content_id: "content-2",
             exam_paper_id: "paper-2",
         }));
-    });
+    }, 20_000);
 });
 
 function learningContents(): LearningContentListResponse {

@@ -258,9 +258,10 @@ class ConfigManager:
                     else "https://api.openai.com/v1"
                 )
                 default_model_name = DEFAULT_LLM_MODEL if has_llm_env else "gpt-4o"
-                timeout = os.getenv("LLM_TIMEOUT") or os.getenv(
-                    "LLM_TIMEOUT_SECONDS",
-                    str(DEFAULT_LLM_TIMEOUT_SECONDS),
+                timeout = (
+                    os.getenv("LLM_TIMEOUT")
+                    or os.getenv("LLM_TIMEOUT_SECONDS")
+                    or str(DEFAULT_LLM_TIMEOUT_SECONDS)
                 )
                 return {
                     "provider": os.getenv("LLM_PROVIDER", DEFAULT_LLM_PROVIDER),

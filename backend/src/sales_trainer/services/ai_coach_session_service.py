@@ -532,14 +532,16 @@ class AiCoachSessionService:
             )
         path_response = await SalesTrainerPathConfigService(self._db).get_config()
         path_payload = path_response.get("path")
-        path_revision_id = path_response.get("active_revision_id")
-        path_revision_no = path_response.get("active_revision_no")
-        if path_payload is None or not path_revision_id or path_revision_no is None:
+        active_revision_id = path_response.get("active_revision_id")
+        active_revision_no = path_response.get("active_revision_no")
+        if path_payload is None or not active_revision_id or active_revision_no is None:
             raise AiCoachSessionServiceError(
                 "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]",
                 "新人训练路径尚未发布 active revision，AI Coach 不能启动。",
                 status_code=409,
             )
+        path_revision_id = str(active_revision_id)
+        path_revision_no = int(active_revision_no)
         try:
             payload = NewcomerPathConfigPayload.model_validate(path_payload)
         except ValidationError as exc:
@@ -558,8 +560,8 @@ class AiCoachSessionService:
                     status_code=409,
                 )
             return (
-                str(path_revision_id),
-                int(path_revision_no),
+                path_revision_id,
+                path_revision_no,
                 module.model_dump(mode="json"),
                 module.ai_coach,
             )

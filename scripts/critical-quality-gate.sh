@@ -26,7 +26,6 @@ NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED="${NEWCOMER_REAL_PROVIDER_CREDENT
 RUN_NEWCOMER_AI_COACH_REAL_PROVIDER_GATE="${RUN_NEWCOMER_AI_COACH_REAL_PROVIDER_GATE:-0}"
 NEWCOMER_AI_COACH_REAL_PROVIDER_REQUIRED="${NEWCOMER_AI_COACH_REAL_PROVIDER_REQUIRED:-0}"
 NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED="${NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED:-0}"
-NEWCOMER_BACKEND_COV_FAIL_UNDER="${NEWCOMER_BACKEND_COV_FAIL_UNDER:-45}"
 NEWCOMER_E2E_FRESH_RUN_ID="${NEWCOMER_E2E_FRESH_RUN_ID:-fresh-$(date +%Y%m%d%H%M%S)}"
 export NEWCOMER_E2E_FRESH_RUN_ID
 
@@ -166,130 +165,17 @@ PYTHON_BIN="$(resolve_python_bin)" || die "Could not find a backend Python inter
 BACKEND_ENV_FILE="${ROOT_DIR}/backend/.env"
 DEFAULT_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
 DEFAULT_REDIS_URL="redis://127.0.0.1:${REDIS_PORT}/0"
-VITEST_GATE_TARGETS=(
-  "src/app/(auth)/login/page.test.tsx"
-  "src/app/(dashboard)/page.test.tsx"
-  "src/app/(dashboard)/sales-trainer/page.test.tsx"
-  "src/app/(dashboard)/sales-trainer/page-newcomer-scope.test.tsx"
-  "src/app/(dashboard)/sales-trainer/audio/[unitId]/page.test.tsx"
-  "src/app/(dashboard)/sales-trainer/audio/result/[submissionId]/page.test.tsx"
-  "src/app/(dashboard)/sales-trainer/business-skills/page.test.tsx"
-  "src/app/(dashboard)/sales-trainer/business-skills/exam/page.test.tsx"
-  "src/app/(dashboard)/sales-trainer/business-skills/coach/page.test.tsx"
-  "src/app/(dashboard)/support/runtime/page.test.tsx"
-  "src/app/admin/analytics/page.test.tsx"
-  "src/app/admin/sales-trainer/analytics/page.test.tsx"
-  "src/app/admin/sales-trainer/ai-coach/page.test.tsx"
-  "src/app/admin/sales-trainer/training-records/page.test.tsx"
-  "src/app/admin/sales-trainer/training-records/[recordType]/[recordId]/page.test.tsx"
-  "src/app/admin/business-rules/_components/governed-business-rule-page.test.tsx"
-  "src/app/admin/business-rules/sales-combinations/page.test.tsx"
-  "src/app/admin/governance/page.test.tsx"
-  "src/app/admin/scoring-rulesets/page.test.tsx"
-  "src/app/admin/settings/page.test.tsx"
-  "src/app/(user)/practice/[sessionId]/page.test.tsx"
-  "src/app/(user)/practice/[sessionId]/report/page.test.tsx"
-  "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
-  "src/components/error-reporting.test.tsx"
-  "src/components/ui/chat-bubble.test.tsx"
-  "src/lib/admin/linked-assets.test.ts"
-  "src/lib/auth-handler.test.ts"
-  "src/lib/sales-trainer/roleplay-observation.test.ts"
-  "src/lib/sales-trainer/module-path.test.ts"
-)
-
-BACKEND_GATE_TARGETS=(
-  "tests/integration/test_auth_login_api.py"
-  "tests/integration/test_history_evidence_flow.py"
-  "tests/integration/test_replay_api.py"
-  "tests/integration/test_sales_realtime_reconnect_flow.py"
-  "tests/integration/test_support_runtime_api.py"
-  "tests/integration/test_observability_surfaces.py"
-  "tests/contract/test_analytics.py"
-  "tests/contract/test_release_verification_contract.py"
-  "tests/contract/test_admin_governance_contract.py"
-  "tests/integration/test_admin_business_rules_api.py"
-  "tests/integration/test_admin_model_configs_api.py"
-  "tests/integration/test_scoring_rulesets_api.py"
-  "tests/integration/test_supervisor_retraining_api.py"
-  "tests/integration/test_business_etiquette_quiz_api.py"
-  "tests/integration/test_business_etiquette_ai_coach_progress_api.py"
-  "tests/integration/test_newcomer_training_journey_api.py"
-  "tests/integration/test_newcomer_training_path_article_api.py"
-  "tests/integration/test_newcomer_training_path_config_api.py"
-  "tests/integration/test_newcomer_training_path_material_api.py"
-  "tests/integration/test_newcomer_training_path_rbac_api.py"
-  "tests/integration/test_practice_session_object_permissions.py"
-  "tests/unit/admin/test_model_config_security.py"
-  "tests/unit/common/auth/test_roles.py"
-  "tests/unit/common/jobs/test_persistent_task_contract.py"
-  "tests/unit/common/test_business_rule_config_service.py"
-  "tests/unit/common/test_route_integrity.py"
-  "tests/unit/test_app_factory.py"
-  "tests/unit/test_architecture_dependency_guard.py"
-  "tests/unit/test_generate_openapi_contract.py"
-  "tests/unit/test_admin_permissions_rbac.py"
-  "tests/unit/test_newcomer_training_path_boundary.py"
-  "tests/unit/test_newcomer_training_path_config_revision.py"
-  "tests/unit/test_newcomer_dead_data_diagnostics_export.py"
-  "tests/unit/test_newcomer_training_path_material_governance.py"
-  "tests/unit/test_newcomer_training_path_permissions.py"
-  "tests/unit/test_observability_metrics.py"
-  "tests/unit/test_p0_fixes.py"
-  "tests/unit/test_presentation_event_emitter.py"
-  "tests/unit/test_runtime_dependency_contract.py"
-  "tests/unit/test_sales_trainer_ai_coach.py"
-  "tests/unit/test_sales_trainer_ai_coach_chat.py"
-  "tests/unit/test_sales_trainer_phase2_projection.py"
-  "tests/unit/test_sales_trainer_realtime_roleplay_start.py"
-  "tests/unit/test_roleplay_observability_contract.py"
-  "tests/unit/test_roleplay_observation_evaluator.py"
-  "tests/unit/test_sales_trainer_roleplay_observation_service.py"
-  "tests/unit/test_sales_websocket_router.py"
-  "tests/unit/test_sales_trainer_training_journey_service.py"
-  "tests/unit/test_stepfun_realtime_prereqs.py"
-  "tests/unit/test_presentation_stepfun_realtime_handler.py"
-  "tests/unit/test_main_presentation_ws_runtime.py"
-  "tests/unit/test_stepfun_transport.py"
-  "tests/unit/test_stepfun_realtime_handler.py"
-  "tests/unit/test_session_runtime_authority.py"
-  "tests/unit/test_websocket_handler.py"
-  # Keep roleplay record-only in the gate as a focused smoke subset; the full
-  # upstream suite is broader and slower than this CI gate needs.
-  "tests/unit/test_stepfun_realtime_upstream.py::test_sales_trainer_roleplay_stream_guard_observes_without_cancelling"
-  "tests/unit/test_stepfun_realtime_upstream.py::test_sales_trainer_roleplay_final_guard_keeps_original_text_and_skips_duplicate_count"
-  "tests/unit/test_stepfun_payload_snapshots.py"
-)
-
-BACKEND_SMOKE_REGRESSION_TARGETS=(
-  "tests/unit/test_curriculum_analytics_service.py"
-  "tests/unit/evaluation/test_evaluation_api_errors.py"
-  "tests/unit/evaluation/test_comprehensive_report_service.py"
-  "tests/unit/common/test_dashboard_recommendation.py"
-)
-
-BACKEND_NEWCOMER_COVERAGE_TARGETS=(
-  "tests/unit/test_newcomer_training_path_boundary.py"
-  "tests/unit/test_sales_trainer_training_journey_service.py"
-  "tests/integration/test_newcomer_training_journey_api.py"
-  "tests/unit/common/test_business_rule_config_service.py"
-)
-
-BACKEND_NEWCOMER_COVERAGE_MODULES=(
-  "sales_trainer"
-  "common.business_rules"
-)
-
-BACKEND_NEWCOMER_MYPY_TARGETS=(
-  "src/common/business_rules"
-  "src/common/services/runtime_outcome_projection.py"
-  "src/common/services/external_session_start.py"
-  "src/sales_trainer/services/training_journey_service.py"
-  "src/sales_trainer/services/realtime_roleplay_start_service.py"
-  "src/sales_trainer/services/roleplay_observation_evaluator.py"
-  "src/sales_trainer/services/roleplay_observation_service.py"
-  "src/sales_bot/websocket/router.py"
-)
+QUALITY_SELECTION_MANIFEST="${EVIDENCE_DIR}/quality-test-selection.json"
+BACKEND_COVERAGE_REPORT="${EVIDENCE_DIR}/backend-coverage.json"
+CHANGED_COVERAGE_REPORT="${EVIDENCE_DIR}/changed-coverage-report.json"
+BACKEND_INTEGRATION_TARGET_FILE="${EVIDENCE_DIR}/backend-integration-targets.txt"
+BACKEND_E2E_TARGET_FILE="${EVIDENCE_DIR}/backend-e2e-targets.txt"
+PLAYWRIGHT_TARGET_FILE="${EVIDENCE_DIR}/playwright-targets.txt"
+QUALITY_GATE_SELECTION_MODE="${QUALITY_GATE_SELECTION_MODE:-local}"
+QUALITY_GATE_BASE_SHA="${QUALITY_GATE_BASE_SHA:-}"
+QUALITY_GATE_HEAD_SHA="${QUALITY_GATE_HEAD_SHA:-HEAD}"
+BACKEND_SUITE_TIMEOUT_SECONDS="${BACKEND_SUITE_TIMEOUT_SECONDS:-1200}"
+VITEST_SUITE_TIMEOUT_SECONDS="${VITEST_SUITE_TIMEOUT_SECONDS:-1200}"
 
 export DATABASE_URL="${DATABASE_URL:-$(dotenv_get "${BACKEND_ENV_FILE}" "DATABASE_URL")}" 
 DATABASE_URL="${DATABASE_URL:-${DEFAULT_DATABASE_URL}}"
@@ -590,34 +476,33 @@ run_newcomer_ai_coach_real_provider_gate() {
     "AI Coach /chat/sessions/stream and /messages/stream created a governed first-card after learner choice against the configured real LLM provider without fallback error events."
 }
 
-run_backend_newcomer_coverage_gate() {
-  local coverage_args=()
-  local module
-  for module in "${BACKEND_NEWCOMER_COVERAGE_MODULES[@]}"; do
-    coverage_args+=("--cov=${module}")
-  done
+run_with_watchdog() {
+  local label="$1"
+  local timeout_seconds="$2"
+  shift 2
 
-  (
-    cd "${ROOT_DIR}/backend"
-    PHASE4_E2E_PROVIDER= \
-      NEWCOMER_E2E_EXPECT_REAL_PROVIDER= \
-      "${PYTHON_BIN}" -m pytest -c pyproject.toml \
-      -o addopts="-v --import-mode=importlib" \
-      "${BACKEND_NEWCOMER_COVERAGE_TARGETS[@]}" \
-      "${coverage_args[@]}" \
-      --cov-report=term-missing \
-      --cov-fail-under="${NEWCOMER_BACKEND_COV_FAIL_UNDER}" \
-      -q
-  )
+  local exit_code=0
+  set +e
+  timeout --foreground -k 30s "${timeout_seconds}s" "$@"
+  exit_code=$?
+  set -e
+  if [[ ${exit_code} -eq 124 || ${exit_code} -eq 137 ]]; then
+    die "${label} timed out after ${timeout_seconds}s (exit=${exit_code})"
+  fi
+  if [[ ${exit_code} -ne 0 ]]; then
+    die "${label} failed (exit=${exit_code})"
+  fi
 }
 
-run_backend_newcomer_mypy_gate() {
-  (
-    cd "${ROOT_DIR}/backend"
-    "${PYTHON_BIN}" -m mypy --config-file pyproject.toml \
-      --follow-imports=skip \
-      "${BACKEND_NEWCOMER_MYPY_TARGETS[@]}"
-  )
+is_selected_playwright_target() {
+  local expected="$1"
+  local target
+  for target in "${PLAYWRIGHT_TARGETS[@]}"; do
+    if [[ "${target}" == "${expected}" ]]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 if [[ "${CRITICAL_GATE_MODE}" != "full" \
@@ -638,6 +523,32 @@ if [[ "${CRITICAL_GATE_MODE}" == "newcomer-ai-coach-real-provider" ]]; then
   exit 0
 fi
 
+log "Select policy-governed slow test families"
+SELECTOR_ARGS=(
+  --mode "${QUALITY_GATE_SELECTION_MODE}"
+  --head "${QUALITY_GATE_HEAD_SHA}"
+  --output "${QUALITY_SELECTION_MANIFEST}"
+)
+if [[ -n "${QUALITY_GATE_BASE_SHA}" ]]; then
+  SELECTOR_ARGS+=(--base "${QUALITY_GATE_BASE_SHA}")
+fi
+"${PYTHON_BIN}" "${ROOT_DIR}/scripts/select_quality_tests.py" "${SELECTOR_ARGS[@]}"
+[[ -s "${QUALITY_SELECTION_MANIFEST}" ]] || die "Selector manifest is missing or empty"
+
+"${PYTHON_BIN}" "${ROOT_DIR}/scripts/select_quality_tests.py" \
+  --output "${QUALITY_SELECTION_MANIFEST}" --emit-family backend_integration \
+  > "${BACKEND_INTEGRATION_TARGET_FILE}"
+"${PYTHON_BIN}" "${ROOT_DIR}/scripts/select_quality_tests.py" \
+  --output "${QUALITY_SELECTION_MANIFEST}" --emit-family backend_e2e \
+  > "${BACKEND_E2E_TARGET_FILE}"
+"${PYTHON_BIN}" "${ROOT_DIR}/scripts/select_quality_tests.py" \
+  --output "${QUALITY_SELECTION_MANIFEST}" --emit-family playwright \
+  > "${PLAYWRIGHT_TARGET_FILE}"
+mapfile -t BACKEND_INTEGRATION_TARGETS < "${BACKEND_INTEGRATION_TARGET_FILE}"
+mapfile -t BACKEND_E2E_TARGETS < "${BACKEND_E2E_TARGET_FILE}"
+mapfile -t PLAYWRIGHT_TARGETS < "${PLAYWRIGHT_TARGET_FILE}"
+BACKEND_SLOW_TARGETS=("${BACKEND_INTEGRATION_TARGETS[@]}" "${BACKEND_E2E_TARGETS[@]}")
+
 log "Backend ruff"
 (
   cd "${ROOT_DIR}/backend"
@@ -654,6 +565,29 @@ log "OpenAPI contract parity"
 (
   cd "${ROOT_DIR}/backend"
   "${PYTHON_BIN}" scripts/generate_openapi_contract.py --check
+)
+
+log "Backend full mypy"
+(
+  cd "${ROOT_DIR}/backend"
+  "${PYTHON_BIN}" -m mypy --config-file pyproject.toml src
+)
+
+log "Backend full unit + contract branch coverage"
+(
+  cd "${ROOT_DIR}/backend"
+  rm -f .coverage "${BACKEND_COVERAGE_REPORT}"
+  run_with_watchdog \
+    "Backend unit + contract branch coverage" \
+    "${BACKEND_SUITE_TIMEOUT_SECONDS}" \
+    env PHASE4_E2E_PROVIDER= NEWCOMER_E2E_EXPECT_REAL_PROVIDER= \
+    "${PYTHON_BIN}" -m pytest -c pyproject.toml \
+      -o addopts="--import-mode=importlib" \
+      tests/unit tests/contract \
+      --cov=src \
+      --cov-branch \
+      --cov-report= \
+      -q
 )
 
 log "Web typecheck"
@@ -673,69 +607,99 @@ log "Vitest"
 (
   cd "${ROOT_DIR}/web"
   rm -rf coverage
-  npx vitest run --coverage "${VITEST_GATE_TARGETS[@]}"
+  run_with_watchdog \
+    "Full Vitest coverage" \
+    "${VITEST_SUITE_TIMEOUT_SECONDS}" \
+    npx vitest run --coverage
 )
 assert_non_empty_vitest_coverage_summary
-
-log "Backend newcomer mypy gate"
-run_backend_newcomer_mypy_gate
+[[ -s "${ROOT_DIR}/web/coverage/coverage-final.json" ]] \
+  || die "Vitest coverage-final.json is missing or empty"
 
 log "[quality-gate] Ensuring database schema is current before smoke bootstrap and Playwright"
 start_smoke_stack
 
-log "Playwright smoke E2E"
-(
-  cd "${ROOT_DIR}/web"
-  SMOKE_REUSE_EXISTING_STACK=1 npx playwright test tests/e2e/smoke.spec.ts
-)
+GENERIC_PLAYWRIGHT_TARGETS=()
+for target in "${PLAYWRIGHT_TARGETS[@]}"; do
+  case "${target}" in
+    tests/e2e/smoke.spec.ts|tests/e2e/newcomer-training-closed-loop.spec.ts|tests/e2e/presentation-phase4.spec.ts|tests/e2e/sales-phase4.spec.ts)
+      ;;
+    *)
+      GENERIC_PLAYWRIGHT_TARGETS+=("${target}")
+      ;;
+  esac
+done
 
-log "Playwright newcomer training closed-loop E2E"
-(
-  cd "${ROOT_DIR}/web"
-  SMOKE_REUSE_EXISTING_STACK=1 \
-    PHASE4_E2E_PROVIDER=local \
-    npx playwright test tests/e2e/newcomer-training-closed-loop.spec.ts --workers=1
-)
+if [[ ${#GENERIC_PLAYWRIGHT_TARGETS[@]} -gt 0 ]]; then
+  log "Policy-selected generic Playwright E2E"
+  (
+    cd "${ROOT_DIR}/web"
+    SMOKE_REUSE_EXISTING_STACK=1 \
+      npx playwright test "${GENERIC_PLAYWRIGHT_TARGETS[@]}" --workers=1
+  )
+fi
 
-log "Playwright presentation Phase 4 E2E"
-stop_smoke_stack
-PHASE4_E2E_PROVIDER=local \
-PHASE4_E2E_PROVIDER_SCRIPT=presentation-provider-script.v1.json \
-PHASE4_E2E_PROVIDER_TRANSCRIPT="${ROOT_DIR}/.sisyphus/evidence/issue-44-provider-transcript.jsonl" \
-ISSUE44_E2E_RUN_MANIFEST="${ROOT_DIR}/.sisyphus/evidence/issue-44-run-manifest.jsonl" \
-ISSUE44_BACKEND_LOG_PATH="${ROOT_DIR}/.dev/logs/backend.log" \
-STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
-start_smoke_stack
-(
-  cd "${ROOT_DIR}/web"
+if is_selected_playwright_target "tests/e2e/smoke.spec.ts"; then
+  log "Playwright smoke E2E"
+  (
+    cd "${ROOT_DIR}/web"
+    SMOKE_REUSE_EXISTING_STACK=1 npx playwright test tests/e2e/smoke.spec.ts
+  )
+fi
+
+if is_selected_playwright_target "tests/e2e/newcomer-training-closed-loop.spec.ts"; then
+  log "Playwright newcomer training closed-loop E2E"
+  (
+    cd "${ROOT_DIR}/web"
+    SMOKE_REUSE_EXISTING_STACK=1 \
+      PHASE4_E2E_PROVIDER=local \
+      npx playwright test tests/e2e/newcomer-training-closed-loop.spec.ts --workers=1
+  )
+fi
+
+if is_selected_playwright_target "tests/e2e/presentation-phase4.spec.ts"; then
+  log "Playwright presentation Phase 4 E2E"
+  stop_smoke_stack
   PHASE4_E2E_PROVIDER=local \
   PHASE4_E2E_PROVIDER_SCRIPT=presentation-provider-script.v1.json \
   PHASE4_E2E_PROVIDER_TRANSCRIPT="${ROOT_DIR}/.sisyphus/evidence/issue-44-provider-transcript.jsonl" \
   ISSUE44_E2E_RUN_MANIFEST="${ROOT_DIR}/.sisyphus/evidence/issue-44-run-manifest.jsonl" \
   ISSUE44_BACKEND_LOG_PATH="${ROOT_DIR}/.dev/logs/backend.log" \
   STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
-  SMOKE_REUSE_EXISTING_STACK=1 \
-  npx playwright test tests/e2e/presentation-phase4.spec.ts --workers=1
-)
+  start_smoke_stack
+  (
+    cd "${ROOT_DIR}/web"
+    PHASE4_E2E_PROVIDER=local \
+    PHASE4_E2E_PROVIDER_SCRIPT=presentation-provider-script.v1.json \
+    PHASE4_E2E_PROVIDER_TRANSCRIPT="${ROOT_DIR}/.sisyphus/evidence/issue-44-provider-transcript.jsonl" \
+    ISSUE44_E2E_RUN_MANIFEST="${ROOT_DIR}/.sisyphus/evidence/issue-44-run-manifest.jsonl" \
+    ISSUE44_BACKEND_LOG_PATH="${ROOT_DIR}/.dev/logs/backend.log" \
+    STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
+    SMOKE_REUSE_EXISTING_STACK=1 \
+    npx playwright test tests/e2e/presentation-phase4.spec.ts --workers=1
+  )
+fi
 
-log "Playwright sales Phase 4 E2E"
-stop_smoke_stack
-PHASE4_E2E_PROVIDER=local \
-PHASE4_E2E_PROVIDER_SCRIPT=sales-provider-script.v1.json \
-PHASE4_E2E_PROVIDER_TRANSCRIPT="${ROOT_DIR}/.sisyphus/evidence/issue-43-provider-transcript.jsonl" \
-ISSUE43_E2E_RUN_MANIFEST="${ROOT_DIR}/.sisyphus/evidence/issue-43-run-manifest.jsonl" \
-STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
-start_smoke_stack
-(
-  cd "${ROOT_DIR}/web"
+if is_selected_playwright_target "tests/e2e/sales-phase4.spec.ts"; then
+  log "Playwright sales Phase 4 E2E"
+  stop_smoke_stack
   PHASE4_E2E_PROVIDER=local \
   PHASE4_E2E_PROVIDER_SCRIPT=sales-provider-script.v1.json \
   PHASE4_E2E_PROVIDER_TRANSCRIPT="${ROOT_DIR}/.sisyphus/evidence/issue-43-provider-transcript.jsonl" \
   ISSUE43_E2E_RUN_MANIFEST="${ROOT_DIR}/.sisyphus/evidence/issue-43-run-manifest.jsonl" \
   STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
-  SMOKE_REUSE_EXISTING_STACK=1 \
-  npx playwright test tests/e2e/sales-phase4.spec.ts --workers=1
-)
+  start_smoke_stack
+  (
+    cd "${ROOT_DIR}/web"
+    PHASE4_E2E_PROVIDER=local \
+    PHASE4_E2E_PROVIDER_SCRIPT=sales-provider-script.v1.json \
+    PHASE4_E2E_PROVIDER_TRANSCRIPT="${ROOT_DIR}/.sisyphus/evidence/issue-43-provider-transcript.jsonl" \
+    ISSUE43_E2E_RUN_MANIFEST="${ROOT_DIR}/.sisyphus/evidence/issue-43-run-manifest.jsonl" \
+    STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
+    SMOKE_REUSE_EXISTING_STACK=1 \
+    npx playwright test tests/e2e/sales-phase4.spec.ts --workers=1
+  )
+fi
 
 if [[ "${RUN_NEWCOMER_REAL_PROVIDER_GATE}" == "1" ]]; then
   run_newcomer_real_provider_gate
@@ -745,23 +709,40 @@ if [[ "${RUN_NEWCOMER_AI_COACH_REAL_PROVIDER_GATE}" == "1" ]]; then
   run_newcomer_ai_coach_real_provider_gate
 fi
 
-log "Backend newcomer coverage gate"
-run_backend_newcomer_coverage_gate
+# Playwright has finished. Release the smoke stack before the slower pytest
+# families so background services cannot contend with test fixtures or retain
+# avoidable CPU/memory during coverage collection.
+stop_smoke_stack
 
-log "Backend tests: auth + history/report/replay + admin analytics + support runtime + business rules + model config + release verification"
+[[ ${#BACKEND_SLOW_TARGETS[@]} -gt 0 ]] \
+  || die "Selector returned no backend integration/e2e targets"
+log "Policy-selected backend integration + e2e coverage append"
 (
   cd "${ROOT_DIR}/backend"
   PHASE4_E2E_PROVIDER= \
     NEWCOMER_E2E_EXPECT_REAL_PROVIDER= \
-    "${PYTHON_BIN}" -m pytest -c pyproject.toml "${BACKEND_GATE_TARGETS[@]}" --no-cov -q
+    "${PYTHON_BIN}" -m pytest -c pyproject.toml \
+      -o addopts="--import-mode=importlib" \
+      "${BACKEND_SLOW_TARGETS[@]}" \
+      --cov=src \
+      --cov-branch \
+      --cov-append \
+      --cov-report=term-missing \
+      --cov-report="json:${BACKEND_COVERAGE_REPORT}" \
+      --cov-fail-under=48 \
+      -q
 )
+[[ -s "${BACKEND_COVERAGE_REPORT}" ]] || die "Backend coverage report is missing or empty"
 
-log "Backend smoke regression tests"
-(
-  cd "${ROOT_DIR}/backend"
-  PHASE4_E2E_PROVIDER= \
-    NEWCOMER_E2E_EXPECT_REAL_PROVIDER= \
-    "${PYTHON_BIN}" -m pytest -c pyproject.toml "${BACKEND_SMOKE_REGRESSION_TARGETS[@]}" --no-cov -q
-)
+log "Changed-line and critical-branch coverage guard"
+"${PYTHON_BIN}" "${ROOT_DIR}/scripts/check_changed_coverage.py" \
+  --backend-report "${BACKEND_COVERAGE_REPORT}" \
+  --frontend-report "${ROOT_DIR}/web/coverage/coverage-final.json" \
+  --selector-manifest "${QUALITY_SELECTION_MANIFEST}" \
+  --output "${CHANGED_COVERAGE_REPORT}" \
+  --head "${QUALITY_GATE_HEAD_SHA}"
+[[ -s "${CHANGED_COVERAGE_REPORT}" ]] || die "Changed coverage report is missing or empty"
+[[ -s "${PLAYWRIGHT_REPORT_DIR}/index.html" ]] \
+  || die "Playwright HTML evidence is missing or empty"
 
 log "Critical quality gate passed"

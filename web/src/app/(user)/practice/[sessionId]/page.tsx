@@ -46,6 +46,18 @@ const CONNECTION_STATUS_LABELS: Record<ConnectionState, string> = {
     failed: "连接失败",
 };
 
+function recordingBlockedMessage(
+    reason: "connection" | "session_status" | "lifecycle" | "transitioning",
+): string {
+    return reason === "connection"
+        ? "连接未就绪，请等待“已连接”后再录音。"
+        : reason === "session_status"
+        ? "会话尚未进入进行中，请稍候或点击顶部“开始/继续”。"
+        : reason === "lifecycle"
+        ? "正在更新会话状态，请稍后再试。"
+        : "录音操作处理中，请稍后再试。";
+}
+
 type TrackedActionCard = {
     key: string;
     card: ActionCard;
@@ -874,14 +886,7 @@ export default function PracticeSessionPage() {
         debug.log('[Recording] toggleRecording intent:', intent.action, 'isRecording:', isRecordingRef.current, 'aiIsBusy:', aiIsBusyRef.current, 'hasPermission:', hasPermission);
 
         if (intent.action === "blocked") {
-            const blockedMessage = intent.reason === "connection"
-                ? "连接未就绪，请等待“已连接”后再录音。"
-                : intent.reason === "session_status"
-                ? "会话尚未进入进行中，请稍候或点击顶部“开始/继续”。"
-                : intent.reason === "lifecycle"
-                ? "正在更新会话状态，请稍后再试。"
-                : "录音操作处理中，请稍后再试。";
-            setRecordingBlockedHint(blockedMessage);
+            setRecordingBlockedHint(recordingBlockedMessage(intent.reason));
             debug.warn("[Recording] toggle blocked", intent);
             return;
         }
@@ -894,13 +899,33 @@ export default function PracticeSessionPage() {
         }
 
         if (intent.action === "request_permission") {
+            if (!recordingStateMachine.beginTransition("requesting_permission")) {
+                return;
+            }
+
             void requestPermission()
                 .then((granted) => {
                     if (!granted || isRecordingRef.current) {
                         return;
                     }
+                    const latestIntent = recordingStateMachine.resolvePermissionGrantedIntent();
+                    if (latestIntent.action !== "start") {
+                        if (latestIntent.action === "blocked") {
+                            setRecordingBlockedHint(
+                                recordingBlockedMessage(latestIntent.reason),
+                            );
+                            debug.warn(
+                                "[Recording] permission granted after readiness changed",
+                                latestIntent,
+                            );
+                        }
+                        return;
+                    }
                     unlockAudio();
                     return Promise.resolve(startRecording()).then(() => continuousUploader.startUpload());
+                })
+                .finally(() => {
+                    recordingStateMachine.endTransition();
                 });
             return;
         }

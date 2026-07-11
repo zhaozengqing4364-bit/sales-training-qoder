@@ -103,6 +103,16 @@ export function useRecordingStateMachine(input: RecordingStateMachineInput) {
         return resolveRecordingToggleIntent(inputRef.current, transitionRef.current);
     }, []);
 
+    const resolvePermissionGrantedIntent = React.useCallback((): RecordingToggleIntent => {
+        return resolveRecordingToggleIntent(
+            {
+                ...inputRef.current,
+                hasPermission: true,
+            },
+            "idle",
+        );
+    }, []);
+
     const currentIntent = resolveRecordingToggleIntent(input, transition);
 
     return {
@@ -111,6 +121,7 @@ export function useRecordingStateMachine(input: RecordingStateMachineInput) {
         canRecord: currentIntent.action === "start" || currentIntent.action === "stop",
         canRequestPermission: currentIntent.action === "request_permission",
         resolveToggleIntent,
+        resolvePermissionGrantedIntent,
         beginTransition,
         endTransition,
     };
