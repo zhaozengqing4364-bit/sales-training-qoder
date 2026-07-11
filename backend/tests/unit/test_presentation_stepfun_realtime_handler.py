@@ -123,11 +123,13 @@ def test_sales_constructor_defaults_keep_typed_capabilities() -> None:
 @pytest.mark.asyncio
 async def test_handle_connection_closes_on_invalid_token(handler):
     handler.websocket.close = AsyncMock()
-    handler.manager.connect = AsyncMock()
 
-    with patch(
-        "sales_bot.websocket.stepfun_realtime_handler.verify_token",
-        side_effect=ValueError("bad token"),
+    with (
+        patch.object(handler.manager, "connect", new=AsyncMock()) as manager_connect,
+        patch(
+            "sales_bot.websocket.stepfun_realtime_handler.verify_token",
+            side_effect=ValueError("bad token"),
+        ),
     ):
         await handler.handle_connection(
             handler.websocket,
@@ -139,7 +141,7 @@ async def test_handle_connection_closes_on_invalid_token(handler):
         code=4401,
         reason="unauthorized",
     )
-    handler.manager.connect.assert_not_awaited()
+    manager_connect.assert_not_awaited()
 
 
 def test_presentation_stepfun_handler_does_not_inherit_sales_stage_mixin():
@@ -338,12 +340,11 @@ async def test_send_error_uses_presentation_event_contract(handler):
 
 @pytest.mark.asyncio
 async def test_send_heartbeat_uses_stepfun_envelope(handler):
-    handler.manager.send_json = AsyncMock()
+    with patch.object(handler.manager, "send_json", new=AsyncMock()) as send_json:
+        await handler._send_heartbeat()
 
-    await handler._send_heartbeat()
-
-    handler.manager.send_json.assert_awaited_once()
-    websocket, payload = handler.manager.send_json.await_args.args
+    send_json.assert_awaited_once()
+    websocket, payload = send_json.await_args.args
     assert websocket is handler.websocket
     assert payload["type"] == "heartbeat"
 
