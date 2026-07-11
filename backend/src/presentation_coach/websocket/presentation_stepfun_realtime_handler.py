@@ -8,8 +8,11 @@ feedback/page-context behavior and disabling sales-only capabilities.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import uuid
+from collections.abc import Mapping
+from hashlib import sha256
 from typing import Any
 
 from fastapi import WebSocket
@@ -47,6 +50,14 @@ from sales_bot.websocket.stepfun_realtime_handler import (
     TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS,
     StepFunRealtimeSharedHandler,
 )
+from training_runtime.realtime import (
+    GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+    ConnectionPhase,
+    RealtimeSessionEngine,
+    RealtimeSessionState,
+    RealtimeStateTransitionError,
+    TurnPhase,
+)
 
 logger = get_logger(__name__)
 
@@ -60,6 +71,7 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         stepfun_transport: Any | None = None,
         db_session_factory: Any | None = None,
         knowledge_service_factory: Any | None = None,
+        runtime_engine: RealtimeSessionEngine | None = None,
     ) -> None:
         super_kwargs: dict[str, Any] = {
             "stepfun_transport": stepfun_transport,
@@ -71,6 +83,8 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         if knowledge_service_factory is not None:
             super_kwargs["knowledge_service_factory"] = knowledge_service_factory
         super().__init__(**super_kwargs)
+        self._runtime_engine = runtime_engine
+        self._grounding_decision_sequence = 0
         self.current_page = 1
         self.feedback_service = get_feedback_service()
         self.prompt_role_resolver = PresentationPromptRoleResolver()
@@ -96,6 +110,268 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             )
         finally:
             self.feedback_service.clear_session(session_id)
+
+    def _create_state_snapshot(self) -> Any:
+        snapshot = super()._create_state_snapshot()
+        if self._runtime_engine is None:
+            return snapshot
+        runtime_state = (
+            copy.deepcopy(snapshot.runtime_state)
+            if isinstance(snapshot.runtime_state, dict)
+            else {}
+        )
+        runtime_state["realtime_engine"] = self._runtime_engine.snapshot()
+        snapshot.runtime_state = runtime_state
+        return snapshot
+
+    async def _restore_session_state(self, state: Any) -> None:
+        if self._runtime_engine is not None:
+            runtime_state = (
+                state.runtime_state if isinstance(state.runtime_state, dict) else {}
+            )
+            reconnect_state = runtime_state.get("reconnect_state")
+            reconnect_payload = (
+                reconnect_state if isinstance(reconnect_state, Mapping) else {}
+            )
+            target_epoch = max(
+                1,
+                self._normalize_connection_epoch(
+                    reconnect_payload.get("connection_epoch")
+                )
+                + 1,
+            )
+            engine_payload = self._engine_restore_payload(
+                runtime_state=runtime_state,
+                session_id=state.session_id,
+                target_epoch=target_epoch,
+            )
+            self._runtime_engine.restore(engine_payload)
+
+        await super()._restore_session_state(state)
+        if (
+            self._runtime_engine is not None
+            and self._runtime_engine.state.connection.epoch != self._connection_epoch
+        ):
+            raise RealtimeStateTransitionError("engine_legacy_epoch_mismatch")
+
+    @staticmethod
+    def _engine_restore_payload(
+        *,
+        runtime_state: dict[str, Any],
+        session_id: str,
+        target_epoch: int,
+    ) -> dict[str, object]:
+        raw_engine_payload = runtime_state.get("realtime_engine")
+        if isinstance(raw_engine_payload, Mapping):
+            payload = copy.deepcopy(dict(raw_engine_payload))
+        else:
+            payload = RealtimeSessionState(scenario_type="presentation").to_dict()
+            request_id = int(runtime_state.get("current_request_id") or 0)
+            if request_id > 0:
+                payload["turn"] = {
+                    "phase": TurnPhase.COMPLETED.value,
+                    "request_id": request_id,
+                    "response_id": None,
+                    "stream_id": None,
+                    "interruption_reason": None,
+                    "timeout_reason": None,
+                    "completion_reason": "snapshot_restored",
+                }
+
+        payload["scenario_type"] = "presentation"
+        raw_connection = payload.get("connection")
+        connection = (
+            copy.deepcopy(dict(raw_connection))
+            if isinstance(raw_connection, Mapping)
+            else {}
+        )
+        connection.update(
+            {
+                "phase": ConnectionPhase.CONNECTING.value,
+                "session_id": session_id,
+                "healthy": False,
+                "reconnecting": target_epoch > 1,
+                "epoch": target_epoch,
+                "reason": None,
+            }
+        )
+        payload["connection"] = connection
+        return payload
+
+    async def _connect_upstream(self) -> None:
+        if self._runtime_engine is not None:
+            connection = self._runtime_engine.state.connection
+            if connection.phase is ConnectionPhase.DISCONNECTED:
+                self._runtime_engine.begin_connection(self.session_id or "presentation")
+        await super()._connect_upstream()
+        if (
+            self._runtime_engine is not None
+            and self._runtime_engine.state.connection.phase
+            is ConnectionPhase.CONNECTING
+        ):
+            self._runtime_engine.mark_connected()
+
+    async def _save_session_state(self) -> None:
+        if self._runtime_engine is not None:
+            connection = self._runtime_engine.state.connection
+            if connection.phase in {
+                ConnectionPhase.CONNECTING,
+                ConnectionPhase.CONNECTED,
+                ConnectionPhase.DEGRADED,
+            }:
+                reason = self._last_disconnect_reason or "connection_closed"
+                self._runtime_engine.begin_close(reason=reason)
+                self._runtime_engine.mark_disconnected(reason=reason)
+        await super()._save_session_state()
+
+    async def _create_response(self, *, count_turn: bool = False) -> bool:
+        previous_request_id = self.current_request_id
+        created = await super()._create_response(count_turn=count_turn)
+        if (
+            not created
+            or self._runtime_engine is None
+            or self.current_request_id == previous_request_id
+        ):
+            return created
+
+        response = self._active_response
+        stream_id = (
+            str(response.stream_id)
+            if response is not None and response.stream_id
+            else f"local:{self.current_request_id}"
+        )
+        self._runtime_engine.begin_turn(
+            request_id=self.current_request_id,
+            stream_id=stream_id,
+        )
+        if response is None:
+            self._runtime_engine.mark_response_started(
+                response_id=f"local:{self.current_request_id}"
+            )
+            self._runtime_engine.complete_turn(request_id=self.current_request_id)
+        return created
+
+    async def _handle_upstream_response_created(self, event: dict[str, Any]) -> None:
+        await super()._handle_upstream_response_created(event)
+        if self._runtime_engine is None or self._active_response is None:
+            return
+        response_id = self._active_response.response_id
+        if (
+            response_id
+            and self._runtime_engine.state.turn.phase is TurnPhase.RECEIVING
+        ):
+            self._runtime_engine.mark_response_started(response_id=str(response_id))
+
+    async def _handle_upstream_response_audio_delta(
+        self, event: dict[str, Any]
+    ) -> None:
+        await super()._handle_upstream_response_audio_delta(event)
+        if (
+            self._runtime_engine is not None
+            and event.get("delta")
+            and self._runtime_engine.state.turn.phase is TurnPhase.GENERATING
+        ):
+            self._runtime_engine.mark_streaming()
+
+    async def _handle_upstream_response_done(self, event: dict[str, Any]) -> None:
+        expected_request_id = (
+            self._active_response.request_id
+            if self._active_response is not None
+            else None
+        )
+        await super()._handle_upstream_response_done(event)
+        if self._runtime_engine is None or expected_request_id is None:
+            return
+        engine_turn = self._runtime_engine.state.turn
+        if (
+            engine_turn.request_id == expected_request_id
+            and engine_turn.phase in {TurnPhase.GENERATING, TurnPhase.STREAMING}
+        ):
+            self._runtime_engine.complete_turn(request_id=expected_request_id)
+
+    async def _handle_binary_frame(self, data: bytes) -> None:
+        await super()._handle_binary_frame(data)
+        if (
+            self._runtime_engine is None
+            or not data
+            or data[0] != self.BINARY_AUDIO_CHUNK
+        ):
+            return
+        audio = data[1:]
+        digest = sha256(audio).hexdigest()
+        turn_number = max(1, self.turn_count)
+        self._runtime_engine.record_evidence(
+            evidence_key=f"audio:{turn_number}:{len(audio)}:{digest}",
+            evidence_type="audio",
+            turn_number=turn_number,
+            payload=audio,
+        )
+
+    async def _prepare_grounding_context(self, user_text: str) -> None:
+        if self._runtime_engine is None:
+            await super()._prepare_grounding_context(user_text)
+            return
+
+        self._grounding_decision_sequence += 1
+        decision_id = (
+            f"presentation:{self.current_request_id + 1}:"
+            f"{self._grounding_decision_sequence}"
+        )
+        policy_hash = self._instruction_contract_hash or "sha256:unavailable"
+        self._runtime_engine.begin_grounding(
+            decision_id=decision_id,
+            policy_hash=policy_hash,
+        )
+        try:
+            await super()._prepare_grounding_context(user_text)
+        except Exception:
+            self._runtime_engine.resolve_grounding(
+                outcome="degraded",
+                mode="degraded",
+                diagnostics=self._grounding_diagnostics(
+                    status="degraded",
+                    reason_code="retrieval_error",
+                ),
+            )
+            raise
+
+        blocked = bool(self._pending_blocked_response_text.strip())
+        if blocked:
+            outcome = "blocked"
+            reason_code = "kb_lock_blocked"
+        elif isinstance(self._latest_knowledge_answer_diagnostics, dict) and any(
+            self._latest_knowledge_answer_diagnostics.get(key)
+            for key in ("timeout", "error", "degraded")
+        ):
+            outcome = "degraded"
+            reason_code = "retrieval_error"
+        else:
+            outcome = "ready"
+            reason_code = "presentation_feedback_ready"
+        self._runtime_engine.resolve_grounding(
+            outcome=outcome,
+            mode=outcome if outcome != "ready" else "grounded",
+            diagnostics=self._grounding_diagnostics(
+                status=outcome,
+                reason_code=reason_code,
+            ),
+        )
+
+    @staticmethod
+    def _grounding_diagnostics(
+        *,
+        status: str,
+        reason_code: str,
+    ) -> dict[str, object]:
+        return {
+            "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+            "status": status,
+            "reason_code": reason_code,
+            "source": "presentation",
+            "mode": status if status != "ready" else "grounded",
+            "degraded": status == "degraded",
+            "blocked": status == "blocked",
+        }
 
     async def _load_effective_policy(self) -> None:
         await super()._load_effective_policy()
@@ -699,6 +975,13 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
                 )
             },
         )
+        if self._runtime_engine is not None and normalized_transcript:
+            self._runtime_engine.record_evidence(
+                evidence_key=f"transcript:{turn_number}:user",
+                evidence_type="transcript",
+                turn_number=turn_number,
+                payload=normalized_transcript.encode("utf-8"),
+            )
 
         self._grounding_preparation_in_progress = True
         try:
