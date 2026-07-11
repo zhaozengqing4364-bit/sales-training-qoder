@@ -118,6 +118,7 @@ def _reference_reader(asset_type: str, asset_id: str) -> object | None:
             "voice_mode": "stepfun_realtime",
             "scoring_ruleset_id": "ruleset-1",
             "knowledge_base_refs": [],
+            "case_item_id": "case-1",
             "curriculum_plan": {
                 "name": "多阶段训练",
                 "stages": [

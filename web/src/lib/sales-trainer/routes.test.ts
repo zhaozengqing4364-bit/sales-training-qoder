@@ -121,6 +121,18 @@ describe("sales trainer admin routes", () => {
             "/admin/sales-trainer",
             capabilities({ manage_questions: true }),
         )).toBe(false);
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/papers",
+            capabilities({ manage_questions: true }),
+        )).toBe(false);
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/learning-topics/papers",
+            capabilities({ manage_questions: true }),
+        )).toBe(false);
+        expect(isSalesTrainerAdminPathAllowedForCapabilities(
+            "/admin/sales-trainer/learning-topics/papers",
+            capabilities({ manage_content: true }),
+        )).toBe(true);
     });
 
     it("allows Journey Analytics through the records capability", () => {

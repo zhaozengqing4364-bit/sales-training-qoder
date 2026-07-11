@@ -8,6 +8,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
 from common.db.models import User
+from sales_trainer.schemas import (
+    NewcomerLearningTopicConfig,
+    NewcomerLearningTopicsPayload,
+    NewcomerPathConfigPayload,
+)
+from sales_trainer.services.asset_revision_service import (
+    SalesTrainerAssetRevisionService,
+)
+from sales_trainer.services.learning_topic_config_service import (
+    BUSINESS_ETIQUETTE_TOPIC_KEY,
+    BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+    NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+    NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+)
+from sales_trainer.services.path_config_models import (
+    NEWCOMER_PATH_LOGICAL_ID,
+    NEWCOMER_PATH_RESOURCE_TYPE,
+)
 
 
 def _auth_headers(user: User) -> dict[str, str]:
@@ -62,6 +80,43 @@ def _markdown() -> bytes:
     return "\n".join(lines).encode("utf-8")
 
 
+async def _seed_draft_business_etiquette_topic(
+    test_db: AsyncSession,
+    *,
+    admin: User,
+    learning_content_id: str,
+) -> None:
+    revisions = SalesTrainerAssetRevisionService(test_db)
+    await revisions.create_published_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        payload=NewcomerPathConfigPayload().model_dump(mode="json"),
+        actor=admin,
+        change_class="binding",
+        reason="发布不含非必修专题的新人必修路径",
+    )
+    await revisions.create_published_revision(
+        resource_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+        logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+        payload=NewcomerLearningTopicsPayload(
+            topics=[
+                NewcomerLearningTopicConfig(
+                    topic_key=BUSINESS_ETIQUETTE_TOPIC_KEY,
+                    source_module_key=BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+                    title="商务礼仪规范",
+                    learning_content_id=learning_content_id,
+                    required=False,
+                    blocks_next=False,
+                )
+            ]
+        ).model_dump(mode="json"),
+        actor=admin,
+        change_class="binding",
+        reason="发布指向待验证草稿的商务礼仪专题配置",
+    )
+    await test_db.commit()
+
+
 @pytest.mark.asyncio
 async def test_admin_should_import_business_etiquette_markdown_via_api(
     async_client: AsyncClient,
@@ -100,11 +155,15 @@ async def test_admin_should_import_business_etiquette_markdown_via_api(
         data["chapters"][0]["micro_chapters"][0]["knowledge_points"][0]["title"]
         == "核心知识点"
     )
+    await _seed_draft_business_etiquette_topic(
+        test_db,
+        admin=admin,
+        learning_content_id=data["learning_content_id"],
+    )
 
     learner_response = await async_client.get(
-        "/api/v1/newcomer-training/modules/business_skills/article",
+        "/api/v1/newcomer-training/business-etiquette/article",
         headers=_auth_headers(learner),
-        params={"learning_content_id": data["learning_content_id"]},
     )
     assert learner_response.status_code == 404
     assert learner_response.json()["error"] == "[LEARNING_CONTENT_NOT_PUBLISHED]"

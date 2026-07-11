@@ -5,6 +5,7 @@ import {
   request as playwrightRequest,
   test,
   type APIRequestContext,
+  type APIResponse,
   type TestInfo,
 } from "@playwright/test";
 
@@ -18,13 +19,13 @@ const backendWsBaseUrl = (
 const adminEmail = process.env.SMOKE_ADMIN_EMAIL || "admin@qoder.ai";
 const adminPassword = process.env.SMOKE_ADMIN_PASSWORD || "change-me";
 const repoRoot = path.resolve(__dirname, "../../..");
-const normalPptPath = path.join(
+const normalPptFixturePath = path.join(
   repoRoot,
-  "tests/e2e/fixtures/presentation-phase4-normal.v1.pptx",
+  "backend/tests/e2e/fixtures/presentation-phase4-normal.v1.pptx.base64",
 );
-const corruptedPptPath = path.join(
+const corruptedPptFixturePath = path.join(
   repoRoot,
-  "tests/e2e/fixtures/presentation-phase4-corrupted.v1.pptx",
+  "backend/tests/e2e/fixtures/presentation-phase4-corrupted.v1.pptx.base64",
 );
 const providerFixtureVersion = "presentation-provider-script.v1";
 const normalPptFixtureVersion = "presentation-phase4-normal.v1";
@@ -133,22 +134,50 @@ async function getPublishedAgentPersonaPair(
 async function uploadPresentation(
   apiContext: APIRequestContext,
   token: string,
-  pptPath: string,
+  fixturePath: string,
   title: string,
 ): Promise<PresentationUpload> {
-  const response = await apiContext.post(`${backendBaseUrl}/presentations`, {
+  const response = await uploadPresentationResponse(apiContext, token, fixturePath, title);
+  expect(response.ok(), `presentation upload should not crash: ${await response.text()}`).toBeTruthy();
+  return (await response.json()) as PresentationUpload;
+}
+
+async function uploadPresentationResponse(
+  apiContext: APIRequestContext,
+  token: string,
+  fixturePath: string,
+  title: string,
+): Promise<APIResponse> {
+  const encodedFixture = fs.readFileSync(fixturePath, "utf8").replace(/\s+/g, "");
+  const filename = path.basename(fixturePath, ".base64");
+  return apiContext.post(`${backendBaseUrl}/presentations`, {
     headers: { Authorization: `Bearer ${token}` },
     multipart: {
       title,
       file: {
-        name: path.basename(pptPath),
+        name: filename,
         mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        buffer: fs.readFileSync(pptPath),
+        buffer: Buffer.from(encodedFixture, "base64"),
       },
     },
   });
-  expect(response.ok(), `presentation upload should not crash: ${await response.text()}`).toBeTruthy();
-  return (await response.json()) as PresentationUpload;
+}
+
+async function listPresentationIds(
+  apiContext: APIRequestContext,
+  token: string,
+): Promise<string[]> {
+  const response = await apiContext.get(`${backendBaseUrl}/presentations?limit=1000`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(response.ok(), "presentation list should be available for no-fabrication proof").toBeTruthy();
+  const payload = unwrapApiPayload(
+    (await response.json()) as PresentationUpload[] | { data?: PresentationUpload[] },
+  ) as PresentationUpload[];
+  return payload
+    .map((presentation) => presentation.presentation_id)
+    .filter((presentationId): presentationId is string => Boolean(presentationId))
+    .sort();
 }
 
 async function createPresentationSession(
@@ -181,7 +210,7 @@ async function seedNormalPresentation(apiContext: APIRequestContext): Promise<Se
   const uploaded = await uploadPresentation(
     apiContext,
     token,
-    normalPptPath,
+    normalPptFixturePath,
     `Issue 44 Presentation ${Date.now()}`,
   );
 
@@ -394,52 +423,38 @@ test.describe("Issue #44 Phase 4 Presentation real WebSocket E2E", () => {
     }
   });
 
-  test("corrupted PPT upload degrades without creating fabricated report evidence", async ({ browserName: _browserName }, testInfo) => {
+  test("corrupted PPT upload is rejected without creating fabricated report evidence", async ({ request: apiContext }, testInfo) => {
     test.setTimeout(90_000);
-    const apiContext = await playwrightRequest.newContext();
-    try {
-      const token = await loginForBearerToken(apiContext);
-      const pair = await getPublishedAgentPersonaPair(apiContext, token);
-      const uploaded = await uploadPresentation(
-        apiContext,
-        token,
-        corruptedPptPath,
-        `Issue 44 Corrupted Presentation ${Date.now()}`,
-      );
+    const token = await loginForBearerToken(apiContext);
+    const presentationIdsBefore = await listPresentationIds(apiContext, token);
+    const uploadResponse = await uploadPresentationResponse(
+      apiContext,
+      token,
+      corruptedPptFixturePath,
+      `Issue 44 Corrupted Presentation ${Date.now()}`,
+    );
+    expect(uploadResponse.status(), "invalid PPTX should fail closed at the upload boundary").toBe(400);
+    const failedBody = (await uploadResponse.json()) as Record<string, unknown>;
+    expect(failedBody).toMatchObject({
+      success: false,
+      error: "文件内容不是有效的 PPTX。",
+      message: "文件内容不是有效的 PPTX。",
+    });
+    expect(failedBody.trace_id, "invalid upload rejection must remain traceable").toBeTruthy();
+    expect(await listPresentationIds(apiContext, token)).toEqual(presentationIdsBefore);
 
-      expect(uploaded.presentation_id, "failed uploads still return a recoverable asset id").toBeTruthy();
-      expect(uploaded.status, "corrupted PPT should degrade to a failed presentation asset").toBe(
-        "failed",
-      );
-      expect(uploaded.total_pages || 0, "corrupted PPT must not fabricate parsed pages").toBe(0);
-
-      const createSessionResponse = await apiContext.post(`${backendBaseUrl}/practice/sessions`, {
-        headers: { Authorization: `Bearer ${token}` },
-        data: {
-          scenario_type: "presentation",
-          presentation_id: uploaded.presentation_id,
-          agent_id: pair.agentId,
-          persona_id: pair.personaId,
-          voice_mode: "stepfun_realtime",
-        },
-      });
-      expect(createSessionResponse.ok(), "failed PPT must not start a fabricated session").toBeFalsy();
-      const failedBody = await createSessionResponse.json();
-      expect(JSON.stringify(failedBody)).toContain("PRESENTATION_NOT_READY");
-
-      appendManifest({
-        path: "corrupted",
-        presentation_id: uploaded.presentation_id,
-        ppt_fixture_version: corruptedPptFixtureVersion,
-        degradation: {
-          upload_status: uploaded.status,
-          session_create_status: createSessionResponse.status(),
-          no_success_evidence_fabricated: true,
-        },
-        ...artifactRefs(testInfo),
-      });
-    } finally {
-      await apiContext.dispose();
-    }
+    appendManifest({
+      path: "corrupted",
+      presentation_id: null,
+      ppt_fixture_version: corruptedPptFixtureVersion,
+      degradation: {
+        upload_status: uploadResponse.status(),
+        error: failedBody.error,
+        trace_id: failedBody.trace_id,
+        no_asset_created: true,
+        no_success_evidence_fabricated: true,
+      },
+      ...artifactRefs(testInfo),
+    });
   });
 });

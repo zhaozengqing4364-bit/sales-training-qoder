@@ -87,6 +87,30 @@ type TrainingJourney = {
       disabled?: boolean;
     } | null;
   }>;
+  learning_topics?: Array<{
+    topic_key?: string;
+    source_module_key?: string;
+    title?: string;
+    status?: string;
+    units?: Array<{
+      unit_key?: string;
+      latest_attempt_id?: string | null;
+      passed?: boolean | null;
+      status?: string;
+    }>;
+    ai_coach?: {
+      enabled?: boolean;
+      configured?: boolean;
+      available?: boolean;
+      coach_path?: string | null;
+    } | null;
+    source?: {
+      resource_type?: string;
+      logical_id?: string;
+      revision_id?: string;
+      revision_no?: number;
+    };
+  }>;
 };
 
 type TrainingRecord = {
@@ -394,7 +418,7 @@ async function loginFromUi(page: Page, email: string): Promise<void> {
   await page.getByLabel("邮箱地址").fill(email);
   await page.getByRole("textbox", { name: "密码" }).fill(sharedPassword);
   await page.getByRole("button", { name: /^登录$/ }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
 }
 
 async function loginForBearerToken(
@@ -513,10 +537,7 @@ async function answerBusinessEtiquetteQuizQuestion(
   page: Page,
   question: NonNullable<BusinessEtiquetteUnitQuiz["questions"]>[number],
 ): Promise<void> {
-  const questionCard = page
-    .locator("div.rounded-xl.bg-white")
-    .filter({ hasText: question.stem })
-    .first();
+  const questionCard = page.getByText(question.stem, { exact: true }).locator("..");
   await expect(questionCard, `question card should render: ${question.stem}`).toBeVisible();
 
   if (question.question_type === "short_answer") {
@@ -534,7 +555,7 @@ async function answerBusinessEtiquetteQuizQuestion(
   for (const option of selectedOptions) {
     const optionLabel = questionCard
       .locator("label")
-      .filter({ hasText: `${option.value}. ${option.label}` })
+      .filter({ hasText: option.label })
       .first();
     await optionLabel.scrollIntoViewIfNeeded();
     await optionLabel.click();
@@ -580,7 +601,7 @@ async function submitBusinessEtiquetteQuizViaApi(
   for (const chapter of unit?.chapters || []) {
     expect(chapter.chapter_id, "chapter should expose id").toBeTruthy();
     const progressResponse = await apiContext.post(
-      `${backendBaseUrl}/newcomer-training/modules/business_skills/article-progress`,
+      `${backendBaseUrl}/newcomer-training/business-etiquette/article-progress`,
       {
         headers: { Authorization: `Bearer ${learnerToken}` },
         data: {
@@ -652,6 +673,19 @@ function requireJourneyModule(
   return journeyModule!;
 }
 
+function requireLearningTopic(
+  journey: TrainingJourney,
+  topicKey: string,
+) {
+  const topic = (journey.learning_topics || []).find(
+    (item) => item.topic_key === topicKey,
+  );
+  expect(topic, `learning topic ${topicKey} should exist in journey`).toBeTruthy();
+  expect(topic?.source?.resource_type).toBe("newcomer_learning_topics");
+  expect(topic?.source?.revision_id, `${topicKey} should expose revision lineage`).toBeTruthy();
+  return topic!;
+}
+
 async function waitForJourneyRealtimeOutcome(
   apiContext: APIRequestContext,
   token: string,
@@ -707,16 +741,18 @@ test.describe("newcomer training closed-loop smoke", () => {
       expect(journey.path_revision_no, "journey must expose active path revision number").toBeGreaterThan(0);
       expect(journey.learner_level?.source, "learner level source must be explicit").toBeTruthy();
       expect(moduleKeys.has("ppt_explanation"), "ppt module should come from active revision").toBeTruthy();
-      expect(moduleKeys.has("business_skills"), "business skills module should come from active revision").toBeTruthy();
+      expect(moduleKeys.has("business_skills"), "learning topics must not be duplicated as required path modules").toBeFalsy();
+      const businessTopic = requireLearningTopic(journey, "business_etiquette");
+      expect(businessTopic.source_module_key).toBe("business_skills");
+      expect(businessTopic.ai_coach?.available).toBe(true);
 
       await loginFromUi(page, learnerEmail);
       await page.goto("/sales-trainer");
 
       await expect(page.getByRole("heading", { level: 1, name: "新人训练路径" })).toBeVisible();
-      await expect(page.getByText("TrainingJourney 真源")).toBeVisible();
-      await expect(page.getByText(/revision：#/)).toBeVisible();
       await expect(page.getByRole("heading", { name: /第1关：PPT讲解/ }).first()).toBeVisible();
-      await expect(page.getByRole("heading", { name: /第2关：商务技巧/ }).first()).toBeVisible();
+      await expect(page.getByRole("heading", { name: "学习专题" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "商务礼仪规范" })).toBeVisible();
       await expect(page.getByRole("heading", { name: /实时对练/ }).first()).toBeVisible();
       await expect(page.getByText(/开始实时对练|继续实时对练|查看实时对练|再次对练/).first()).toBeVisible();
 
@@ -733,8 +769,7 @@ test.describe("newcomer training closed-loop smoke", () => {
     await page.goto("/sales-trainer/business-skills");
 
     await expect(page.getByRole("heading", { name: "商务礼仪训练" })).toBeVisible();
-    await expect(page.getByText("7 个小单元")).toBeVisible();
-    await expect(page.getByRole("button", { name: /完成本节|正在标记本节/ })).toBeVisible();
+    await expect(page.getByText(/\d+\/7 小单元/)).toBeVisible();
     await expect(page.getByRole("button", { name: /读完后小测|开始小测|正在加载小测/ })).toBeVisible();
 
     await expectNoBlockingSignals(signals, "newcomer business skills smoke");
@@ -1049,7 +1084,7 @@ test.describe("newcomer training closed-loop smoke", () => {
       for (const chapter of unit?.chapters || []) {
         expect(chapter.chapter_id, "chapter should expose id").toBeTruthy();
         const progressResponse = await apiContext.post(
-          `${backendBaseUrl}/newcomer-training/modules/business_skills/article-progress`,
+          `${backendBaseUrl}/newcomer-training/business-etiquette/article-progress`,
           {
             headers: { Authorization: `Bearer ${learnerToken}` },
             data: {
@@ -1112,13 +1147,12 @@ test.describe("newcomer training closed-loop smoke", () => {
 
       const journey = await getJourney(apiContext, learnerToken);
       expect(attempt.path_revision_id, "attempt should retain active path revision").toBe(journey.path_revision_id);
-      const businessQuizModule = requireJourneyModule(journey, {
-        kind: "quiz_attempt",
-        moduleKey: "business_skills",
-      });
-      expect(businessQuizModule.latest_outcome?.record_type).toBe("business_etiquette_quiz_attempt");
-      expect(businessQuizModule.latest_outcome?.source_record_id).toBe(attemptId);
-      expect(businessQuizModule.latest_outcome?.path_revision_id).toBe(journey.path_revision_id);
+      const businessTopic = requireLearningTopic(journey, "business_etiquette");
+      const topicUnit = (businessTopic.units || []).find(
+        (item) => item.unit_key === unit?.unit_key,
+      );
+      expect(topicUnit, "submitted learning unit should exist in topic projection").toBeTruthy();
+      expect(topicUnit?.latest_attempt_id).toBe(attemptId);
 
       const listResponse = await apiContext.get(
         `${backendBaseUrl}/admin/sales-trainer/training-records?user_id=${encodeURIComponent(String(journey.learner_id))}&limit=200`,
@@ -1195,33 +1229,22 @@ test.describe("newcomer training closed-loop smoke", () => {
       expect(attempt.path_revision_id, "fresh quiz should retain active path revision").toBe(
         journey.path_revision_id,
       );
-      const businessQuizModule = requireJourneyModule(journey, {
-        kind: "quiz_attempt",
-        moduleKey: "business_skills",
-      });
+      const businessTopic = requireLearningTopic(journey, "business_etiquette");
+      const topicUnit = (businessTopic.units || []).find(
+        (item) => item.unit_key === unit.unit_key,
+      );
       const audioModule = requireJourneyModule(journey, {
         kind: "audio_submission",
         moduleKey: "ppt_explanation",
       });
-      const aiCoachModule = requireJourneyModule(journey, {
-        kind: "ai_coach",
-        moduleKey: "business_skills",
-      });
       const audioRecordId = String(audioModule.latest_outcome?.source_record_id || "");
-      const aiCoachRecordId = String(aiCoachModule.latest_outcome?.source_record_id || "");
 
-      expect(businessQuizModule.latest_outcome?.source_record_id).toBe(attemptId);
-      expect(businessQuizModule.latest_outcome?.path_revision_id).toBe(
-        journey.path_revision_id,
-      );
+      expect(topicUnit, "fresh quiz unit should exist in learning-topic projection").toBeTruthy();
+      expect(topicUnit?.latest_attempt_id).toBe(attemptId);
+      expect(businessTopic.ai_coach?.available).toBe(true);
       expect(audioModule.latest_outcome?.record_type).toBe("audio_submission");
       expect(audioModule.latest_outcome?.path_revision_id).toBe(journey.path_revision_id);
       expect(audioRecordId, "fresh audio record id should be present").toBeTruthy();
-      expect(aiCoachModule.latest_outcome?.record_type).toBe("ai_coach_session");
-      expect(aiCoachModule.latest_outcome?.path_revision_id).toBe(
-        journey.path_revision_id,
-      );
-      expect(aiCoachRecordId, "fresh AI Coach record id should be present").toBeTruthy();
 
       const listResponse = await apiContext.get(
         `${backendBaseUrl}/admin/sales-trainer/training-records?user_id=${encodeURIComponent(String(journey.learner_id))}&limit=200`,
@@ -1234,6 +1257,15 @@ test.describe("newcomer training closed-loop smoke", () => {
       const recordList = unwrapApiPayload(
         (await listResponse.json()) as ApiEnvelope<TrainingRecordList>,
       );
+      const aiCoachRecord = await findAdminTrainingRecordContaining(
+        apiContext,
+        adminToken,
+        recordList.items || [],
+        "ai_coach_session",
+        `newcomer_closed_loop_fresh_ai_coach:${freshRunId}`,
+      );
+      const aiCoachRecordId = String(aiCoachRecord.record_id || "");
+      expect(aiCoachRecordId, "fresh AI Coach record id should be present").toBeTruthy();
       const listed = new Set(
         (recordList.items || []).map((record) => `${record.record_type}:${record.record_id}`),
       );
@@ -1276,12 +1308,6 @@ test.describe("newcomer training closed-loop smoke", () => {
       );
       expect(audioRecord.operation_logs?.some((log) => log.action === "audio_result.fresh_closed_loop")).toBe(true);
 
-      const aiCoachRecord = await getAdminTrainingRecord(
-        apiContext,
-        adminToken,
-        "ai_coach_session",
-        aiCoachRecordId,
-      );
       expect(aiCoachRecord.path_revision_id).toBe(journey.path_revision_id);
       expect(aiCoachRecord.legacy_snapshot_only).toBe(false);
       expect(aiCoachRecord.passed).toBe(true);
@@ -1522,8 +1548,8 @@ test.describe("newcomer training closed-loop smoke", () => {
       signals.responseErrors.length = 0;
       forbiddenResourceRequests.length = 0;
       await page.goto("/admin/sales-trainer/papers");
-      await expect(page.getByRole("heading", { name: "商务技巧考卷管理" })).toBeVisible();
-      await expect(page.getByRole("heading", { name: "考卷管理权限不足" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "学习专题考卷管理" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "学习专题考卷权限不足" })).toBeVisible();
       await expect(page.getByRole("link", { name: /新建考卷/ })).toHaveCount(0);
       await page.waitForLoadState("networkidle");
       expect(
@@ -1560,13 +1586,10 @@ test.describe("newcomer training closed-loop smoke", () => {
         kind: "audio_submission",
         moduleKey: "ppt_explanation",
       });
-      const aiCoachModule = requireJourneyModule(journey, {
-        kind: "ai_coach",
-        moduleKey: "business_skills",
-      });
+      const businessTopic = requireLearningTopic(journey, "business_etiquette");
 
       expect(audioModule.latest_outcome?.passed, "PPT audio seed should pass").toBe(true);
-      expect(aiCoachModule.latest_outcome?.passed, "AI Coach seed should pass").toBe(true);
+      expect(businessTopic.ai_coach?.available, "learning-topic AI Coach should be available").toBe(true);
 
       const listResponse = await apiContext.get(
         `${backendBaseUrl}/admin/sales-trainer/training-records?user_id=${encodeURIComponent(String(journey.learner_id))}&limit=200`,
@@ -1660,7 +1683,8 @@ test.describe("newcomer training closed-loop smoke", () => {
         mastery_state: "mastered",
         status: "completed",
       });
-      expect(JSON.stringify(aiCoachRecord.ai_coach_session)).toContain("active_path_module_snapshot");
+      expect(JSON.stringify(aiCoachRecord.ai_coach_session)).toContain("active_learning_topic_module_snapshot");
+      expect(JSON.stringify(aiCoachRecord.ai_coach_session)).toContain("learning_topic_revision_id");
       expect(JSON.stringify(aiCoachRecord.ai_coach_session)).toContain("ai_coach_config_snapshot");
       expect(aiCoachRecord.operation_logs?.some((log) => log.action === "ai_coach_session.seed_closed_loop")).toBe(true);
 
@@ -1693,7 +1717,7 @@ test.describe("newcomer training closed-loop smoke", () => {
       await expect(page.getByText("商务礼仪：新人的第一本职业素养手册", { exact: true })).toBeVisible();
       await expect(page.getByText(`${journey.path_revision_id} · v${journey.path_revision_no}`, { exact: true })).toBeVisible();
       await expect(page.getByText("newcomer_closed_loop_e2e_ai_coach_seed_v1", { exact: true })).toBeVisible();
-      await expect(page.getByText("active_path_module_snapshot")).toBeVisible();
+      await expect(page.getByText("active_learning_topic_module_snapshot")).toBeVisible();
       await expect(page.getByText("ai_coach_config_snapshot")).toBeVisible();
 
       await expectNoBlockingSignals(signals, "newcomer audio and AI Coach replay smoke");
@@ -2001,7 +2025,7 @@ test.describe("newcomer training closed-loop smoke", () => {
     }
   });
 
-  test("path config publish preview fails closed when required AI Coach config is missing", async () => {
+  test("path config publish preview stays independent of optional learning-topic AI Coach", async () => {
     const apiContext = await playwrightRequest.newContext();
     let adminToken: string | null = null;
     let originalPathConfig: Record<string, unknown> | null = null;
@@ -2026,6 +2050,26 @@ test.describe("newcomer training closed-loop smoke", () => {
         ...pathConfig,
         modules,
       };
+      const learningTopicsResponse = await apiContext.get(
+        `${backendBaseUrl}/admin/newcomer-training/learning-topics/config`,
+        { headers: { Authorization: `Bearer ${adminToken}` } },
+      );
+      expect(
+        learningTopicsResponse.ok(),
+        `learning-topic config should load: ${await learningTopicsResponse.text()}`,
+      ).toBeTruthy();
+      const learningTopicsConfig = unwrapApiPayload(
+        (await learningTopicsResponse.json()) as ApiEnvelope<Record<string, unknown>>,
+      );
+      const learningTopicsPayload = asRecord(learningTopicsConfig.payload);
+      const learningTopics = Array.isArray(learningTopicsPayload.topics)
+        ? learningTopicsPayload.topics
+        : [];
+      const businessTopic = learningTopics
+        .map((topic) => asRecord(topic))
+        .find((topic) => topic.topic_key === "business_etiquette");
+      expect(asRecord(businessTopic?.ai_coach).enabled).toBe(true);
+      expect(asRecord(businessTopic?.ai_coach).prompt_template_id).toBeTruthy();
       const brokenModules = modules.map((module) => {
         const item = asRecord(module);
         if (item.module_key === "business_skills") {
@@ -2045,23 +2089,23 @@ test.describe("newcomer training closed-loop smoke", () => {
             description: pathConfig.description ?? null,
             enabled: pathConfig.enabled ?? true,
             modules: brokenModules,
-            reason: "Playwright 验证 AI Coach 必过发布门禁",
+            reason: "Playwright 验证路径与学习专题 AI Coach 解耦",
           },
         },
       );
       expect(
         saveResponse.ok(),
-        `invalid AI Coach config should still be saveable as working draft: ${await saveResponse.text()}`,
+        `path compatibility draft should allow legacy AI Coach to be absent: ${await saveResponse.text()}`,
       ).toBeTruthy();
 
       const previewResponse = await apiContext.post(
         `${backendBaseUrl}/admin/newcomer-training/path-config/publish/preview`,
         { headers: { Authorization: `Bearer ${adminToken}` } },
       );
-      expect(previewResponse.status()).toBe(409);
-      const previewBody = await previewResponse.json();
-      expect(previewBody.error).toBe("[AI_COACH_NOT_CONFIGURED]");
-      expect(String(previewBody.message || "")).toContain("必须启用 AI 教练");
+      expect(
+        previewResponse.ok(),
+        `path preview should not re-impose the retired AI Coach gate: ${await previewResponse.text()}`,
+      ).toBeTruthy();
     } finally {
       if (adminToken && originalPathConfig) {
         const restoreResponse = await apiContext.put(

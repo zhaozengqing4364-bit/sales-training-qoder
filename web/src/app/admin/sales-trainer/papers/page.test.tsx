@@ -275,12 +275,12 @@ describe("NewcomerPapersPage", () => {
 
     it("fails closed without content management capability", async () => {
         getCapabilitiesMock.mockResolvedValueOnce({
-            role: "viewer",
-            role_label: "只读人员",
+            role: "training_manager",
+            role_label: "培训负责人",
             capabilities: {
                 admin_full_access: false,
                 manage_content: false,
-                manage_questions: false,
+                manage_questions: true,
                 manage_modules: false,
                 manage_prompts: false,
                 view_records: false,
@@ -290,7 +290,7 @@ describe("NewcomerPapersPage", () => {
                 view_logs: false,
                 view_settings: false,
             },
-            capability_keys: [],
+            capability_keys: ["manage_questions"],
         });
 
         render(<NewcomerPapersPage />);

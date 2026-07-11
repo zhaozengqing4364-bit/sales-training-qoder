@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ from curriculum_practice.models import (
 )
 from sales_trainer.models import (
     SalesTrainerAudioScorePrompt,
+    SalesTrainerAudioSubmission,
     SalesTrainerExamPaper,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
@@ -26,6 +28,13 @@ from sales_trainer.models import (
 from sales_trainer.schemas import NewcomerPathConfigPayload, NewcomerPathModuleConfig
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
+)
+from sales_trainer.services.audio_submission_service import AudioSubmissionService
+from sales_trainer.services.learning_topic_config_service import (
+    BUSINESS_ETIQUETTE_TOPIC_KEY,
+    NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+    NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+    payload_from_learning_topic_revision,
 )
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
@@ -51,9 +60,12 @@ def _load_seed_module():
 
 
 @pytest.fixture(autouse=True)
-def _isolate_seed_material_storage(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def _isolate_seed_storage(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv(
         "SALES_TRAINER_MATERIAL_STORAGE_PATH", str(tmp_path / "sales_trainer_materials")
+    )
+    monkeypatch.setenv(
+        "SALES_TRAINER_AUDIO_STORAGE_PATH", str(tmp_path / "sales_trainer_audio")
     )
 
 
@@ -64,12 +76,71 @@ async def test_seed_newcomer_training_path_is_idempotent(
     seed_module = _load_seed_module()
 
     first = await seed_module.seed(test_db)
+    canonical_speech = (
+        (
+            await test_db.execute(
+                select(SalesTrainerAudioSubmission).where(
+                    SalesTrainerAudioSubmission.original_filename
+                    == seed_module.PYRAMID_E2E_AUDIO_FILENAME,
+                    SalesTrainerAudioSubmission.source_page
+                    == seed_module.PYRAMID_E2E_AUDIO_SOURCE_PAGE,
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
+    canonical_speech_id = str(canonical_speech.submission_id)
+    test_db.add(
+        SalesTrainerAudioSubmission(
+            submission_id=seed_module._uuid(),
+            unit_id=canonical_speech.unit_id,
+            user_id=canonical_speech.user_id,
+            purpose=canonical_speech.purpose,
+            original_filename=canonical_speech.original_filename,
+            content_type=canonical_speech.content_type,
+            size_bytes=canonical_speech.size_bytes,
+            storage_key=canonical_speech.storage_key,
+            file_hash=canonical_speech.file_hash,
+            duration_seconds=canonical_speech.duration_seconds,
+            source_page=canonical_speech.source_page,
+            material_snapshot=canonical_speech.material_snapshot,
+            score_scheme_snapshot=canonical_speech.score_scheme_snapshot,
+            task_brief_snapshot=canonical_speech.task_brief_snapshot,
+            status="uploaded",
+            created_at=canonical_speech.created_at + timedelta(days=1),
+            updated_at=canonical_speech.updated_at + timedelta(days=1),
+        )
+    )
+    await test_db.flush()
     second = await seed_module.seed(test_db)
     verified = await seed_module.verify(test_db)
 
     assert first.verified is True
     assert second.verified is True
     assert verified.verified is True
+
+    canonical_speech_rows = (
+        (
+            await test_db.execute(
+                select(SalesTrainerAudioSubmission).where(
+                    SalesTrainerAudioSubmission.user_id
+                    == str(canonical_speech.user_id),
+                    SalesTrainerAudioSubmission.unit_id
+                    == str(canonical_speech.unit_id),
+                    SalesTrainerAudioSubmission.original_filename
+                    == seed_module.PYRAMID_E2E_AUDIO_FILENAME,
+                    SalesTrainerAudioSubmission.source_page
+                    == seed_module.PYRAMID_E2E_AUDIO_SOURCE_PAGE,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [str(row.submission_id) for row in canonical_speech_rows] == [
+        canonical_speech_id
+    ]
 
     unit_count = await test_db.scalar(
         select(func.count())
@@ -94,9 +165,10 @@ async def test_seed_newcomer_training_path_is_idempotent(
     module_capability_keys = {
         module.module_key: module.capability_keys for module in active_payload.modules
     }
-    for module_key, capability_keys in (
-        seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE.items()
-    ):
+    for (
+        module_key,
+        capability_keys,
+    ) in seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE.items():
         if module_key in module_capability_keys:
             assert module_capability_keys[module_key] == capability_keys
     elevator_module = next(
@@ -226,16 +298,43 @@ async def test_seed_newcomer_training_path_is_idempotent(
     path_service = SalesTrainerPathConfigService(test_db)
     current_path = await path_service.get_config()
     business_module = _business_module(current_path["path"])
-    assert business_module.capability_keys == (
-        seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE[
-            seed_module.BUSINESS_SKILLS_MODULE_KEY
-        ]
+    assert (
+        business_module.capability_keys
+        == (
+            seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE[
+                seed_module.BUSINESS_SKILLS_MODULE_KEY
+            ]
+        )
     )
     assert len(business_module.learning_units) == 7
     assert business_module.learning_units[0].unit_key == "trust_foundation"
     assert business_module.learning_units[-1].source_chapter_orders == [8]
     assert business_module.ai_coach is not None
     assert business_module.ai_coach.auto_advance_enabled is False
+
+    active_learning_topics = await SalesTrainerAssetRevisionService(
+        test_db
+    ).active_revision(
+        resource_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+        logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+    )
+    assert active_learning_topics is not None
+    learning_topics_payload = payload_from_learning_topic_revision(
+        active_learning_topics
+    )
+    business_topic = next(
+        topic
+        for topic in learning_topics_payload.topics
+        if topic.topic_key == BUSINESS_ETIQUETTE_TOPIC_KEY
+    )
+    assert business_topic.source_module_key == "business_skills"
+    assert business_topic.learning_content_id == content.learning_content_id
+    assert business_topic.quiz_paper_id == paper.paper_id
+    assert business_topic.required is False
+    assert business_topic.blocks_next is False
+    assert len(business_topic.learning_units) == 7
+    assert business_topic.ai_coach is not None
+    assert business_topic.ai_coach.prompt_template_id
 
     ppt_unit = (
         (
@@ -251,8 +350,9 @@ async def test_seed_newcomer_training_path_is_idempotent(
     )
     ppt_audio = ppt_unit.config["audio"]
     assert ppt_unit.config["path"]["completion_rule"] == "passed"
-    assert ppt_unit.config["path"]["capability_keys"] == (
-        seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE["ppt_explanation"]
+    assert (
+        ppt_unit.config["path"]["capability_keys"]
+        == (seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE["ppt_explanation"])
     )
     assert ppt_audio["purpose"] == "ppt_pitch"
     assert ppt_audio["scoring_prompt_id"]
@@ -302,14 +402,61 @@ async def test_seed_newcomer_training_path_is_idempotent(
     for unit in elevator_units:
         assert unit.config["path"]["enabled"] is True
         assert unit.config["path"]["completion_rule"] == "passed"
-        assert unit.config["path"]["capability_keys"] == (
-            seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE["elevator_pitch"]
+        assert (
+            unit.config["path"]["capability_keys"]
+            == (seed_module.READINESS_CAPABILITY_KEYS_BY_MODULE["elevator_pitch"])
         )
         assert unit.config["audio"]["purpose"] == "elevator_pitch"
         assert (
             unit.config["audio"]["scoring_prompt_id"]
             == elevator_module.scoring_prompt_id
         )
+
+
+@pytest.mark.asyncio
+async def test_seed_fresh_e2e_audio_persists_an_authorized_file(
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed_module = _load_seed_module()
+    run_id = "unit-fresh-run"
+    monkeypatch.setenv(seed_module.FRESH_E2E_RUN_ID_ENV, run_id)
+
+    await seed_module.seed(test_db)
+
+    learner = (
+        (
+            await test_db.execute(
+                select(User).where(User.email == seed_module.LEARNER_EMAIL)
+            )
+        )
+        .scalars()
+        .one()
+    )
+    submission = (
+        (
+            await test_db.execute(
+                select(SalesTrainerAudioSubmission).where(
+                    SalesTrainerAudioSubmission.user_id == str(learner.user_id),
+                    SalesTrainerAudioSubmission.original_filename
+                    == f"newcomer-ppt-explanation-fresh-{run_id}.wav",
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
+    stored_path = Path(str(submission.storage_key))
+
+    assert stored_path.is_file()
+    assert stored_path.stat().st_size == submission.size_bytes
+    access = await AudioSubmissionService(test_db).resolve_audio_file_access(
+        str(submission.submission_id),
+        actor=learner,
+    )
+    assert access.mode == "local"
+    assert access.path == stored_path.resolve()
+    assert access.media_type == "audio/wav"
 
 
 @pytest.mark.asyncio

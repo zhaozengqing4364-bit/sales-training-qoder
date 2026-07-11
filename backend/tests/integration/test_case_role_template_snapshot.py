@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
-from common.db.models import ScoringRuleset
+from common.db.models import ScoringRuleset, User
 from common.knowledge.models import KnowledgeBase
 from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.schemas import CaseItemCreate, RoleProfileCreate
@@ -25,7 +25,15 @@ from curriculum_practice.services.snapshots import RuntimeSnapshotService
 
 async def _seed_runtime_entities(
     db: AsyncSession,
-) -> tuple[Agent, Persona, VoiceRuntimeProfile, ScoringRuleset, KnowledgeBase]:
+) -> tuple[User, Agent, Persona, VoiceRuntimeProfile, ScoringRuleset, KnowledgeBase]:
+    actor = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"case-role-publisher-{uuid.uuid4()}",
+        email=f"case-role-publisher-{uuid.uuid4()}@example.com",
+        name="Case Role Publisher",
+        role="admin",
+        is_active=True,
+    )
     agent = Agent(
         id=str(uuid.uuid4()),
         name="Case Role Agent",
@@ -67,11 +75,11 @@ async def _seed_runtime_entities(
         vector_collection="case_role_kb",
         status="active",
     )
-    db.add_all([agent, persona, runtime_profile, ruleset, knowledge_base])
+    db.add_all([actor, agent, persona, runtime_profile, ruleset, knowledge_base])
     await db.flush()
     db.add(AgentPersona(agent_id=agent.id, persona_id=persona.id, is_default=True))
     await db.commit()
-    return agent, persona, runtime_profile, ruleset, knowledge_base
+    return actor, agent, persona, runtime_profile, ruleset, knowledge_base
 
 
 def _case_item_payload() -> dict[str, object]:
@@ -108,17 +116,22 @@ def _role_profile_payload() -> dict[str, object]:
     return payload
 
 
-async def _create_case_and_role(db: AsyncSession, *, publish: bool) -> tuple[object, object]:
+async def _create_case_and_role(
+    db: AsyncSession,
+    *,
+    publish: bool,
+    actor_id: str,
+) -> tuple[object, object]:
     service = ContentAssetService(db)
     case_item = await service.create_case_item(
-        CaseItemCreate.model_validate(_case_item_payload()), actor_id="admin-1"
+        CaseItemCreate.model_validate(_case_item_payload()), actor_id=actor_id
     )
     role_profile = await service.create_role_profile(
-        RoleProfileCreate.model_validate(_role_profile_payload()), actor_id="admin-1"
+        RoleProfileCreate.model_validate(_role_profile_payload()), actor_id=actor_id
     )
     if publish:
-        case_item = await service.publish_case_item(case_item, actor_id="admin-1")
-        role_profile = await service.publish_role_profile(role_profile, actor_id="admin-1")
+        case_item = await service.publish_case_item(case_item, actor_id=actor_id)
+        role_profile = await service.publish_role_profile(role_profile, actor_id=actor_id)
     return case_item, role_profile
 
 
@@ -152,10 +165,14 @@ def _template(
 async def test_should_reject_template_publish_when_case_or_role_is_unpublished(
     test_db: AsyncSession,
 ) -> None:
-    agent, persona, runtime_profile, ruleset, knowledge_base = await _seed_runtime_entities(
-        test_db
+    actor, agent, persona, runtime_profile, ruleset, knowledge_base = (
+        await _seed_runtime_entities(test_db)
     )
-    case_item, role_profile = await _create_case_and_role(test_db, publish=False)
+    case_item, role_profile = await _create_case_and_role(
+        test_db,
+        publish=False,
+        actor_id=str(actor.user_id),
+    )
     template = _template(
         agent=agent,
         persona=persona,
@@ -169,7 +186,7 @@ async def test_should_reject_template_publish_when_case_or_role_is_unpublished(
     await test_db.commit()
 
     published, decision = await PracticeTemplateService(test_db).publish_template(
-        template, actor_id="admin-1"
+        template, actor_id=str(actor.user_id)
     )
 
     assert published is None
@@ -184,10 +201,14 @@ async def test_should_reject_template_publish_when_case_or_role_is_unpublished(
 async def test_should_include_case_and_role_version_refs_without_hidden_information(
     test_db: AsyncSession,
 ) -> None:
-    agent, persona, runtime_profile, ruleset, knowledge_base = await _seed_runtime_entities(
-        test_db
+    actor, agent, persona, runtime_profile, ruleset, knowledge_base = (
+        await _seed_runtime_entities(test_db)
     )
-    case_item, role_profile = await _create_case_and_role(test_db, publish=True)
+    case_item, role_profile = await _create_case_and_role(
+        test_db,
+        publish=True,
+        actor_id=str(actor.user_id),
+    )
     template = _template(
         agent=agent,
         persona=persona,
@@ -200,7 +221,7 @@ async def test_should_include_case_and_role_version_refs_without_hidden_informat
     test_db.add(template)
     await test_db.commit()
     published, decision = await PracticeTemplateService(test_db).publish_template(
-        template, actor_id="admin-1"
+        template, actor_id=str(actor.user_id)
     )
     assert decision.can_publish is True
     assert published is not None
@@ -259,7 +280,7 @@ async def test_should_include_case_and_role_version_refs_without_hidden_informat
     snapshot = await RuntimeSnapshotService(read_reference).build_for_session(
         published_ref(published),
         {"id": "session-case-role", "scenario_type": "sales"},
-        "admin-1",
+        str(actor.user_id),
         created_at="2026-05-12T00:00:00+00:00",
     )
 

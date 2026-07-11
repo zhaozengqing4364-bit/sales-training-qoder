@@ -146,10 +146,19 @@ async def test_should_freeze_examiner_agent_ref_in_session_snapshot(
     )
     template.status = "draft"
     template.examiner_agent_id = "examiner-snapshot"
+    publisher = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"examiner-snapshot-publisher-{uuid.uuid4()}",
+        email=f"examiner-snapshot-publisher-{uuid.uuid4()}@example.com",
+        name="Examiner Snapshot Publisher",
+        role="admin",
+        is_active=True,
+    )
+    test_db.add(publisher)
     await test_db.commit()
     published, decision = await PracticeTemplateService(test_db).publish_template(
         template,
-        actor_id=None,
+        actor_id=str(publisher.user_id),
     )
     assert decision.can_publish is True
     assert published is not None
@@ -209,14 +218,14 @@ async def test_should_freeze_examiner_agent_ref_in_session_snapshot(
     assert examiner_ref == {
         "asset_type": "examiner_agent",
         "asset_id": "examiner-snapshot",
-        "version": 1,
+        "version": "1",
         "hash": examiner_agent_v1_hash,
         "snapshot_label": "published",
     }
     assert question_ref == {
         "asset_type": "question_item",
         "asset_id": "exam-question",
-        "version": 1,
+        "version": "1",
         "hash": "sha256:exam-question",
         "snapshot_label": "published",
     }

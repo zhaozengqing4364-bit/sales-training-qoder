@@ -6,12 +6,17 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, Persona, VoiceRuntimeProfile
-from common.db.models import ScoringRuleset
+from common.db.models import ScoringRuleset, User
 from curriculum_practice.models import PracticeTemplate
-from curriculum_practice.schemas import RoleProfileCreate, RoleProfileResponse
+from curriculum_practice.schemas import (
+    CaseItemCreate,
+    RoleProfileCreate,
+    RoleProfileResponse,
+)
 from curriculum_practice.services.content_assets import (
     ContentAssetNotEditableError,
     ContentAssetService,
+    case_item_content_hash,
     role_profile_content_hash,
 )
 from curriculum_practice.services.practice_templates import PracticeTemplateService
@@ -154,6 +159,14 @@ async def test_should_not_update_role_profile_when_voice_clone_is_rejected(
 async def test_should_fail_parent_publish_when_child_role_profile_voices_mismatch(
     test_db: AsyncSession,
 ) -> None:
+    actor = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"voice-gate-publisher-{uuid.uuid4()}",
+        email=f"voice-gate-publisher-{uuid.uuid4()}@example.com",
+        name="Voice Gate Publisher",
+        role="admin",
+        is_active=True,
+    )
     agent = Agent(
         id=str(uuid.uuid4()),
         name="Voice Gate Agent",
@@ -186,15 +199,39 @@ async def test_should_fail_parent_publish_when_child_role_profile_voices_mismatc
         definition_json={"scenario_type": "sales"},
         is_active=True,
     )
-    test_db.add_all([agent, persona, runtime_profile, ruleset])
+    test_db.add_all([actor, agent, persona, runtime_profile, ruleset])
     await test_db.commit()
     asset_service = ContentAssetService(test_db)
+    case_payload: dict[str, object] = {
+        "industry": "企业软件",
+        "company_profile": "客户正在评估销售训练平台。",
+        "customer_role": "CTO",
+        "pain_points": ["新人上手慢"],
+        "objections": ["预算紧张"],
+        "hidden_information": "预算需要追问后披露。",
+        "success_criteria": ["确认试点范围"],
+        "allowed_disclosure_policy": {
+            "phases": [{"trigger": "ask", "disclose": "budget"}],
+            "roleplay": {"situation_code": "first_visit"},
+        },
+        "content_hash": "sha256:pending",
+    }
+    case_payload["content_hash"] = case_item_content_hash(case_payload)
+    case_item = await asset_service.create_case_item(
+        CaseItemCreate.model_validate(case_payload),
+        actor_id=str(actor.user_id),
+    )
+    case_item = await asset_service.publish_case_item(
+        case_item,
+        actor_id=str(actor.user_id),
+    )
     child_templates: list[PracticeTemplate] = []
     for voice_id in ("custom_voice_a", "custom_voice_b"):
         role_payload = _role_profile_payload()
         role_payload["content_hash"] = role_profile_content_hash(role_payload)
         role = await asset_service.create_role_profile(
-            RoleProfileCreate.model_validate(role_payload), actor_id="admin-1"
+            RoleProfileCreate.model_validate(role_payload),
+            actor_id=str(actor.user_id),
         )
         await asset_service.register_role_profile_voice(
             role,
@@ -203,9 +240,12 @@ async def test_should_fail_parent_publish_when_child_role_profile_voices_mismatc
             audio_bytes=b"voice-bytes",
             content_type="audio/wav",
             voice_sample_url=f"oss://role-voices/{voice_id}.wav",
-            actor_id="admin-1",
+            actor_id=str(actor.user_id),
         )
-        role = await asset_service.publish_role_profile(role, actor_id="admin-1")
+        role = await asset_service.publish_role_profile(
+            role,
+            actor_id=str(actor.user_id),
+        )
         child = PracticeTemplate(
             name=f"child {voice_id}",
             description="child stage template",
@@ -216,13 +256,15 @@ async def test_should_fail_parent_publish_when_child_role_profile_voices_mismatc
             runtime_profile_id=runtime_profile.id,
             voice_mode="stepfun_realtime",
             scoring_ruleset_id=ruleset.ruleset_id,
+            case_item_id=case_item.case_item_id,
             role_profile_id=role.role_profile_id,
+            situation_pack_code="first_visit",
         )
         test_db.add(child)
         await test_db.commit()
         published_child, child_decision = await PracticeTemplateService(
             test_db
-        ).publish_template(child, actor_id="admin-1")
+        ).publish_template(child, actor_id=str(actor.user_id))
         assert child_decision.can_publish is True
         assert published_child is not None
         child_templates.append(published_child)
@@ -236,6 +278,8 @@ async def test_should_fail_parent_publish_when_child_role_profile_voices_mismatc
         runtime_profile_id=runtime_profile.id,
         voice_mode="stepfun_realtime",
         scoring_ruleset_id=ruleset.ruleset_id,
+        case_item_id=case_item.case_item_id,
+        situation_pack_code="first_visit",
         curriculum_plan={
             "name": "voice mismatch plan",
             "stages": [
@@ -249,7 +293,7 @@ async def test_should_fail_parent_publish_when_child_role_profile_voices_mismatc
     await test_db.commit()
 
     published_parent, decision = await PracticeTemplateService(test_db).publish_template(
-        parent, actor_id="admin-1"
+        parent, actor_id=str(actor.user_id)
     )
 
     assert published_parent is None

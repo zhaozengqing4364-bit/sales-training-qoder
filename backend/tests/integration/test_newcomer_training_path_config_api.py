@@ -1372,7 +1372,7 @@ async def test_should_reject_ai_coach_prompt_revision_fallback_on_admin_save(
 
 
 @pytest.mark.asyncio
-async def test_should_reject_business_skills_publish_without_ai_coach_config(
+async def test_should_publish_business_skills_path_without_legacy_ai_coach_gate(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
@@ -1403,20 +1403,19 @@ async def test_should_reject_business_skills_publish_without_ai_coach_config(
         "/api/v1/admin/newcomer-training/path-config/publish/preview",
         headers=_auth_headers(admin),
     )
-    assert preview_response.status_code == 409
-    preview_body = preview_response.json()
-    assert preview_body["error"] == "[AI_COACH_NOT_CONFIGURED]"
-    assert "必须启用 AI 教练" in preview_body["message"]
+    assert preview_response.status_code == 200, preview_response.text
 
     publish_response = await async_client.post(
         "/api/v1/admin/newcomer-training/path-config/publish",
         headers=_auth_headers(admin),
-        json={"reason": "验证 AI Coach 必过发布门禁"},
+        json={"reason": "验证路径配置与学习专题 AI Coach 解耦"},
     )
-    assert publish_response.status_code == 409
-    publish_body = publish_response.json()
-    assert publish_body["error"] == "[AI_COACH_NOT_CONFIGURED]"
-    assert "必须启用 AI 教练" in publish_body["message"]
+    assert publish_response.status_code == 200, publish_response.text
+    active_modules = publish_response.json()["data"]["active_revision_snapshot"][
+        "payload"
+    ]["modules"]
+    assert active_modules[0]["module_key"] == "business_skills"
+    assert active_modules[0]["ai_coach"] is None
 
 
 @pytest.mark.asyncio

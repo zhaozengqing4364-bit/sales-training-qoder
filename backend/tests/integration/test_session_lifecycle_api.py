@@ -24,9 +24,11 @@ from common.db.session_lifecycle import (
     SessionLifecycleService,
 )
 from common.error_handling.result import Result
-from common.services import practice_session_service as practice_service
 from common.websocket.session_manager import get_session_manager
 from evaluation.services.report_generation_trigger import trigger_report_generation
+from presentation_coach.services import (
+    practice_session_contributor as presentation_practice_session_contributor,
+)
 from sales_bot.services import (
     practice_session_contributor as sales_practice_session_contributor,
 )
@@ -459,7 +461,7 @@ async def test_lifecycle_api_end_presentation_completes_without_scoring_handoff(
         return Result.ok(session)
 
     monkeypatch.setattr(
-        practice_service.PresentationCoachService,
+        presentation_practice_session_contributor.PresentationCoachService,
         "end_session",
         _stub_presentation_end,
     )

@@ -58,10 +58,10 @@ export const learnerStaticRoutes: readonly NewcomerTrainingAuditRoute[] = [
   },
   {
     id: "L-10",
-    label: "旧商务技巧考试入口",
+    label: "兼容考试入口",
     path: "/sales-trainer/business-skills/exam",
     critical: true,
-    expectText: [/考试|小测|商务/],
+    expectText: [/商务礼仪训练|小测|商务/],
     forbiddenText: [/TrainingJourney/i, /\brevision\b/i, /trace[_-]?id/i, /\bE2E\b/i, /\be2e\b/, /\bmock\b/i, /\bseed\b/i, /\[HTTP_/],
   },
   {
@@ -77,23 +77,23 @@ export const learnerStaticRoutes: readonly NewcomerTrainingAuditRoute[] = [
 export const learnerDynamicRouteTemplates: readonly Omit<NewcomerTrainingAuditRoute, "path">[] = [
   {
     id: "L-04",
-    label: "单元学习",
+    label: "学习专题单元",
     critical: true,
-    expectText: [/新人训练|第 \d+\/\d+ 章|标记本章已读|开始本章测验|无法阅读本章/],
+    expectText: [/商务礼仪训练|小单元|阅读/],
     forbiddenText: [/TrainingJourney/i, /\brevision\b/i, /trace[_-]?id/i, /\bE2E\b/i, /\be2e\b/, /\bmock\b/i, /\bseed\b/i, /\[HTTP_/],
   },
   {
     id: "L-05",
-    label: "单元考试",
+    label: "学习专题单元小测",
     critical: true,
-    expectText: [/提交答案|做题训练|训练单元/],
+    expectText: [/小测|提交答案|开始本章测验|训练结果/],
     forbiddenText: [/TrainingJourney/i, /\brevision\b/i, /trace[_-]?id/i, /\bE2E\b/i, /\be2e\b/, /\bmock\b/i, /\bseed\b/i, /\[HTTP_/],
   },
   {
     id: "L-06",
-    label: "考试结果",
+    label: "学习专题小测结果",
     critical: true,
-    expectText: [/做题结果|总分|状态/],
+    expectText: [/训练结果|得分|通过|小测/],
     forbiddenText: [/TrainingJourney/i, /\brevision\b/i, /trace[_-]?id/i, /\bE2E\b/i, /\be2e\b/, /\bmock\b/i, /\bseed\b/i, /\[HTTP_/],
   },
   {

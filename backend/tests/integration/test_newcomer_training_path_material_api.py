@@ -59,7 +59,14 @@ def _published_prompt(admin: User) -> SalesTrainerAudioScorePrompt:
     )
 
 
-def _audio_unit(admin: User, *, prompt_id: str, title: str) -> SalesTrainerUnit:
+def _audio_unit(
+    admin: User,
+    *,
+    prompt_id: str,
+    title: str,
+    scenario_key: str,
+    purpose: str,
+) -> SalesTrainerUnit:
     return SalesTrainerUnit(
         unit_id=str(uuid.uuid4()),
         name=title,
@@ -69,7 +76,8 @@ def _audio_unit(admin: User, *, prompt_id: str, title: str) -> SalesTrainerUnit:
             "audio": {
                 "scoring_prompt_id": prompt_id,
                 "pass_threshold": 80,
-                "purpose": "ppt_pitch",
+                "purpose": purpose,
+                "scenario_key": scenario_key,
             }
         },
         status="published",
@@ -466,8 +474,20 @@ async def test_should_enforce_object_scope_for_material_file_download(
     content_admin = _user("content_admin")
     ops_user = _user("operations")
     prompt = _published_prompt(admin)
-    first_unit = _audio_unit(admin, prompt_id=prompt.prompt_id, title="PPT 讲解")
-    second_unit = _audio_unit(admin, prompt_id=prompt.prompt_id, title="电梯演讲")
+    first_unit = _audio_unit(
+        admin,
+        prompt_id=prompt.prompt_id,
+        title="PPT 讲解",
+        scenario_key="ppt_explanation",
+        purpose="ppt_pitch",
+    )
+    second_unit = _audio_unit(
+        admin,
+        prompt_id=prompt.prompt_id,
+        title="金字塔演讲",
+        scenario_key="elevator_pitch",
+        purpose="elevator_pitch",
+    )
     bound_material, bound_version = _material_with_version(
         admin,
         storage_root=tmp_path,
@@ -554,14 +574,12 @@ async def test_should_enforce_object_scope_for_material_file_download(
     manager_error = str(manager_forbidden.json()["error"])
     assert "PERMISSION_DENIED" in manager_error or "ROLE_REQUIRED" in manager_error
 
-    admin_public_forbidden = await async_client.get(
+    admin_public_allowed = await async_client.get(
         f"/api/v1/sales-trainer/materials/versions/{bound_version.version_id}/file",
         headers=_auth_headers(admin),
     )
-    assert admin_public_forbidden.status_code == 403
-    assert admin_public_forbidden.json()["error"] == (
-        "[NEWCOMER_LEARNER_ROLE_REQUIRED]"
-    )
+    assert admin_public_allowed.status_code == 200
+    assert admin_public_allowed.content == b"bound-material"
 
     content_admin_allowed = await async_client.get(
         f"/api/v1/admin/sales-trainer/materials/versions/{extra_version.version_id}/file",

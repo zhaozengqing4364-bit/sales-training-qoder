@@ -311,8 +311,6 @@ const SALES_TRAINER_ADMIN_CAPABILITY_ACCESS_ROOTS = [
         roots: [
             "/admin/sales-trainer/learning-topics/questions",
             "/admin/sales-trainer/questions",
-            "/admin/sales-trainer/learning-topics/papers",
-            "/admin/sales-trainer/papers",
         ],
     },
     {

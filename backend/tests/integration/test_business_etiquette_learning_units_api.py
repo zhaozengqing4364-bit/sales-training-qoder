@@ -23,6 +23,12 @@ from sales_trainer.services.business_etiquette_import_service import (
     BUSINESS_ETIQUETTE_RESOURCE_TYPE,
     DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
 )
+from sales_trainer.services.learning_topic_config_service import (
+    BUSINESS_ETIQUETTE_TOPIC_KEY,
+    BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+    NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+    NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+)
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
     NEWCOMER_PATH_RESOURCE_TYPE,
@@ -173,6 +179,53 @@ async def _seed_business_etiquette_capabilities(
     await test_db.commit()
 
 
+async def _seed_business_etiquette_topic(
+    test_db: AsyncSession,
+    *,
+    admin: User,
+    content: LearningContent,
+    learning_units: list[dict[str, object]] | None = None,
+) -> None:
+    await SalesTrainerAssetRevisionService(test_db).create_published_revision(
+        resource_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+        logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+        payload={
+            "schema_version": "newcomer_learning_topics_v1",
+            "topics": [
+                {
+                    "topic_key": BUSINESS_ETIQUETTE_TOPIC_KEY,
+                    "source_module_key": BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+                    "content_kind": "article",
+                    "enabled": True,
+                    "title": "商务礼仪规范",
+                    "order_index": 1,
+                    "learning_content_id": content.learning_content_id,
+                    "learning_units": (
+                        learning_units
+                        if learning_units is not None
+                        else [
+                            _learning_unit(1, chapter_orders=[1, 2]),
+                            _learning_unit(2, chapter_orders=[3]),
+                            _learning_unit(3, chapter_orders=[4]),
+                            _learning_unit(4, chapter_orders=[5]),
+                            _learning_unit(5, chapter_orders=[6]),
+                            _learning_unit(6, chapter_orders=[7]),
+                            _learning_unit(7, chapter_orders=[8]),
+                        ]
+                    ),
+                    "required": False,
+                    "blocks_next": False,
+                    "score_display_policy": "quiz_attempt_score",
+                }
+            ],
+        },
+        actor=admin,
+        change_class="binding",
+        reason="发布商务礼仪学习专题配置",
+    )
+    await test_db.commit()
+
+
 @pytest.mark.asyncio
 async def test_should_list_business_etiquette_learning_units_via_api(
     async_client: AsyncClient,
@@ -207,6 +260,7 @@ async def test_should_list_business_etiquette_learning_units_via_api(
     )
     assert complete_result.is_success
     await _seed_business_etiquette_path(test_db, admin=admin, content=content)
+    await _seed_business_etiquette_topic(test_db, admin=admin, content=content)
     await _seed_business_etiquette_capabilities(test_db, admin=admin)
 
     response = await async_client.get(
@@ -272,6 +326,7 @@ async def test_should_list_admin_business_etiquette_learning_units_without_learn
     )
     assert complete_result.is_success
     await _seed_business_etiquette_path(test_db, admin=admin, content=content)
+    await _seed_business_etiquette_topic(test_db, admin=admin, content=content)
     await _seed_business_etiquette_capabilities(test_db, admin=admin)
 
     response = await async_client.get(
@@ -367,6 +422,12 @@ async def test_should_reject_missing_business_etiquette_learning_unit_config(
         change_class="binding",
     )
     await test_db.commit()
+    await _seed_business_etiquette_topic(
+        test_db,
+        admin=admin,
+        content=content,
+        learning_units=[],
+    )
 
     response = await async_client.get(
         "/api/v1/newcomer-training/business-etiquette/learning-units",

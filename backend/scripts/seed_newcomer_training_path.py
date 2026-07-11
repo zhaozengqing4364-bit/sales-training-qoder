@@ -52,6 +52,8 @@ from sales_trainer.models import (
 from sales_trainer.schemas import (
     AudioSubmissionCreate,
     ExamPaperQuestionBinding,
+    NewcomerLearningTopicConfig,
+    NewcomerLearningTopicsPayload,
     NewcomerPathConfigPayload,
     NewcomerPathModuleConfig,
     SalesTrainerPathConfig,
@@ -76,6 +78,16 @@ from sales_trainer.services.business_etiquette_learning_unit_defaults import (
     default_business_etiquette_learning_units_payload,
 )
 from sales_trainer.services.deucate_scoring_service import AudioScoreOutcome
+from sales_trainer.services.learning_topic_config_service import (
+    BUSINESS_ETIQUETTE_TOPIC_KEY,
+    BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+    NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+    NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+    LearningTopicConfigError,
+    NewcomerLearningTopicConfigService,
+    classify_learning_topic_change,
+    payload_from_learning_topic_revision,
+)
 from sales_trainer.services.material_service import SalesTrainerMaterialService
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_attempt_context_service import (
@@ -2188,6 +2200,89 @@ async def _publish_seed_path_revision(
     summary.updated += 1
 
 
+async def _publish_seed_learning_topics_revision(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    actor: User,
+    ai_coach_config: dict[str, Any],
+    learning_content_id: str,
+    exam_paper_id: str,
+) -> None:
+    revisions = SalesTrainerAssetRevisionService(db)
+    active = await revisions.active_revision(
+        resource_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+        logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+    )
+    active_payload: NewcomerLearningTopicsPayload | None = None
+    if active is not None:
+        try:
+            active_payload = payload_from_learning_topic_revision(active)
+        except (ValueError, TypeError):
+            active_payload = None
+
+    business_topic = NewcomerLearningTopicConfig(
+        topic_key=BUSINESS_ETIQUETTE_TOPIC_KEY,
+        source_module_key=BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+        content_kind="article",
+        enabled=True,
+        title="商务礼仪规范",
+        description=LEARNING_CONTENT_SUMMARY,
+        order_index=1,
+        learning_content_id=learning_content_id,
+        quiz_paper_id=exam_paper_id,
+        learning_units=default_business_etiquette_learning_units_payload(),
+        ai_coach=ai_coach_config,
+        required=False,
+        blocks_next=False,
+        score_display_policy="quiz_attempt_score",
+    )
+    preserved_topics = [
+        topic
+        for topic in (active_payload.topics if active_payload is not None else [])
+        if topic.topic_key != BUSINESS_ETIQUETTE_TOPIC_KEY
+    ]
+    next_payload = NewcomerLearningTopicsPayload(
+        topics=sorted(
+            [business_topic, *preserved_topics],
+            key=lambda topic: (topic.order_index, topic.topic_key),
+        )
+    )
+    if active_payload is not None and active_payload.model_dump(
+        mode="json"
+    ) == next_payload.model_dump(mode="json"):
+        return
+
+    try:
+        change_class = classify_learning_topic_change(active, next_payload)
+    except (ValueError, TypeError):
+        change_class = "binding"
+    reason = "同步新人训练学习专题 seed 默认配置"
+    result = await revisions.create_published_revision(
+        resource_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+        logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+        payload=next_payload.model_dump(mode="json"),
+        actor=actor,
+        change_class=change_class,
+        reason=reason,
+    )
+    await OperationLogService(db).record(
+        actor=actor,
+        action="newcomer_learning_topics.seed_publish",
+        target_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+        target_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+        metadata={
+            "before_revision_id": result.previous_revision_id,
+            "after_revision_id": str(result.revision.revision_id),
+            "change_class": change_class,
+            "reason": reason,
+            "future_only": True,
+            "preserved_topic_keys": [topic.topic_key for topic in preserved_topics],
+        },
+    )
+    summary.updated += 1
+
+
 async def _record_seed_log_once(
     db: AsyncSession,
     *,
@@ -2215,6 +2310,7 @@ async def _record_seed_log_once(
 
 async def _normalize_seed_audio_submission_files(
     db: AsyncSession,
+    summary: SeedSummary,
     *,
     learner: User,
     unit: SalesTrainerUnit,
@@ -2223,7 +2319,7 @@ async def _normalize_seed_audio_submission_files(
     storage_key: str,
     size_bytes: int,
     file_hash: str,
-) -> None:
+) -> SalesTrainerAudioSubmission | None:
     legacy_rows = (
         await db.execute(
             select(SalesTrainerAudioSubmission).where(
@@ -2241,6 +2337,37 @@ async def _normalize_seed_audio_submission_files(
         submission.storage_key = storage_key
         submission.file_hash = file_hash
         submission.updated_at = _now()
+
+    canonical_rows = (
+        (
+            await db.execute(
+                select(SalesTrainerAudioSubmission)
+                .where(
+                    SalesTrainerAudioSubmission.user_id == str(learner.user_id),
+                    SalesTrainerAudioSubmission.unit_id == str(unit.unit_id),
+                    SalesTrainerAudioSubmission.source_page == source_page,
+                    SalesTrainerAudioSubmission.original_filename == filename,
+                )
+                .order_by(
+                    SalesTrainerAudioSubmission.created_at.asc(),
+                    SalesTrainerAudioSubmission.submission_id.asc(),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not canonical_rows:
+        return None
+
+    canonical = canonical_rows[0]
+    duplicates = canonical_rows[1:]
+    for duplicate in duplicates:
+        await db.delete(duplicate)
+        summary.updated += 1
+    if duplicates:
+        await db.flush()
+    return canonical
 
 
 async def _upsert_e2e_audio_result(
@@ -2265,11 +2392,10 @@ async def _upsert_e2e_audio_result(
             path_revision_no=context.path_revision_no,
         ),
     )
-    storage_key, size_bytes, file_hash = _ensure_seed_audio_file(
-        PPT_E2E_AUDIO_FILENAME
-    )
-    await _normalize_seed_audio_submission_files(
+    storage_key, size_bytes, file_hash = _ensure_seed_audio_file(PPT_E2E_AUDIO_FILENAME)
+    submission = await _normalize_seed_audio_submission_files(
         db,
+        summary,
         learner=learner,
         unit=ppt_unit,
         source_page=PPT_E2E_AUDIO_SOURCE_PAGE,
@@ -2277,15 +2403,6 @@ async def _upsert_e2e_audio_result(
         storage_key=storage_key,
         size_bytes=size_bytes,
         file_hash=file_hash,
-    )
-    submission = await _first(
-        db,
-        select(SalesTrainerAudioSubmission).where(
-            SalesTrainerAudioSubmission.user_id == str(learner.user_id),
-            SalesTrainerAudioSubmission.unit_id == str(ppt_unit.unit_id),
-            SalesTrainerAudioSubmission.original_filename == PPT_E2E_AUDIO_FILENAME,
-            SalesTrainerAudioSubmission.source_page == PPT_E2E_AUDIO_SOURCE_PAGE,
-        ),
     )
     if submission is None:
         submission = await audio_service.create_submission(
@@ -2387,8 +2504,9 @@ async def _upsert_e2e_pyramid_speech_result(
     storage_key, size_bytes, file_hash = _ensure_seed_audio_file(
         PYRAMID_E2E_AUDIO_FILENAME
     )
-    await _normalize_seed_audio_submission_files(
+    submission = await _normalize_seed_audio_submission_files(
         db,
+        summary,
         learner=learner,
         unit=speech_unit,
         source_page=PYRAMID_E2E_AUDIO_SOURCE_PAGE,
@@ -2396,15 +2514,6 @@ async def _upsert_e2e_pyramid_speech_result(
         storage_key=storage_key,
         size_bytes=size_bytes,
         file_hash=file_hash,
-    )
-    submission = await _first(
-        db,
-        select(SalesTrainerAudioSubmission).where(
-            SalesTrainerAudioSubmission.user_id == str(learner.user_id),
-            SalesTrainerAudioSubmission.unit_id == str(speech_unit.unit_id),
-            SalesTrainerAudioSubmission.original_filename == PYRAMID_E2E_AUDIO_FILENAME,
-            SalesTrainerAudioSubmission.source_page == PYRAMID_E2E_AUDIO_SOURCE_PAGE,
-        ),
     )
     if submission is None:
         submission = await audio_service.create_submission(
@@ -2492,23 +2601,25 @@ async def _upsert_e2e_ai_coach_session(
     owner: User,
     learner: User,
 ) -> SalesTrainerAiCoachSession:
-    active = await SalesTrainerAssetRevisionService(db).active_revision(
-        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-        logical_id=NEWCOMER_PATH_LOGICAL_ID,
-    )
-    if active is None:
-        raise VerifyError("newcomer path active revision missing")
-    payload = payload_from_revision(active)
-    business_module = _business_module_from_payload(payload)
-    if business_module is None:
-        raise VerifyError("active path business_skills module missing")
+    topic_service = NewcomerLearningTopicConfigService(db)
+    try:
+        (
+            path_revision_id,
+            path_revision_no,
+            business_module,
+        ) = await topic_service.active_business_etiquette_module_config()
+        _, topic_revision = await topic_service.active_business_etiquette_topic()
+    except LearningTopicConfigError as exc:
+        raise VerifyError("active business etiquette learning topic missing") from exc
     module_snapshot = business_module.model_dump(mode="json")
     lineage = {
-        "path_key": payload.path_key,
-        "path_revision_id": str(active.revision_id),
-        "path_revision_no": int(active.revision_no),
+        "path_key": PATH_KEY,
+        "path_revision_id": path_revision_id,
+        "path_revision_no": path_revision_no,
         "module_key": BUSINESS_SKILLS_MODULE_KEY,
         "legacy_snapshot_only": False,
+        "learning_topic_revision_id": str(topic_revision.revision_id),
+        "learning_topic_revision_no": int(topic_revision.revision_no),
     }
     session = await _first(
         db,
@@ -2531,9 +2642,9 @@ async def _upsert_e2e_ai_coach_session(
     baseline_refreshed_at = _now()
     session.created_at = baseline_refreshed_at
     session.updated_at = baseline_refreshed_at
-    session.path_key = payload.path_key
-    session.path_revision_id = str(active.revision_id)
-    session.path_revision_no = int(active.revision_no)
+    session.path_key = PATH_KEY
+    session.path_revision_id = path_revision_id
+    session.path_revision_no = path_revision_no
     session.article_snapshot = {
         "learning_content_id": business_module.learning_content_id,
         "title": LEARNING_CONTENT_TITLE,
@@ -2542,7 +2653,7 @@ async def _upsert_e2e_ai_coach_session(
     session.path_config_snapshot = {
         **module_snapshot,
         **lineage,
-        "snapshot_type": "active_path_module_snapshot",
+        "snapshot_type": "active_learning_topic_module_snapshot",
     }
     ai_coach_snapshot = (
         business_module.ai_coach.model_dump(mode="json")
@@ -2555,8 +2666,10 @@ async def _upsert_e2e_ai_coach_session(
     session.config_snapshot = {
         **ai_coach_snapshot,
         "snapshot_type": "ai_coach_config_snapshot",
-        "path_revision_id": str(active.revision_id),
-        "path_revision_no": int(active.revision_no),
+        "path_revision_id": path_revision_id,
+        "path_revision_no": path_revision_no,
+        "learning_topic_revision_id": str(topic_revision.revision_id),
+        "learning_topic_revision_no": int(topic_revision.revision_no),
     }
     session.coach_state = {
         "schema_version": "ai_coach_seed_state_v1",
@@ -2576,8 +2689,10 @@ async def _upsert_e2e_ai_coach_session(
         target_type="sales_trainer_ai_coach_session",
         target_id=str(session.session_id),
         metadata={
-            "path_revision_id": str(active.revision_id),
-            "path_revision_no": int(active.revision_no),
+            "path_revision_id": path_revision_id,
+            "path_revision_no": path_revision_no,
+            "learning_topic_revision_id": str(topic_revision.revision_id),
+            "learning_topic_revision_no": int(topic_revision.revision_no),
             "module_key": BUSINESS_SKILLS_MODULE_KEY,
             "trace_id": AI_COACH_E2E_TRACE_ID,
         },
@@ -2616,15 +2731,16 @@ async def _create_fresh_e2e_audio_result(
         ),
     )
     filename = f"newcomer-ppt-explanation-fresh-{run_id}.wav"
+    storage_key, size_bytes, file_hash = _ensure_seed_audio_file(filename)
     submission = await audio_service.create_submission(
         AudioSubmissionCreate(
             unit_id=str(ppt_unit.unit_id),
             purpose="ppt_pitch",
             original_filename=filename,
             content_type="audio/wav",
-            size_bytes=4096,
-            storage_key=f"/tmp/{filename}",
-            file_hash=hashlib.sha256(filename.encode()).hexdigest(),
+            size_bytes=size_bytes,
+            storage_key=storage_key,
+            file_hash=file_hash,
             duration_seconds=118,
             source_page=f"newcomer_closed_loop_fresh_e2e:{run_id}",
             confirmed_material_version_id=current_version_id,
@@ -2663,16 +2779,18 @@ async def _create_fresh_e2e_ai_coach_session(
     learner: User,
     run_id: str,
 ) -> SalesTrainerAiCoachSession:
-    active = await SalesTrainerAssetRevisionService(db).active_revision(
-        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-        logical_id=NEWCOMER_PATH_LOGICAL_ID,
-    )
-    if active is None:
-        raise VerifyError("fresh e2e newcomer path active revision missing")
-    payload = payload_from_revision(active)
-    business_module = _business_module_from_payload(payload)
-    if business_module is None:
-        raise VerifyError("fresh e2e active path business_skills module missing")
+    topic_service = NewcomerLearningTopicConfigService(db)
+    try:
+        (
+            path_revision_id,
+            path_revision_no,
+            business_module,
+        ) = await topic_service.active_business_etiquette_module_config()
+        _, topic_revision = await topic_service.active_business_etiquette_topic()
+    except LearningTopicConfigError as exc:
+        raise VerifyError(
+            "fresh e2e business etiquette learning topic missing"
+        ) from exc
     module_snapshot = business_module.model_dump(mode="json")
     ai_coach_snapshot = (
         business_module.ai_coach.model_dump(mode="json")
@@ -2685,9 +2803,9 @@ async def _create_fresh_e2e_ai_coach_session(
         user_id=str(learner.user_id),
         module_key=BUSINESS_SKILLS_MODULE_KEY,
         trace_id=trace_id,
-        path_key=payload.path_key,
-        path_revision_id=str(active.revision_id),
-        path_revision_no=int(active.revision_no),
+        path_key=PATH_KEY,
+        path_revision_id=path_revision_id,
+        path_revision_no=path_revision_no,
         article_snapshot={
             "learning_content_id": business_module.learning_content_id,
             "title": LEARNING_CONTENT_TITLE,
@@ -2696,12 +2814,14 @@ async def _create_fresh_e2e_ai_coach_session(
         },
         path_config_snapshot={
             **module_snapshot,
-            "path_key": payload.path_key,
-            "path_revision_id": str(active.revision_id),
-            "path_revision_no": int(active.revision_no),
+            "path_key": PATH_KEY,
+            "path_revision_id": path_revision_id,
+            "path_revision_no": path_revision_no,
             "module_key": BUSINESS_SKILLS_MODULE_KEY,
             "legacy_snapshot_only": False,
-            "snapshot_type": "active_path_module_snapshot",
+            "learning_topic_revision_id": str(topic_revision.revision_id),
+            "learning_topic_revision_no": int(topic_revision.revision_no),
+            "snapshot_type": "active_learning_topic_module_snapshot",
             "fresh_run_id": run_id,
         },
         prompt_template_id=ai_coach_snapshot.get("prompt_template_id"),
@@ -2710,8 +2830,10 @@ async def _create_fresh_e2e_ai_coach_session(
         config_snapshot={
             **ai_coach_snapshot,
             "snapshot_type": "ai_coach_config_snapshot",
-            "path_revision_id": str(active.revision_id),
-            "path_revision_no": int(active.revision_no),
+            "path_revision_id": path_revision_id,
+            "path_revision_no": path_revision_no,
+            "learning_topic_revision_id": str(topic_revision.revision_id),
+            "learning_topic_revision_no": int(topic_revision.revision_no),
             "fresh_run_id": run_id,
         },
         coach_state={
@@ -2736,8 +2858,10 @@ async def _create_fresh_e2e_ai_coach_session(
         target_id=str(session.session_id),
         metadata={
             "fresh_run_id": run_id,
-            "path_revision_id": str(active.revision_id),
-            "path_revision_no": int(active.revision_no),
+            "path_revision_id": path_revision_id,
+            "path_revision_no": path_revision_no,
+            "learning_topic_revision_id": str(topic_revision.revision_id),
+            "learning_topic_revision_no": int(topic_revision.revision_no),
             "module_key": BUSINESS_SKILLS_MODULE_KEY,
             "trace_id": trace_id,
         },
@@ -2926,6 +3050,39 @@ async def _verify_active_path_business_etiquette_article(
         min_chapter_count=8,
     ):
         raise VerifyError("active path business_skills article chapters missing")
+
+
+async def _verify_active_business_etiquette_learning_topic(
+    db: AsyncSession,
+    *,
+    learning_content_id: str,
+    exam_paper_id: str,
+) -> None:
+    try:
+        topic, revision = await NewcomerLearningTopicConfigService(
+            db
+        ).active_business_etiquette_topic()
+    except LearningTopicConfigError as exc:
+        raise VerifyError("active business etiquette learning topic missing") from exc
+    if revision.status != "published":
+        raise VerifyError("business etiquette learning topic must be published")
+    if topic.source_module_key != BUSINESS_SKILLS_SOURCE_MODULE_KEY:
+        raise VerifyError("business etiquette learning topic source mismatch")
+    if topic.learning_content_id != learning_content_id:
+        raise VerifyError("business etiquette learning topic article mismatch")
+    if topic.quiz_paper_id != exam_paper_id:
+        raise VerifyError("business etiquette learning topic paper mismatch")
+    if topic.required is not False or topic.blocks_next is not False:
+        raise VerifyError("business etiquette learning topic must stay non-blocking")
+    if not topic.learning_units:
+        raise VerifyError("business etiquette learning topic units missing")
+    if topic.ai_coach is None:
+        raise VerifyError("business etiquette learning topic AI coach missing")
+    await _verify_ai_coach_seed_config(
+        db,
+        topic.ai_coach.model_dump(mode="json"),
+        context="business etiquette learning topic",
+    )
 
 
 async def _verify_active_path_elevator_options(db: AsyncSession) -> None:
@@ -3174,23 +3331,31 @@ async def _verify_e2e_closed_loop_records(
     if audio_module.get("passed") is not True:
         raise VerifyError("e2e journey audio module must pass")
 
-    ai_module = next(
+    business_topic = next(
         (
-            module
-            for module in modules
-            if module.get("kind") == "ai_coach"
-            and module.get("module_key") == BUSINESS_SKILLS_MODULE_KEY
+            topic
+            for topic in (journey.get("learning_topics") or [])
+            if topic.get("topic_key") == BUSINESS_ETIQUETTE_TOPIC_KEY
         ),
         None,
     )
-    if ai_module is None:
-        raise VerifyError("e2e journey AI coach module missing")
-    if (ai_module.get("latest_outcome") or {}).get(
-        "source_record_id"
-    ) != expected_ai_session_id:
-        raise VerifyError("e2e journey AI coach outcome mismatch")
-    if ai_module.get("passed") is not True:
-        raise VerifyError("e2e journey AI coach module must pass")
+    if business_topic is None:
+        raise VerifyError("e2e journey business etiquette learning topic missing")
+    ai_coach = business_topic.get("ai_coach") or {}
+    if ai_coach.get("available") is not True:
+        raise VerifyError("e2e journey learning-topic AI coach must be available")
+    if any(
+        module.get("module_key") == BUSINESS_SKILLS_MODULE_KEY for module in modules
+    ):
+        raise VerifyError(
+            "e2e journey must not duplicate learning topic in path modules"
+        )
+
+    expected_ai_record = await records.get_record(
+        "ai_coach_session", expected_ai_session_id
+    )
+    if expected_ai_record is None or expected_ai_record.get("passed") is not True:
+        raise VerifyError("e2e AI coach record must remain replayable and passed")
 
     speech = await _first(
         db,
@@ -3233,10 +3398,14 @@ async def _verify_e2e_closed_loop_records(
     )
     if speech_module is None:
         raise VerifyError("e2e journey pyramid speech module missing")
-    if (speech_module.get("latest_outcome") or {}).get("source_record_id") != str(
-        speech.submission_id
-    ):
-        raise VerifyError("e2e journey pyramid speech outcome mismatch")
+    actual_speech_record_id = (speech_module.get("latest_outcome") or {}).get(
+        "source_record_id"
+    )
+    if actual_speech_record_id != str(speech.submission_id):
+        raise VerifyError(
+            "e2e journey pyramid speech outcome mismatch: "
+            f"expected={speech.submission_id} actual={actual_speech_record_id}"
+        )
     if speech_module.get("passed") is not True:
         raise VerifyError("e2e journey pyramid speech module must pass")
 
@@ -3710,6 +3879,14 @@ async def seed(db: AsyncSession) -> SeedSummary:
         learning_content_id=str(content.learning_content_id),
         exam_paper_id=str(paper.paper_id),
     )
+    await _publish_seed_learning_topics_revision(
+        db,
+        summary,
+        actor=owner,
+        ai_coach_config=ai_coach_config,
+        learning_content_id=str(content.learning_content_id),
+        exam_paper_id=str(paper.paper_id),
+    )
     await _upsert_e2e_audio_result(
         db,
         summary,
@@ -3932,6 +4109,11 @@ async def verify(
     await _verify_active_path_ai_coach_config(db)
     await _verify_active_path_business_etiquette_learning_units(db)
     await _verify_active_path_business_etiquette_article(db)
+    await _verify_active_business_etiquette_learning_topic(
+        db,
+        learning_content_id=str(content.learning_content_id),
+        exam_paper_id=str(paper.paper_id),
+    )
     await _verify_active_path_elevator_options(db)
     await _verify_active_business_etiquette_training_pack(db)
     await _verify_e2e_closed_loop_records(db, learner=learner)

@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
-from common.db.models import PracticeSession, ScoringRuleset, TrainingTask
+from common.db.models import PracticeSession, ScoringRuleset, TrainingTask, User
 from common.knowledge.models import KnowledgeBase
 from common.services.practice_session_service import PracticeServiceError
 from common.services.session_runtime_state_service import read_lifecycle_snapshot
@@ -18,6 +18,11 @@ from common.training_tasks.schemas import (
 )
 from common.training_tasks.service import start_training_task_session
 from curriculum_practice.models import PracticeTemplate
+from curriculum_practice.schemas import CaseItemCreate
+from curriculum_practice.services.content_assets import (
+    ContentAssetService,
+    case_item_content_hash,
+)
 from curriculum_practice.services.practice_templates import PracticeTemplateService
 
 
@@ -101,6 +106,40 @@ async def _create_published_template(
     ruleset: ScoringRuleset,
     knowledge_base: KnowledgeBase,
 ) -> PracticeTemplate:
+    actor = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"training-task-publisher-{uuid.uuid4()}",
+        email=f"training-task-publisher-{uuid.uuid4()}@example.com",
+        name="Training Task Publisher",
+        role="admin",
+        is_active=True,
+    )
+    db.add(actor)
+    await db.flush()
+    case_payload: dict[str, object] = {
+        "industry": "企业软件",
+        "company_profile": "客户正在评估新人销售训练平台。",
+        "customer_role": "销售负责人",
+        "pain_points": ["新人异议处理不稳定"],
+        "objections": ["实施成本高"],
+        "hidden_information": "预算仅在充分追问后披露。",
+        "success_criteria": ["形成试点计划"],
+        "allowed_disclosure_policy": {
+            "phases": [{"trigger": "ask", "disclose": "budget"}],
+            "roleplay": {"situation_code": "first_visit"},
+        },
+        "content_hash": "sha256:pending",
+    }
+    case_payload["content_hash"] = case_item_content_hash(case_payload)
+    asset_service = ContentAssetService(db)
+    case_item = await asset_service.create_case_item(
+        CaseItemCreate.model_validate(case_payload),
+        actor_id=str(actor.user_id),
+    )
+    case_item = await asset_service.publish_case_item(
+        case_item,
+        actor_id=str(actor.user_id),
+    )
     template = PracticeTemplate(
         name="Training Task Template",
         description="template for training task binding tests",
@@ -112,12 +151,14 @@ async def _create_published_template(
         voice_mode="stepfun_realtime",
         scoring_ruleset_id=ruleset.ruleset_id,
         knowledge_base_refs=[knowledge_base.id],
+        case_item_id=case_item.case_item_id,
+        situation_pack_code="first_visit",
     )
     db.add(template)
     await db.commit()
     published, decision = await PracticeTemplateService(db).publish_template(
         template,
-        actor_id=None,
+        actor_id=str(actor.user_id),
     )
     assert decision.can_publish is True
     assert published is not None
@@ -253,7 +294,7 @@ async def test_training_task_start_session_rejects_unusable_template_dependency(
         )
 
     assert exc_info.value.status_code == 400
-    assert exc_info.value.error_code == "[RUNTIME_SNAPSHOT_RUBRIC_MISSING]"
+    assert exc_info.value.error_code == "[RUNTIME_SNAPSHOT_ASSET_HASH_MISMATCH]"
 
 
 @pytest.mark.asyncio

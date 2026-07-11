@@ -40,36 +40,13 @@ type Journey = {
   modules?: JourneyModule[];
   learning_topics?: Array<{
     topic_key?: string;
+    learning_content_id?: string | null;
     units?: Array<{
       unit_key?: string;
       require_quiz?: boolean;
       latest_attempt_id?: string | null;
     }>;
   }>;
-};
-
-type SalesTrainerUnit = {
-  unit_id: string;
-  unit_type: string;
-  config?: {
-    learner?: {
-      learning_content_id?: string;
-      chapter_order_index?: number;
-    };
-  };
-  questions?: Array<{
-    question_id: string;
-    question_type: string;
-    options?: Array<{ value?: string; label?: string } | string>;
-  }>;
-};
-
-type UnitList = {
-  items?: SalesTrainerUnit[];
-};
-
-type QuizAttempt = {
-  attempt_id?: string;
 };
 
 type AudioSubmissionList = {
@@ -90,67 +67,8 @@ async function apiGet<T>(
   return unwrapApiPayload((await response.json()) as ApiEnvelope<T>);
 }
 
-async function apiPost<T>(
-  context: BrowserContext,
-  token: string,
-  path: string,
-  data: unknown,
-): Promise<T> {
-  const response = await context.request.post(`${backendBaseUrl}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    data,
-  });
-  expect(response.ok(), `POST ${path} should succeed: ${await response.text()}`).toBeTruthy();
-  return unwrapApiPayload((await response.json()) as ApiEnvelope<T>);
-}
-
 function firstTargetUnitId(module: JourneyModule | undefined): string | null {
   return module?.target_unit_id || module?.target_unit_ids?.[0] || null;
-}
-
-function answerForQuestion(question: NonNullable<SalesTrainerUnit["questions"]>[number]): unknown {
-  if (question.question_type === "multiple_choice") {
-    const first = question.options?.[0];
-    if (!first) return [];
-    return [typeof first === "string" ? first : first.value ?? first.label ?? ""].filter(Boolean);
-  }
-  if (question.question_type === "single_choice") {
-    const first = question.options?.[0];
-    return typeof first === "string" ? first : first?.value ?? first?.label ?? "";
-  }
-  if (question.question_type === "true_false") {
-    return "true";
-  }
-  return "保持尊重和清晰表达。";
-}
-
-async function createQuizAttempt(
-  context: BrowserContext,
-  token: string,
-  unitId: string,
-): Promise<string> {
-  const unit = await apiGet<SalesTrainerUnit>(
-    context,
-    token,
-    `/sales-trainer/units/${encodeURIComponent(unitId)}`,
-  );
-  const questions = unit.questions || [];
-  expect(questions.length, "quiz result audit requires at least one question").toBeGreaterThan(0);
-  const attempt = await apiPost<QuizAttempt>(
-    context,
-    token,
-    "/sales-trainer/quiz-attempts",
-    {
-      unit_id: unit.unit_id,
-      client_token: `newcomer-audit-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      answers: questions.map((question) => ({
-        question_id: question.question_id,
-        answer_payload: answerForQuestion(question),
-      })),
-    },
-  );
-  expect(attempt.attempt_id, "quiz attempt should return attempt_id").toBeTruthy();
-  return String(attempt.attempt_id);
 }
 
 async function resolveLearnerDynamicRoutes(
@@ -164,23 +82,13 @@ async function resolveLearnerDynamicRoutes(
   const adminToken = await loginForBearerToken(context, adminEmail);
   const journey = await apiGet<Journey>(context, learnerToken, "/sales-trainer/journey");
   const modules = journey.modules || [];
-  const units = await apiGet<UnitList>(context, learnerToken, "/sales-trainer/units");
-
-  const readableUnit = (units.items || []).find((unit) => {
-    const learner = unit.config?.learner;
-    return Boolean(
-      unit.unit_id &&
-      learner?.learning_content_id &&
-      typeof learner.chapter_order_index === "number" &&
-      learner.chapter_order_index >= 1,
-    );
-  });
-  const quizModule = modules.find((module) =>
-    module.kind === "quiz_attempt" ||
-    module.module_type === "article_exam" ||
-    module.module_type === "quiz"
+  const businessTopic = (journey.learning_topics || []).find(
+    (topic) => topic.topic_key === "business_etiquette",
   );
-  const quizUnitId = firstTargetUnitId(quizModule);
+  const readableTopicUnit = businessTopic?.units?.find((unit) => unit.unit_key);
+  const quizTopicUnit = businessTopic?.units?.find(
+    (unit) => unit.unit_key && unit.require_quiz !== false,
+  );
   const audioModule = modules.find((module) =>
     module.kind === "audio_submission" ||
     module.module_type === "audio_scoring" ||
@@ -188,12 +96,7 @@ async function resolveLearnerDynamicRoutes(
   );
   const audioUnitId = firstTargetUnitId(audioModule);
 
-  let quizAttemptId = quizModule?.latest_outcome?.record_type === "quiz_attempt"
-    ? quizModule.latest_outcome.source_record_id || null
-    : null;
-  if (!quizAttemptId && quizUnitId) {
-    quizAttemptId = await createQuizAttempt(context, learnerToken, quizUnitId);
-  }
+  const quizAttemptId = quizTopicUnit?.latest_attempt_id || null;
 
   let audioSubmissionId = audioModule?.latest_outcome?.record_type === "audio_submission"
     ? audioModule.latest_outcome.source_record_id || null
@@ -209,26 +112,26 @@ async function resolveLearnerDynamicRoutes(
 
   const routeById = new Map(learnerDynamicRouteTemplates.map((route) => [route.id, route]));
   const dynamicRoutes: NewcomerTrainingAuditRoute[] = [];
-  if (readableUnit?.unit_id) {
+  if (businessTopic?.learning_content_id && readableTopicUnit?.unit_key) {
     dynamicRoutes.push({
       ...routeById.get("L-04")!,
-      path: `/sales-trainer/learn/${encodeURIComponent(readableUnit.unit_id)}`,
+      path: `/sales-trainer/business-skills?learningUnit=${encodeURIComponent(readableTopicUnit.unit_key)}`,
     });
   } else {
-    setupIssues.push("L-04 缺少带 learning_content_id 与 chapter_order_index 的可读训练单元。");
+    setupIssues.push("L-04 缺少 active learning topic 的文章或可读学习单元。");
   }
-  if (quizUnitId) {
+  if (quizTopicUnit?.unit_key) {
     dynamicRoutes.push({
       ...routeById.get("L-05")!,
-      path: `/sales-trainer/quiz/${encodeURIComponent(quizUnitId)}`,
+      path: `/sales-trainer/business-skills?learningUnit=${encodeURIComponent(quizTopicUnit.unit_key)}&view=quiz`,
     });
   } else {
-    setupIssues.push("L-05 缺少 quiz/article_exam 模块 target_unit_id。");
+    setupIssues.push("L-05 缺少 active learning topic 的小测学习单元。");
   }
   if (quizAttemptId) {
     dynamicRoutes.push({
       ...routeById.get("L-06")!,
-      path: `/sales-trainer/quiz/result/${encodeURIComponent(quizAttemptId)}`,
+      path: `/sales-trainer/business-skills?learningUnit=${encodeURIComponent(String(quizTopicUnit?.unit_key))}&view=result`,
     });
   } else {
     setupIssues.push("L-06 缺少可访问的 quiz_attempt 结果。");

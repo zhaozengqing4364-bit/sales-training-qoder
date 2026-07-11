@@ -21,6 +21,12 @@ from sales_trainer.services.business_etiquette_import_service import (
     BUSINESS_ETIQUETTE_RESOURCE_TYPE,
     DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
 )
+from sales_trainer.services.learning_topic_config_service import (
+    BUSINESS_ETIQUETTE_TOPIC_KEY,
+    BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+    NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+    NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+)
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
     NEWCOMER_PATH_RESOURCE_TYPE,
@@ -42,6 +48,30 @@ def _user(role: str, *, department: str | None = None) -> User:
         role=role,
         department=department,
     )
+
+
+def _quiz_learning_unit() -> dict[str, object]:
+    return {
+        "unit_key": "trust_foundation",
+        "title": "职业信任底座",
+        "description": "尊重分寸、第一印象。",
+        "order_index": 1,
+        "enabled": True,
+        "source_chapter_orders": [1],
+        "capability_keys": ["respect_boundaries"],
+        "unlock_after_unit_keys": [],
+        "require_reading": True,
+        "require_quiz": True,
+        "require_ai_coach": True,
+        "quiz_question_count": 1,
+        "quiz_pass_threshold": None,
+        "quiz_allow_retake": True,
+        "quiz_max_attempts": None,
+        "quiz_question_type_weights": {"single_choice": 1},
+        "allow_skip_reading": False,
+        "block_next_until_complete": True,
+        "empty_state_message": None,
+    }
 
 
 async def _seed_active_path(
@@ -88,29 +118,7 @@ async def _seed_active_path(
                 "review_action_label": None,
                 "guidance_templates": {},
                 "ai_coach": None,
-                "learning_units": [
-                    {
-                        "unit_key": "trust_foundation",
-                        "title": "职业信任底座",
-                        "description": "尊重分寸、第一印象。",
-                        "order_index": 1,
-                        "enabled": True,
-                        "source_chapter_orders": [1],
-                        "capability_keys": ["respect_boundaries"],
-                        "unlock_after_unit_keys": [],
-                        "require_reading": True,
-                        "require_quiz": True,
-                        "require_ai_coach": True,
-                        "quiz_question_count": 1,
-                        "quiz_pass_threshold": None,
-                        "quiz_allow_retake": True,
-                        "quiz_max_attempts": None,
-                        "quiz_question_type_weights": {"single_choice": 1},
-                        "allow_skip_reading": False,
-                        "block_next_until_complete": True,
-                        "empty_state_message": None,
-                    }
-                ],
+                "learning_units": [_quiz_learning_unit()],
             }
         ],
     }
@@ -121,6 +129,38 @@ async def _seed_active_path(
         actor=admin,
         change_class="binding",
         reason="发布商务礼仪小测路径配置",
+    )
+    await test_db.commit()
+
+
+async def _seed_active_learning_topic(
+    test_db: AsyncSession,
+    *,
+    admin: User,
+) -> None:
+    await SalesTrainerAssetRevisionService(test_db).create_published_revision(
+        resource_type=NEWCOMER_LEARNING_TOPICS_RESOURCE_TYPE,
+        logical_id=NEWCOMER_LEARNING_TOPICS_LOGICAL_ID,
+        payload={
+            "schema_version": "newcomer_learning_topics_v1",
+            "topics": [
+                {
+                    "topic_key": BUSINESS_ETIQUETTE_TOPIC_KEY,
+                    "source_module_key": BUSINESS_SKILLS_SOURCE_MODULE_KEY,
+                    "content_kind": "article",
+                    "enabled": True,
+                    "title": "商务礼仪规范",
+                    "order_index": 1,
+                    "learning_units": [_quiz_learning_unit()],
+                    "required": False,
+                    "blocks_next": False,
+                    "score_display_policy": "quiz_attempt_score",
+                }
+            ],
+        },
+        actor=admin,
+        change_class="binding",
+        reason="发布商务礼仪小测学习专题",
     )
     await test_db.commit()
 
@@ -212,6 +252,7 @@ async def test_should_get_submit_and_list_business_etiquette_unit_quiz_via_api(
     test_db.add_all([admin, learner])
     await test_db.commit()
     await _seed_active_path(test_db, admin=admin)
+    await _seed_active_learning_topic(test_db, admin=admin)
     await _seed_active_training_pack(test_db, admin=admin)
     question = await _seed_published_question(test_db, admin=admin)
 
@@ -350,6 +391,7 @@ async def test_should_scope_business_etiquette_quiz_attempts_to_manager_departme
     test_db.add_all([admin, manager, east_learner, west_learner])
     await test_db.commit()
     await _seed_active_path(test_db, admin=admin)
+    await _seed_active_learning_topic(test_db, admin=admin)
     await _seed_active_training_pack(test_db, admin=admin)
     question = await _seed_published_question(test_db, admin=admin)
 
