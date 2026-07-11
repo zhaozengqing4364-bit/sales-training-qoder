@@ -557,3 +557,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: Gate 3 Provider 与 Grounding 闭环
+
+**Date**: 2026-07-11
+**Task**: Gate 3 Provider 与 Grounding 闭环
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+完成 RealtimeProviderPort、StepFun Adapter/Codec、Fake Provider contract、单一 Grounding 决策与有界缓存权威；Brooks/Trellis finding=0；clean-start canonical gate 自然通过（backend 3271、Vitest 1329、selected backend 598、changed coverage 88.96%），并以 TDD 修复陈旧 Next dev state 污染与 ENOSPC。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `67c2ffca..1ce4b601` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
