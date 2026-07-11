@@ -65,15 +65,15 @@
 - Consumes: current `common.db.models`, Journey/Dossier public methods, global TS barrels and domain builders.
 - Produces: immutable symbol/metadata/import/locality assertions every later task must keep green.
 
-- [ ] **Step 1: Write backend characterization tests**
+- [x] **Step 1: Write backend characterization tests**
 
   Define the exact 65 public enum/entity class names plus `Base`, assert each is importable from
-  `common.db.models`, assert the 52 mapped tables' complete
+  `common.db.models`, assert the 52 relocated mapped tables and the full 98-table metadata's complete
   every mapped table name/columns/PK/FK/index/unique/check/default signature, and assert all classes share
   `Base.metadata`. Add AST checks that identify current direct `User`/`PracticeSession` imports in the two
   application services and fail once the target architecture is not present.
 
-- [ ] **Step 2: Write frontend locality characterization tests**
+- [x] **Step 2: Write frontend locality characterization tests**
 
   Assert Journey/Readiness/report symbols remain import-compatible from `types.ts`, domain builders remain
   composed by `client.ts`, pages do not import builder implementations directly, and define the target rule:
@@ -87,17 +87,17 @@
   expect(clientDomainsSource).not.toContain("/practice/sessions/${sessionId}/report");
   ```
 
-- [ ] **Step 3: Run Red and record only target failures**
+- [x] **Step 3: Run Red and record only target failures**
 
   Run backend from `backend/` and frontend from `web/`. Expected: existing behavior/inventory assertions
   pass; target AST/locality assertions fail because the authority still resides in global/ORM files.
 
-- [ ] **Step 4: Save exact baselines and affected selection**
+- [x] **Step 4: Save exact baselines and affected selection**
 
   Record `31 passed`, `39 passed`, frontend 6 files / `91 passed`, CodeGraph impact counts, 224 model
   compatibility importers and historical co-change values in implementation notes.
 
-- [ ] **Step 5: Commit executable Gate 5 baseline**
+- [x] **Step 5: Commit executable Gate 5 baseline**
 
   Commit only tests/task evidence as `test(architecture): freeze gate 5 locality contracts`.
 

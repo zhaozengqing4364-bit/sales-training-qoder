@@ -32,7 +32,8 @@ The Gate is a locality refactor, not a product redesign:
   `common.db.models`. These are the first approved cross-domain ORM reads to replace with immutable
   projection ports and SQL adapters.
 - `common/db/models.py` is 2,663 lines and defines 65 public enum/entity classes plus `Base`, including
-  52 mapped tables. There are 224 source
+  52 mapped tables; importing the complete application model graph registers 98 tables on the same
+  metadata. There are 224 source
   files with direct imports from this compatibility path. The file has string-based SQLAlchemy
   relationships and one shared `Base`, so it can be split physically without changing table/FK or
   deployment topology if every grouped module is imported by the registry before metadata use.

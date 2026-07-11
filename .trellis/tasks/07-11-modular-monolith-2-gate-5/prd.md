@@ -56,7 +56,8 @@
 - `common/db/models.py` 变为稳定 compatibility registry；实体 Implementation 按 identity、
   governance、training/evidence、evaluation/supervision、platform/operations、knowledge 分组到
   `common/db/model_registry/`。
-- 所有实体继续继承同一个 `Base`，65 个既有公开 enum/entity class 加 `Base`、52 个 mapped table、
+- 所有实体继续继承同一个 `Base`，65 个既有公开 enum/entity class 加 `Base`、本文件拥有的
+  52 个 mapped table、完整 metadata 的 98 个 table、
   table name、column、FK、index、
   constraint、relationship、default 和 metadata 注册完全一致；不得生成 migration。
 - `from common.db.models import X` 保持对象 identity；Alembic `target_metadata`、test create_all、
@@ -85,7 +86,7 @@
 - [ ] Journey/Readiness/report 的真实 TS definitions 和 transport 实现在领域文件；全局 files 只组合
       或 re-export，locality contract 可执行。
 - [ ] 65 个 enum/entity class 加 `Base` 的 `common.db.models` 公开 symbol identity/qualified-name
-      compatibility 与 52 个 mapped table 的完整 `Base.metadata` 表/约束快照不变；
+      compatibility、迁移的 52 个 mapped table 和完整 `Base.metadata` 98-table 表/约束快照不变；
       `common/db/models.py` 为小型 registry，未产生 Alembic schema diff。
 - [ ] 新 Journey/Readiness application code 通过 repository/projection 访问 identity/practice 数据，
       不扩大任何跨包边或 SCC。
