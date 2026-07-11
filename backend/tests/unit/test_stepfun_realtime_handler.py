@@ -70,6 +70,7 @@ def _select_legacy_transport_unless_test_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "false")
+    monkeypatch.setenv("REALTIME_GROUNDING_MODULE_ENABLED", "false")
 
 
 def test_stepfun_transport_builds_session_update_payload_with_transcription_and_tools():
@@ -169,6 +170,201 @@ class BlockingCloseRealtimeProvider(RecordingRealtimeProvider):
         await self.allow_close.wait()
 
 
+def test_grounding_module_default_selection_is_frozen_and_unknown_uses_legacy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("REALTIME_GROUNDING_MODULE_ENABLED", raising=False)
+    default_handler = StepFunRealtimeHandler()
+    monkeypatch.setenv("REALTIME_GROUNDING_MODULE_ENABLED", "false")
+
+    assert default_handler._grounding_module_enabled is True
+    assert default_handler._grounding_module is not None
+    assert default_handler._legacy_grounding_runtime is None
+    assert default_handler._grounding_pipeline is None
+
+    monkeypatch.setenv("REALTIME_GROUNDING_MODULE_ENABLED", "invalid")
+    legacy_handler = StepFunRealtimeHandler()
+    assert legacy_handler._grounding_module_enabled is False
+    assert legacy_handler._grounding_module is None
+    assert legacy_handler._legacy_grounding_runtime is not None
+    assert legacy_handler._grounding_pipeline is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("inverse_order", [False, True])
+async def test_default_grounding_prefetch_and_tool_share_one_retrieval(
+    monkeypatch: pytest.MonkeyPatch,
+    inverse_order: bool,
+) -> None:
+    monkeypatch.setenv("REALTIME_GROUNDING_MODULE_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-grounding-one-cache"
+    handler._instruction_contract_hash = "policy-v1"
+    handler._effective_policy = {
+        "instruction_contract_hash": "policy-v1",
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "require_kb_grounding": True,
+            "retrieval_top_k": 3,
+        },
+    }
+    handler._tool_execution.execute_tool = AsyncMock(
+        return_value={
+            "query": "产品能力",
+            "count": 1,
+            "retrieval_mode": "vector",
+            "results": [
+                {
+                    "knowledge_base_id": "kb-1",
+                    "knowledge_base_name": "产品库",
+                    "document_title": "产品说明",
+                    "snippet": "产品支持实时训练。",
+                    "claim": "产品支持实时训练。",
+                    "score": 0.95,
+                }
+            ],
+            "_answerability": {
+                "answerability": "sufficient",
+                "source_status": "hit",
+                "rewritten_queries": ["产品能力"],
+            },
+        }
+    )
+
+    async def prefetch() -> None:
+        await handler._prepare_grounding_context("产品能力")
+
+    async def tool() -> None:
+        await handler._tool_search_internal_knowledge({"query": "产品能力"})
+
+    first, second = (tool, prefetch) if inverse_order else (prefetch, tool)
+    await first()
+    await second()
+
+    assert handler._tool_execution.execute_tool.await_count == 1
+    assert handler._grounding_result is not None
+    assert handler._pending_blocked_response_text == ""
+
+
+@pytest.mark.asyncio
+async def test_default_grounding_does_not_negative_cache_sequential_no_hit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_GROUNDING_MODULE_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-grounding-no-hit"
+    handler._instruction_contract_hash = "policy-v1"
+    handler._effective_policy = {
+        "instruction_contract_hash": "policy-v1",
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {"require_kb_grounding": False, "retrieval_top_k": 3},
+    }
+    handler._tool_execution.execute_tool = AsyncMock(
+        return_value={
+            "query": "未命中问题",
+            "count": 0,
+            "retrieval_mode": "vector",
+            "results": [],
+            "message": "未命中",
+            "_answerability": {
+                "answerability": "insufficient",
+                "source_status": "miss",
+            },
+        }
+    )
+
+    await handler._tool_search_internal_knowledge({"query": "未命中问题"})
+    await handler._tool_search_internal_knowledge({"query": "未命中问题"})
+
+    assert handler._tool_execution.execute_tool.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_default_grounding_concurrent_identical_requests_are_single_flight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_GROUNDING_MODULE_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-grounding-single-flight"
+    handler._instruction_contract_hash = "policy-v1"
+    handler._effective_policy = {
+        "instruction_contract_hash": "policy-v1",
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {"retrieval_top_k": 3},
+    }
+
+    async def retrieve_once(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        await asyncio.sleep(0)
+        return {
+            "query": "产品能力",
+            "count": 1,
+            "retrieval_mode": "vector",
+            "results": [{"snippet": "产品支持实时训练。"}],
+        }
+
+    handler._tool_execution.execute_tool = AsyncMock(side_effect=retrieve_once)
+
+    first, second = await asyncio.gather(
+        handler._tool_search_internal_knowledge({"query": "产品能力"}),
+        handler._tool_search_internal_knowledge({"query": "产品能力"}),
+    )
+
+    assert first["count"] == second["count"] == 1
+    assert handler._tool_execution.execute_tool.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_default_grounding_cache_key_includes_frozen_policy_and_kb_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_GROUNDING_MODULE_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-grounding-scoped-cache"
+    handler._instruction_contract_hash = "policy-v1"
+    handler._effective_policy = {
+        "instruction_contract_hash": "policy-v1",
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {"retrieval_top_k": 3},
+    }
+    handler._tool_execution.execute_tool = AsyncMock(
+        return_value={
+            "query": "产品能力",
+            "count": 1,
+            "retrieval_mode": "vector",
+            "results": [{"snippet": "产品支持实时训练。"}],
+        }
+    )
+
+    await handler._tool_search_internal_knowledge({"query": "产品能力"})
+    handler._instruction_contract_hash = "policy-v2"
+    handler._effective_policy = {
+        "instruction_contract_hash": "policy-v2",
+        "knowledge_base_ids": ["kb-2"],
+        "tool_policy": {"retrieval_top_k": 3},
+    }
+    await handler._tool_search_internal_knowledge({"query": "产品能力"})
+
+    assert handler._tool_execution.execute_tool.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_connection_cleanup_awaits_selected_grounding_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_GROUNDING_MODULE_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    assert handler._grounding_module is not None
+    handler._grounding_module.close = AsyncMock()  # type: ignore[method-assign]
+    handler._cancel_pending_response_after_commit = AsyncMock()
+    handler._close_upstream = AsyncMock()
+    handler._save_session_state = AsyncMock()
+    handler.manager = SimpleNamespace(disconnect=AsyncMock())
+
+    await handler._finalize_connection_cleanup("session-grounding-close")
+
+    handler._grounding_module.close.assert_awaited_once_with()
+
+
 @pytest.mark.asyncio
 async def test_provider_port_default_selection_is_frozen_and_does_not_shadow_transport(
     monkeypatch: pytest.MonkeyPatch,
@@ -195,7 +391,9 @@ async def test_provider_port_default_selection_is_frozen_and_does_not_shadow_tra
     handler._stepfun_url = "wss://stepfun.example/realtime"
     handler._effective_policy = {"turn_detection": "server_vad"}
     handler._build_stepfun_tools_from_policy = MagicMock(return_value=[])
-    handler._enforce_stepfun_tool_guardrails = MagicMock(side_effect=lambda tools: tools)
+    handler._enforce_stepfun_tool_guardrails = MagicMock(
+        side_effect=lambda tools: tools
+    )
     handler._ensure_upstream_keepalive_task = MagicMock()
     handler._maybe_start_kb_lock_warmup = AsyncMock()
 
@@ -217,7 +415,10 @@ async def test_provider_port_default_selection_is_frozen_and_does_not_shadow_tra
     assert provider_factory_calls[0]["url"] == "wss://stepfun.example/realtime"
     assert provider_factory_calls[0]["transport"] is legacy_transport
     assert len(provider.connect_calls) == 2
-    assert provider.connect_calls[0].model == handler._active_voice_runtime_profile().model_name
+    assert (
+        provider.connect_calls[0].model
+        == handler._active_voice_runtime_profile().model_name
+    )
     assert provider.connect_calls[0].turn_detection == {"type": "server_vad"}
     assert [command.kind for command in provider.commands] == [
         ProviderCommandKind.APPEND_AUDIO
@@ -602,7 +803,9 @@ async def test_provider_capability_mismatch_fails_before_any_legacy_socket_conne
 
     class CapabilityRejectingProvider(RecordingRealtimeProvider):
         async def connect(self, config: RealtimeProviderSessionConfig) -> None:
-            validate_provider_capabilities(capabilities=self.capabilities, config=config)
+            validate_provider_capabilities(
+                capabilities=self.capabilities, config=config
+            )
 
     handler = StepFunRealtimeHandler(
         stepfun_transport=legacy_transport,
@@ -610,7 +813,9 @@ async def test_provider_capability_mismatch_fails_before_any_legacy_socket_conne
     )
     handler._effective_policy = {"turn_detection": "server_vad"}
     handler._build_stepfun_tools_from_policy = MagicMock(return_value=[])
-    handler._enforce_stepfun_tool_guardrails = MagicMock(side_effect=lambda tools: tools)
+    handler._enforce_stepfun_tool_guardrails = MagicMock(
+        side_effect=lambda tools: tools
+    )
 
     with pytest.raises(RealtimeProviderError):
         await handler._connect_upstream()
@@ -646,7 +851,9 @@ async def test_selected_provider_path_never_falls_back_after_connect_failure(
     )
     handler._effective_policy = {"turn_detection": "server_vad"}
     handler._build_stepfun_tools_from_policy = MagicMock(return_value=[])
-    handler._enforce_stepfun_tool_guardrails = MagicMock(side_effect=lambda tools: tools)
+    handler._enforce_stepfun_tool_guardrails = MagicMock(
+        side_effect=lambda tools: tools
+    )
     handler._stop_upstream_keepalive_task = AsyncMock()
 
     with pytest.raises(RuntimeError, match="provider connect failed"):
@@ -658,9 +865,12 @@ async def test_selected_provider_path_never_falls_back_after_connect_failure(
         marker = object()
         handler._realtime_provider = None
         await handler._send_upstream_keepalive_ping(marker)
-    assert handler._should_drop_upstream_for_backpressure(
-        {"type": "input_audio_buffer.append", "audio": "AAE="}
-    ) is True
+    assert (
+        handler._should_drop_upstream_for_backpressure(
+            {"type": "input_audio_buffer.append", "audio": "AAE="}
+        )
+        is True
+    )
     handler._realtime_provider = provider
     await handler._close_upstream()
 
@@ -804,7 +1014,9 @@ async def test_handle_connection_finishes_cleanup_before_propagating_repeated_ca
     )
     handler = StepFunRealtimeHandler()
     handler.manager = manager
-    handler.state_service = SimpleNamespace(get_state=AsyncMock(return_value=Result.ok(None)))
+    handler.state_service = SimpleNamespace(
+        get_state=AsyncMock(return_value=Result.ok(None))
+    )
     handler._stepfun_api_key = "test-api-key"
     handler._load_effective_policy = AsyncMock()
     handler._initialize_curriculum_stage_runtime = AsyncMock()
@@ -815,7 +1027,9 @@ async def test_handle_connection_finishes_cleanup_before_propagating_repeated_ca
     handler._cancel_pending_response_after_commit = AsyncMock()
     handler._close_upstream = AsyncMock(side_effect=blocking_close)
     handler._save_session_state = AsyncMock()
-    monkeypatch.setattr(stepfun_module, "verify_token", lambda _token: {"user_id": "user-1"})
+    monkeypatch.setattr(
+        stepfun_module, "verify_token", lambda _token: {"user_id": "user-1"}
+    )
     monkeypatch.setattr(lifecycle_hooks, "mark_session_runtime_started", AsyncMock())
 
     lifecycle_task = asyncio.create_task(
@@ -1284,7 +1498,9 @@ async def test_sparse_function_done_without_call_binding_fails_closed() -> None:
     handler._execute_function_call.assert_not_awaited()
 
 
-def test_trusted_legacy_sparse_call_does_not_overwrite_explicit_stale_response() -> None:
+def test_trusted_legacy_sparse_call_does_not_overwrite_explicit_stale_response() -> (
+    None
+):
     handler = StepFunRealtimeHandler()
     handler._active_response = RealtimeResponseState(
         request_id=5,
@@ -1491,7 +1707,9 @@ async def test_matching_raw_response_done_cannot_register_unseen_tool_call() -> 
 
 
 @pytest.mark.asyncio
-async def test_unauthorized_done_tool_is_filtered_but_response_still_finalizes() -> None:
+async def test_unauthorized_done_tool_is_filtered_but_response_still_finalizes() -> (
+    None
+):
     handler = StepFunRealtimeHandler()
     handler.turn_count = 1
     handler._active_response = RealtimeResponseState(
@@ -1631,7 +1849,9 @@ async def test_response_id_cannot_prebind_before_response_created() -> None:
 
 
 @pytest.mark.asyncio
-async def test_response_created_requires_exact_active_request_and_stream_authority() -> None:
+async def test_response_created_requires_exact_active_request_and_stream_authority() -> (
+    None
+):
     raw_handler = StepFunRealtimeHandler()
     raw_handler._active_response = RealtimeResponseState(
         request_id=5,
@@ -1750,7 +1970,9 @@ async def test_trusted_legacy_top_level_created_binds_and_preserves_kb_cancel_pa
 
 
 @pytest.mark.asyncio
-async def test_no_active_response_event_matrix_has_narrow_cleanup_and_cancel_paths() -> None:
+async def test_no_active_response_event_matrix_has_narrow_cleanup_and_cancel_paths() -> (
+    None
+):
     sparse_done_handler = StepFunRealtimeHandler()
     sparse_done_handler._connection_epoch = 8
     sparse_done_handler._pending_tool_followup_response = True
@@ -1870,7 +2092,9 @@ async def test_connect_upstream_delegates_connection_to_shared_stepfun_transport
 async def test_send_upstream_delegates_to_transport_and_marks_activity_only_on_success():
     upstream_ws = object()
     transport = SimpleNamespace(
-        send_json=AsyncMock(return_value=StepFunSendResult(status=StepFunSendStatus.SENT))
+        send_json=AsyncMock(
+            return_value=StepFunSendResult(status=StepFunSendStatus.SENT)
+        )
     )
     handler = StepFunRealtimeHandler(stepfun_transport=transport)
     handler.upstream_ws = upstream_ws
@@ -1878,11 +2102,15 @@ async def test_send_upstream_delegates_to_transport_and_marks_activity_only_on_s
     accepted = await handler._send_upstream({"type": "session.update"})
 
     assert accepted is True
-    transport.send_json.assert_awaited_once_with(upstream_ws, {"type": "session.update"})
+    transport.send_json.assert_awaited_once_with(
+        upstream_ws, {"type": "session.update"}
+    )
     assert handler._upstream_last_activity_at > 0
 
     failed_transport = SimpleNamespace(
-        send_json=AsyncMock(return_value=StepFunSendResult(status=StepFunSendStatus.FAILED))
+        send_json=AsyncMock(
+            return_value=StepFunSendResult(status=StepFunSendStatus.FAILED)
+        )
     )
     failed_handler = StepFunRealtimeHandler(stepfun_transport=failed_transport)
     failed_handler.upstream_ws = upstream_ws
@@ -1923,10 +2151,14 @@ async def test_apply_lifecycle_action_delegates_transition_to_session_control_ad
             assert session_id == "session-adapter-delegation"
             return session, "sales"
 
-        async def transition(self, **kwargs):  # pragma: no cover - must use adapter seam
+        async def transition(
+            self, **kwargs
+        ):  # pragma: no cover - must use adapter seam
             raise AssertionError("handler bypassed SessionControlAdapter")
 
-        async def trigger_report_generation_if_needed(self, observed_transition: Any) -> None:
+        async def trigger_report_generation_if_needed(
+            self, observed_transition: Any
+        ) -> None:
             assert observed_transition is transition
 
     class FakeSessionControlAdapter:
@@ -1939,7 +2171,9 @@ async def test_apply_lifecycle_action_delegates_transition_to_session_control_ad
 
     monkeypatch.setattr(stepfun_module, "AsyncSessionLocal", FakeDb)
     monkeypatch.setattr(stepfun_module, "SessionLifecycleService", FakeLifecycleService)
-    monkeypatch.setattr(stepfun_module, "SessionControlAdapter", FakeSessionControlAdapter)
+    monkeypatch.setattr(
+        stepfun_module, "SessionControlAdapter", FakeSessionControlAdapter
+    )
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-adapter-delegation"
     handler._send_error = AsyncMock()
@@ -1992,7 +2226,9 @@ def test_handler_applies_voice_runtime_profile_from_policy_snapshot() -> None:
     assert handler._instruction_contract_hash == "hash-custom"
 
 
-def test_stepfun_session_config_uses_voice_runtime_profile_as_canonical_source() -> None:
+def test_stepfun_session_config_uses_voice_runtime_profile_as_canonical_source() -> (
+    None
+):
     handler = StepFunRealtimeHandler()
     handler._apply_voice_runtime_profile(
         {
@@ -2011,7 +2247,9 @@ def test_stepfun_session_config_uses_voice_runtime_profile_as_canonical_source()
     handler._stepfun_instructions = "陈旧指令。"
     handler._effective_policy = {}
     handler._build_stepfun_tools_from_policy = MagicMock(return_value=[])
-    handler._enforce_stepfun_tool_guardrails = MagicMock(side_effect=lambda tools: tools)
+    handler._enforce_stepfun_tool_guardrails = MagicMock(
+        side_effect=lambda tools: tools
+    )
 
     config = handler._build_stepfun_session_config()
 
@@ -2109,7 +2347,9 @@ async def test_handle_client_text_persists_user_message_before_create_response()
 async def test_audio_chunk_backpressure_delegates_to_transport_and_drops_audio_append():
     transport = SimpleNamespace(
         decide_backpressure=MagicMock(
-            return_value=StepFunBackpressureResult(status=StepFunBackpressureStatus.DROP)
+            return_value=StepFunBackpressureResult(
+                status=StepFunBackpressureStatus.DROP
+            )
         )
     )
     handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
@@ -2139,7 +2379,9 @@ async def test_audio_chunk_backpressure_delegates_to_transport_and_drops_audio_a
 async def test_audio_chunk_delegates_sent_audio_to_audio_flow_without_payload_change():
     transport = SimpleNamespace(
         decide_backpressure=MagicMock(
-            return_value=StepFunBackpressureResult(status=StepFunBackpressureStatus.ALLOW)
+            return_value=StepFunBackpressureResult(
+                status=StepFunBackpressureStatus.ALLOW
+            )
         )
     )
     handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
@@ -2190,7 +2432,9 @@ def test_summarize_pcm16_payload_returns_aggregate_audio_quality_only():
 async def test_binary_audio_quality_is_logged_and_reset_after_commit():
     transport = SimpleNamespace(
         decide_backpressure=MagicMock(
-            return_value=StepFunBackpressureResult(status=StepFunBackpressureStatus.ALLOW)
+            return_value=StepFunBackpressureResult(
+                status=StepFunBackpressureStatus.ALLOW
+            )
         )
     )
     handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
@@ -2247,7 +2491,9 @@ async def test_binary_audio_quality_is_logged_and_reset_after_commit():
 async def test_binary_audio_quality_debug_log_does_not_duplicate_payload_bytes():
     transport = SimpleNamespace(
         decide_backpressure=MagicMock(
-            return_value=StepFunBackpressureResult(status=StepFunBackpressureStatus.ALLOW)
+            return_value=StepFunBackpressureResult(
+                status=StepFunBackpressureStatus.ALLOW
+            )
         )
     )
     handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
@@ -2283,7 +2529,9 @@ async def test_binary_audio_quality_debug_log_does_not_duplicate_payload_bytes()
 async def test_binary_audio_quality_does_not_count_backpressure_dropped_audio():
     transport = SimpleNamespace(
         decide_backpressure=MagicMock(
-            return_value=StepFunBackpressureResult(status=StepFunBackpressureStatus.DROP)
+            return_value=StepFunBackpressureResult(
+                status=StepFunBackpressureStatus.DROP
+            )
         )
     )
     handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
@@ -3711,7 +3959,12 @@ async def test_create_response_resolves_interruption_without_payload_shape_chang
         [
             call({"type": "response.cancel"}),
             call({"type": "input_audio_buffer.clear"}),
-            call({"type": "response.create", "response": {"modalities": ["audio", "text"]}}),
+            call(
+                {
+                    "type": "response.create",
+                    "response": {"modalities": ["audio", "text"]},
+                }
+            ),
         ]
     )
     handler._close_upstream.assert_awaited_once_with()
@@ -3974,7 +4227,11 @@ async def test_handler_routes_tool_call_through_module_decide():
     assert executed is False
     assert tool_execution.routing_calls == [
         (
-            {"id": "call-routed", "name": "search_internal_knowledge", "arguments": {"query": "产品"}},
+            {
+                "id": "call-routed",
+                "name": "search_internal_knowledge",
+                "arguments": {"query": "产品"},
+            },
             {"session_id": "session-routing", "turn_id": 3, "call_id": "call-routed"},
         )
     ]
@@ -4005,25 +4262,19 @@ async def test_execute_function_call_skips_legacy_executed_call_id_before_module
 
 
 @pytest.mark.asyncio
-async def test_handler_uses_module_cache_for_repeated_searches():
+async def test_legacy_handler_uses_named_cache_for_repeated_searches():
     class CacheToolExecution(StepFunToolExecutionModule):
         def __init__(self) -> None:
             super().__init__()
-            self.get_calls: list[str] = []
-            self.cache_calls: list[tuple[str, dict[str, Any], float]] = []
             self.execute_count = 0
-
-        def get_cached_result(self, cache_key: str) -> dict[str, Any] | None:
-            self.get_calls.append(cache_key)
-            return super().get_cached_result(cache_key)
-
-        def cache_result(self, cache_key: str, result: dict[str, Any], *, ttl_seconds: float) -> None:
-            self.cache_calls.append((cache_key, result, ttl_seconds))
-            super().cache_result(cache_key, result, ttl_seconds=ttl_seconds)
 
         async def execute_tool(self, tool_call, *, context):  # type: ignore[no-untyped-def]
             self.execute_count += 1
-            return {"query": tool_call["arguments"]["query"], "count": 1, "results": [{"snippet": "石犀"}]}
+            return {
+                "query": tool_call["arguments"]["query"],
+                "count": 1,
+                "results": [{"snippet": "石犀"}],
+            }
 
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-cache"
@@ -4031,13 +4282,19 @@ async def test_handler_uses_module_cache_for_repeated_searches():
     handler._internal_retrieval_cache_ttl_seconds = 5.0
 
     first = await handler._tool_search_internal_knowledge({"query": "产品", "top_k": 3})
-    second = await handler._tool_search_internal_knowledge({"top_k": 3, "query": "产品"})
+    second = await handler._tool_search_internal_knowledge(
+        {"top_k": 3, "query": "产品"}
+    )
 
-    assert first == second == {"query": "产品", "count": 1, "results": [{"snippet": "石犀"}]}
+    assert (
+        first
+        == second
+        == {"query": "产品", "count": 1, "results": [{"snippet": "石犀"}]}
+    )
     tool_execution = cast(CacheToolExecution, handler._tool_execution)
     assert tool_execution.execute_count == 1
-    assert len(tool_execution.get_calls) == 2
-    assert len(tool_execution.cache_calls) == 1
+    assert handler._legacy_grounding_runtime is not None
+    assert len(handler._legacy_grounding_runtime.tool_cache._entries) == 1
 
 
 @pytest.mark.asyncio
@@ -4751,7 +5008,9 @@ async def test_record_knowledge_runtime_metric_keeps_warning_only_failure_surfac
 
 
 @pytest.mark.asyncio
-async def test_reconnect_restores_roleplay_runtime_state_from_existing_snapshot() -> None:
+async def test_reconnect_restores_roleplay_runtime_state_from_existing_snapshot() -> (
+    None
+):
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-v1-reconnect"
     handler._effective_policy = {
@@ -4952,9 +5211,10 @@ def test_v1_disabled_runtime_state_does_not_include_roleplay_observability() -> 
     )
     snapshot = handler._create_state_snapshot()
 
-    assert V1_ROLEPLAY_RUNTIME_METRICS_KEY not in handler._effective_policy[
-        "runtime_metrics"
-    ]
+    assert (
+        V1_ROLEPLAY_RUNTIME_METRICS_KEY
+        not in handler._effective_policy["runtime_metrics"]
+    )
     runtime_state = snapshot.runtime_state or {}
     assert V1_ROLEPLAY_RUNTIME_STATE_KEY not in runtime_state
 
@@ -5127,9 +5387,20 @@ async def test_load_effective_policy_merges_active_kb_dictionary_into_transcript
 
     await handler._load_effective_policy()
 
-    assert handler._effective_policy["tool_policy"]["transcript_normalization_enabled"] is True
-    assert handler._effective_policy["tool_policy"]["transcript_normalization_lexicon"][0]["canonical_term"] == "石犀科技"
-    assert handler._effective_policy["source"]["kb_dictionary_lexicon"] == "knowledge_base_active_dictionary"
+    assert (
+        handler._effective_policy["tool_policy"]["transcript_normalization_enabled"]
+        is True
+    )
+    assert (
+        handler._effective_policy["tool_policy"]["transcript_normalization_lexicon"][0][
+            "canonical_term"
+        ]
+        == "石犀科技"
+    )
+    assert (
+        handler._effective_policy["source"]["kb_dictionary_lexicon"]
+        == "knowledge_base_active_dictionary"
+    )
     dummy_db.commit.assert_awaited()
 
 
@@ -5225,8 +5496,16 @@ async def test_load_effective_policy_uses_injected_db_and_knowledge_factories_wi
     assert len(opened_contexts) == 1
     assert len(created_services) == 1
     assert created_services[0].db is dummy_db
-    assert handler._effective_policy["tool_policy"]["transcript_normalization_lexicon"][0]["canonical_term"] == "注入知识库术语"
-    assert handler._effective_policy["source"]["kb_dictionary_lexicon"] == "knowledge_base_active_dictionary"
+    assert (
+        handler._effective_policy["tool_policy"]["transcript_normalization_lexicon"][0][
+            "canonical_term"
+        ]
+        == "注入知识库术语"
+    )
+    assert (
+        handler._effective_policy["source"]["kb_dictionary_lexicon"]
+        == "knowledge_base_active_dictionary"
+    )
     dummy_db.commit.assert_awaited()
 
 

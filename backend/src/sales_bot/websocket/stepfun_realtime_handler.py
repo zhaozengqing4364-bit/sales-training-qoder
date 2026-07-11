@@ -48,6 +48,9 @@ from common.db.session_lifecycle import (
 from common.effectiveness import coerce_live_session_conclusion_summary
 from common.effectiveness.schemas import ActionCard
 from common.knowledge.kb_lock_guard import (
+    apply_answerability_output_guard as apply_kb_answerability_output_guard,
+    build_answerability_instruction_overlay as build_kb_answerability_instruction_overlay,
+    build_blocked_response_from_answerability as build_kb_blocked_response_from_answerability,
     resolve_answerability_mode as resolve_kb_answerability_mode,
 )
 from common.knowledge.service import KnowledgeService
@@ -145,6 +148,9 @@ from sales_bot.websocket.grounding_decision_pipeline import (
     GroundingDecisionContext,
     GroundingDecisionPipeline,
 )
+from sales_bot.websocket.legacy_grounding_runtime import (
+    LegacyRealtimeGroundingAdapter,
+)
 from sales_bot.websocket.stepfun_tool_execution import (
     StepFunToolExecutionModule,
     ToolExecutionContext,
@@ -164,9 +170,15 @@ from training_runtime.stepfun_transport import StepFunBackpressureStatus
 from training_runtime.stepfun_transport import StepFunHealthStatus
 from training_runtime.stepfun_transport import StepFunUpstreamConnectError
 from training_runtime.realtime import (
+    GroundingRequest,
+    GroundingDecisionResult,
+    GroundingRetrievalCache,
+    GroundingRetrievalResult,
     RealtimeProviderError,
     RealtimeProviderPort,
     RealtimeProviderSessionConfig,
+    RealtimeGroundingModule,
+    grounding_retrieval_from_legacy_payload,
 )
 from training_runtime.realtime.stepfun_provider import StepFunRealtimeProvider
 
@@ -283,7 +295,8 @@ class StepFunRealtimeSharedHandler(
     ) -> None:
         super().__init__(scenario)
         self.upstream_ws = None
-        self._provider_port_enabled = Settings().REALTIME_PROVIDER_PORT_ENABLED
+        settings = Settings()
+        self._provider_port_enabled = settings.REALTIME_PROVIDER_PORT_ENABLED
         self._selected_provider_path = (
             "provider_port"
             if self._provider_port_enabled
@@ -297,7 +310,9 @@ class StepFunRealtimeSharedHandler(
                 self.scenario
             ),
         )
-        self._db_session_factory = db_session_factory or self._default_db_session_factory
+        self._db_session_factory = (
+            db_session_factory or self._default_db_session_factory
+        )
         self._knowledge_service_factory = (
             knowledge_service_factory or self._default_knowledge_service_factory
         )
@@ -474,14 +489,29 @@ class StepFunRealtimeSharedHandler(
         self._internal_retrieval_cache_max_entries = (
             self._resolve_internal_retrieval_cache_max_entries_from_env()
         )
-        self._tool_execution.configure_cache(
-            max_entries=self._internal_retrieval_cache_max_entries,
-        )
-        self._grounding_pipeline = GroundingDecisionPipeline(
-            retriever=self._retrieve_grounding_via_internal_knowledge,
-            warmup_callable=self._run_kb_lock_warmup,
-            cache_ttl_seconds=self._internal_retrieval_cache_ttl_seconds,
-        )
+        self._grounding_module_enabled = settings.REALTIME_GROUNDING_MODULE_ENABLED
+        self._grounding_module: RealtimeGroundingModule | None = None
+        self._legacy_grounding_runtime: LegacyRealtimeGroundingAdapter | None = None
+        self._grounding_pipeline: GroundingDecisionPipeline | None = None
+        self._grounding_result: GroundingDecisionResult | None = None
+        if self._grounding_module_enabled:
+            grounding_cache = GroundingRetrievalCache(
+                ttl_seconds=self._internal_retrieval_cache_ttl_seconds,
+                max_entries=self._internal_retrieval_cache_max_entries,
+                timeout_seconds=self._kb_lock_decision_timeout_seconds,
+            )
+            self._grounding_module = RealtimeGroundingModule(
+                retriever=self._retrieve_grounding_uncached,
+                cache=grounding_cache,
+            )
+        else:
+            self._legacy_grounding_runtime = LegacyRealtimeGroundingAdapter(
+                retriever=self._retrieve_grounding_via_internal_knowledge,
+                warmup_callable=self._run_kb_lock_warmup,
+                cache_ttl_seconds=self._internal_retrieval_cache_ttl_seconds,
+                cache_max_entries=self._internal_retrieval_cache_max_entries,
+            )
+            self._grounding_pipeline = self._legacy_grounding_runtime.pipeline
         self._kb_lock_warmup_enabled = self._resolve_kb_lock_warmup_enabled_from_env()
         self._kb_lock_warmup_task: asyncio.Task | None = None
         self._upstream_auto_recover_enabled = (
@@ -556,10 +586,36 @@ class StepFunRealtimeSharedHandler(
     ) -> dict[str, Any]:
         return await self._tool_search_internal_knowledge(arguments_obj)
 
+    async def _retrieve_grounding_uncached(
+        self,
+        request: GroundingRequest,
+    ) -> GroundingRetrievalResult:
+        arguments_obj: dict[str, Any] = {
+            "query": request.query,
+            "top_k": request.top_k,
+        }
+        if request.metadata_filter:
+            arguments_obj["metadata_filter"] = dict(request.metadata_filter)
+        frozen_policy = copy.deepcopy(self._effective_policy)
+        frozen_policy["knowledge_base_ids"] = list(request.knowledge_base_ids)
+        frozen_policy["instruction_contract_hash"] = request.frozen_policy_hash
+        output = await self._tool_execution.execute_tool(
+            {"name": "search_internal_knowledge", "arguments": arguments_obj},
+            context=ToolExecutionContext(
+                session_id=cast(str, self.session_id),
+                effective_policy=frozen_policy,
+                session_factory=self._db_session_factory,
+                knowledge_service_factory=self._knowledge_service_factory,
+                record_metric=self._record_knowledge_runtime_metric,
+            ),
+        )
+        return grounding_retrieval_from_legacy_payload(request, output)
+
     def _reset_turn_runtime_state(self) -> None:
         """Clear turn-scoped state that must not leak across reconnects or interrupts."""
         self._pending_grounding_context = ""
         self._pending_blocked_response_text = ""
+        self._grounding_result = None
         self._roleplay_regenerate_attempted_for_turn = False
         self._roleplay_repair_instruction = ""
         self._latest_input_transcript_delta = ""
@@ -588,7 +644,9 @@ class StepFunRealtimeSharedHandler(
             contract_hash = str(profile.instruction_contract_hash or "").strip()
             if contract_hash:
                 return contract_hash
-        effective_policy = self._effective_policy if isinstance(self._effective_policy, dict) else {}
+        effective_policy = (
+            self._effective_policy if isinstance(self._effective_policy, dict) else {}
+        )
         contract_hash = str(
             effective_policy.get("instruction_contract_hash")
             or self._instruction_contract_hash
@@ -667,16 +725,23 @@ class StepFunRealtimeSharedHandler(
         mode: str,
         diagnostics: dict[str, Any] | None,
     ) -> str:
-        return GroundingDecisionPipeline().build_instruction_overlay(mode, diagnostics)
+        return build_kb_answerability_instruction_overlay(mode, diagnostics)
 
     def _build_blocked_response_from_answerability(
         self,
         diagnostics: dict[str, Any] | None,
     ) -> str:
-        return self._grounding_pipeline.build_blocked_response(diagnostics)
+        if self._grounding_module is not None and self._grounding_result is not None:
+            return self._grounding_module.build_blocked_response(self._grounding_result)
+        return build_kb_blocked_response_from_answerability(diagnostics)
 
     def _apply_answerability_output_guard(self, response_text: str) -> str:
-        return self._grounding_pipeline.apply_output_guard(
+        if self._grounding_module is not None and self._grounding_result is not None:
+            return self._grounding_module.apply_output_guard(
+                response_text,
+                self._grounding_result,
+            )
+        return apply_kb_answerability_output_guard(
             response_text,
             self._latest_knowledge_answer_diagnostics,
         )
@@ -698,7 +763,11 @@ class StepFunRealtimeSharedHandler(
             if not isinstance(item, dict):
                 continue
             aliases = item.get("aliases")
-            alias_tuple = tuple(str(alias) for alias in aliases if str(alias).strip()) if isinstance(aliases, list) else ()
+            alias_tuple = (
+                tuple(str(alias) for alias in aliases if str(alias).strip())
+                if isinstance(aliases, list)
+                else ()
+            )
             seen.add(
                 (
                     str(item.get("canonical_term") or ""),
@@ -731,7 +800,9 @@ class StepFunRealtimeSharedHandler(
         next_policy.setdefault("transcript_normalization_enabled", True)
         return next_policy, True
 
-    async def _merge_kb_dictionary_into_effective_policy(self, db: AsyncSession) -> bool:
+    async def _merge_kb_dictionary_into_effective_policy(
+        self, db: AsyncSession
+    ) -> bool:
         knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
         if not isinstance(knowledge_base_ids, list) or not knowledge_base_ids:
             return False
@@ -740,7 +811,9 @@ class StepFunRealtimeSharedHandler(
             tool_policy = {}
 
         try:
-            kb_lexicon = await self._knowledge_service_factory(db).active_dictionary_lexicon(
+            kb_lexicon = await self._knowledge_service_factory(
+                db
+            ).active_dictionary_lexicon(
                 [str(kb_id) for kb_id in knowledge_base_ids if str(kb_id).strip()]
             )
         except Exception as exc:  # noqa: BLE001
@@ -878,12 +951,16 @@ class StepFunRealtimeSharedHandler(
     async def _restore_session_state(self, state: SessionStateSnapshot) -> None:
         """Restore reconnect state using the StepFun connection mixin authority."""
         await super()._restore_session_state(state)
-        runtime_state = state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        runtime_state = (
+            state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        )
         restore_roleplay_runtime_state(self._effective_policy, runtime_state)
         if self._curriculum_stage_runtime is not None:
             self._curriculum_stage_runtime.restore_runtime_state(runtime_state)
 
-    def _curriculum_runtime_payload(self) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    def _curriculum_runtime_payload(
+        self,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         curriculum_snapshot = self._curriculum_snapshot
         if isinstance(curriculum_snapshot, dict):
             stage_snapshots = curriculum_snapshot.get("stage_snapshots")
@@ -920,7 +997,9 @@ class StepFunRealtimeSharedHandler(
         if not result.runtime_state_patch and not result.websocket_events:
             return
         if result.runtime_state_patch:
-            await self._persist_curriculum_stage_runtime_state(result.runtime_state_patch)
+            await self._persist_curriculum_stage_runtime_state(
+                result.runtime_state_patch
+            )
         for event in result.websocket_events:
             await self._send_curriculum_stage_event(event)
 
@@ -931,12 +1010,16 @@ class StepFunRealtimeSharedHandler(
             return
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(PracticeSession).where(PracticeSession.session_id == self.session_id)
+                select(PracticeSession).where(
+                    PracticeSession.session_id == self.session_id
+                )
             )
             session = result.scalar_one_or_none()
             if not session:
                 return
-            existing_state: dict[str, Any] = session.runtime_state if isinstance(session.runtime_state, dict) else {}
+            existing_state: dict[str, Any] = (
+                session.runtime_state if isinstance(session.runtime_state, dict) else {}
+            )
             cast(Any, session).runtime_state = {
                 **copy.deepcopy(existing_state),
                 **copy.deepcopy(runtime_state_patch),
@@ -1055,7 +1138,8 @@ class StepFunRealtimeSharedHandler(
             await self._load_effective_policy()
             existing_runtime_state = (
                 existing_state.runtime_state
-                if existing_state is not None and isinstance(existing_state.runtime_state, dict)
+                if existing_state is not None
+                and isinstance(existing_state.runtime_state, dict)
                 else None
             )
             await self._initialize_curriculum_stage_runtime(existing_runtime_state)
@@ -1224,12 +1308,20 @@ class StepFunRealtimeSharedHandler(
 
         await run_cleanup(stop_upstream_receive)
         await run_cleanup(self._close_upstream)
+        await run_cleanup(self._close_selected_grounding_runtime)
         await run_cleanup(self._save_session_state)
-        await run_cleanup(
-            lambda: self.manager.disconnect(self.scenario, session_id)
-        )
+        await run_cleanup(lambda: self.manager.disconnect(self.scenario, session_id))
         if cleanup_error is not None:
             raise cleanup_error
+
+    async def _close_selected_grounding_runtime(self) -> None:
+        runtime = (
+            self._grounding_module
+            if self._grounding_module_enabled
+            else self._legacy_grounding_runtime
+        )
+        if runtime is not None:
+            await runtime.close()
 
     async def _sync_session_state(self) -> None:
         if not self.session_id:
@@ -1359,6 +1451,7 @@ class StepFunRealtimeSharedHandler(
 
     async def _close_upstream(self) -> None:
         """Close upstream connection safely."""
+
         async def close_selected_upstream() -> None:
             await self._stop_upstream_keepalive_task()
             if self._using_provider_port():
@@ -1442,8 +1535,17 @@ class StepFunRealtimeSharedHandler(
             return
 
         self._kb_lock_warmup_task = asyncio.create_task(
-            self._grounding_pipeline.warmup(normalized_kb_ids)
+            self._warm_selected_grounding_runtime(normalized_kb_ids)
         )
+
+    async def _warm_selected_grounding_runtime(self, kb_ids: list[str]) -> None:
+        if self._grounding_module_enabled:
+            await self._run_kb_lock_warmup(kb_ids)
+            return
+        pipeline = self._grounding_pipeline
+        if pipeline is None:
+            raise RuntimeError("legacy_grounding_selection_missing")
+        await pipeline.warmup(kb_ids)
 
     async def _run_kb_lock_warmup(self, kb_ids: list[str]) -> None:
         started_at = asyncio.get_running_loop().time()

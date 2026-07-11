@@ -179,6 +179,9 @@ class GroundingCitation:
     snippet: str
     claim: str
     score: float | None = None
+    compatibility_metadata: Mapping[str, JsonValue] = field(
+        default_factory=FrozenJsonMapping
+    )
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -197,6 +200,13 @@ class GroundingCitation:
             if type(self.score) not in {int, float} or not isfinite(float(self.score)):
                 raise ValueError("grounding_citation_score_must_be_finite")
             object.__setattr__(self, "score", float(self.score))
+        if not isinstance(self.compatibility_metadata, Mapping):
+            raise ValueError("grounding_citation_compatibility_metadata_invalid")
+        object.__setattr__(
+            self,
+            "compatibility_metadata",
+            FrozenJsonMapping(self.compatibility_metadata),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,6 +248,10 @@ class GroundingRetrievalResult:
     evidence: GroundingEvidence
     diagnostics: GroundingDiagnostics
     error_reason: str | None = None
+    compatibility_metadata: Mapping[str, JsonValue] = field(
+        default_factory=FrozenJsonMapping
+    )
+    response_query: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "status", _required_text(self.status, "status"))
@@ -257,6 +271,18 @@ class GroundingRetrievalResult:
             self,
             "error_reason",
             _optional_text(self.error_reason, "error_reason"),
+        )
+        if not isinstance(self.compatibility_metadata, Mapping):
+            raise ValueError("grounding_compatibility_metadata_must_be_mapping")
+        object.__setattr__(
+            self,
+            "compatibility_metadata",
+            FrozenJsonMapping(self.compatibility_metadata),
+        )
+        object.__setattr__(
+            self,
+            "response_query",
+            _optional_text(self.response_query, "response_query"),
         )
 
 
@@ -359,9 +385,14 @@ def _answerability_diagnostics(evidence: GroundingEvidence) -> dict[str, Any]:
     }
 
 
-def _legacy_retrieval_payload(result: GroundingRetrievalResult) -> dict[str, Any]:
-    rows = [
-        {
+def grounding_retrieval_to_legacy_payload(
+    request: GroundingRequest,
+    result: GroundingRetrievalResult,
+) -> dict[str, Any]:
+    """Project the bounded result onto the stable StepFun tool payload."""
+    rows = []
+    for citation in result.evidence.citations:
+        row = {
             "knowledge_base_id": citation.knowledge_base_id,
             "knowledge_base_name": citation.knowledge_base_name,
             "document_title": citation.document_title,
@@ -371,17 +402,169 @@ def _legacy_retrieval_payload(result: GroundingRetrievalResult) -> dict[str, Any
             "claim": citation.claim,
             "score": citation.score,
         }
-        for citation in result.evidence.citations
-    ]
+        compatibility_metadata = _thaw_json(citation.compatibility_metadata)
+        if isinstance(compatibility_metadata, dict):
+            row.update(compatibility_metadata)
+        rows.append(row)
     payload: dict[str, Any] = {
+        "query": result.response_query or request.query,
         "count": result.result_count,
         "retrieval_mode": result.retrieval_mode,
         "results": rows,
         "_answerability": _answerability_diagnostics(result.evidence),
     }
+    compatibility_metadata = _thaw_json(result.compatibility_metadata)
+    if isinstance(compatibility_metadata, dict):
+        payload.update(compatibility_metadata)
+    if result.evidence.rewritten_queries:
+        payload["rewritten_queries"] = list(result.evidence.rewritten_queries)
     if result.error_reason:
         payload["error"] = result.error_reason
     return payload
+
+
+def grounding_retrieval_from_legacy_payload(
+    request: GroundingRequest,
+    payload: Mapping[str, Any],
+) -> GroundingRetrievalResult:
+    """Validate and bound the low-level internal-search compatibility payload."""
+    if not isinstance(payload, Mapping):
+        raise ValueError("grounding_legacy_payload_must_be_mapping")
+    raw_rows = payload.get("results")
+    rows = raw_rows if isinstance(raw_rows, list) else []
+    fallback_kb_id = (
+        request.knowledge_base_ids[0] if request.knowledge_base_ids else "unknown"
+    )
+    citations: list[GroundingCitation] = []
+    for raw_row in rows[: request.top_k]:
+        if not isinstance(raw_row, Mapping):
+            continue
+        snippet = str(
+            raw_row.get("snippet")
+            or raw_row.get("content")
+            or raw_row.get("claim")
+            or ""
+        ).strip()
+        if not snippet:
+            continue
+        kb_id = str(raw_row.get("knowledge_base_id") or fallback_kb_id).strip()
+        kb_name = str(raw_row.get("knowledge_base_name") or kb_id).strip()
+        title = str(
+            raw_row.get("document_title") or raw_row.get("title") or "内部知识片段"
+        ).strip()
+        claim = str(raw_row.get("claim") or snippet).strip()
+        raw_score = raw_row.get("score")
+        score = (
+            float(raw_score)
+            if isinstance(raw_score, (int, float))
+            and not isinstance(raw_score, bool)
+            and isfinite(float(raw_score))
+            else None
+        )
+        citations.append(
+            GroundingCitation(
+                knowledge_base_id=kb_id or fallback_kb_id,
+                knowledge_base_name=kb_name or fallback_kb_id,
+                document_title=title or "内部知识片段",
+                snippet=snippet,
+                claim=claim,
+                score=score,
+                compatibility_metadata={
+                    key: copy.deepcopy(raw_row[key])
+                    for key in ("ranking_passed", "retrieval_mode", "score_breakdown")
+                    if key in raw_row
+                },
+            )
+        )
+
+    raw_answerability = payload.get("_answerability")
+    answerability = raw_answerability if isinstance(raw_answerability, Mapping) else {}
+    raw_rewritten = answerability.get("rewritten_queries")
+    if not isinstance(raw_rewritten, list):
+        raw_rewritten = payload.get("rewritten_queries")
+    rewritten_queries = tuple(
+        str(item).strip()
+        for item in (raw_rewritten if isinstance(raw_rewritten, list) else [])
+        if str(item).strip()
+    )
+    retrieval_mode = (
+        str(payload.get("retrieval_mode") or "unknown").strip() or "unknown"
+    )
+    error_reason = str(payload.get("error") or "").strip() or None
+    result_count = len(citations)
+    evidence = GroundingEvidence(
+        citations=tuple(citations),
+        rewritten_queries=rewritten_queries,
+        answerability=str(
+            answerability.get("answerability")
+            or ("sufficient" if result_count else "insufficient")
+        ),
+        source_status=str(
+            answerability.get("source_status") or ("hit" if result_count else "miss")
+        ),
+        retrieval_mode=retrieval_mode,
+    )
+    raw_diagnostics = payload.get("_diagnostics")
+    diagnostics_payload = (
+        raw_diagnostics if isinstance(raw_diagnostics, Mapping) else {}
+    )
+    raw_duration = diagnostics_payload.get("duration_ms", 0.0)
+    duration_ms = (
+        float(raw_duration)
+        if type(raw_duration) in {int, float}
+        and isfinite(float(raw_duration))
+        and float(raw_duration) >= 0
+        else 0.0
+    )
+    status = "error" if error_reason else "success"
+    compatibility_keys = {
+        "entity_resolution",
+        "execution_trace",
+        "grounded_degradation",
+        "intent",
+        "knowledge_answer_diagnostics",
+        "knowledge_timeout_count",
+        "message",
+        "natural_customer_challenge",
+        "quality_flags",
+        "retrieval_plan",
+        "status",
+    }
+    compatibility_metadata = {
+        key: copy.deepcopy(payload[key]) for key in compatibility_keys if key in payload
+    }
+    diagnostics = GroundingDiagnostics(
+        schema_version=1,
+        status=status,
+        reason_code=error_reason
+        or ("retrieval_hit" if result_count else "retrieval_miss"),
+        source="internal_knowledge",
+        mode=(
+            GroundingMode.DEGRADED.value
+            if error_reason
+            else (
+                GroundingMode.GROUNDED.value
+                if result_count
+                else GroundingMode.UNRESTRICTED.value
+            )
+        ),
+        degraded=bool(error_reason),
+        blocked=False,
+        cache_disposition=GroundingCacheDisposition.BYPASS,
+        result_count=result_count,
+        duration_ms=duration_ms,
+    )
+    return GroundingRetrievalResult(
+        status=status,
+        result_count=result_count,
+        retrieval_mode=retrieval_mode,
+        evidence=evidence,
+        diagnostics=diagnostics,
+        error_reason=error_reason,
+        compatibility_metadata=compatibility_metadata,
+        response_query=str(payload.get("query") or request.query).strip()
+        or request.query,
+    )
 
 
 class RealtimeGroundingModule:
@@ -417,7 +600,7 @@ class RealtimeGroundingModule:
         async def cache_backed_retriever(**_kwargs: Any) -> dict[str, Any]:
             nonlocal retrieval_result
             retrieval_result = await self.retrieve(request)
-            return _legacy_retrieval_payload(retrieval_result)
+            return grounding_retrieval_to_legacy_payload(request, retrieval_result)
 
         decision = await self._kb_lock_evaluator(
             query=request.query,
@@ -456,7 +639,7 @@ class RealtimeGroundingModule:
         decision = evaluate_retrieval_grounding_decision(
             query=request.query,
             effective_policy=effective_policy,
-            retrieval_payload=_legacy_retrieval_payload(retrieval),
+            retrieval_payload=grounding_retrieval_to_legacy_payload(request, retrieval),
         )
         if not decision.allow_generation:
             outcome = GroundingOutcome.BLOCKED
@@ -529,7 +712,7 @@ class RealtimeGroundingModule:
             type(item) is not str for item in raw_ids
         ):
             return "policy_scope_invalid"
-        policy_ids = tuple(sorted(item.strip() for item in raw_ids if item.strip()))
+        policy_ids = tuple(sorted({item.strip() for item in raw_ids if item.strip()}))
         if policy_ids != tuple(sorted(request.knowledge_base_ids)):
             return "policy_scope_mismatch"
         policy_hash = effective_policy.get("instruction_contract_hash")

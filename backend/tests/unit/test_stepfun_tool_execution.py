@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from sales_bot.websocket.legacy_grounding_runtime import LegacyToolResultCache
 from sales_bot.websocket.stepfun_tool_execution import (
     StepFunToolExecutionModule,
     ToolExecutionContext,
@@ -136,40 +137,43 @@ def test_decide_tool_routing_returns_skip_for_duplicate_call():
     assert duplicate.stable_key == first.stable_key
 
 
-def test_cache_result_stores_and_retrieves_without_sleeping():
+def test_tool_execution_has_no_result_cache_authority():
+    module = StepFunToolExecutionModule()
+
+    assert not hasattr(module, "_result_cache")
+    assert not hasattr(module, "get_cached_result")
+    assert not hasattr(module, "cache_result")
+    assert not hasattr(module, "configure_cache")
+
+
+def test_legacy_cache_result_stores_and_retrieves_without_sleeping():
     now = 10.0
-    module = StepFunToolExecutionModule(clock=lambda: now)
+    cache = LegacyToolResultCache(max_entries=128, clock=lambda: now)
     result = {"query": "产品", "count": 1, "results": [{"snippet": "石犀"}]}
 
-    cache_key = module.build_internal_retrieval_cache_key(
-        {"query": " 产品 ", "top_k": 3}
-    )
-    module.cache_result(cache_key, result, ttl_seconds=5.0)
+    cache_key = cache.build_key({"query": " 产品 ", "top_k": 3})
+    cache.put(cache_key, result, ttl_seconds=5.0)
 
-    assert module.get_cached_result(cache_key) == result
+    assert cache.get(cache_key) == result
 
 
-def test_cache_result_expires_after_ttl_without_sleeping():
+def test_legacy_cache_result_expires_after_ttl_without_sleeping():
     now = 10.0
-    module = StepFunToolExecutionModule(clock=lambda: now)
-    cache_key = module.build_internal_retrieval_cache_key({"query": "产品"})
-    module.cache_result(cache_key, {"query": "产品", "count": 1}, ttl_seconds=2.0)
+    cache = LegacyToolResultCache(max_entries=128, clock=lambda: now)
+    cache_key = cache.build_key({"query": "产品"})
+    cache.put(cache_key, {"query": "产品", "count": 1}, ttl_seconds=2.0)
 
     now = 12.1
 
-    assert module.get_cached_result(cache_key) is None
+    assert cache.get(cache_key) is None
 
 
 def test_collect_diagnostics_aggregates_call_stats():
-    now = 10.0
-    module = StepFunToolExecutionModule(clock=lambda: now)
+    module = StepFunToolExecutionModule()
     search_call = {"name": "search_internal_knowledge", "arguments": {"query": "产品"}}
 
     decision = module.decide_tool_routing(search_call, turn_context={"turn_id": "t1"})
     duplicate = module.decide_tool_routing(search_call, turn_context={"turn_id": "t1"})
-    cache_key = module.build_internal_retrieval_cache_key({"query": "产品"})
-    module.cache_result(cache_key, {"query": "产品", "count": 1}, ttl_seconds=5.0)
-    module.get_cached_result(cache_key)
     module.record_execution_error()
 
     diagnostics = module.collect_diagnostics()
@@ -178,7 +182,8 @@ def test_collect_diagnostics_aggregates_call_stats():
     assert duplicate.status == ToolRoutingStatus.SKIP_DUPLICATE
     assert diagnostics.total_calls == 2
     assert diagnostics.duplicate_skips == 1
-    assert diagnostics.cache_hits == 1
+    assert diagnostics.cache_hits == 0
+    assert diagnostics.cache_misses == 0
     assert diagnostics.grounding_triggers == 1
     assert diagnostics.errors == 1
 

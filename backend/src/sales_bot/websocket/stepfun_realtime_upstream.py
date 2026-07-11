@@ -157,7 +157,9 @@ from sales_bot.websocket.components.stepfun_upstream_router import (
     extract_function_call_from_item_created,
     extract_response_done_function_calls,
 )
-from sales_bot.websocket.components.stepfun_voice_errors import is_voice_unavailable_error
+from sales_bot.websocket.components.stepfun_voice_errors import (
+    is_voice_unavailable_error,
+)
 from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
@@ -195,6 +197,9 @@ from sales_bot.websocket.stepfun_tool_execution import ToolExecutionContext
 from training_runtime.stepfun_transport import StepFunSendStatus
 from training_runtime.realtime import (
     FrozenJsonMapping,
+    GroundingCacheDisposition,
+    GroundingDecisionResult,
+    GroundingRequest,
     JsonValue,
     ProviderCommand,
     ProviderCommandKind,
@@ -202,11 +207,13 @@ from training_runtime.realtime import (
     ProviderEvent,
     ProviderEventKind,
     RealtimeProviderError,
+    grounding_retrieval_to_legacy_payload,
 )
 
 logger = get_logger(__name__)
 ROLEPLAY_INSTRUCTION_HASH_METRICS_KEY = "roleplay_instruction_hash"
 ROLEPLAY_INSTRUCTION_HASH_SAMPLE_LIMIT = 10
+
 
 class _ResponseEventClass(StrEnum):
     NON_RESPONSE = "non_response"
@@ -314,12 +321,199 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         await self._schedule_response_after_commit()
 
     async def _prepare_grounding_context(self, query: str) -> None:
+        if not self._grounding_module_enabled:
+            await self._prepare_grounding_context_legacy(query)
+            return
+        await self._prepare_grounding_context_with_module(query)
+
+    def _build_grounding_request(
+        self,
+        query: str,
+        *,
+        arguments_obj: dict[str, Any] | None = None,
+    ) -> GroundingRequest:
+        arguments = arguments_obj if isinstance(arguments_obj, dict) else {}
+        tool_policy = self._effective_policy.get("tool_policy")
+        if not isinstance(tool_policy, dict):
+            tool_policy = {}
+        raw_top_k = arguments.get("top_k", tool_policy.get("retrieval_top_k", 3))
+        try:
+            top_k = max(1, min(8, int(raw_top_k or 3)))
+        except (TypeError, ValueError):
+            top_k = 3
+        metadata_filter = arguments.get("metadata_filter")
+        if not isinstance(metadata_filter, dict):
+            metadata_filter = {}
+        raw_kb_ids = self._effective_policy.get("knowledge_base_ids")
+        if not isinstance(raw_kb_ids, list):
+            raw_kb_ids = []
+        knowledge_base_ids = tuple(
+            sorted({str(item).strip() for item in raw_kb_ids if str(item).strip()})
+        )
+        policy_hash = str(
+            self._instruction_contract_hash
+            or self._effective_policy.get("instruction_contract_hash")
+            or "unversioned"
+        ).strip()
+        return GroundingRequest(
+            decision_id=uuid.uuid4().hex[:12],
+            query=str(query or "").strip(),
+            frozen_policy_hash=policy_hash,
+            knowledge_base_ids=knowledge_base_ids,
+            top_k=top_k,
+            metadata_filter=metadata_filter,
+        )
+
+    @staticmethod
+    def _legacy_answerability_diagnostics_from_grounding(
+        result: GroundingDecisionResult,
+    ) -> dict[str, Any]:
+        return {
+            "answerability": result.evidence.answerability,
+            "source_status": result.evidence.source_status,
+            "rewritten_queries": list(result.evidence.rewritten_queries),
+            "citations": [
+                {
+                    "knowledge_base_id": citation.knowledge_base_id,
+                    "knowledge_base_name": citation.knowledge_base_name,
+                    "document_title": citation.document_title,
+                    "snippet": citation.snippet,
+                    "claim": citation.claim,
+                    "score": citation.score,
+                }
+                for citation in result.evidence.citations
+            ],
+            "status": result.diagnostics.status,
+            "reason_code": result.diagnostics.reason_code,
+            "mode": result.mode.value,
+        }
+
+    def _apply_grounding_result(self, result: GroundingDecisionResult) -> None:
+        self._grounding_result = result
+        self._latest_knowledge_answer_diagnostics = (
+            self._legacy_answerability_diagnostics_from_grounding(result)
+        )
+        self._pending_grounding_context = result.grounding_context
+        self._pending_blocked_response_text = (
+            "" if result.allow_generation else result.blocked_response
+        )
+
+    async def _prepare_grounding_context_with_module(self, query: str) -> None:
+        normalized_query = str(query or "").strip()
+        self._pending_grounding_context = ""
+        self._pending_blocked_response_text = ""
+        self._grounding_result = None
+        if not normalized_query:
+            self._log_grounding_debug("prefetch_skipped", reason="empty_query")
+            return
+        if should_use_phase4_local_provider():
+            self._log_grounding_debug(
+                "prefetch_skipped", reason="phase4_local_provider"
+            )
+            return
+        module = self._grounding_module
+        if module is None:
+            raise RuntimeError("grounding_module_selection_missing")
+        tool_policy = self._effective_policy.get("tool_policy")
+        if not isinstance(tool_policy, dict):
+            tool_policy = {}
+        raw_kb_ids = self._effective_policy.get("knowledge_base_ids")
+        has_bound_kb = isinstance(raw_kb_ids, list) and any(
+            str(item).strip() for item in raw_kb_ids
+        )
+        require_kb_grounding = bool(tool_policy.get("require_kb_grounding", False))
+        internal_retrieval_enabled = bool(
+            tool_policy.get("enable_internal_retrieval", True)
+        )
+        if (
+            not require_kb_grounding
+            and not internal_retrieval_enabled
+            and not has_bound_kb
+        ):
+            self._log_grounding_debug(
+                "prefetch_skipped",
+                reason="internal_retrieval_disabled",
+                query_length=len(normalized_query),
+            )
+            return
+        request = self._build_grounding_request(normalized_query)
+        timeout_seconds = (
+            self._kb_lock_decision_timeout_seconds
+            if require_kb_grounding
+            else self._grounding_prefetch_timeout_seconds
+        )
+
+        async def decide() -> GroundingDecisionResult:
+            if require_kb_grounding:
+                return await module.prepare(request, policy=self._effective_policy)
+            retrieval = await module.retrieve(request)
+            return module.decide(
+                request,
+                retrieval,
+                policy=self._effective_policy,
+            )
+
+        try:
+            result = (
+                await asyncio.wait_for(decide(), timeout=timeout_seconds)
+                if timeout_seconds > 0
+                else await decide()
+            )
+        except TimeoutError:
+            self._pending_grounding_context = ""
+            if has_bound_kb:
+                self._pending_blocked_response_text = (
+                    "当前内部知识检索超时，暂时无法基于内部资料回答这个问题。"
+                    "请稍后重试，或补充更具体的关键词、版本信息或业务场景。"
+                )
+            self._log_grounding_debug(
+                "prefetch_timeout",
+                query_length=len(normalized_query),
+                timeout_ms=int(timeout_seconds * 1000),
+                kb_count=len(request.knowledge_base_ids),
+            )
+            return
+        self._apply_grounding_result(result)
+        if require_kb_grounding:
+            await self._record_kb_lock_decision(
+                status=result.diagnostics.status,
+                blocked=not result.allow_generation,
+                decision_id=result.decision_id,
+                duration_ms=result.diagnostics.duration_ms,
+                phase_breakdown={
+                    "phase_total_ms": result.diagnostics.duration_ms,
+                    "cache_hit_internal_retrieval": result.cache_disposition
+                    in {
+                        GroundingCacheDisposition.HIT,
+                        GroundingCacheDisposition.SHARED,
+                    },
+                },
+                error_detail=(
+                    result.diagnostics.reason_code
+                    if not result.allow_generation
+                    else None
+                ),
+            )
+        self._log_grounding_debug(
+            "prefetch_grounding_decided",
+            query_length=len(normalized_query),
+            result_count=result.diagnostics.result_count,
+            status=result.diagnostics.status,
+            mode=result.mode.value,
+            cache_disposition=result.cache_disposition.value,
+            blocked=not result.allow_generation,
+        )
+
+    async def _prepare_grounding_context_legacy(self, query: str) -> None:
         """
         Pre-fetch internal knowledge for the current user turn.
 
         This provides deterministic grounding for realtime mode (even when model
         does not proactively call `search_internal_knowledge`).
         """
+        pipeline = self._grounding_pipeline
+        if pipeline is None:
+            raise RuntimeError("legacy_grounding_selection_missing")
         normalized_query = query.strip()
         self._pending_grounding_context = ""
         self._pending_blocked_response_text = ""
@@ -346,7 +540,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             decision_id = uuid.uuid4().hex[:12]
             decision_started_at = asyncio.get_running_loop().time()
             kb_lock_timeout_seconds = self._kb_lock_decision_timeout_seconds
-            decision_coro = self._grounding_pipeline.evaluate(
+            decision_coro = pipeline.evaluate(
                 query=normalized_query,
                 context=GroundingDecisionContext(
                     effective_policy=self._effective_policy,
@@ -552,7 +746,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         if prefetch_timeout_seconds > 0:
             try:
                 retrieval = await asyncio.wait_for(
-                    self._grounding_pipeline.retrieve(
+                    pipeline.retrieve(
                         normalized_query,
                         top_k=retrieval_top_k,
                     ),
@@ -575,7 +769,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                     self._pending_grounding_context = ""
                 return
         else:
-            retrieval = await self._grounding_pipeline.retrieve(
+            retrieval = await pipeline.retrieve(
                 normalized_query,
                 top_k=retrieval_top_k,
             )
@@ -593,7 +787,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 )
                 self._pending_grounding_context = ""
             return
-        grounding_decision = self._grounding_pipeline.evaluate_retrieval(
+        grounding_decision = pipeline.evaluate_retrieval(
             normalized_query,
             GroundingDecisionContext(effective_policy=self._effective_policy),
             retrieval,
@@ -904,8 +1098,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 f"{turn_instructions}\n\n【下一轮角色合同软纠偏提示】\n"
                 f"{roleplay_soft_correction_hint}"
                 if turn_instructions
-                else f"【下一轮角色合同软纠偏提示】\n"
-                f"{roleplay_soft_correction_hint}"
+                else f"【下一轮角色合同软纠偏提示】\n{roleplay_soft_correction_hint}"
             )
         turn_instruction_hash = build_turn_instruction_hash(turn_instructions)
         if turn_instructions:
@@ -1115,7 +1308,9 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             ws_lifetime_ms=self._compute_upstream_ws_lifetime_ms(),
         )
 
-    async def _recover_upstream_after_idle_timeout_error(self, event: dict[str, Any]) -> bool:
+    async def _recover_upstream_after_idle_timeout_error(
+        self, event: dict[str, Any]
+    ) -> bool:
         if not self._is_upstream_idle_timeout_error(event):
             return False
         recovered = await self._refresh_upstream_for_next_input(
@@ -1142,10 +1337,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             if (
                 self.upstream_ws is not None
                 or self._upstream_rollover_phase != "idle"
-                or (
-                    self._using_provider_port()
-                    and self._realtime_provider is not None
-                )
+                or (self._using_provider_port() and self._realtime_provider is not None)
             ):
                 try:
                     await self._clear_upstream_generation(reconnect=False)
@@ -1378,9 +1570,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             event,
             request_id=active.request_id,
             response_id=(
-                response_id
-                if event_type == "response.created"
-                else active.response_id
+                response_id if event_type == "response.created" else active.response_id
             ),
             stream_id=active.stream_id,
         )
@@ -1418,14 +1608,11 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         response = event.get("response")
         if explicit_response_id is None and isinstance(response, dict):
             explicit_response_id = response.get("id")
-        if (
-            explicit_request_id is not None and explicit_request_id != request_id
-        ) or (explicit_stream_id is not None and explicit_stream_id != stream_id):
-            return event
-        if (
-            explicit_response_id is not None
-            and explicit_response_id != response_id
+        if (explicit_request_id is not None and explicit_request_id != request_id) or (
+            explicit_stream_id is not None and explicit_stream_id != stream_id
         ):
+            return event
+        if explicit_response_id is not None and explicit_response_id != response_id:
             return event
         correlated = dict(event)
         correlated["request_id"] = request_id
@@ -1592,9 +1779,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         event: dict[str, Any],
     ) -> bool:
         request_id = event.get("request_id")
-        if request_id is not None and (
-            type(request_id) is not int or request_id < 0
-        ):
+        if request_id is not None and (type(request_id) is not int or request_id < 0):
             return False
         stream_id = event.get("stream_id")
         if stream_id is not None and (
@@ -2035,12 +2220,22 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         response_text = self._extract_response_text(response_done_event)
         if not response_text:
             response_text = "".join(response_state.text_parts).strip()
-        response_text = self._grounding_pipeline.apply_output_guard(
-            response_text,
-            self._latest_knowledge_answer_diagnostics
-            if isinstance(self._latest_knowledge_answer_diagnostics, dict)
-            else None,
-        )
+        if (
+            self._grounding_module_enabled
+            and self._grounding_module is not None
+            and self._grounding_result is not None
+        ):
+            response_text = self._grounding_module.apply_output_guard(
+                response_text,
+                self._grounding_result,
+            )
+        elif self._grounding_pipeline is not None:
+            response_text = self._grounding_pipeline.apply_output_guard(
+                response_text,
+                self._latest_knowledge_answer_diagnostics
+                if isinstance(self._latest_knowledge_answer_diagnostics, dict)
+                else None,
+            )
         response_text = await self._apply_roleplay_output_guard(
             response_text,
             existing_decision=response_state.roleplay_violation_decision,
@@ -2184,10 +2379,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             runtime_state=self._roleplay_checker_runtime_state(contract),
             current_sales_stage=current_stage,
         )
-        if (
-            not isinstance(decision, dict)
-            or decision.get("severity") != "blocking"
-        ):
+        if not isinstance(decision, dict) or decision.get("severity") != "blocking":
             return
         if self._roleplay_decisions_match(
             response_state.roleplay_violation_decision,
@@ -2234,28 +2426,28 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             }
         action = action_override or str(decision.get("action") or "")
         if count_violation:
-            roleplay_metrics["violation_count"] = int(
-                roleplay_metrics.get("violation_count") or 0
-            ) + 1
+            roleplay_metrics["violation_count"] = (
+                int(roleplay_metrics.get("violation_count") or 0) + 1
+            )
             if decision.get("severity") == "blocking":
-                roleplay_metrics["blocking_violation_count"] = int(
-                    roleplay_metrics.get("blocking_violation_count") or 0
-                ) + 1
+                roleplay_metrics["blocking_violation_count"] = (
+                    int(roleplay_metrics.get("blocking_violation_count") or 0) + 1
+                )
         if action == "regenerate_once":
-            roleplay_metrics["regenerate_count"] = int(
-                roleplay_metrics.get("regenerate_count") or 0
-            ) + 1
+            roleplay_metrics["regenerate_count"] = (
+                int(roleplay_metrics.get("regenerate_count") or 0) + 1
+            )
         if action == "cancel_stream":
-            roleplay_metrics["cancel_stream_count"] = int(
-                roleplay_metrics.get("cancel_stream_count") or 0
-            ) + 1
+            roleplay_metrics["cancel_stream_count"] = (
+                int(roleplay_metrics.get("cancel_stream_count") or 0) + 1
+            )
         if (
             action != "observe_only"
             and decision.get("violation_code") == "ROLEPLAY_HIDDEN_INFORMATION_LEAK"
         ):
-            roleplay_metrics["hidden_leak_prevented_count"] = int(
-                roleplay_metrics.get("hidden_leak_prevented_count") or 0
-            ) + 1
+            roleplay_metrics["hidden_leak_prevented_count"] = (
+                int(roleplay_metrics.get("hidden_leak_prevented_count") or 0) + 1
+            )
         roleplay_metrics["last_decision"] = decision
         roleplay_metrics["last_action"] = action or decision.get("action")
         roleplay_metrics["last_action_at"] = datetime.now(UTC).isoformat()
@@ -2395,7 +2587,9 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             contract=contract,
             previous_state=previous,
             learner_message=learner_message,
-            current_sales_stage=str(sales_stage or self._current_sales_stage_code() or ""),
+            current_sales_stage=str(
+                sales_stage or self._current_sales_stage_code() or ""
+            ),
             turn_number=turn_number,
             evidence={"trace_id": get_trace_id()},
         )
@@ -2410,7 +2604,9 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             return
         async with self._db_session_factory() as db:
             result = await db.execute(
-                select(PracticeSession).where(PracticeSession.session_id == self.session_id)
+                select(PracticeSession).where(
+                    PracticeSession.session_id == self.session_id
+                )
             )
             session = result.scalar_one_or_none()
             if session is None:
@@ -2451,9 +2647,17 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             "【当前轮角色合同可见范围】",
             f"- 当前销售阶段：{context.get('current_sales_stage') or 'unknown'}",
             "- 当前可见字段："
-            + ("、".join(str(item) for item in visible_keys) if isinstance(visible_keys, list) and visible_keys else "无"),
+            + (
+                "、".join(str(item) for item in visible_keys)
+                if isinstance(visible_keys, list) and visible_keys
+                else "无"
+            ),
             "- 已披露字段："
-            + ("、".join(str(item) for item in disclosed_keys) if isinstance(disclosed_keys, list) and disclosed_keys else "无"),
+            + (
+                "、".join(str(item) for item in disclosed_keys)
+                if isinstance(disclosed_keys, list) and disclosed_keys
+                else "无"
+            ),
         ]
         if isinstance(visible_payload, dict) and visible_payload:
             payload_text = "；".join(
@@ -2531,30 +2735,38 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         output_payload: dict[str, Any]
         if function_name == "search_internal_knowledge":
             output_payload = await self._tool_search_internal_knowledge(arguments_obj)
-            grounding_decision = self._grounding_pipeline.evaluate_retrieval(
-                str(arguments_obj.get("query") or ""),
-                GroundingDecisionContext(effective_policy=self._effective_policy),
-                output_payload,
-            )
-            self._latest_knowledge_answer_diagnostics = (
-                copy.deepcopy(grounding_decision.diagnostics)
-                if isinstance(grounding_decision.diagnostics, dict)
-                else None
-            )
-            if grounding_decision.allow_generation:
-                self._pending_blocked_response_text = ""
-                if grounding_decision.grounding_context:
-                    self._pending_grounding_context = grounding_decision.grounding_context
-            else:
-                self._pending_grounding_context = ""
-                self._pending_blocked_response_text = grounding_decision.user_message
-                self._log_grounding_debug(
-                    "function_call_grounding_blocked",
-                    call_id=call_id,
-                    query_length=len(str(arguments_obj.get("query") or "").strip()),
-                    status=grounding_decision.status,
-                    answerability_mode=grounding_decision.answerability_mode,
+            if not self._grounding_module_enabled:
+                pipeline = self._grounding_pipeline
+                if pipeline is None:
+                    raise RuntimeError("legacy_grounding_selection_missing")
+                grounding_decision = pipeline.evaluate_retrieval(
+                    str(arguments_obj.get("query") or ""),
+                    GroundingDecisionContext(effective_policy=self._effective_policy),
+                    output_payload,
                 )
+                self._latest_knowledge_answer_diagnostics = (
+                    copy.deepcopy(grounding_decision.diagnostics)
+                    if isinstance(grounding_decision.diagnostics, dict)
+                    else None
+                )
+                if grounding_decision.allow_generation:
+                    self._pending_blocked_response_text = ""
+                    if grounding_decision.grounding_context:
+                        self._pending_grounding_context = (
+                            grounding_decision.grounding_context
+                        )
+                else:
+                    self._pending_grounding_context = ""
+                    self._pending_blocked_response_text = (
+                        grounding_decision.user_message
+                    )
+                    self._log_grounding_debug(
+                        "function_call_grounding_blocked",
+                        call_id=call_id,
+                        query_length=len(str(arguments_obj.get("query") or "").strip()),
+                        status=grounding_decision.status,
+                        answerability_mode=grounding_decision.answerability_mode,
+                    )
         else:
             output_payload = build_unsupported_function_output(function_name)
 
@@ -2587,20 +2799,67 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         return True
 
     def _build_internal_retrieval_cache_key(self, arguments_obj: dict[str, Any]) -> str:
-        cache_key: str = self._tool_execution.build_internal_retrieval_cache_key(
-            arguments_obj
-        )
-        return cache_key
+        runtime = self._legacy_grounding_runtime
+        if runtime is None:
+            return ""
+        return runtime.tool_cache.build_key(arguments_obj)
 
     async def _tool_search_internal_knowledge(
         self, arguments_obj: dict[str, Any]
     ) -> dict[str, Any]:
         """Search internal knowledge bases bound to current policy."""
+        if self._grounding_module_enabled:
+            return await self._tool_search_with_grounding_module(arguments_obj)
+        return await self._tool_search_with_legacy_grounding(arguments_obj)
+
+    async def _tool_search_with_grounding_module(
+        self,
+        arguments_obj: dict[str, Any],
+    ) -> dict[str, Any]:
+        query = str(arguments_obj.get("query") or "").strip()
+        if not query:
+            return {
+                "query": "",
+                "count": 0,
+                "results": [],
+                "retrieval_mode": "unknown",
+                "message": "query_required",
+                "error": "query_required",
+            }
+        module = self._grounding_module
+        if module is None:
+            raise RuntimeError("grounding_module_selection_missing")
+        request = self._build_grounding_request(
+            query,
+            arguments_obj=arguments_obj,
+        )
+        retrieval = await module.retrieve(request)
+        result = module.decide(
+            request,
+            retrieval,
+            policy=self._effective_policy,
+        )
+        self._apply_grounding_result(result)
+        output = grounding_retrieval_to_legacy_payload(request, retrieval)
+        self._log_internal_retrieval_result(
+            output,
+            cache_hit=retrieval.diagnostics.cache_disposition
+            in {GroundingCacheDisposition.HIT, GroundingCacheDisposition.SHARED},
+        )
+        return output
+
+    async def _tool_search_with_legacy_grounding(
+        self,
+        arguments_obj: dict[str, Any],
+    ) -> dict[str, Any]:
+        runtime = self._legacy_grounding_runtime
+        if runtime is None:
+            raise RuntimeError("legacy_grounding_selection_missing")
         cache_key = self._build_internal_retrieval_cache_key(arguments_obj)
         cache_hit = False
         output: dict[str, Any] = {}
         if cache_key and self._internal_retrieval_cache_ttl_seconds > 0:
-            cached = self._tool_execution.get_cached_result(cache_key)
+            cached = runtime.tool_cache.get(cache_key)
             if cached is not None:
                 output = cached
                 cache_hit = True
@@ -2641,7 +2900,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 and isinstance(output, dict)
                 and not output.get("error")
             ):
-                self._tool_execution.cache_result(
+                runtime.tool_cache.put(
                     cache_key,
                     output,
                     ttl_seconds=self._internal_retrieval_cache_ttl_seconds,
@@ -2652,10 +2911,20 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 diagnostics = {}
             diagnostics["cache_hit_internal_retrieval"] = cache_hit
             output["_diagnostics"] = diagnostics
+        self._log_internal_retrieval_result(output, cache_hit=cache_hit)
+        output.pop("_diagnostics", None)
+        return output
+
+    def _log_internal_retrieval_result(
+        self,
+        output: dict[str, Any],
+        *,
+        cache_hit: bool,
+    ) -> None:
         knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
         if not isinstance(knowledge_base_ids, list):
             knowledge_base_ids = []
-        query_text = str(arguments_obj.get("query") or "")
+        query_text = str(output.get("query") or "")
         self._log_grounding_debug(
             "internal_retrieval",
             query_length=len(query_text.strip()),
@@ -2666,8 +2935,6 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             has_error=bool(output.get("error")),
             cache_hit=cache_hit,
         )
-        output.pop("_diagnostics", None)
-        return output
 
     async def _record_knowledge_runtime_metric(
         self,
@@ -2738,9 +3005,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 event_keys=sorted(str(key) for key in event.keys()),
                 transcript_shape=self._summarize_payload_shape(raw_transcript),
                 transcript_string_length=(
-                    len(raw_transcript)
-                    if isinstance(raw_transcript, str)
-                    else None
+                    len(raw_transcript) if isinstance(raw_transcript, str) else None
                 ),
                 transcript_blank=(
                     not raw_transcript.strip()

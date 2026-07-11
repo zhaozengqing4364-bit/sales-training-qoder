@@ -16,6 +16,8 @@ from training_runtime.realtime.grounding import (
     GroundingRequest,
     GroundingRetrievalResult,
     RealtimeGroundingModule,
+    grounding_retrieval_from_legacy_payload,
+    grounding_retrieval_to_legacy_payload,
 )
 from training_runtime.realtime.grounding_cache import GroundingRetrievalCache
 from training_runtime.realtime.provider import FrozenJsonMapping
@@ -106,6 +108,38 @@ def test_grounding_request_is_strict_and_recursively_frozen() -> None:
         _request(top_k=True)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="knowledge_base_id"):
         _request(kb_ids=("",))
+
+
+def test_legacy_payload_projection_preserves_only_bounded_compatibility_metadata() -> (
+    None
+):
+    request = _request()
+    payload = {
+        "query": "产品能力",
+        "count": 1,
+        "retrieval_mode": "vector",
+        "results": [{"snippet": "支持实时训练"}],
+        "rewritten_queries": ["产品能力"],
+        "status": "hit",
+        "message": "已命中",
+        "entity_resolution": {"resolved": True},
+        "quality_flags": ["verified"],
+        "_diagnostics": {"internal_only": True},
+        "unknown_internal_field": "must_not_escape",
+    }
+
+    result = grounding_retrieval_from_legacy_payload(request, payload)
+    projected = grounding_retrieval_to_legacy_payload(request, result)
+
+    assert projected["status"] == "hit"
+    assert projected["message"] == "已命中"
+    assert projected["entity_resolution"] == {"resolved": True}
+    assert projected["quality_flags"] == ["verified"]
+    assert projected["rewritten_queries"] == ["产品能力"]
+    assert "_diagnostics" not in projected
+    assert "unknown_internal_field" not in projected
+    with pytest.raises(TypeError):
+        result.compatibility_metadata["status"] = "changed"  # type: ignore[index]
 
 
 @pytest.mark.asyncio

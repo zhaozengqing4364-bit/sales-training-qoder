@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -65,15 +64,10 @@ class StepFunToolExecutionModule:
         self,
         *,
         internal_knowledge_searcher: InternalKnowledgeSearcher = search_internal_knowledge,
-        clock: Callable[[], float] = time.monotonic,
-        cache_max_entries: int = 128,
     ) -> None:
         self._internal_knowledge_searcher = internal_knowledge_searcher
-        self._clock = clock
-        self._cache_max_entries = max(1, int(cache_max_entries or 1))
         self._call_registry: dict[str, set[str]] = {}
         self._completed_call_ids: set[str] = set()
-        self._result_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._diagnostics = ToolExecutionDiagnostics()
 
     def decide_tool_routing(
@@ -101,7 +95,9 @@ class StepFunToolExecutionModule:
                 should_trigger_grounding=False,
             )
         turn_key = str(context.get("turn_id") or context.get("session_id") or "default")
-        stable_key = self._build_tool_call_stable_key(tool_name, arguments_obj, turn_key)
+        stable_key = self._build_tool_call_stable_key(
+            tool_name, arguments_obj, turn_key
+        )
         self._record_total_call()
         seen = self._call_registry.setdefault(turn_key, set())
         if stable_key in seen:
@@ -129,68 +125,6 @@ class StepFunToolExecutionModule:
             should_execute=True,
             should_trigger_grounding=should_trigger_grounding,
         )
-
-    def build_internal_retrieval_cache_key(self, arguments_obj: dict[str, Any]) -> str:
-        """Build the stable cache key for internal knowledge retrieval arguments."""
-        query = str(arguments_obj.get("query") or "").strip().lower()
-        if not query:
-            return ""
-
-        top_k = arguments_obj.get("top_k")
-        metadata_filter = arguments_obj.get("metadata_filter")
-        if not isinstance(metadata_filter, dict):
-            metadata_filter = {}
-        metadata_filter_signature = json.dumps(
-            metadata_filter,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        return f"{query}|top_k={top_k}|filter={metadata_filter_signature}"
-
-    def get_cached_result(self, cache_key: str) -> dict[str, Any] | None:
-        """Return a cached tool result when present and not expired."""
-        if not cache_key:
-            return None
-        cached = self._result_cache.get(cache_key)
-        if not cached:
-            self._record_cache_miss()
-            return None
-        expires_at, payload = cached
-        if expires_at <= self._clock():
-            self._result_cache.pop(cache_key, None)
-            self._record_cache_miss()
-            return None
-        self._diagnostics = ToolExecutionDiagnostics(
-            total_calls=self._diagnostics.total_calls,
-            duplicate_skips=self._diagnostics.duplicate_skips,
-            cache_hits=self._diagnostics.cache_hits + 1,
-            cache_misses=self._diagnostics.cache_misses,
-            grounding_triggers=self._diagnostics.grounding_triggers,
-            errors=self._diagnostics.errors,
-        )
-        return dict(payload)
-
-    def cache_result(
-        self,
-        cache_key: str,
-        result: dict[str, Any],
-        *,
-        ttl_seconds: float,
-    ) -> None:
-        """Cache a successful tool result for a bounded TTL."""
-        if not cache_key or ttl_seconds <= 0:
-            return
-        if len(self._result_cache) >= self._cache_max_entries:
-            self._result_cache.clear()
-        self._result_cache[cache_key] = (self._clock() + ttl_seconds, dict(result))
-
-    def configure_cache(self, *, max_entries: int | None = None) -> None:
-        """Apply cache bounds from the owning runtime policy."""
-        if max_entries is not None:
-            self._cache_max_entries = max(1, int(max_entries or 1))
-            if len(self._result_cache) > self._cache_max_entries:
-                self._result_cache.clear()
 
     def collect_diagnostics(self) -> ToolExecutionDiagnostics:
         """Return aggregate tool execution diagnostics."""
@@ -237,16 +171,6 @@ class StepFunToolExecutionModule:
             duplicate_skips=self._diagnostics.duplicate_skips + 1,
             cache_hits=self._diagnostics.cache_hits,
             cache_misses=self._diagnostics.cache_misses,
-            grounding_triggers=self._diagnostics.grounding_triggers,
-            errors=self._diagnostics.errors,
-        )
-
-    def _record_cache_miss(self) -> None:
-        self._diagnostics = ToolExecutionDiagnostics(
-            total_calls=self._diagnostics.total_calls,
-            duplicate_skips=self._diagnostics.duplicate_skips,
-            cache_hits=self._diagnostics.cache_hits,
-            cache_misses=self._diagnostics.cache_misses + 1,
             grounding_triggers=self._diagnostics.grounding_triggers,
             errors=self._diagnostics.errors,
         )

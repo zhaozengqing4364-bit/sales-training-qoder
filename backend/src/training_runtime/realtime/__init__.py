@@ -18,6 +18,8 @@ from .grounding import (
     GroundingRetrieverPort,
     RealtimeGroundingModule,
     RealtimeGroundingRuntime,
+    grounding_retrieval_from_legacy_payload,
+    grounding_retrieval_to_legacy_payload,
 )
 from .grounding_cache import GroundingRetrievalCache
 from .provider import (
@@ -95,6 +97,8 @@ __all__ = [
     "RealtimeProviderSessionConfig",
     "RealtimeGroundingModule",
     "RealtimeGroundingRuntime",
+    "grounding_retrieval_from_legacy_payload",
+    "grounding_retrieval_to_legacy_payload",
     "RealtimeSessionState",
     "RealtimeStateTransitionError",
     "RealtimeTransition",

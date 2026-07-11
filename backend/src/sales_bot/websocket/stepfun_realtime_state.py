@@ -17,6 +17,12 @@ if TYPE_CHECKING:
     from sales_bot.services.transcript_normalization import (
         TranscriptNormalizationService,
     )
+    from sales_bot.websocket.grounding_decision_pipeline import (
+        GroundingDecisionPipeline,
+    )
+    from sales_bot.websocket.legacy_grounding_runtime import (
+        LegacyRealtimeGroundingAdapter,
+    )
     from sales_bot.websocket.realtime_feedback_arbiter import (
         RealtimeFeedbackPacingState,
     )
@@ -26,7 +32,9 @@ if TYPE_CHECKING:
         RealtimeResponseState,
     )
     from training_runtime.realtime import (
+        GroundingDecisionResult,
         ProviderCommand,
+        RealtimeGroundingModule,
         RealtimeProviderPort,
     )
 
@@ -145,7 +153,11 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
     _kb_lock_decision_timeout_seconds: float
     _internal_retrieval_cache_ttl_seconds: float
     _internal_retrieval_cache_max_entries: int
-    _internal_retrieval_cache: dict[str, tuple[float, dict[str, Any]]]
+    _grounding_module_enabled: bool
+    _grounding_module: RealtimeGroundingModule | None
+    _legacy_grounding_runtime: LegacyRealtimeGroundingAdapter | None
+    _grounding_pipeline: GroundingDecisionPipeline | None
+    _grounding_result: GroundingDecisionResult | None
     _kb_lock_warmup_enabled: bool
     _kb_lock_warmup_task: asyncio.Task[Any] | None
     _upstream_auto_recover_enabled: bool

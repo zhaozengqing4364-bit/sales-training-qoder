@@ -46,3 +46,10 @@
 - Task 4 Green: 36 focused Grounding/common parity tests and 267 Provider/Engine/Grounding
   compatibility tests passed; Ruff, mypy (634 source files), architecture guard and diff check
   passed. No production handler uses the new module before Task 5.
+- Task 5 Red: the default-selection test failed because the handler had no
+  `_grounding_module_enabled` selection state.
+- Task 5 Green: the default path now owns one `RealtimeGroundingModule` and one bounded cache;
+  strict/prefetch/tool retrieval shares the same immutable request/result authority, while the
+  exact former Pipeline plus result-cache behavior is isolated in the named Legacy adapter.
+  Focused behavior matrix `267 passed`, affected realtime matrix `873 passed`, architecture guard
+  `19 passed`, Ruff passed, and mypy passed across `635 source files`.
