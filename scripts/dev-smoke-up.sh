@@ -214,6 +214,15 @@ run_alembic_upgrade_head() {
   )
 }
 
+reset_smoke_frontend_dev_state() {
+  rm -rf "${ROOT_DIR}/web/.next/dev"
+}
+
+start_local_stack() {
+  reset_smoke_frontend_dev_state
+  bash "${ROOT_DIR}/scripts/dev-up.sh"
+}
+
 main() {
   require_cmd curl
   require_cmd lsof
@@ -231,7 +240,7 @@ main() {
   record_prior_state
 
   log "使用 smoke 启动约定拉起本地全栈环境"
-  bash "${ROOT_DIR}/scripts/dev-up.sh"
+  start_local_stack
 
   run_alembic_upgrade_head
 

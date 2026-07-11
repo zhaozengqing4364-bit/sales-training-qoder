@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 DEV_UP_SCRIPT = ROOT_DIR / "scripts" / "dev-up.sh"
+DEV_SMOKE_UP_SCRIPT = ROOT_DIR / "scripts" / "dev-smoke-up.sh"
 
 
 def run_bash(script: str, *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -160,3 +161,31 @@ def test_dev_up_binds_backend_to_all_interfaces_by_default(tmp_path: Path) -> No
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert "--host 0.0.0.0" in result.stdout
+
+
+def test_dev_smoke_up_resets_generated_frontend_dev_state_before_start(
+    tmp_path: Path,
+) -> None:
+    sourceable_script = tmp_path / "dev-smoke-up-sourceable.sh"
+    sourceable_script.write_text(
+        DEV_SMOKE_UP_SCRIPT.read_text().replace('\nmain "$@"\n', "\n")
+    )
+
+    result = run_bash(
+        "\n".join(
+            [
+                "set -euo pipefail",
+                f"source {shlex.quote(str(sourceable_script))}",
+                f"ROOT_DIR={shlex.quote(str(ROOT_DIR))}",
+                "rm() { printf 'rm %s\\n' \"$*\"; }",
+                "bash() { printf 'bash %s\\n' \"$*\"; }",
+                "start_local_stack",
+            ]
+        )
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert result.stdout.splitlines() == [
+        f"rm -rf {ROOT_DIR / 'web' / '.next' / 'dev'}",
+        f"bash {ROOT_DIR / 'scripts' / 'dev-up.sh'}",
+    ]
