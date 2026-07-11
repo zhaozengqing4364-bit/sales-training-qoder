@@ -314,6 +314,8 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         accepted = await super()._handle_binary_frame(data)
         if not accepted:
             return False
+        if self._runtime_engine is None:
+            return True
         audio = data[1:]
         if self._accepted_audio_evidence is None:
             self._accepted_audio_evidence = _AcceptedAudioEvidenceAccumulator(

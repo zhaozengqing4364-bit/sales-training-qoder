@@ -358,6 +358,21 @@ def _configure_accepted_audio_input(
 
 
 @pytest.mark.asyncio
+async def test_rollback_adapter_accepts_audio_without_building_engine_accumulator() -> (
+    None
+):
+    adapter = LegacyPresentationStepFunRealtimeHandler(runtime_engine=None)
+    _configure_accepted_audio_input(adapter)
+
+    accepted = await adapter._handle_binary_frame(
+        bytes([adapter.BINARY_AUDIO_CHUNK]) + b"rollback-audio"
+    )
+
+    assert accepted is True
+    assert adapter._accepted_audio_evidence is None
+
+
+@pytest.mark.asyncio
 async def test_adapter_aggregates_accepted_audio_once_at_real_commit_boundary() -> None:
     transitions: list[str] = []
     engine = RealtimeSessionEngine(
