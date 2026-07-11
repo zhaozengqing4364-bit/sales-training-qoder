@@ -43,7 +43,22 @@ class FakeRuntimeAdapter:
             "session_status": self.session_status,
             "ai_state": self.ai_state,
             "current_request_id": 3,
+            "live_session_summary": {
+                "focus_type": "objection_handling_gap",
+                "claim_truth": {"status": "unsupported_claim"},
+            },
+            "claim_truth": {"status": "unsupported_claim"},
+            "coach_health": {
+                "status": "healthy",
+                "reason": None,
+                "message": "实时辅导正常。",
+            },
+            "knowledge_answer_diagnostics": {
+                "status": "ready",
+                "source": "presentation",
+            },
             "reconnect_state": {"connection_epoch": 2},
+            "runtime_events": [{"event": "response.done"}],
             "token": "must-not-leak",
             "raw_prompt": "must-not-leak",
             "transcript": "must-not-leak",
@@ -133,11 +148,41 @@ def test_facade_runtime_diagnostics_are_versioned_and_sanitized() -> None:
     assert diagnostics["rollback_runtime"] == "legacy_presentation_stepfun"
     assert diagnostics["engine_state_version"] == 1
     assert diagnostics["engine_state"]["scenario_type"] == "presentation"
+    assert diagnostics["live_session_summary"] == {
+        "focus_type": "objection_handling_gap",
+        "claim_truth": {"status": "unsupported_claim"},
+    }
+    assert diagnostics["claim_truth"] == {"status": "unsupported_claim"}
+    assert diagnostics["coach_health"] == {
+        "status": "healthy",
+        "reason": None,
+        "message": "实时辅导正常。",
+    }
+    assert diagnostics["knowledge_answer_diagnostics"] == {
+        "status": "ready",
+        "source": "presentation",
+    }
+    assert diagnostics["runtime_events"] == [{"event": "response.done"}]
     assert diagnostics["adapter"] == {
         "session_status": "preparing",
         "ai_state": "idle",
         "current_request_id": 3,
+        "live_session_summary": {
+            "focus_type": "objection_handling_gap",
+            "claim_truth": {"status": "unsupported_claim"},
+        },
+        "claim_truth": {"status": "unsupported_claim"},
+        "coach_health": {
+            "status": "healthy",
+            "reason": None,
+            "message": "实时辅导正常。",
+        },
+        "knowledge_answer_diagnostics": {
+            "status": "ready",
+            "source": "presentation",
+        },
         "reconnect_state": {"connection_epoch": 2},
+        "runtime_events": [{"event": "response.done"}],
     }
     assert "must-not-leak" not in repr(diagnostics)
 

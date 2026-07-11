@@ -957,6 +957,98 @@ async def test_knowledge_check_prefers_live_session_summary_over_stale_completed
 
 
 @pytest.mark.asyncio
+async def test_knowledge_check_reads_legacy_diagnostics_fields_through_presentation_facade(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    from presentation_coach.websocket.presentation_realtime_engine_handler import (
+        PresentationRealtimeEngineHandler,
+    )
+    from training_runtime.realtime import RealtimeSessionEngine
+
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="presentation",
+        name="presentation facade diagnostics scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.IN_PROGRESS.value,
+        voice_policy_snapshot={
+            "knowledge_base_ids": ["kb-presentation-live"],
+            "tool_policy": {
+                "enable_internal_retrieval": True,
+                "require_kb_grounding": False,
+            },
+        },
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    adapter = SimpleNamespace(
+        scenario="presentation",
+        session_status="in_progress",
+        ai_state="listening",
+        get_runtime_diagnostics=lambda: {
+            "live_session_summary": {
+                "focus_type": "objection_handling_gap",
+                "main_issue": {
+                    "issue_type": "objection_handling_gap",
+                    "issue_text": "遗漏了一个关键讲解点。",
+                    "recovery_rule": "下一轮补充关键讲解点。",
+                },
+            },
+            "claim_truth": {
+                "status": "unsupported_claim",
+                "label": "未被证据支撑",
+                "source": "objection_ledger",
+                "reason": "gap_acknowledged",
+            },
+            "coach_health": {
+                "status": "healthy",
+                "reason": None,
+                "message": "实时辅导正常。",
+            },
+            "knowledge_answer_diagnostics": {
+                "status": "ready",
+                "source": "presentation",
+            },
+        },
+    )
+    facade = PresentationRealtimeEngineHandler(
+        runtime_engine_factory=RealtimeSessionEngine,
+        runtime_adapter_factory=lambda *, runtime_engine: adapter,
+    )
+    session_manager = get_session_manager()
+    await session_manager.register_session(session.session_id, facade)
+    try:
+        response = await async_client.get(
+            f"/api/v1/practice/sessions/{session.session_id}/knowledge-check",
+            headers=owner_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["live_session_summary"]["focus_type"] == (
+            "objection_handling_gap"
+        )
+        assert data["claim_truth"]["source"] == "objection_ledger"
+        assert data["coach_health"]["status"] == "healthy"
+        assert data["knowledge_answer_diagnostics"]["status"] == "ready"
+        assert data["knowledge_answer_diagnostics"]["source"] == "presentation"
+    finally:
+        await session_manager.unregister_session(
+            session.session_id,
+            reason="test_cleanup",
+        )
+
+
+@pytest.mark.asyncio
 async def test_knowledge_check_does_not_revive_stale_snapshot_when_live_summary_is_partial(
     async_client: AsyncClient,
     db_session: AsyncSession,

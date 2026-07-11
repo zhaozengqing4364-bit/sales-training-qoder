@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -134,17 +135,22 @@ class PresentationRealtimeEngineHandler:
         adapter_diagnostics = self._runtime_adapter.get_runtime_diagnostics()
         engine_snapshot = self._engine.snapshot()
         safe_adapter_fields = {
-            key: adapter_diagnostics[key]
+            key: deepcopy(adapter_diagnostics[key])
             for key in (
                 "session_status",
                 "ai_state",
                 "current_request_id",
+                "live_session_summary",
+                "claim_truth",
                 "coach_health",
+                "knowledge_answer_diagnostics",
                 "reconnect_state",
+                "runtime_events",
             )
             if key in adapter_diagnostics
         }
         return {
+            **safe_adapter_fields,
             "selected_runtime": "presentation_realtime_engine",
             "rollout_enabled": True,
             "rollback_runtime": "legacy_presentation_stepfun",
