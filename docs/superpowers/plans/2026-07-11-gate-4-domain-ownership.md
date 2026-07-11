@@ -129,29 +129,29 @@ architecture guard, Trellis, CodeGraph.
   - `SituationPackPort.get_published(code)`
 - Compatibility paths return the same dict shapes as before.
 
-- [ ] **Step 1: Write import-boundary and parity Red tests**
+- [x] **Step 1: Write import-boundary and parity Red tests**
 
   Assert the new package exposes immutable DTOs, imports no protected domain, and old/new hash plus
   decision output are exactly equal across the Golden fixture matrix.
 
-- [ ] **Step 2: Implement pure domain primitives**
+- [x] **Step 2: Implement pure domain primitives**
 
   Move the algorithm and the actual Roleplay bundled defaults to `roleplay`; keep public dict adapters
   so callers do not receive a response-shape change. Volatile-field lists and JSON serialization bytes
   must be copied exactly from the baseline.
 
-- [ ] **Step 3: Convert old locations to forwarding compatibility**
+- [x] **Step 3: Convert old locations to forwarding compatibility**
 
   Old modules may re-export but may not contain a second decision implementation. Mark compatibility
   with owner `platform-architecture`, retire condition `Gate 6 consumer inventory is empty`, expiry
   `2026-10-31`.
 
-- [ ] **Step 4: Run parity, hash and architecture checks**
+- [x] **Step 4: Run parity, hash and architecture checks**
 
   Run focused tests, Ruff for touched files, mypy for `roleplay`, and architecture guard. Expected:
   Golden hashes unchanged and no new SCC.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   Commit as `refactor(roleplay): establish neutral contract primitives`.
 

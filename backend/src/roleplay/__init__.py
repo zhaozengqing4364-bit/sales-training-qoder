@@ -1,12 +1,6 @@
-"""Compatibility import for the neutral :mod:`roleplay` bounded context.
-
-Owner: platform-architecture
-Retire when: Gate 6 consumer inventory for ``common.roleplay_contracts`` is empty.
-Expires on: 2026-10-31.
-"""
+"""Neutral Roleplay Contract and Situation Pack bounded context."""
 
 from roleplay.contracts import (
-    BLOCKING_VIOLATION_ACTIONS,
     LEGACY_ROLEPLAY_STATUS,
     ROLEPLAY_COMPLIANCE_METRICS_KEY,
     ROLEPLAY_CONTRACT_COMPILER_VERSION,
@@ -18,9 +12,13 @@ from roleplay.contracts import (
     roleplay_audit_hash,
     roleplay_contract_hash,
 )
+from roleplay.situation_packs import (
+    SituationPackPort,
+    SituationPackSnapshot,
+    situation_pack_content_hash,
+)
 
 __all__ = [
-    "BLOCKING_VIOLATION_ACTIONS",
     "LEGACY_ROLEPLAY_STATUS",
     "ROLEPLAY_COMPLIANCE_METRICS_KEY",
     "ROLEPLAY_CONTRACT_COMPILER_VERSION",
@@ -28,7 +26,10 @@ __all__ = [
     "ROLEPLAY_DISCLOSURE_STATE_KEY",
     "ROLEPLAY_STAGE_AUTHORITY",
     "RoleplayComplianceDecision",
+    "SituationPackPort",
+    "SituationPackSnapshot",
     "check_roleplay_output",
     "roleplay_audit_hash",
     "roleplay_contract_hash",
+    "situation_pack_content_hash",
 ]

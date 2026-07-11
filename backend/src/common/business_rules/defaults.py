@@ -6,13 +6,20 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from roleplay.defaults import (
+    DEFAULT_ROLEPLAY_EVAL_RELEASE_GATE,
+    DEFAULT_ROLEPLAY_SITUATION_PACKS,
+    ROLEPLAY_EVAL_RELEASE_GATE_KEY,
+    ROLEPLAY_SITUATION_PACKS_KEY,
+)
+
 ACHIEVEMENT_RULES_KEY = "growth.achievement.rules"
 AI_COACH_RULES_KEY = "growth.ai_coach.rules"
 NEXT_PRACTICE_RECOMMENDATION_KEY = "recommendation.next_practice.ruleset"
 SALES_COMBINATION_RULES_KEY = "sales.training.combinations.ruleset"
 OBJECTION_LEDGER_RULES_KEY = "sales.objection_ledger.ruleset"
-ROLEPLAY_SITUATION_PACKS_KEY = "roleplay.situation_packs.ruleset"
-ROLEPLAY_EVAL_RELEASE_GATE_KEY = "roleplay.eval.release_gate"
+_LEGACY_ROLEPLAY_SITUATION_PACKS_KEY = "roleplay.situation_packs.ruleset"
+_LEGACY_ROLEPLAY_EVAL_RELEASE_GATE_KEY = "roleplay.eval.release_gate"
 ADMIN_SETTINGS_GENERAL_KEY = "admin.settings.general"
 ADMIN_SETTINGS_SECURITY_KEY = "admin.settings.security"
 ADMIN_SETTINGS_NOTIFICATIONS_KEY = "admin.settings.notifications"
@@ -552,7 +559,7 @@ _ROLEPLAY_COMMON_VIOLATION_POLICY: dict[str, str] = {
     "persona_style_drift": "mark_for_report",
 }
 
-DEFAULT_ROLEPLAY_SITUATION_PACKS: dict[str, Any] = {
+_LEGACY_DEFAULT_ROLEPLAY_SITUATION_PACKS: dict[str, Any] = {
     "version": "roleplay_situation_packs_v1",
     "enabled": True,
     "packs": [
@@ -819,7 +826,7 @@ DEFAULT_ROLEPLAY_SITUATION_PACKS: dict[str, Any] = {
     ],
 }
 
-DEFAULT_ROLEPLAY_EVAL_RELEASE_GATE: dict[str, Any] = {
+_LEGACY_DEFAULT_ROLEPLAY_EVAL_RELEASE_GATE: dict[str, Any] = {
     "version": "roleplay_eval_release_gate_v1",
     "enabled": True,
     "deterministic_gate_mode": "blocking",

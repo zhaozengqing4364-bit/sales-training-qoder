@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import importlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -185,3 +187,44 @@ def test_gate4_reverse_dependency_inventory_cannot_expand_during_migration() -> 
 
     assert remaining <= GATE4_REVERSE_EDGES
     assert remaining
+
+
+def test_roleplay_neutral_primitives_are_compatibility_authority() -> None:
+    contracts = importlib.import_module("roleplay.contracts")
+    situation_packs = importlib.import_module("roleplay.situation_packs")
+
+    from common.roleplay_contracts import (
+        check_roleplay_output as compatibility_check,
+    )
+    from curriculum_practice.services.roleplay.situation_pack_dto import (
+        SituationPackDTO,
+    )
+
+    assert compatibility_check is contracts.check_roleplay_output
+    assert SituationPackDTO is situation_packs.SituationPackSnapshot
+    assert _roleplay_payload() == _load_json(
+        GOLDEN_ROOT / "roleplay" / "gate4-roleplay-contracts.json"
+    )
+
+
+def test_roleplay_neutral_primitives_do_not_import_protected_domains() -> None:
+    protected = {
+        "admin",
+        "agent",
+        "curriculum_practice",
+        "evaluation",
+        "presentation_coach",
+        "sales_bot",
+    }
+    roleplay_root = SRC_ROOT / "roleplay"
+    imported: set[str] = set()
+    for path in roleplay_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name.split(".", 1)[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module.split(".", 1)[0])
+
+    assert roleplay_root.is_dir()
+    assert imported.isdisjoint(protected)

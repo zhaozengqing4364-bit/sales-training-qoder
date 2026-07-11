@@ -27,3 +27,10 @@
   `evaluation->{admin,curriculum_practice,presentation_coach,sales_bot}`. Green baseline from the
   correct `backend/` working directory is `65 passed` across the Gate 4 Golden, Roleplay,
   ConfigBundle, Evaluation and Presentation report suites.
+- Task 2 Red failed with `ModuleNotFoundError: roleplay`. Neutral `roleplay.contracts`, bundled
+  Roleplay defaults and `SituationPackSnapshot`/canonical hash now own the public primitives;
+  `common.roleplay_contracts` and Curriculum DTO/hasher are forwarding compatibility imports with
+  retirement metadata. Golden/import-boundary/Situation Pack matrix is `41 passed`; broader
+  frozen-ref, projection, import/export and runtime impact matrix is `47 passed`; architecture guard
+  and its 19 tests, Ruff and mypy (7 focused source files) are green. The new package is declared in
+  policy and is not added to the legacy SCC.

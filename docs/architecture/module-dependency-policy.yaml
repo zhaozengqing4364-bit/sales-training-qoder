@@ -9,6 +9,7 @@ packages:
   - evaluation
   - presentation_coach
   - prompt_templates
+  - roleplay
   - sales_bot
   - sales_trainer
   - supervisor
@@ -24,6 +25,7 @@ stable_edges:
   - [curriculum_analytics, common]
   - [curriculum_practice, common]
   - [curriculum_practice, evaluation]
+  - [curriculum_practice, roleplay]
   - [evaluation, common]
   - [evaluation, prompt_templates]
   - [presentation_coach, common]
@@ -64,12 +66,14 @@ temporary_edges:
     expires_on: 2026-10-31
 
   - source: common
-    targets: [agent, curriculum_practice, evaluation, prompt_templates]
+    targets: [agent, curriculum_practice, evaluation, prompt_templates, roleplay]
     owner: platform-architecture
     reason: >-
       Shared kernel still owns transitional domain projections and composition
-      helpers.
-    retire_when: Common contains only stable kernel types and ports.
+      helpers; common.roleplay_contracts is a forwarding compatibility import.
+    retire_when: >-
+      Common contains only stable kernel types and ports, and Gate 6 proves the
+      common.roleplay_contracts compatibility import has no consumers.
     expires_on: 2026-10-31
 
   - source: curriculum_practice
