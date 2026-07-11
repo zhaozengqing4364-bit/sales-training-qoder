@@ -1485,15 +1485,16 @@ class StepFunRealtimeHandler(
     StepFunRealtimeSalesStageMixin,
     StepFunRealtimeSharedHandler,
 ):
-    async def _handle_upstream_event(self, event: dict[str, Any]) -> None:
-        event_type = str(event.get("type") or "")
+    async def _before_accepted_upstream_event(self, event: dict[str, Any]) -> None:
         self._turn_transcript_capture.on_upstream_event(
             event,
             active_response=self._active_response,
             turn_id=self._current_transcript_capture_turn_id(),
             turn_index=self._current_transcript_capture_turn_index(),
         )
-        await super()._handle_upstream_event(event)
+
+    async def _after_accepted_upstream_event(self, event: dict[str, Any]) -> None:
+        event_type = str(event.get("type") or "")
         if (
             event_type == "response.created"
             and self._active_response is not None

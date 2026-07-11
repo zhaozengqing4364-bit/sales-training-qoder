@@ -16,6 +16,7 @@ import sys
 import time
 import uuid
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, cast
 from urllib.parse import urlencode
 
@@ -207,20 +208,63 @@ logger = get_logger(__name__)
 ROLEPLAY_INSTRUCTION_HASH_METRICS_KEY = "roleplay_instruction_hash"
 ROLEPLAY_INSTRUCTION_HASH_SAMPLE_LIMIT = 10
 
-_PROVIDER_RESPONSE_AUTHORITY_EVENT_KINDS = frozenset(
-    {
-        ProviderEventKind.RESPONSE_CREATED,
-        ProviderEventKind.RESPONSE_TEXT_DELTA,
-        ProviderEventKind.RESPONSE_TRANSCRIPT_DELTA,
-        ProviderEventKind.RESPONSE_TRANSCRIPT_FINAL,
-        ProviderEventKind.RESPONSE_AUDIO_DELTA,
-        ProviderEventKind.THINKING_DELTA,
-        ProviderEventKind.THINKING_DONE,
-        ProviderEventKind.FUNCTION_ARGUMENTS_DELTA,
-        ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
-        ProviderEventKind.RESPONSE_DONE,
-    }
-)
+class _ResponseEventClass(StrEnum):
+    NON_RESPONSE = "non_response"
+    CREATED = "created"
+    DONE = "done"
+    OTHER = "other"
+
+
+class _ActiveResponseAuthorityState(StrEnum):
+    NONE = "none"
+    UNBOUND = "unbound"
+    BOUND = "bound"
+
+
+class _UpstreamEventDisposition(StrEnum):
+    PROCESS = "process"
+    CLEANUP_ONLY = "cleanup_only"
+    REJECT = "reject"
+
+
+_RESPONSE_EVENT_ACTIVE_MATRIX = {
+    (_ResponseEventClass.NON_RESPONSE, _ActiveResponseAuthorityState.NONE): (
+        _UpstreamEventDisposition.PROCESS
+    ),
+    (_ResponseEventClass.NON_RESPONSE, _ActiveResponseAuthorityState.UNBOUND): (
+        _UpstreamEventDisposition.PROCESS
+    ),
+    (_ResponseEventClass.NON_RESPONSE, _ActiveResponseAuthorityState.BOUND): (
+        _UpstreamEventDisposition.PROCESS
+    ),
+    (_ResponseEventClass.CREATED, _ActiveResponseAuthorityState.NONE): (
+        _UpstreamEventDisposition.PROCESS
+    ),
+    (_ResponseEventClass.CREATED, _ActiveResponseAuthorityState.UNBOUND): (
+        _UpstreamEventDisposition.PROCESS
+    ),
+    (_ResponseEventClass.CREATED, _ActiveResponseAuthorityState.BOUND): (
+        _UpstreamEventDisposition.PROCESS
+    ),
+    (_ResponseEventClass.DONE, _ActiveResponseAuthorityState.NONE): (
+        _UpstreamEventDisposition.CLEANUP_ONLY
+    ),
+    (_ResponseEventClass.DONE, _ActiveResponseAuthorityState.UNBOUND): (
+        _UpstreamEventDisposition.PROCESS
+    ),
+    (_ResponseEventClass.DONE, _ActiveResponseAuthorityState.BOUND): (
+        _UpstreamEventDisposition.PROCESS
+    ),
+    (_ResponseEventClass.OTHER, _ActiveResponseAuthorityState.NONE): (
+        _UpstreamEventDisposition.REJECT
+    ),
+    (_ResponseEventClass.OTHER, _ActiveResponseAuthorityState.UNBOUND): (
+        _UpstreamEventDisposition.PROCESS
+    ),
+    (_ResponseEventClass.OTHER, _ActiveResponseAuthorityState.BOUND): (
+        _UpstreamEventDisposition.PROCESS
+    ),
+}
 
 
 def _handler_symbol(name: str, fallback: Any) -> Any:
@@ -1210,7 +1254,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
     async def _handle_provider_event(self, event: ProviderEvent) -> None:
         """Project one canonical Provider event into the legacy delivery adapter."""
 
-        if not self._provider_event_has_active_authority(event):
+        if event.connection_epoch != self._connection_epoch:
             logger.warning(
                 "stale_realtime_provider_event_ignored",
                 session_id=self.session_id,
@@ -1220,79 +1264,46 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             return
         await self._handle_upstream_event(_legacy_event_from_provider_event(event))
 
-    def _provider_event_has_active_authority(self, event: ProviderEvent) -> bool:
-        """Validate canonical event IDs before any persistence/audio/tool side effect."""
-        if event.connection_epoch != self._connection_epoch:
-            return False
-
-        is_function_item = (
-            event.kind is ProviderEventKind.CONVERSATION_ITEM
-            and event.call_id is not None
-            and event.data.get("item_type") == "function_call"
-        )
-        if (
-            event.kind not in _PROVIDER_RESPONSE_AUTHORITY_EVENT_KINDS
-            and not is_function_item
-        ):
-            return True
-
-        active_response = self._active_response
-        if active_response is None:
-            return False
-        if (
-            event.request_id is not None
-            and event.request_id != active_response.request_id
-        ):
-            return False
-        if event.response_id is not None:
-            if event.kind is ProviderEventKind.RESPONSE_CREATED:
-                if (
-                    active_response.response_id is not None
-                    and event.response_id != active_response.response_id
-                ):
-                    return False
-            elif (
-                active_response.response_id is None
-                or event.response_id != active_response.response_id
-            ):
-                return False
-        if event.stream_id is not None and event.stream_id != active_response.stream_id:
-            return False
-
-        legacy_event = _legacy_event_from_provider_event(event)
-        if is_function_item:
-            function_call = extract_function_call_from_item_created(legacy_event)
-            if function_call is None:
-                return False
-            call_id, name = function_call
-            return self._authorize_function_call_event(
-                legacy_event,
-                call_id=call_id,
-                name=name,
-                allow_register=True,
-            )
-        if event.kind in {
-            ProviderEventKind.FUNCTION_ARGUMENTS_DELTA,
-            ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
-        }:
-            call_id, name, _arguments = parse_function_call_event(legacy_event)
-            return self._authorize_function_call_event(
-                legacy_event,
-                call_id=call_id,
-                name=name,
-                allow_register=True,
-            )
-        return True
-
     async def _handle_upstream_event(self, event: dict[str, Any]) -> None:
         """Map selected StepFun events to existing frontend contract."""
         event_type = str(event.get("type", ""))
-        if not self._raw_response_event_has_active_authority(event, event_type):
+        disposition = self._preflight_upstream_event(event, event_type)
+        if disposition is _UpstreamEventDisposition.REJECT:
             self._log_grounding_debug(
                 "stale_raw_response_event_ignored",
                 event_type=event_type,
             )
             return
+        if disposition is _UpstreamEventDisposition.CLEANUP_ONLY:
+            await self._handle_cleanup_only_upstream_event(event)
+            await self._after_accepted_upstream_event(event)
+            return
+        await self._before_accepted_upstream_event(event)
+        await self._route_accepted_upstream_event(event, event_type)
+        await self._after_accepted_upstream_event(event)
+
+    async def _before_accepted_upstream_event(self, event: dict[str, Any]) -> None:
+        """Allow scenario handlers to observe an event after shared preflight."""
+
+    async def _after_accepted_upstream_event(self, event: dict[str, Any]) -> None:
+        """Allow scenario handlers to update local state after shared routing."""
+
+    async def _handle_cleanup_only_upstream_event(
+        self,
+        event: dict[str, Any],
+    ) -> None:
+        self._pending_tool_followup_response = False
+        self._log_grounding_debug(
+            "cleanup_sparse_response_done_without_active_response",
+            event_type=str(event.get("type") or ""),
+        )
+        await self._send_status("listening")
+
+    async def _route_accepted_upstream_event(
+        self,
+        event: dict[str, Any],
+        event_type: str,
+    ) -> None:
         self._last_upstream_event_type = event_type
         await self._handle_emotion_event(event)
         await self._handle_thinking_event(event)
@@ -1348,29 +1359,107 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             await self._handle_upstream_error(event)
             return
 
-    def _raw_response_event_has_active_authority(
+    def _preflight_upstream_event(
         self,
         event: dict[str, Any],
         event_type: str,
-    ) -> bool:
-        if not event_type.startswith("response."):
-            return True
-        _request_id, response_id, _stream_id = self._function_event_authority(event)
+    ) -> _UpstreamEventDisposition:
+        event_class = self._classify_response_event(event, event_type)
+        active_state = self._active_response_authority_state()
+        disposition = _RESPONSE_EVENT_ACTIVE_MATRIX[(event_class, active_state)]
+        if event_class is _ResponseEventClass.NON_RESPONSE:
+            return disposition
+
+        request_id, response_id, stream_id = self._function_event_authority(event)
         active = self._active_response
-        if event_type == "response.created":
-            if active is None:
-                return True
-            return bool(
-                response_id is not None
-                and (active.response_id is None or response_id == active.response_id)
-            )
-        if response_id is None:
-            return True
-        return bool(
-            active is not None
-            and active.response_id is not None
-            and response_id == active.response_id
+        if active is None:
+            if disposition is _UpstreamEventDisposition.CLEANUP_ONLY and any(
+                value is not None for value in (request_id, response_id, stream_id)
+            ):
+                return _UpstreamEventDisposition.REJECT
+            return disposition
+
+        if event_class is _ResponseEventClass.CREATED:
+            if request_id != active.request_id or stream_id != active.stream_id:
+                return _UpstreamEventDisposition.REJECT
+            if response_id is None:
+                return _UpstreamEventDisposition.REJECT
+            if active.response_id is not None and response_id != active.response_id:
+                return _UpstreamEventDisposition.REJECT
+            return disposition
+
+        if request_id is not None and request_id != active.request_id:
+            return _UpstreamEventDisposition.REJECT
+        if stream_id is not None and stream_id != active.stream_id:
+            return _UpstreamEventDisposition.REJECT
+        if response_id is not None and (
+            active.response_id is None or response_id != active.response_id
+        ):
+            return _UpstreamEventDisposition.REJECT
+        return self._preflight_function_call_authority(
+            event,
+            event_type=event_type,
+            disposition=disposition,
         )
+
+    def _preflight_function_call_authority(
+        self,
+        event: dict[str, Any],
+        *,
+        event_type: str,
+        disposition: _UpstreamEventDisposition,
+    ) -> _UpstreamEventDisposition:
+        if event_type == "conversation.item.created":
+            function_call = extract_function_call_from_item_created(event)
+            if function_call is None:
+                return disposition
+            call_id, name = function_call
+            authorized = self._authorize_function_call_event(
+                event,
+                call_id=call_id,
+                name=name,
+                allow_register=True,
+            )
+            return disposition if authorized else _UpstreamEventDisposition.REJECT
+        if event_type in {
+            "response.function_call_arguments.delta",
+            "response.function_call_arguments.done",
+        }:
+            call_id, name, _arguments = parse_function_call_event(event)
+            authorized = self._authorize_function_call_event(
+                event,
+                call_id=call_id,
+                name=name,
+                allow_register=True,
+            )
+            return disposition if authorized else _UpstreamEventDisposition.REJECT
+        if event_type == "response.done":
+            self._authorized_response_done_function_calls(event)
+        return disposition
+
+    def _classify_response_event(
+        self,
+        event: dict[str, Any],
+        event_type: str,
+    ) -> _ResponseEventClass:
+        if event_type == "response.created":
+            return _ResponseEventClass.CREATED
+        if event_type == "response.done":
+            return _ResponseEventClass.DONE
+        if event_type.startswith("response."):
+            return _ResponseEventClass.OTHER
+        if event_type == "conversation.item.created" and (
+            extract_function_call_from_item_created(event) is not None
+        ):
+            return _ResponseEventClass.OTHER
+        return _ResponseEventClass.NON_RESPONSE
+
+    def _active_response_authority_state(self) -> _ActiveResponseAuthorityState:
+        if self._active_response is None:
+            return _ActiveResponseAuthorityState.NONE
+        if self._active_response.response_id is None:
+            return _ActiveResponseAuthorityState.UNBOUND
+        return _ActiveResponseAuthorityState.BOUND
 
     async def _handle_upstream_conversation_item_created(self, event: dict) -> None:
         """Track function-call state and user-item transcript hints from upstream."""

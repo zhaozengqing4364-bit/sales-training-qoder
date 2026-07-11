@@ -5,7 +5,8 @@
 - 原始实现 commit：`ec7067f0 refactor(realtime): route sessions through provider port`
 - Review 修复 commit：`e9df6d8d fix(realtime): enforce provider rollout and event authority`
 - Review 2 修复 commit：`cff26400 fix(realtime): verify raw differential and tool authority`
-- Review 3 修复 commit：本提交 `fix(realtime): close response authority and golden oracle`
+- Review 3 修复 commit：`d9797c88 fix(realtime): close response authority and golden oracle`
+- Review 4 修复 commit：本提交 `fix(realtime): guard raw events before side effects`
 - 风险等级：P1（共享 Sales/Presentation realtime 生产 Provider 路径默认切换；保留 server-only
   Legacy 回滚）。
 - 严格只完成 Task 3：未实现 Grounding Module/单 cache（Task 4+），未调用真实收费 Provider，未改
@@ -32,10 +33,10 @@
   `ProviderEvent`，再只投影 allowlisted compatibility fields。
 - canonical projection 覆盖 ASR delta/final、speech timing、response text/audio/transcript、thinking、
   function arguments、normalized response.done function outputs、typed error/unknown。event epoch 与当前
-  connection epoch 不一致时在任何 persistence/tool/turn side effect 前忽略。Review 后 canonical boundary
-  还会在投影前复用 handler 的 `_active_response`，校验同 epoch 的
-  request/response/stream/call authority；stale text/audio/thinking/done/function args/tool output 不会进入
-  persistence、TTS 或 tool chain。
+  connection epoch 不一致时在任何 persistence/tool/turn side effect 前忽略。Review 4 后 Legacy raw 与
+  canonical projection 统一进入同一个 response preflight，在 transcript capture、emotion/thinking、
+  persistence、TTS、tool 和 turn side effect 前校验 request/response/stream/call authority；父子 handler
+  不再重复 preflight，也不再由子类先调用 transcript hook。
 - Review 2 新增独立 `_function_call_authorities`：只有携带至少一个显式 authority ID、且所有已提供
   request/response/stream 均匹配当前 active response 的首个 call event，才能注册完整
   `call_id -> (request_id, response_id, stream_id)` binding。后续 sparse delta/done 可依 call binding
@@ -46,6 +47,11 @@
   response ID 绑定入口。已明确匹配 active response 的 `response.done` 可作为某个 call 的首个显式
   authority 事件；同一 done 中真正属于旧 response 的 call 只过滤 tool side effect，当前 response 仍会
   flush、持久化、结束 turn 并回到 listening，不再因一个非法 call 整事件 return 而悬挂。
+- Review 4 用显式 `event class × active authority state` 矩阵统一 Legacy/Port：non-response 正常处理；
+  `response.created` 是唯一 bind 入口，active 存在时必须显式匹配 request_id、stream_id、response_id 与
+  已绑定 ID；无 active 的 unexpected created 仅进入既有 KB-lock 安全 cancel；无 active 的完全 sparse
+  `response.done` 仅执行 cleanup-only（清 pending follow-up、回 listening），不解析内容或执行 tool；其余
+  无 active response-scoped 事件全部拒绝。stale raw assistant transcript 现在在 sink 之前被拒绝。
 - handler close 与主连接 lifecycle 采用 shielded cleanup：单次或重复 cancellation 都先完成 Provider
   close、本地 upstream/timing reset、snapshot save 与 manager disconnect，再传播首次
   `CancelledError`；清理步骤发生普通错误时仍继续尝试其余步骤并上抛首个错误。
@@ -122,18 +128,31 @@ Review 3 Red/Green：
    修改生产 projector 时 raw 结果仍通过 expected oracle，而 canonical 结果被 differential 和 expected
    oracle 同时捕获。
 
+Review 4 Red/Green：
+
+1. shared preflight Red：stale raw `response.audio_transcript.done` 会先进入子类
+   `TurnTranscriptCapture.on_upstream_event` 并 dispatch sink，之后父类才拒绝；回归直接观察到 captured
+   payload 非空。Green 后 `_handle_upstream_event` 成为单一 template method，preflight 每事件恰好一次，
+   transcript before/after hooks 只在 accepted 事件上运行。
+2. created authority Red：Legacy raw `response.created` 只比 response ID，stale/missing request_id 或
+   stream_id 仍绑定 active；canonical created 也允许缺失两项 authority。Green 后 raw/canonical 共用精确
+   authority 规则，冲突或缺失字段均不能 bind。
+3. no-active matrix Red：canonical sparse done 被 blanket reject，pending follow-up 悬挂；canonical
+   unexpected created 无法进入 KB-lock cancel；Legacy sparse thinking 又被过宽放行。三个定向用例结果
+   `3 failed, 169 deselected`，Green 为 `3 passed`；三文件定向回归 `220 passed`。
+
 ## 最终验证
 
 Brief 全量 pytest（14 个 unit/integration 文件）：
 
 ```text
-322 passed, 1 warning in 12.90s
+324 passed, 1 warning in 13.74s
 ```
 
 CodeGraph affected 全集（20 个 contract/e2e/integration/unit 文件）：
 
 ```text
-794 passed, 1 warning in 40.70s
+797 passed, 1 warning in 43.34s
 ```
 
 其中 payload snapshots 独立复核：
@@ -164,8 +183,10 @@ git diff --check: exit 0
   response/tool/audio 与 Sales/Presentation 调用链。
 - `_close_upstream --depth 3`：21 affected symbols；覆盖主 lifecycle、refresh/recovery 与取消测试。
 - `_handle_provider_event --depth 3`：9 affected symbols；覆盖 canonical queue 与 stale authority tests。
-- `_provider_event_has_active_authority`：9 affected symbols；覆盖 canonical receive、text/audio/thinking/done、
-  call binding 与 pre-bind stale ID 拒绝。
+- `_preflight_upstream_event`：24 affected symbols；覆盖 raw/canonical matrix、transcript sink、created bind、
+  cleanup-only done、thinking/emotion/persistence/tool 前置 authority。
+- `_handle_upstream_event`：34 affected symbols；覆盖 receive loop、Sales/Presentation handlers、Golden raw/
+  canonical drivers 与 response/transcript/tool consumers。
 - `_authorize_function_call_event --depth 3`：18 affected symbols；覆盖 Provider/Legacy 首事件注册、
   sparse delta/done、response.done、tool execution 与 reconnect reset。
 - `_receive_upstream_events --depth 3`：8 affected symbols；由 canonical Fake Provider queue 与 Fake raw

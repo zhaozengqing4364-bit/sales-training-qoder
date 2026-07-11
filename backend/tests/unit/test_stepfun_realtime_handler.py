@@ -682,11 +682,13 @@ async def test_stale_provider_authority_is_rejected_before_any_side_effect(
             stream_id="stream-current",
         )
     }
-    handler._handle_upstream_event = AsyncMock()  # type: ignore[method-assign]
+    handler._before_accepted_upstream_event = AsyncMock()  # type: ignore[method-assign]
+    handler._route_accepted_upstream_event = AsyncMock()  # type: ignore[method-assign]
 
     await handler._handle_provider_event(event)
 
-    handler._handle_upstream_event.assert_not_awaited()
+    handler._before_accepted_upstream_event.assert_not_awaited()
+    handler._route_accepted_upstream_event.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -951,7 +953,7 @@ async def test_response_id_cannot_prebind_before_response_created() -> None:
         request_id=5,
         stream_id="stream-current",
     )
-    handler._handle_upstream_event = AsyncMock()  # type: ignore[method-assign]
+    handler._before_accepted_upstream_event = AsyncMock()  # type: ignore[method-assign]
 
     prebind_events = [
         ProviderEvent(
@@ -1007,7 +1009,7 @@ async def test_response_id_cannot_prebind_before_response_created() -> None:
     for event in prebind_events:
         await handler._handle_provider_event(event)
 
-    handler._handle_upstream_event.assert_not_awaited()
+    handler._before_accepted_upstream_event.assert_not_awaited()
     assert handler._active_response.response_id is None
 
     await handler._handle_provider_event(
@@ -1020,7 +1022,127 @@ async def test_response_id_cannot_prebind_before_response_created() -> None:
             stream_id="stream-current",
         )
     )
-    handler._handle_upstream_event.assert_awaited_once()
+    handler._before_accepted_upstream_event.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_response_created_requires_exact_active_request_and_stream_authority() -> None:
+    raw_handler = StepFunRealtimeHandler()
+    raw_handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+    )
+    raw_events = [
+        {
+            "type": "response.created",
+            "request_id": 4,
+            "stream_id": "stream-current",
+            "response": {"id": "response-stale-request"},
+        },
+        {
+            "type": "response.created",
+            "request_id": 5,
+            "stream_id": "stream-stale",
+            "response": {"id": "response-stale-stream"},
+        },
+        {
+            "type": "response.created",
+            "stream_id": "stream-current",
+            "response": {"id": "response-missing-request"},
+        },
+        {
+            "type": "response.created",
+            "request_id": 5,
+            "response": {"id": "response-missing-stream"},
+        },
+    ]
+    for event in raw_events:
+        await raw_handler._handle_upstream_event(event)
+        assert raw_handler._active_response.response_id is None
+
+    bound_handler = StepFunRealtimeHandler()
+    bound_handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+        response_id="response-current",
+    )
+    await bound_handler._handle_upstream_event(
+        {
+            "type": "response.created",
+            "request_id": 5,
+            "stream_id": "stream-current",
+            "response": {"id": "response-conflict"},
+        }
+    )
+    assert bound_handler._active_response.response_id == "response-current"
+
+    canonical_handler = StepFunRealtimeHandler()
+    canonical_handler._connection_epoch = 8
+    canonical_handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+    )
+    await canonical_handler._handle_provider_event(
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_CREATED,
+            provider_event_type="response.created",
+            connection_epoch=8,
+            response_id="response-missing-authority",
+        )
+    )
+
+    assert canonical_handler._active_response.response_id is None
+
+
+@pytest.mark.asyncio
+async def test_no_active_response_event_matrix_has_narrow_cleanup_and_cancel_paths() -> None:
+    sparse_done_handler = StepFunRealtimeHandler()
+    sparse_done_handler._connection_epoch = 8
+    sparse_done_handler._pending_tool_followup_response = True
+    sparse_done_handler._send_status = AsyncMock()
+    sparse_done_handler._execute_function_call = AsyncMock()  # type: ignore[method-assign]
+
+    await sparse_done_handler._handle_provider_event(
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_DONE,
+            provider_event_type="response.done",
+            connection_epoch=8,
+            data={},
+        )
+    )
+
+    assert sparse_done_handler._pending_tool_followup_response is False
+    sparse_done_handler._send_status.assert_awaited_once_with("listening")
+    sparse_done_handler._execute_function_call.assert_not_awaited()
+
+    unexpected_created_handler = StepFunRealtimeHandler()
+    unexpected_created_handler._connection_epoch = 8
+    unexpected_created_handler._is_kb_lock_required_for_current_policy = MagicMock(
+        return_value=True
+    )
+    unexpected_created_handler._send_upstream = AsyncMock(return_value=True)  # type: ignore[method-assign]
+
+    await unexpected_created_handler._handle_provider_event(
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_CREATED,
+            provider_event_type="response.created",
+            connection_epoch=8,
+            response_id="response-unexpected",
+        )
+    )
+
+    assert unexpected_created_handler._active_response is None
+    unexpected_created_handler._send_upstream.assert_awaited_once_with(
+        {"type": "response.cancel"}
+    )
+
+    rejected_handler = StepFunRealtimeHandler()
+    rejected_handler._handle_thinking_event = AsyncMock()
+    await rejected_handler._handle_upstream_event(
+        {"type": "response.thinking.done", "thinking": "不得进入副作用"}
+    )
+
+    rejected_handler._handle_thinking_event.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -3384,6 +3506,7 @@ async def test_response_done_does_not_duplicate_followup_when_done_handler_alrea
 async def test_response_done_clears_stale_followup_without_creating_when_no_active_response():
     handler = StepFunRealtimeHandler()
     handler._pending_tool_followup_response = True
+    handler._send_status = AsyncMock()
     handler._flush_active_response = AsyncMock(return_value=False)
     handler._handle_function_calls_from_response_done = AsyncMock(return_value=False)
     handler._create_response = AsyncMock()
@@ -3392,7 +3515,8 @@ async def test_response_done_clears_stale_followup_without_creating_when_no_acti
         {"type": "response.done", "response": {"output": []}}
     )
 
-    handler._flush_active_response.assert_awaited_once()
+    handler._flush_active_response.assert_not_awaited()
+    handler._send_status.assert_awaited_once_with("listening")
     handler._handle_function_calls_from_response_done.assert_not_awaited()
     handler._create_response.assert_not_awaited()
     assert handler._pending_tool_followup_response is False
@@ -6425,6 +6549,34 @@ async def test_handle_upstream_response_audio_transcript_done_dispatches_capture
 
     release_sink.set()
     await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_stale_raw_assistant_transcript_is_rejected_before_capture_sink() -> None:
+    captured: list[dict[str, Any]] = []
+    handler = StepFunRealtimeHandler(transcript_capture_sink=captured.append)
+    handler.session_id = "session-stale-capture"
+    handler.turn_count = 2
+    handler._active_response = RealtimeResponseState(
+        request_id=2,
+        stream_id="stream-current",
+        response_id="response-current",
+    )
+    original_preflight = handler._preflight_upstream_event
+    handler._preflight_upstream_event = MagicMock(wraps=original_preflight)  # type: ignore[method-assign]
+
+    await handler._handle_upstream_event(
+        {
+            "type": "response.audio_transcript.done",
+            "request_id": 2,
+            "stream_id": "stream-current",
+            "response_id": "response-stale",
+            "transcript": "旧响应不得进入采集。",
+        }
+    )
+
+    assert captured == []
+    handler._preflight_upstream_event.assert_called_once()
 
 
 @pytest.mark.asyncio
