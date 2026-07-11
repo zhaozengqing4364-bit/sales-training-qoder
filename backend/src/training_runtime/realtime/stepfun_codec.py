@@ -26,6 +26,7 @@ _RawJsonValue: TypeAlias = Union[  # noqa: UP007
     list["_RawJsonValue"],
 ]
 _SAFE_RAW_TYPE_PATTERN = compile_pattern(r"[a-z0-9][a-z0-9._:-]{0,127}")
+_MAX_RAW_JSON_DEPTH = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,7 +125,13 @@ class StepFunEventCodec:
     ) -> ProviderEvent:
         try:
             payload = _decode_raw_object(raw)
-        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, TypeError):
+        except (
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            RecursionError,
+            ValueError,
+            TypeError,
+        ):
             return _protocol_error(connection_epoch=connection_epoch)
 
         event_type = payload.get("type")
@@ -143,7 +150,7 @@ class StepFunEventCodec:
                 event_type=safe_event_type,
                 connection_epoch=connection_epoch,
             )
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, RecursionError, TypeError, ValueError):
             return _protocol_error(
                 connection_epoch=connection_epoch,
                 provider_event_type=safe_event_type,
@@ -326,7 +333,21 @@ def _decode_raw_object(raw: str | bytes) -> dict[str, _RawJsonValue]:
     decoded = cast(object, json.loads(text))
     if not isinstance(decoded, dict):
         raise ValueError("stepfun_raw_event_must_be_object")
-    return cast(dict[str, _RawJsonValue], decoded)
+    typed = cast(dict[str, _RawJsonValue], decoded)
+    _validate_raw_json_depth(typed)
+    return typed
+
+
+def _validate_raw_json_depth(value: _RawJsonValue) -> None:
+    pending: list[tuple[_RawJsonValue, int]] = [(value, 0)]
+    while pending:
+        current, depth = pending.pop()
+        if depth > _MAX_RAW_JSON_DEPTH:
+            raise ValueError("stepfun_raw_event_depth_exceeded")
+        if isinstance(current, dict):
+            pending.extend((item, depth + 1) for item in current.values())
+        elif isinstance(current, list):
+            pending.extend((item, depth + 1) for item in current)
 
 
 def _safe_raw_type(value: str) -> str:

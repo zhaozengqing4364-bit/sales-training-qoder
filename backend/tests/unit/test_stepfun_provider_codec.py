@@ -1186,3 +1186,266 @@ async def test_adapter_close_should_clear_state_and_sanitize_unknown_exception()
     assert connection.close_count == 1
     assert "connected=False" in repr(provider)
     await provider.close()
+
+
+class SequencedTransport(FakeTransport):
+    def __init__(self, connections: tuple[FakeConnection, ...]) -> None:
+        super().__init__(connection=connections[0])
+        self.connections = deque(connections)
+
+    async def connect(self, *, api_key: str, url: str, model: str) -> FakeConnection:
+        self.connect_calls.append({"api_key": api_key, "url": url, "model": model})
+        return self.connections.popleft()
+
+
+class LinearizedConnectTransport(SequencedTransport):
+    def __init__(self, connections: tuple[FakeConnection, ...]) -> None:
+        super().__init__(connections)
+        self.first_connect_started = asyncio.Event()
+        self.release_first_connect = asyncio.Event()
+        self.session_update_connections: list[FakeConnection] = []
+
+    async def connect(self, *, api_key: str, url: str, model: str) -> FakeConnection:
+        self.connect_calls.append({"api_key": api_key, "url": url, "model": model})
+        connection = self.connections.popleft()
+        if len(self.connect_calls) == 1:
+            self.first_connect_started.set()
+            await self.release_first_connect.wait()
+        return connection
+
+    async def send_json(
+        self,
+        connection: object,
+        payload: dict[str, object],
+    ) -> StepFunSendResult:
+        assert isinstance(connection, FakeConnection)
+        self.sent.append(payload)
+        if payload.get("type") == "session.update":
+            self.session_update_connections.append(connection)
+        return self.send_result
+
+
+@pytest.mark.asyncio
+async def test_adapter_concurrent_connect_should_open_and_configure_once() -> None:
+    connection = FakeConnection()
+    transport = LinearizedConnectTransport((connection,))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    first = asyncio.create_task(provider.connect(_session_config()))
+    await transport.first_connect_started.wait()
+
+    with pytest.raises(RealtimeProviderError) as captured:
+        await provider.connect(_session_config())
+
+    assert captured.value.category is ProviderErrorCategory.PROTOCOL
+    assert len(transport.connect_calls) == 1
+    assert transport.session_update_connections == []
+    transport.release_first_connect.set()
+    await first
+    assert len(transport.connect_calls) == 1
+    assert transport.session_update_connections == [connection]
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_close_during_connect_should_not_revive_stale_connection() -> (
+    None
+):
+    stale_connection = FakeConnection()
+    current_connection = FakeConnection()
+    transport = LinearizedConnectTransport((stale_connection, current_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    stale_connect = asyncio.create_task(provider.connect(_session_config()))
+    await transport.first_connect_started.wait()
+    await provider.close()
+    await provider.connect(_session_config())
+    assert "connected=True" in repr(provider)
+
+    transport.release_first_connect.set()
+    with pytest.raises(RealtimeProviderError) as captured:
+        await stale_connect
+
+    assert captured.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert stale_connection.close_count == 1
+    assert current_connection.close_count == 0
+    assert transport.session_update_connections == [current_connection]
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_cancel_during_connect_should_release_lifecycle_for_reconnect() -> (
+    None
+):
+    stale_connection = FakeConnection()
+    current_connection = FakeConnection()
+    transport = LinearizedConnectTransport((stale_connection, current_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    cancelled = asyncio.create_task(provider.connect(_session_config()))
+    await transport.first_connect_started.wait()
+    cancelled.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await cancelled
+
+    await provider.connect(_session_config())
+    assert len(transport.connect_calls) == 2
+    assert transport.session_update_connections == [current_connection]
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.parametrize("operation", ["send", "receive", "health"])
+@pytest.mark.asyncio
+async def test_adapter_terminal_current_io_should_disconnect_close_and_reconnect(
+    operation: str,
+) -> None:
+    first_connection = FakeConnection()
+    second_connection = FakeConnection()
+    transport = SequencedTransport((first_connection, second_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    if operation == "send":
+        transport.send_result = StepFunSendResult(
+            status=StepFunSendStatus.FAILED,
+            error_type="ConnectionClosedError",
+        )
+        result = await provider.send(
+            ProviderCommand(
+                kind=ProviderCommandKind.APPEND_AUDIO,
+                data={"audio": "AAE="},
+            )
+        )
+        assert result.accepted is False
+    elif operation == "receive":
+        with pytest.raises(RealtimeProviderError) as captured:
+            await provider.receive(connection_epoch=1)
+        assert captured.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    else:
+        transport.health_result = StepFunHealthResult(
+            status=StepFunHealthStatus.UNHEALTHY,
+            error_type="ConnectionClosedError",
+        )
+        result = await provider.check_health()
+        assert result.error_reason is ProviderErrorReason.CONNECTION_CLOSED
+
+    assert first_connection.close_count == 1
+    assert "connected=False" in repr(provider)
+    transport.send_result = StepFunSendResult(status=StepFunSendStatus.SENT)
+    transport.health_result = StepFunHealthResult(status=StepFunHealthStatus.HEALTHY)
+    await provider.connect(_session_config())
+    assert "connected=True" in repr(provider)
+    assert second_connection.close_count == 0
+
+
+class LateSendTransport(SequencedTransport):
+    def __init__(self, connections: tuple[FakeConnection, ...]) -> None:
+        super().__init__(connections)
+        self.send_started = asyncio.Event()
+        self.release_send = asyncio.Event()
+
+    async def send_json(
+        self,
+        connection: object,
+        payload: dict[str, object],
+    ) -> StepFunSendResult:
+        del connection
+        self.sent.append(payload)
+        if payload.get("type") != "input_audio_buffer.append":
+            return StepFunSendResult(status=StepFunSendStatus.SENT)
+        self.send_started.set()
+        await self.release_send.wait()
+        return StepFunSendResult(
+            status=StepFunSendStatus.FAILED,
+            error_type="ConnectionClosedError",
+        )
+
+
+@pytest.mark.asyncio
+async def test_adapter_late_stale_send_failure_should_not_clear_new_connection() -> (
+    None
+):
+    stale_connection = FakeConnection()
+    current_connection = FakeConnection()
+    transport = LateSendTransport((stale_connection, current_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    late_send = asyncio.create_task(
+        provider.send(
+            ProviderCommand(
+                kind=ProviderCommandKind.APPEND_AUDIO,
+                data={"audio": "AAE="},
+            )
+        )
+    )
+    await transport.send_started.wait()
+    await provider.close()
+    await provider.connect(_session_config())
+
+    transport.release_send.set()
+    result = await late_send
+
+    assert result.accepted is False
+    assert stale_connection.close_count == 1
+    assert current_connection.close_count == 0
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_timeout_and_protocol_error_should_keep_current_connection() -> (
+    None
+):
+    connection = FakeConnection(events=("not-json",))
+    transport = FakeTransport(connection=connection)
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    transport.health_result = StepFunHealthResult(
+        status=StepFunHealthStatus.UNHEALTHY,
+        error_type="TimeoutError",
+    )
+
+    health = await provider.check_health(timeout_seconds=0.1)
+    event = await provider.receive(connection_epoch=4)
+
+    assert health.error_reason is ProviderErrorReason.IDLE_TIMEOUT
+    assert event.kind is ProviderEventKind.ERROR
+    assert event.error_reason is ProviderErrorReason.INVALID_EVENT
+    assert connection.close_count == 0
+    assert "connected=True" in repr(provider)
+
+
+def test_codec_extreme_json_depth_should_map_to_protocol_error() -> None:
+    raw = (
+        '{"type":"conversation.item.input_audio_transcription.completed",'
+        '"content":' + "[" * 1500 + '"deep"' + "]" * 1500 + "}"
+    )
+
+    event = StepFunEventCodec().decode_event(raw, connection_epoch=7)
+
+    assert event.kind is ProviderEventKind.ERROR
+    assert event.error_category is ProviderErrorCategory.PROTOCOL
+    assert event.error_reason is ProviderErrorReason.INVALID_EVENT

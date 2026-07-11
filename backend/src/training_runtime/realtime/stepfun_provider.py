@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from typing import cast
 
@@ -49,6 +50,9 @@ class StepFunRealtimeProvider:
         "_backpressure_policy",
         "_codec",
         "_connection",
+        "_connecting",
+        "_lifecycle_generation",
+        "_lifecycle_lock",
         "_transport",
         "_url",
     )
@@ -70,6 +74,9 @@ class StepFunRealtimeProvider:
         self._transport = StepFunTransport() if transport is None else transport
         self._codec = StepFunEventCodec() if codec is None else codec
         self._connection: object | None = None
+        self._connecting = False
+        self._lifecycle_generation = 0
+        self._lifecycle_lock = asyncio.Lock()
         self._backpressure_policy = StepFunBackpressurePolicy(
             high_watermark_bytes=STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES
         )
@@ -79,42 +86,46 @@ class StepFunRealtimeProvider:
         return _STEPFUN_CAPABILITIES
 
     async def connect(self, config: RealtimeProviderSessionConfig) -> None:
-        if self._connection is not None:
-            raise RealtimeProviderError(
-                category=ProviderErrorCategory.PROTOCOL,
-                reason=ProviderErrorReason.INVALID_EVENT,
-                retryable=False,
-            )
         validate_provider_capabilities(capabilities=self.capabilities, config=config)
+        generation = await self._begin_connect_attempt()
+        connection: object | None = None
+        published = False
         try:
-            connection = await self._transport.connect(
-                api_key=self._api_key,
-                url=self._url,
-                model=config.model,
-            )
-        except StepFunUpstreamConnectError as exc:
-            raise _connect_error(exc.status_code) from None
-        except Exception:
-            raise _unavailable_error() from None
+            try:
+                connection = await self._transport.connect(
+                    api_key=self._api_key,
+                    url=self._url,
+                    model=config.model,
+                )
+            except StepFunUpstreamConnectError as exc:
+                raise _connect_error(exc.status_code) from None
+            except Exception:
+                raise _unavailable_error() from None
 
-        payload = build_stepfun_session_update_payload(_session_config(config))
-        try:
-            send_result = await self._transport.send_json(connection, payload)
-        except Exception:
-            await _close_failed_connection(self._transport, connection)
-            raise _disconnected_error() from None
-        except BaseException:
-            await _close_failed_connection(self._transport, connection)
-            raise
-        if send_result.status is not StepFunSendStatus.SENT:
-            await _close_failed_connection(self._transport, connection)
-            raise _disconnected_error()
-        self._connection = connection
+            if not await self._connect_attempt_is_current(generation):
+                raise _disconnected_error()
+
+            payload = build_stepfun_session_update_payload(_session_config(config))
+            try:
+                send_result = await self._transport.send_json(connection, payload)
+            except Exception:
+                raise _disconnected_error() from None
+            if send_result.status is not StepFunSendStatus.SENT:
+                raise _disconnected_error()
+            published = await self._publish_connection(generation, connection)
+            if not published:
+                raise _disconnected_error()
+        finally:
+            if not published:
+                if connection is not None:
+                    await _close_failed_connection(self._transport, connection)
+                await self._finish_connect_attempt(generation)
 
     async def send(self, command: ProviderCommand) -> ProviderSendResult:
-        connection = self._connection
-        if connection is None:
+        current = await self._current_connection()
+        if current is None:
             return _disconnected_send_result()
+        connection, generation = current
         payload = self._codec.encode_command(command)
         try:
             result = await self._transport.send_json(connection, payload)
@@ -122,19 +133,18 @@ class StepFunRealtimeProvider:
                 return ProviderSendResult(accepted=True)
         except Exception:
             pass
+        await self._invalidate_current_connection(connection, generation)
         return _disconnected_send_result()
 
     async def receive(self, *, connection_epoch: int) -> ProviderEvent:
-        connection = self._connection
-        if connection is None:
-            raise RealtimeProviderError(
-                category=ProviderErrorCategory.DISCONNECTED,
-                reason=ProviderErrorReason.CONNECTION_CLOSED,
-                retryable=True,
-            )
+        current = await self._current_connection()
+        if current is None:
+            raise _disconnected_error()
+        connection, generation = current
         try:
             recv = getattr(connection, "recv", None)
         except Exception:
+            await self._invalidate_current_connection(connection, generation)
             raise _disconnected_error() from None
         if not callable(recv):
             raise RealtimeProviderError(
@@ -145,6 +155,7 @@ class StepFunRealtimeProvider:
         try:
             raw = await cast(Callable[[], Awaitable[object]], recv)()
         except Exception:
+            await self._invalidate_current_connection(connection, generation)
             raise _disconnected_error() from None
         normalized_raw = cast(str | bytes, raw) if type(raw) in {str, bytes} else ""
         try:
@@ -153,6 +164,7 @@ class StepFunRealtimeProvider:
                 connection_epoch=connection_epoch,
             )
         except Exception:
+            await self._invalidate_current_connection(connection, generation)
             raise _disconnected_error() from None
 
     async def check_health(
@@ -160,13 +172,10 @@ class StepFunRealtimeProvider:
         *,
         timeout_seconds: float | None = None,
     ) -> ProviderHealthResult:
-        connection = self._connection
-        if connection is None:
-            return ProviderHealthResult(
-                healthy=False,
-                error_category=ProviderErrorCategory.DISCONNECTED,
-                error_reason=ProviderErrorReason.CONNECTION_CLOSED,
-            )
+        current = await self._current_connection()
+        if current is None:
+            return _disconnected_health_result()
+        connection, generation = current
         try:
             result = await self._transport.check_health(
                 connection,
@@ -182,6 +191,7 @@ class StepFunRealtimeProvider:
                 )
         except Exception:
             pass
+        await self._invalidate_current_connection(connection, generation)
         return _disconnected_health_result()
 
     def decide_backpressure(
@@ -203,14 +213,72 @@ class StepFunRealtimeProvider:
         )
 
     async def close(self) -> None:
-        connection = self._connection
+        async with self._lifecycle_lock:
+            self._lifecycle_generation += 1
+            self._connecting = False
+            connection = self._connection
+            self._connection = None
         if connection is None:
             return
-        self._connection = None
         try:
             await self._transport.close(connection)
         except Exception:
             raise _disconnected_error() from None
+
+    async def _begin_connect_attempt(self) -> int:
+        async with self._lifecycle_lock:
+            if self._connection is not None or self._connecting:
+                raise RealtimeProviderError(
+                    category=ProviderErrorCategory.PROTOCOL,
+                    reason=ProviderErrorReason.INVALID_EVENT,
+                    retryable=False,
+                )
+            self._lifecycle_generation += 1
+            self._connecting = True
+            return self._lifecycle_generation
+
+    async def _connect_attempt_is_current(self, generation: int) -> bool:
+        async with self._lifecycle_lock:
+            return self._connecting and self._lifecycle_generation == generation
+
+    async def _publish_connection(
+        self,
+        generation: int,
+        connection: object,
+    ) -> bool:
+        async with self._lifecycle_lock:
+            if not self._connecting or self._lifecycle_generation != generation:
+                return False
+            self._connection = connection
+            self._connecting = False
+            return True
+
+    async def _finish_connect_attempt(self, generation: int) -> None:
+        async with self._lifecycle_lock:
+            if self._lifecycle_generation == generation:
+                self._connecting = False
+
+    async def _current_connection(self) -> tuple[object, int] | None:
+        async with self._lifecycle_lock:
+            if self._connection is None:
+                return None
+            return self._connection, self._lifecycle_generation
+
+    async def _invalidate_current_connection(
+        self,
+        connection: object,
+        generation: int,
+    ) -> bool:
+        async with self._lifecycle_lock:
+            if (
+                self._connection is not connection
+                or self._lifecycle_generation != generation
+            ):
+                return False
+            self._connection = None
+            self._lifecycle_generation += 1
+        await _close_failed_connection(self._transport, connection)
+        return True
 
     def __repr__(self) -> str:
         return (
