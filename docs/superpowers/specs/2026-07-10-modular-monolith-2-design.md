@@ -16,10 +16,10 @@ integration/E2E `598 passed, 21 skipped`、changed coverage 82%，并自然输�
 `Critical quality gate passed`。Gate 2 已于 2026-07-11 完成 Presentation tracer bullet：默认
 Engine façade、单 flag Legacy 回滚、显式 versioned state、additive/pre-Gate snapshot、单 writer、
 零 Presentation Sales capability construction 和真实 Golden differential 已进入生产路径。
-本 Gate canonical gate 从头自然 exit 0：backend `2868 passed, 1 skipped`、Vitest 209 files /
+本 Gate canonical gate 从头自然 exit 0：backend `2870 passed, 1 skipped`、Vitest 209 files /
 `1329 passed, 6 skipped`、Playwright generic/smoke/newcomer/presentation/sales 为
 `3/9/11/2/1 passed`、selected backend `598 passed, 21 skipped`、changed coverage
-770/847（90.91%）。Gate 3–6 仍按路线图推进，本文件的目标架构尚未整体落地。
+773/849（91.05%）。Gate 3–6 仍按路线图推进，本文件的目标架构尚未整体落地。
 
 ## 1. 背景
 
