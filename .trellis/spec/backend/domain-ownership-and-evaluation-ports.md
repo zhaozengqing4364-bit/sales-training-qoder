@@ -98,7 +98,8 @@ Legacy authority. A request constructs exactly one authority and never shadow-wr
 - `ComprehensiveReportService` remains the only comprehensive-report writer; a scenario adapter
   returns `EvaluationScenarioResult`, which Evaluation maps once and persists once.
 - The public scoring ruleset path remains `/api/v1/evaluation/admin/scoring-rulesets`; root mounting
-  removes the reverse import without changing OpenAPI.
+  removes the reverse import without changing OpenAPI. When replacing a nested router with root
+  composition, preserve both registration order and inherited tags; URL parity alone is insufficient.
 - Neutral event/text/message helpers live in `training_runtime.realtime`. Sales compatibility modules
   forward the same function objects. Presentation retains only the named Sales shared-handler seam
   until Gate 6 proves it can be deleted.

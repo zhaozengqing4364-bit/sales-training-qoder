@@ -127,3 +127,10 @@
   finding=0. CodeGraph was synchronized and conservatively selected 208 affected tests; the focused
   matrices above are green and the canonical gate remains the complete selection/coverage authority.
   The durable immutable-record and lifecycle-ordering contract was added to the Gate 4 Trellis spec.
+- The first Task 8 canonical attempt failed closed at OpenAPI parity before test execution. Root cause
+  was the Task 5 root composition move: mounting the scoring router after Evaluation with an Admin tag
+  preserved the URL but changed path ordering and duplicated OpenAPI tags compared with the historical
+  nested router. `router_registry` now mounts the concrete router first with the historical two
+  Evaluation tags, then mounts the Evaluation core router. Evaluation still has no Admin import, while
+  the committed OpenAPI is byte-current. Regression verification is 15 passed across generator,
+  Gate 4 ownership, scoring integration and contract tests; Ruff and mypy are green.

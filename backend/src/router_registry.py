@@ -326,10 +326,12 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(prompt_templates_router, tags=["prompt-templates"])
     app.include_router(scenario_prompts_router, tags=["scenario-prompts"])
 
-    app.include_router(evaluation_router, prefix="/api/v1", tags=["evaluation"])
+    # Preserve the historical nested-router OpenAPI order/tags while keeping
+    # Evaluation free of an Admin implementation import.
     app.include_router(
         admin_scoring_rulesets_router,
         prefix="/api/v1/evaluation",
-        tags=["admin-scoring-rulesets"],
+        tags=["evaluation", "evaluation"],
     )
+    app.include_router(evaluation_router, prefix="/api/v1", tags=["evaluation"])
     app.include_router(supervisor_router, prefix="/api/v1", tags=["supervisor"])
