@@ -501,3 +501,59 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: 模块化单体 2.0 Gate 2 Realtime Session Engine 闭环
+
+**Date**: 2026-07-11
+**Task**: 模块化单体 2.0 Gate 2 Realtime Session Engine 闭环
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+完成 Presentation RealtimeSessionEngine tracer bullet、显式 versioned 状态与严格快照恢复、默认 Engine/单 flag 回滚、零 Sales capability construction、真实 Golden differential、accepted-only 每轮音频 Evidence 聚合；独立 whole-branch review 与 Trellis check finding=0，最终 canonical gate 自然 exit 0（backend 2903、Vitest 1329、selected 598、changed coverage 91.34%）。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `acaae1271b0d9837f144ef297640b971d1920ee9` | (see git log) |
+| `3c8940d5faa5b615f251a7fbbb55ba834344c0b8` | (see git log) |
+| `f71feb5540952a4ddd8a2c7b2d41b55ddcdb0352` | (see git log) |
+| `9dffaabfa70ae179090fa0c05defd774ec95d24b` | (see git log) |
+| `ab1a73352db85b345cf6d7df379151c955f1b70c` | (see git log) |
+| `a9d5f11633958ddd4c1c1bf6fa486fa7c2bd716f` | (see git log) |
+| `3bcbbaa04f82bc2aac5da9896277b2378b19b085` | (see git log) |
+| `875220e48ac220aad45c75d417e1d05ab67f20c2` | (see git log) |
+| `d08d83137e598af18e8c5c03cf790e6a3b10afe1` | (see git log) |
+| `d287d635e4ff71484d27ec8ee58aeeb22e2f7503` | (see git log) |
+| `050aef844c9f430bef3981a668dd6086fa78e026` | (see git log) |
+| `6c97d8a3042e876f2a28548325517678775da8b5` | (see git log) |
+| `f979ef5f78663972cb7bc3ecf5b64b4506d4f354` | (see git log) |
+| `31549c906316fcb647ac438c30bfddfcacaced9d` | (see git log) |
+| `a31d718b41238e2a25afe1f6c51078d2c77ea6e7` | (see git log) |
+| `70a9d29d3729acfb4e4430a5bc683ad5eeb4fe1d` | (see git log) |
+| `1c66251af38cfeec2c35a9c561cadbf380354e88` | (see git log) |
+| `dcab03e99faa403e64aa9b2aff3db5dd0b14d3dd` | (see git log) |
+| `410c38ca51842f7cfcd3e6bef6659b4d88aa19c5` | (see git log) |
+| `8aae56397789eb08d0f8029c1d9047b98f56458b` | (see git log) |
+| `c6d9a068666fc133cd7aa443c8ca3d4d3ae0cf37` | (see git log) |
+| `3443320e94e1af75a9062104a020ecea39f2e72e` | (see git log) |
+| `5f2751134c8b4459258563cfcc10e8b8ebaa78f4` | (see git log) |
+| `047c2b91ba4b1ca95e120da5412e6fb6f587af21` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
