@@ -24,6 +24,8 @@ from training_runtime.realtime.provider import (
     ProviderErrorReason,
     ProviderEvent,
     ProviderEventKind,
+    ProviderHealthResult,
+    ProviderSendResult,
     RealtimeProviderError,
     RealtimeProviderPort,
     RealtimeProviderSessionConfig,
@@ -1449,3 +1451,167 @@ def test_codec_extreme_json_depth_should_map_to_protocol_error() -> None:
     assert event.kind is ProviderEventKind.ERROR
     assert event.error_category is ProviderErrorCategory.PROTOCOL
     assert event.error_reason is ProviderErrorReason.INVALID_EVENT
+
+
+class LateReceiveConnection(FakeConnection):
+    def __init__(self) -> None:
+        super().__init__()
+        self.receive_started = asyncio.Event()
+        self.release_receive = asyncio.Event()
+
+    async def recv(self) -> str | bytes:
+        self.receive_started.set()
+        await self.release_receive.wait()
+        return '{"type":"session.created"}'
+
+
+class StaleSuccessTransport(SequencedTransport):
+    def __init__(self, connections: tuple[FakeConnection, ...]) -> None:
+        super().__init__(connections)
+        self.send_started = asyncio.Event()
+        self.release_send = asyncio.Event()
+        self.health_started = asyncio.Event()
+        self.release_health = asyncio.Event()
+        self.late_health_result = StepFunHealthResult(
+            status=StepFunHealthStatus.HEALTHY
+        )
+
+    async def send_json(
+        self,
+        connection: object,
+        payload: dict[str, object],
+    ) -> StepFunSendResult:
+        del connection
+        self.sent.append(payload)
+        if payload.get("type") != "input_audio_buffer.append":
+            return StepFunSendResult(status=StepFunSendStatus.SENT)
+        self.send_started.set()
+        await self.release_send.wait()
+        return StepFunSendResult(status=StepFunSendStatus.SENT)
+
+    async def check_health(
+        self,
+        connection: object,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> StepFunHealthResult:
+        del connection, timeout_seconds
+        self.health_started.set()
+        await self.release_health.wait()
+        return self.late_health_result
+
+
+@pytest.mark.parametrize(
+    "operation",
+    ["send", "receive", "health_healthy", "health_timeout"],
+)
+@pytest.mark.asyncio
+async def test_adapter_stale_success_and_nonterminal_results_should_fail_closed(
+    operation: str,
+) -> None:
+    stale_connection: FakeConnection
+    if operation == "receive":
+        stale_connection = LateReceiveConnection()
+    else:
+        stale_connection = FakeConnection()
+    current_connection = FakeConnection()
+    transport = StaleSuccessTransport((stale_connection, current_connection))
+    if operation == "health_timeout":
+        transport.late_health_result = StepFunHealthResult(
+            status=StepFunHealthStatus.UNHEALTHY,
+            error_type="TimeoutError",
+        )
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    if operation == "send":
+        pending = asyncio.create_task(
+            provider.send(
+                ProviderCommand(
+                    kind=ProviderCommandKind.APPEND_AUDIO,
+                    data={"audio": "AAE="},
+                )
+            )
+        )
+        await transport.send_started.wait()
+    elif operation == "receive":
+        assert isinstance(stale_connection, LateReceiveConnection)
+        pending = asyncio.create_task(provider.receive(connection_epoch=5))
+        await stale_connection.receive_started.wait()
+    else:
+        pending = asyncio.create_task(provider.check_health(timeout_seconds=0.1))
+        await transport.health_started.wait()
+
+    await provider.close()
+    await provider.connect(_session_config())
+    if operation == "send":
+        transport.release_send.set()
+        send_result = await pending
+        assert isinstance(send_result, ProviderSendResult)
+        assert send_result.accepted is False
+    elif operation == "receive":
+        stale_connection.release_receive.set()
+        with pytest.raises(RealtimeProviderError) as captured:
+            await pending
+        assert captured.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    else:
+        transport.release_health.set()
+        health_result = await pending
+        assert isinstance(health_result, ProviderHealthResult)
+        assert health_result.healthy is False
+        assert health_result.error_reason is ProviderErrorReason.CONNECTION_CLOSED
+
+    assert stale_connection.close_count == 1
+    assert current_connection.close_count == 0
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_connect_cleanup_should_preserve_original_cancellation() -> None:
+    transport = FakeTransport()
+    transport.send_exception = asyncio.CancelledError("primary-cancel")
+    transport.close_exception = asyncio.CancelledError("cleanup-cancel")
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(asyncio.CancelledError) as captured:
+        await provider.connect(_session_config())
+
+    assert captured.value.args == ("primary-cancel",)
+    transport.send_exception = None
+    transport.close_exception = None
+    await provider.connect(_session_config())
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_connect_cleanup_base_exception_should_release_reservation() -> (
+    None
+):
+    class CleanupBaseFailure(BaseException):
+        pass
+
+    transport = FakeTransport()
+    transport.send_exception = Exception("raw-body secret-token")
+    transport.close_exception = CleanupBaseFailure("cleanup-base")
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(CleanupBaseFailure) as captured:
+        await provider.connect(_session_config())
+
+    assert captured.value.args == ("cleanup-base",)
+    transport.send_exception = None
+    transport.close_exception = None
+    await provider.connect(_session_config())
+    assert "connected=True" in repr(provider)

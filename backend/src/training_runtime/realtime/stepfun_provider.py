@@ -115,11 +115,20 @@ class StepFunRealtimeProvider:
             published = await self._publish_connection(generation, connection)
             if not published:
                 raise _disconnected_error()
-        finally:
-            if not published:
+        except BaseException as primary_error:
+            cleanup_error: BaseException | None = None
+            try:
                 if connection is not None:
-                    await _close_failed_connection(self._transport, connection)
+                    await self._transport.close(connection)
+            except Exception:
+                pass
+            except BaseException as error:
+                cleanup_error = error
+            finally:
                 await self._finish_connect_attempt(generation)
+            if cleanup_error is not None and isinstance(primary_error, Exception):
+                raise cleanup_error
+            raise
 
     async def send(self, command: ProviderCommand) -> ProviderSendResult:
         current = await self._current_connection()
@@ -130,7 +139,9 @@ class StepFunRealtimeProvider:
         try:
             result = await self._transport.send_json(connection, payload)
             if result.status is StepFunSendStatus.SENT:
-                return ProviderSendResult(accepted=True)
+                if await self._connection_is_current(connection, generation):
+                    return ProviderSendResult(accepted=True)
+                return _disconnected_send_result()
         except Exception:
             pass
         await self._invalidate_current_connection(connection, generation)
@@ -147,6 +158,8 @@ class StepFunRealtimeProvider:
             await self._invalidate_current_connection(connection, generation)
             raise _disconnected_error() from None
         if not callable(recv):
+            if not await self._connection_is_current(connection, generation):
+                raise _disconnected_error()
             raise RealtimeProviderError(
                 category=ProviderErrorCategory.PROTOCOL,
                 reason=ProviderErrorReason.INVALID_EVENT,
@@ -159,13 +172,16 @@ class StepFunRealtimeProvider:
             raise _disconnected_error() from None
         normalized_raw = cast(str | bytes, raw) if type(raw) in {str, bytes} else ""
         try:
-            return self._codec.decode_event(
+            event = self._codec.decode_event(
                 normalized_raw,
                 connection_epoch=connection_epoch,
             )
         except Exception:
             await self._invalidate_current_connection(connection, generation)
             raise _disconnected_error() from None
+        if not await self._connection_is_current(connection, generation):
+            raise _disconnected_error()
+        return event
 
     async def check_health(
         self,
@@ -182,13 +198,17 @@ class StepFunRealtimeProvider:
                 timeout_seconds=timeout_seconds,
             )
             if result.status is StepFunHealthStatus.HEALTHY:
-                return ProviderHealthResult(healthy=True)
+                if await self._connection_is_current(connection, generation):
+                    return ProviderHealthResult(healthy=True)
+                return _disconnected_health_result()
             if result.error_type == "TimeoutError":
-                return ProviderHealthResult(
-                    healthy=False,
-                    error_category=ProviderErrorCategory.TIMEOUT,
-                    error_reason=ProviderErrorReason.IDLE_TIMEOUT,
-                )
+                if await self._connection_is_current(connection, generation):
+                    return ProviderHealthResult(
+                        healthy=False,
+                        error_category=ProviderErrorCategory.TIMEOUT,
+                        error_reason=ProviderErrorReason.IDLE_TIMEOUT,
+                    )
+                return _disconnected_health_result()
         except Exception:
             pass
         await self._invalidate_current_connection(connection, generation)
@@ -263,6 +283,17 @@ class StepFunRealtimeProvider:
             if self._connection is None:
                 return None
             return self._connection, self._lifecycle_generation
+
+    async def _connection_is_current(
+        self,
+        connection: object,
+        generation: int,
+    ) -> bool:
+        async with self._lifecycle_lock:
+            return (
+                self._connection is connection
+                and self._lifecycle_generation == generation
+            )
 
     async def _invalidate_current_connection(
         self,
