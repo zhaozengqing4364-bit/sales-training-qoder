@@ -1,0 +1,9 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend verification and forbidden patterns"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Metadata and transaction verification"}
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "Dependency/SCC verification"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend tests, typecheck and lint"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Domain type locality verification"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "Cross-artifact closure audit"}
+{"file": ".trellis/tasks/07-11-modular-monolith-2-gate-5/research/current-locality-and-model-registry.md", "reason": "Baseline and acceptance evidence"}
+{"file": "docs/superpowers/plans/2026-07-11-gate-5-training-locality.md", "reason": "Task matrix and exact commands"}
