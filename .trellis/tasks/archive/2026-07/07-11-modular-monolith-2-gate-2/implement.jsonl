@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend non-negotiables and verification entrypoint."}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Domain module placement and WebSocket registration boundaries."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Required pytest, Ruff, mypy and forbidden-test patterns."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"WebSocket fail-closed and client-safe error contracts."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Trace, structured diagnostics and redaction requirements."}
+{"file":".trellis/spec/backend/architecture-fitness.md","reason":"Cross-package edge, SCC and temporary-exception lifecycle contract."}
+{"file":".trellis/spec/backend/realtime-roleplay-v1.md","reason":"Frozen snapshot, record-only roleplay and KB degradation invariants."}
+{"file":".trellis/tasks/07-11-modular-monolith-2-gate-2/research/current-presentation-runtime-and-state.md","reason":"CodeGraph-backed current inheritance, state authority and impact evidence."}
+{"file":".trellis/tasks/07-11-modular-monolith-2-gate-2/research/golden-contract-and-migration-options.md","reason":"Chosen composition/rollout design and rejected alternatives."}
+{"file":"docs/superpowers/plans/2026-07-11-gate-2-realtime-session-engine.md","reason":"Approved TDD implementation sequence, exact interfaces and verification."}

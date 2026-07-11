@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend acceptance and verification baseline."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Independent test-quality, lint and type-check review."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Review exact WebSocket failure semantics and safe errors."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Review diagnostics redaction and trace behavior."}
+{"file":".trellis/spec/backend/architecture-fitness.md","reason":"Review dependency/SCC policy and stale exception handling."}
+{"file":".trellis/spec/backend/realtime-roleplay-v1.md","reason":"Review snapshot/KB/record-only compatibility."}
+{"file":".trellis/tasks/07-11-modular-monolith-2-gate-2/research/current-presentation-runtime-and-state.md","reason":"Review implementation against CodeGraph-backed current truth."}
+{"file":".trellis/tasks/07-11-modular-monolith-2-gate-2/research/golden-contract-and-migration-options.md","reason":"Review rollout, single-writer and migration decision integrity."}
+{"file":"docs/superpowers/plans/2026-07-11-gate-2-realtime-session-engine.md","reason":"Review every planned acceptance and verification step."}
