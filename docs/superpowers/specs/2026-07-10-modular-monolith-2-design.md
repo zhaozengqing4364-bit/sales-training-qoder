@@ -192,7 +192,9 @@ Presentation tracer bullet 已在 Gate 2 落地：façade 不再继承 Sales han
 从第一次 base 初始化即声明 `scenario="presentation"` 且不构造 SalesStage、FuzzyDetection、
 RealtimeScoring。兼容 Adapter 仍临时复用 `sales_bot` StepFun mixins，所以实际
 `presentation_coach -> sales_bot` 依赖和 architecture policy 临时例外尚未退役；Gate 3
-完成 Provider/Grounding 中立化后再删除该边，不能以 façade 已组合化代替边退役事实。
+只中立化 Provider/Grounding 所有权。该边还包含 message persistence、prompt、Roleplay 和报告
+helper；Gate 4 完成相关所有权迁移后，Gate 6 才能依据实际 import graph 删除，不能以 façade
+或单个 Port 已组合化代替整条边退役事实。
 
 ### 6.3 Roleplay Contract bounded context
 

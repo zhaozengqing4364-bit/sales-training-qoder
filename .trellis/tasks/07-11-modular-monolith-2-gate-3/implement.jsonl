@@ -1,0 +1,15 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend pre-development checklist and verification entrypoint."}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Neutral runtime module placement and WebSocket adapter boundaries."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"TDD, pytest, Ruff, mypy and forbidden-test rules."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Fail-closed Provider/Grounding and client-safe WebSocket error contracts."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Structured diagnostics, trace and secret/query redaction requirements."}
+{"file":".trellis/spec/backend/architecture-fitness.md","reason":"Cross-package edge/SCC/temporary-exception lifecycle contract."}
+{"file":".trellis/spec/backend/business-rule-configs.md","reason":"Default-on server flags, validation, fallback and governance conventions."}
+{"file":".trellis/spec/backend/realtime-session-engine.md","reason":"Gate 2 Engine state, snapshot, rollout, evidence and Golden invariants inherited by Gate 3."}
+{"file":".trellis/spec/backend/realtime-roleplay-v1.md","reason":"Frozen policy, KB fail-closed, record-only Roleplay and report invariants."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse existing StepFunTransport/classifier and avoid duplicate seams."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Trace Provider wire to Engine/handler/client and Grounding to metrics/persistence."}
+{"file":".trellis/spec/guides/design-artifact-audit-guide.md","reason":"Verify references, types, dependencies and test impact before each implementation slice."}
+{"file":".trellis/tasks/07-11-modular-monolith-2-gate-3/research/current-provider-grounding-runtime.md","reason":"CodeGraph-backed current Provider/Grounding call paths, duplicate caches and blast radius."}
+{"file":".trellis/tasks/07-11-modular-monolith-2-gate-3/research/provider-grounding-contract-decisions.md","reason":"Chosen Port/cache/rollout design and rejected alternatives."}
+{"file":"docs/superpowers/plans/2026-07-11-gate-3-provider-grounding.md","reason":"Exact TDD tasks, interfaces, rollback and verification plan."}

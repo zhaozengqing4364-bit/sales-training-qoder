@@ -150,7 +150,9 @@ branch 无 changed missing line、无 floor 回退，最终自然输出 `Critica
 `docs/superpowers/plans/2026-07-11-gate-2-realtime-session-engine.md`。
 
 Gate 2 没有完成 Provider/Grounding 中立化。兼容 Adapter 仍复用 `sales_bot` StepFun mixins，
-所以 `presentation_coach -> sales_bot` 临时 policy edge 继续保留；退役条件由 Gate 3 完成。
+所以 `presentation_coach -> sales_bot` 临时 policy edge 继续保留。Gate 3 只中立化 Provider 与
+Grounding 所有权；该边还包含 message persistence、prompt、Roleplay 和报告 helper，必须等
+Gate 4 完成相关所有权迁移，并由 Gate 6 按实际 import graph 退役，不能预先删除 policy。
 
 已完成变更包：
 

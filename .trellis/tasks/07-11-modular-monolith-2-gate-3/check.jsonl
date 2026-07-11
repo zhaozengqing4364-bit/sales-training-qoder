@@ -1,0 +1,14 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend quality verification baseline."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Independent test quality, lint, type and forbidden-pattern review."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Review typed errors, fail-closed behavior and client-safe fallbacks."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Review diagnostics/metrics redaction and bounded cardinality."}
+{"file":".trellis/spec/backend/architecture-fitness.md","reason":"Review import direction, SCC and stale-exception truth."}
+{"file":".trellis/spec/backend/business-rule-configs.md","reason":"Review rollout defaults, read-once semantics and fallback governance."}
+{"file":".trellis/spec/backend/realtime-session-engine.md","reason":"Review Gate 2 state/snapshot/evidence/Golden compatibility."}
+{"file":".trellis/spec/backend/realtime-roleplay-v1.md","reason":"Review frozen KB and record-only behavior."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Review that Transport/classifier/cache logic is not duplicated."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Review command/event and Grounding decision data flows end to end."}
+{"file":".trellis/spec/guides/design-artifact-audit-guide.md","reason":"Audit reference/type/dependency/test consistency after fixes."}
+{"file":".trellis/tasks/07-11-modular-monolith-2-gate-3/research/current-provider-grounding-runtime.md","reason":"Compare implementation to CodeGraph-backed current truth and impact set."}
+{"file":".trellis/tasks/07-11-modular-monolith-2-gate-3/research/provider-grounding-contract-decisions.md","reason":"Review chosen boundaries, flags, cache semantics and rejected alternatives."}
+{"file":"docs/superpowers/plans/2026-07-11-gate-3-provider-grounding.md","reason":"Review every planned acceptance and exact verification step."}
