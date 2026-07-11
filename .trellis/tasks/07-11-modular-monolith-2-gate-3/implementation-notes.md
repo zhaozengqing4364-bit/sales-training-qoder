@@ -42,3 +42,7 @@
   proactive refresh generation drift, failed pause cleanup retry and close-only intent upgrade.
 - Task 3 Review 8 Green: focused lifecycle matrix `12 passed`; brief suite `342 passed`; CodeGraph
   affected suite `825 passed`; Ruff, mypy (632 files), architecture guard and diff check passed.
+- Task 4 Red: the neutral Grounding module import failed during collection as planned.
+- Task 4 Green: 36 focused Grounding/common parity tests and 267 Provider/Engine/Grounding
+  compatibility tests passed; Ruff, mypy (634 source files), architecture guard and diff check
+  passed. No production handler uses the new module before Task 5.

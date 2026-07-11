@@ -10,7 +10,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from common.db.session import AsyncSessionLocal
 from common.knowledge.internal_searcher import search_internal_knowledge
@@ -51,6 +51,20 @@ class RetrievalGroundingDecision:
     result_count: int = 0
     error_detail: str = ""
     should_apply_output_guard: bool = False
+
+
+class KbLockRetriever(Protocol):
+    """Local retrieval seam; common must not depend on runtime modules."""
+
+    async def __call__(
+        self,
+        *,
+        arguments_obj: dict[str, Any],
+        effective_policy: dict[str, Any],
+        session_factory: Callable[[], Any],
+        knowledge_service_cls: Callable[[Any], Any],
+        record_metric: Callable[..., Awaitable[None]],
+    ) -> dict[str, Any]: ...
 
 
 KB_LOCK_CHAIN_FAILURE_STATUSES = {
@@ -578,6 +592,7 @@ async def evaluate_kb_lock_decision(
     effective_policy: dict[str, Any],
     record_metric: Callable[..., Awaitable[None]] | None = None,
     decision_id: str = "",
+    retriever: KbLockRetriever | None = None,
 ) -> KbLockDecision:
     """Evaluate one-turn KB lock decision with deterministic pass/block result."""
     started_at = time.monotonic()
@@ -640,7 +655,8 @@ async def evaluate_kb_lock_decision(
         retrieval_top_k = 5
 
     metric_cb = record_metric or _noop_record_metric
-    payload = await search_internal_knowledge(
+    retrieval = retriever or search_internal_knowledge
+    payload = await retrieval(
         arguments_obj={
             "query": normalized_query,
             "top_k": max(1, min(8, retrieval_top_k)),

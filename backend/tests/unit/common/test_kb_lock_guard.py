@@ -257,6 +257,48 @@ async def test_evaluate_kb_lock_decision_auto_enables_lock_for_legacy_false_snap
 
 
 @pytest.mark.asyncio
+async def test_evaluate_kb_lock_decision_uses_injected_retriever_without_runtime_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        guard_module,
+        "search_internal_knowledge",
+        AsyncMock(side_effect=AssertionError("default retriever must not run")),
+    )
+    retriever = AsyncMock(
+        return_value={
+            "count": 1,
+            "retrieval_mode": "vector",
+            "results": [
+                {
+                    "snippet": "企业版支持实时训练。",
+                    "score": 0.95,
+                }
+            ],
+            "_answerability": {
+                "answerability": "sufficient",
+                "source_status": "hit",
+            },
+        }
+    )
+
+    decision = await evaluate_kb_lock_decision(
+        query="介绍产品",
+        effective_policy={
+            "tool_policy": {"require_kb_grounding": True},
+            "knowledge_base_ids": ["kb-1"],
+        },
+        retriever=retriever,
+    )
+
+    assert decision.allow_generation is True
+    retriever.assert_awaited_once()
+    call_kwargs = retriever.await_args.kwargs
+    assert call_kwargs["arguments_obj"]["query"] == "介绍产品"
+    assert call_kwargs["effective_policy"]["knowledge_base_ids"] == ["kb-1"]
+
+
+@pytest.mark.asyncio
 async def test_evaluate_kb_lock_decision_respects_explicit_persona_disable(
     monkeypatch,
 ):
