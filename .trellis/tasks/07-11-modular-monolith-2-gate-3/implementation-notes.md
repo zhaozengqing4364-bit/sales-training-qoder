@@ -27,6 +27,10 @@
   required sanitized `provider_port_enabled` / `selected_provider_path` selection is observable.
   These two mechanical files were not listed in the brief's initial file inventory but are the
   existing single diagnostics path; no second diagnostics writer was added.
+- After the user prohibited sub-agent dispatch, the main agent completed Task 3 Review 8 directly.
+  The lifecycle fix unifies proactive refresh and disconnect recovery with the same generation
+  rollover authority rather than retaining direct close/connect paths. This expands the Task 3
+  production slice only within the already planned Provider rollout/reconnect invariant.
 
 ## Evidence
 
@@ -34,3 +38,7 @@
 - Pre-implementation task context validation: 15 implementation and 14 check entries valid.
 - Pre-implementation architecture policy: `dependency policy satisfied`.
 - Implementation base commit: `dd6202c1`.
+- Task 3 Review 8 Red: four deterministic failures covering stale successful Legacy receive,
+  proactive refresh generation drift, failed pause cleanup retry and close-only intent upgrade.
+- Task 3 Review 8 Green: focused lifecycle matrix `12 passed`; brief suite `342 passed`; CodeGraph
+  affected suite `825 passed`; Ruff, mypy (632 files), architecture guard and diff check passed.

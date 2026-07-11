@@ -228,12 +228,35 @@ Review 7 Red/Green：
    recovery 并停止新连接；Green 后 start epoch/provider identity/token 判定为 stale，直接进入 epoch 5 的下一
    receive，recovery、client error 均为零次。
 
+Review 8 Red/Green（主 agent 独立闭环，遵循“不派发子代理”约束）：
+
+1. stale success Red：Legacy epoch 4 socket 的 `response.created` 在 epoch 5 已建立后才成功返回，旧实现仍
+   进入 raw correlation/router 并绑定新 active response；Green 后成功和异常 receive 共用冻结
+   epoch/upstream identity/provider identity/rollover token freshness check，任何 activity、correlation、
+   transcript/persistence/tool side effect 前整事件丢弃。
+2. proactive refresh Red：`_refresh_upstream_for_next_input` 直接 close/connect，epoch `4`、rollover token
+   `0` 均未变化，旧 receive error 可误伤新连接；Green 后 refresh 与 disconnect recovery 全部进入共享
+   generation rollover，测试得到 epoch `4 -> 5`，旧 error 不触发 recovery/client error/session stop。
+3. lifecycle retry Red：pause 首次 Provider close 失败后 phase 为 `closing`、compatibility marker 已清空，
+   第二次 pause 因只检查 marker 而完全不重试；Green 后 lifecycle 还检查 rollover phase/selected Provider
+   ownership，第二次入口完成 close retry 并回到 `idle`。
+4. intent priority Red：paused close-only transaction 正在 close 时，并发 reconnect caller 把共享 boolean
+   OR 为 true，导致 paused session 建立新连接；Green 后每个 rollover task 的 reconnect intent immutable，
+   terminal lifecycle 可降级但不能升级 transaction。另覆盖 lifecycle 在 connect I/O 中途变 terminal，
+   connect 完成后立即由 close-only transaction 收回，不遗留 paused live connection。
+
 ## 最终验证
 
-Brief 全量 pytest（14 个 unit/integration 文件）：
+Brief 全量 pytest（14 个 unit/integration 文件，Review 8 后）：
 
 ```text
-324 passed, 1 warning in 13.74s
+342 passed, 1 warning in 13.41s
+```
+
+Review 8 CodeGraph affected 20 文件：
+
+```text
+825 passed, 1 warning in 44.60s
 ```
 
 Review 7 的 Task 1/2 Provider 合同 + Task 3 全集（18 个文件）：
@@ -307,6 +330,11 @@ git diff --check: exit 0
 - Review 7 `_receive_upstream_events --depth 5`：12 affected symbols；覆盖冻结 epoch/provider identity、
   Golden raw/canonical driver、shared handler lifecycle 与 stale receive error。
 - Review 7 changed-source affected：21 个 test files / `857 passed`，exit 0。
+- Review 8 `_clear_upstream_generation --depth 5`：80 affected symbols；覆盖 refresh/recovery、input、
+  interrupt/lifecycle/tool follow-up、Sales/Presentation 和 reconnect integration。
+- Review 8 `_receive_upstream_events --depth 5`：14 affected symbols；覆盖 Legacy/Port 成功与异常的统一
+  attempt freshness、Golden drivers 和 handler lifecycle。
+- Review 8 changed-source affected：20 个 test files / `825 passed`，exit 0。
 - architecture guard 证明未新增未治理 edge；Presentation subtree静态 `training_runtime` import 搜索为空。
 
 ## 假设、兼容性与回滚

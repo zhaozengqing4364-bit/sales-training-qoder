@@ -1076,8 +1076,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 return False
 
             try:
-                await self._close_upstream()
-                await self._connect_upstream()
+                await self._clear_upstream_generation(reconnect=True)
                 await self._cancel_pending_response_after_commit()
                 self._reset_turn_runtime_state()
                 await self._send_status(
@@ -1140,7 +1139,14 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         if transition.action in {"pause", "end"}:
             await self._cancel_pending_response_after_commit()
             self._reset_turn_runtime_state()
-            if self.upstream_ws is not None:
+            if (
+                self.upstream_ws is not None
+                or self._upstream_rollover_phase != "idle"
+                or (
+                    self._using_provider_port()
+                    and self._realtime_provider is not None
+                )
+            ):
                 try:
                     await self._clear_upstream_generation(reconnect=False)
                 except Exception as exc:  # noqa: BLE001
@@ -1190,10 +1196,26 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                     provider_event = await provider.receive(
                         connection_epoch=connection_epoch
                     )
+                    if self._upstream_receive_attempt_is_stale(
+                        connection_epoch=connection_epoch,
+                        upstream_identity=upstream_identity,
+                        provider_identity=provider_identity,
+                        rollover_token=rollover_token,
+                    ):
+                        await asyncio.sleep(0)
+                        continue
                     self._mark_upstream_activity()
                     await self._handle_provider_event(provider_event)
                     continue
                 raw = await upstream_identity.recv()
+                if self._upstream_receive_attempt_is_stale(
+                    connection_epoch=connection_epoch,
+                    upstream_identity=upstream_identity,
+                    provider_identity=provider_identity,
+                    rollover_token=rollover_token,
+                ):
+                    await asyncio.sleep(0)
+                    continue
                 self._mark_upstream_activity()
                 event = json.loads(raw)
                 event = self._correlate_trusted_legacy_raw_event(event)

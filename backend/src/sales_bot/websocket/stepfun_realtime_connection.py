@@ -244,21 +244,59 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
 
     async def _clear_upstream_generation(self, *, reconnect: bool = True) -> None:
         """Abort any active upstream response and clear buffered audio input."""
-        async with self._upstream_rollover_lock:
-            task = self._upstream_rollover_task
-            if task is None or task.done():
-                if self._upstream_rollover_phase == "idle":
-                    if self.upstream_ws is None:
-                        return
-                    self._upstream_rollover_phase = "draining"
-                self._upstream_rollover_token += 1
-                token = self._upstream_rollover_token
-                self._upstream_rollover_reconnect_requested = reconnect
-                task = asyncio.create_task(self._run_upstream_rollover(token))
-                self._upstream_rollover_task = task
-            elif reconnect:
-                self._upstream_rollover_reconnect_requested = True
-        await self._wait_upstream_rollover(task)
+        requested_reconnect = reconnect
+        while True:
+            async with self._upstream_rollover_lock:
+                task = self._upstream_rollover_task
+                task_reconnects = self._upstream_rollover_reconnect_requested
+                if task is None or task.done():
+                    effective_reconnect = (
+                        requested_reconnect
+                        and self._upstream_reconnect_is_allowed()
+                    )
+                    if self._upstream_rollover_phase == "idle":
+                        if self.upstream_ws is None:
+                            if not effective_reconnect:
+                                return
+                            self._upstream_rollover_phase = "reconnecting"
+                        else:
+                            self._upstream_rollover_phase = "draining"
+                    self._upstream_rollover_token += 1
+                    token = self._upstream_rollover_token
+                    task_reconnects = effective_reconnect
+                    self._upstream_rollover_reconnect_requested = (
+                        effective_reconnect
+                    )
+                    task = asyncio.create_task(
+                        self._run_upstream_rollover(
+                            token,
+                            reconnect=effective_reconnect,
+                        )
+                    )
+                    self._upstream_rollover_task = task
+            await self._wait_upstream_rollover(task)
+            if (
+                requested_reconnect
+                and not task_reconnects
+                and self._upstream_reconnect_is_allowed()
+                and self.upstream_ws is None
+            ):
+                continue
+            if (
+                not requested_reconnect
+                and task_reconnects
+                and not self._upstream_reconnect_is_allowed()
+                and self.upstream_ws is not None
+            ):
+                continue
+            return
+
+    def _upstream_reconnect_is_allowed(self) -> bool:
+        """Keep terminal lifecycle state authoritative over reconnect requests."""
+        return bool(
+            self.session_status
+            not in {"paused", "ended", "completed", "cancelled", "failed"}
+        )
 
     @staticmethod
     async def _wait_upstream_rollover(task: asyncio.Task[None]) -> None:
@@ -286,7 +324,12 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
         if rollover_error is not None:
             raise rollover_error
 
-    async def _run_upstream_rollover(self, token: int) -> None:
+    async def _run_upstream_rollover(
+        self,
+        token: int,
+        *,
+        reconnect: bool,
+    ) -> None:
         """Run one shared upstream generation rollover without holding its lock over I/O."""
         self._upstream_rollover_in_progress = True
         try:
@@ -306,14 +349,13 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
                     self._normalize_connection_epoch(self._connection_epoch) + 1,
                 )
                 async with self._upstream_rollover_lock:
-                    reconnect = self._upstream_rollover_reconnect_requested
+                    reconnect = reconnect and self._upstream_reconnect_is_allowed()
                     self._upstream_rollover_phase = (
                         "reconnecting" if reconnect else "idle"
                     )
                 phase = "reconnecting" if reconnect else "idle"
             if phase == "reconnecting":
-                async with self._upstream_rollover_lock:
-                    reconnect = self._upstream_rollover_reconnect_requested
+                reconnect = reconnect and self._upstream_reconnect_is_allowed()
                 if reconnect:
                     await self._connect_upstream()
                 async with self._upstream_rollover_lock:
@@ -584,8 +626,7 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
             return False
         try:
             idle_seconds = self._upstream_idle_seconds()
-            await self._close_upstream()
-            await self._connect_upstream()
+            await self._clear_upstream_generation(reconnect=True)
             await self._cancel_pending_response_after_commit()
             self._reset_turn_runtime_state()
             await self._send_status(
