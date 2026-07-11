@@ -12,3 +12,4 @@
 {"file":".trellis/tasks/07-11-modular-monolith-2-gate-3/research/current-provider-grounding-runtime.md","reason":"Compare implementation to CodeGraph-backed current truth and impact set."}
 {"file":".trellis/tasks/07-11-modular-monolith-2-gate-3/research/provider-grounding-contract-decisions.md","reason":"Review chosen boundaries, flags, cache semantics and rejected alternatives."}
 {"file":"docs/superpowers/plans/2026-07-11-gate-3-provider-grounding.md","reason":"Review every planned acceptance and exact verification step."}
+{"file": ".trellis/spec/backend/realtime-provider-grounding.md", "reason": "Verify the implemented Provider/Grounding authority against its executable contract."}

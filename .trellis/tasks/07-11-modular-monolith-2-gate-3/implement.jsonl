@@ -13,3 +13,4 @@
 {"file":".trellis/tasks/07-11-modular-monolith-2-gate-3/research/current-provider-grounding-runtime.md","reason":"CodeGraph-backed current Provider/Grounding call paths, duplicate caches and blast radius."}
 {"file":".trellis/tasks/07-11-modular-monolith-2-gate-3/research/provider-grounding-contract-decisions.md","reason":"Chosen Port/cache/rollout design and rejected alternatives."}
 {"file":"docs/superpowers/plans/2026-07-11-gate-3-provider-grounding.md","reason":"Exact TDD tasks, interfaces, rollback and verification plan."}
+{"file": ".trellis/spec/backend/realtime-provider-grounding.md", "reason": "Gate 3 executable Provider/Grounding authority and verification contract."}

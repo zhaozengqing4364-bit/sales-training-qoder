@@ -983,14 +983,14 @@ git commit -m "docs(realtime): codify provider and grounding authority"
 - Consumes: complete Gate 3 branch diff from its recorded base commit.
 - Produces: Critical/Important finding=0, fresh release evidence and archived Trellis task.
 
-- [ ] **Step 1: Run CodeGraph impact/affected and independent whole-branch review**
+- [x] **Step 1: Run CodeGraph impact/affected and independent whole-branch review**
 
 Record impact for Provider Port, StepFun Adapter/Codec, Grounding Module/cache, shared handler and
 Presentation adapter. Generate a review package from Gate 3 base to HEAD and separately hand the
 reviewer the active Trellis PRD/research/context paths, which remain Trellis-managed until archive.
 Fix all Critical and Important findings with TDD and re-review until Approved/finding=0.
 
-- [ ] **Step 2: Run independent `trellis-check`**
+- [x] **Step 2: Run independent `trellis-check`**
 
 The check agent reads PRD, implement/check JSONL and every applicable spec; it fixes spec,
 cross-layer, reuse, import, diagnostics and test-quality findings. Re-run focused checks after any

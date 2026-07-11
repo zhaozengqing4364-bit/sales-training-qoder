@@ -68,3 +68,11 @@
 - Task 7 documentation audit traced every public Provider/Grounding symbol and exact rollout test.
   The real `presentation_coach -> sales_bot` edge remains; only its stale reason/retire condition
   was corrected to the remaining persistence/prompt/Roleplay/report ownership and Gate 4/6 exit.
+- Task 8 whole-branch Brooks audit scored 100/100 with 0 Critical, Warning or Suggestion findings.
+  CodeGraph impact covered the Provider, codec, Grounding, cache, shared handler and Presentation
+  façade; the architecture dependency guard and diff check passed. Conway alignment was not scored
+  because repository team-ownership data is unavailable.
+- Task 8 independent Trellis check found one workflow-context drift: Task 7's new executable
+  Provider/Grounding spec was not yet listed in the task JSONL. Both lists now include it and
+  validate at 16 implement / 15 check entries. The repeated focused matrix is `812 passed`; Ruff,
+  architecture policy and mypy (`635 source files`) are green. Canonical clean-start gate remains.
