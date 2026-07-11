@@ -364,6 +364,15 @@ generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 仅
 changed executable lines 802/878（91.34%），critical branch 无 changed missing line、无
 adoption floor 回退，最终输出 `Critical quality gate passed`。
 
+Gate 3 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
+`3271 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
+generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 仅保留 1 个既有
+真实 Provider 条件 skip）；selected backend integration/E2E `598 passed, 21 skipped`；changed
+executable lines 3441/3868（88.96%），critical branch 无 changed missing line、无 adoption floor
+回退，最终输出 `Critical quality gate passed`。Brooks architecture audit 100/100、独立
+Trellis check finding=0。smoke 入口在每次 Next dev 启动前清理 `web/.next/dev`，防止编译期
+public env 跨环境污染和 Turbopack cache 引发 ENOSPC。
+
 可执行合同：`.trellis/spec/backend/realtime-session-engine.md`、
 `.trellis/spec/backend/realtime-provider-grounding.md`。实施计划：
 `docs/superpowers/plans/2026-07-11-gate-2-realtime-session-engine.md`、

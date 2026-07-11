@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–2 已完成；Gate 3
-Provider/Grounding 实现与聚焦验证已完成，canonical closure 正在执行；Gate 4–6 待实施。
+Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–3 已完成；Gate 4–6
+待实施。
 本文描述目标边界和迁移约束，不把尚未完成的物理迁移写成当前事实。
 
 ## 背景
@@ -146,7 +146,15 @@ projection 不暴露 query、snippet、claim、raw Provider error 或 secret。
 Gate 3 不等于整条 Presentation 边退役。兼容 Adapter 仍复用 `sales_bot` 的 message
 persistence、prompt、Roleplay 和 report helpers，实际 `presentation_coach -> sales_bot`
 dependency policy 临时边继续保留；Gate 4 所有权迁移和 Gate 6 import-graph 证明完成前不得删除。
-Gate 3 canonical gate、Trellis check 与归档证据由本 Gate 最终闭环步骤补记。
+Gate 3 closure 证据（2026-07-11 UTC）：whole-branch Brooks Architecture Audit 100/100 且
+Critical/Important finding=0，独立 Trellis check finding=0。最终 clean-start canonical gate
+自然 exit 0：backend unit+contract `3271 passed, 1 skipped`；Vitest 209 files /
+`1329 passed, 6 skipped`；Playwright generic/smoke/newcomer/presentation/sales 分别为
+`3/9/11/2/1 passed`（newcomer 保留 1 个既有真实 Provider 条件 skip）；selected backend
+integration/E2E `598 passed, 21 skipped`；changed executable lines 3441/3868（88.96%），
+critical branch 无 changed missing line 或 adoption floor 回退，最终输出
+`Critical quality gate passed`。门禁首次暴露的陈旧 `.next/dev` 环境污染/ENOSPC 已以 TDD
+修复为每次 smoke 启动前清理生成 dev state，不修改用户 `.env.local` 或生产构建。
 
 ### 8. 使用可验证变更包衡量进度
 

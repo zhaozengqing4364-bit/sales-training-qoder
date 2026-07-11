@@ -19,7 +19,7 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 | 1A | Completed（2026-07-10） | 49 条边全部受 policy 治理；12 包 SCC 只许缩小；guard 已进入主门禁 |
 | 1B | Completed（2026-07-11） | 唯一 release gate 从头自然 exit 0；backend 2665 passed；Vitest 209 files / 1329 passed；全部本地 Playwright、598 个 selected backend 测试和 82% changed coverage 通过 |
 | 2 | Completed（2026-07-11） | Presentation Engine tracer bullet 默认启用、单 flag 可回滚；canonical gate backend 2903 passed、Vitest 1329 passed、全部本地 Playwright、598 个 selected backend 测试和 91.34% changed coverage 通过 |
-| 3 | Closure verification（2026-07-11） | Provider Port/StepFun codec/Fake contract 与单 Grounding authority 已实现；Sales 2x2、Presentation 2x2x2、focused/affected 回归已绿；canonical gate/Trellis closure 执行中 |
+| 3 | Completed（2026-07-11） | Provider Port/StepFun codec/Fake contract 与单 Grounding authority 已闭环；Brooks/Trellis review finding=0；canonical gate backend 3271、Vitest 1329、selected backend 598、changed coverage 88.96% 全绿 |
 | 4–6 | Not started | 按顺序实施领域所有权、Locality 和兼容层退役 |
 
 Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进度，不把已批准的目标
@@ -169,7 +169,7 @@ Gate 4 完成相关所有权迁移，并由 Gate 6 按实际 import graph 退役
 
 ## Gate 3：Provider 与 Grounding 深化
 
-状态：**实现完成，closure 验证中（2026-07-11 UTC）**。
+状态：**Completed（2026-07-11 UTC）**。
 
 变更包建议：
 
@@ -189,7 +189,13 @@ default-on/Legacy rollback 已进入生产路径。Sales Provider/Grounding 2x2=
 Engine/Provider/Grounding 2x2x2=8 均只构造每轴一个 authority；Golden fixture 不变，wire、
 snapshot、persistence、reconnect、score/report single writer 保持兼容。聚焦 Task 6 matrix
 `529 passed`、broader affected realtime matrix `887 passed`、mypy `635 source files`、architecture
-guard `19 passed`。最终 canonical gate、Trellis check 和归档由 Gate 3 closure 步骤补记。
+guard `19 passed`。whole-branch Brooks Architecture Audit 100/100、Critical/Important finding=0，
+独立 Trellis check finding=0。最终 clean-start canonical gate 自然 exit 0：backend unit+contract
+`3271 passed, 1 skipped`，Vitest 209 files / `1329 passed, 6 skipped`，Playwright
+generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 保留 1 个既有真实
+Provider 条件 skip），selected backend integration/E2E `598 passed, 21 skipped`，changed
+executable lines 3441/3868（88.96%），critical branch 无 changed missing line 或 adoption floor
+回退，最终输出 `Critical quality gate passed`。
 
 边界说明：Gate 3 不删除整条 `presentation_coach -> sales_bot` 临时边；该边剩余的 message
 persistence、prompt、Roleplay、report helper 由 Gate 4 迁移并在 Gate 6 依据实际 import graph

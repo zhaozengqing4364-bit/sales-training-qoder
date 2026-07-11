@@ -996,7 +996,7 @@ The check agent reads PRD, implement/check JSONL and every applicable spec; it f
 cross-layer, reuse, import, diagnostics and test-quality findings. Re-run focused checks after any
 fix until finding=0.
 
-- [ ] **Step 3: Run one clean-start canonical gate**
+- [x] **Step 3: Run one clean-start canonical gate**
 
 ```bash
 cd /home/dev/work/sales-training-qoder
@@ -1008,7 +1008,7 @@ Expected: natural exit 0 and final `Critical quality gate passed`; no retry, res
 skip/xfail or gate-script weakening. Restore generated audit/NFR artifacts and delete new UUID
 screenshots before committing docs. If a production fix follows, repeat from clean start.
 
-- [ ] **Step 4: Close documentation and Trellis state**
+- [x] **Step 4: Close documentation and Trellis state**
 
 Write exact counts/coverage, mark all plan/PRD criteria complete, run `trellis-update-spec`, validate
 context JSONL, commit any final authority-only evidence, archive

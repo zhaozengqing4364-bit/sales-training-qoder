@@ -1,7 +1,7 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 0C、Gate 1A、Gate 1B、Gate 2 已完成；Gate 3 实现完成、closure 验证中）
+状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 0C、Gate 1A、Gate 1B、Gate 2、Gate 3 已完成）
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 
 实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
@@ -19,8 +19,13 @@ Engine façade、单 flag Legacy 回滚、显式 versioned state、additive/pre-
 本 Gate canonical gate 从头自然 exit 0：backend `2903 passed, 1 skipped`、Vitest 209 files /
 `1329 passed, 6 skipped`、Playwright generic/smoke/newcomer/presentation/sales 为
 `3/9/11/2/1 passed`、selected backend `598 passed, 21 skipped`、changed coverage
-802/878（91.34%）。Gate 3 已完成 Provider/Grounding 实现和聚焦/affected 验证，正在执行
-canonical closure；Gate 4–6 仍按路线图推进，本文件的目标架构尚未整体落地。
+802/878（91.34%）。Gate 3 已完成 Provider/Grounding 实现和 closure：最终 clean-start
+canonical gate 自然 exit 0，backend `3271 passed, 1 skipped`、Vitest 209 files /
+`1329 passed, 6 skipped`、Playwright generic/smoke/newcomer/presentation/sales 为
+`3/9/11/2/1 passed`（newcomer 1 个既有真实 Provider 条件 skip）、selected backend
+`598 passed, 21 skipped`、changed executable lines 3441/3868（88.96%），critical branch 无
+changed missing line 或 adoption floor 回退，最终输出 `Critical quality gate passed`。Gate 4–6
+仍按路线图推进，本文件的目标架构尚未整体落地。
 
 ## 1. 背景
 

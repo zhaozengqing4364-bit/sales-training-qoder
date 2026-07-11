@@ -93,6 +93,11 @@ data，最终 `backend-coverage.json` 生成后才运行 `scripts/check_changed_
 unit/contract 的报告判断 changed-line。changed executable line 至少 80%，关键文件 branch ratio
 不得低于 `docs/architecture/changed-coverage-policy.yaml` 的 adoption floor。
 
+本地 smoke/release gate 每次启动 Next dev 前必须删除生成目录 `web/.next/dev`。`NEXT_PUBLIC_*`
+是编译期输入，复用旧 Turbopack state 会把其他环境的 API/WS 地址带入本地验收，并可能让缓存
+持续膨胀直至 ENOSPC。只清理 dev 生成物，不修改 `.env.local`、源码或 production build；
+`scripts/dev-smoke-up.sh` 是该隔离规则的单一入口，并由 `test_dev_up_script.py` 保护执行顺序。
+
 临时 adoption anchor 在 selection/coverage policy 中必须完全一致，具有 owner、reason、
 retire_when 和 expires_on；guard 对漂移或过期 fail closed。
 

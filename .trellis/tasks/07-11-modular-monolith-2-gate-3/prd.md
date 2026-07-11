@@ -146,30 +146,42 @@ Grounding 的 prepare/retrieve/decide/overlay/block、结果缓存、timeout、d
 
 ## Acceptance Criteria
 
-- [ ] Versioned machine-readable Provider command/event/capability/error inventory 与 Golden
+- [x] Versioned machine-readable Provider command/event/capability/error inventory 与 Golden
       fixtures 覆盖现有 StepFun production surface。
-- [ ] `RealtimeProviderPort`、StepFun Adapter/Codec 与 Fake Provider contract suite 完成；Fake
+- [x] `RealtimeProviderPort`、StepFun Adapter/Codec 与 Fake Provider contract suite 完成；Fake
       不需修改 Engine 即可运行。
-- [ ] Production shared handler 默认通过 Provider Port，flag false 回滚 raw transport；Sales 与
+- [x] Production shared handler 默认通过 Provider Port，flag false 回滚 raw transport；Sales 与
       Presentation differential 保持 wire、持久化、reconnect、tool follow-up 和报告单 writer。
-- [ ] Provider capability mismatch、invalid JSON/shape、typed error、unknown event、health、
+- [x] Provider capability mismatch、invalid JSON/shape、typed error、unknown event、health、
       backpressure、disconnect/reconnect/stale epoch 均有 fail-closed 测试。
-- [ ] Grounding prepare/retrieve/decide/overlay/block/output guard 收入中立 Module，compatibility
+- [x] Grounding prepare/retrieve/decide/overlay/block/output guard 收入中立 Module，compatibility
       私有字段只做 projection。
-- [ ] prefetch 与 Provider tool call 共用一个 bounded TTL/single-flight cache；ToolExecution 的
+- [x] prefetch 与 Provider tool call 共用一个 bounded TTL/single-flight cache；ToolExecution 的
       result cache 与 cache diagnostics ownership 从默认路径移除；命名 Legacy cache 仅在
       flag=false 时构造并保留到 Gate 6。
-- [ ] cache key 包含 frozen policy hash + sorted KB scope + query/top_k/filter；deep copy、TTL、
+- [x] cache key 包含 frozen policy hash + sorted KB scope + query/top_k/filter；deep copy、TTL、
       max entries、single-flight、owner timeout/cancel、session close、late-result discard 以及
       error/invalid/no-hit 不缓存均有测试。
-- [ ] strict KB、无 KB、not-ready、timeout、error、empty、partial、grounded 的行为、文案、
+- [x] strict KB、无 KB、not-ready、timeout、error、empty、partial、grounded 的行为、文案、
       diagnostics 和 metrics 与 Gate 2 基线一致。
-- [ ] Engine GroundingState、legacy diagnostics 与 durable metrics 都由同一 decision result 映射；
+- [x] Engine GroundingState、legacy diagnostics 与 durable metrics 都由同一 decision result 映射；
       Engine/frontend/log/new surfaces 无 raw query/token/prompt/transcript/provider error，既有
       durable query fields 仅由兼容 single writer 保留。
-- [ ] architecture policy 无新增未治理边、SCC 不扩大；只按实际消失 import 收缩 exception。
-- [ ] Gate 2 Golden differential、Sales reconnect/status、Presentation、local Provider E2E、完整
+- [x] architecture policy 无新增未治理边、SCC 不扩大；只按实际消失 import 收缩 exception。
+- [x] Gate 2 Golden differential、Sales reconnect/status、Presentation、local Provider E2E、完整
       canonical gate 全绿，未新增 skip/xfail/retry/永久排除。
+
+## Completion Evidence
+
+- Whole-branch Brooks Architecture Audit：100/100，Critical/Important finding=0。
+- Independent Trellis check：finding=0；context 16 implement / 15 check entries 全部有效。
+- Focused Gate 3 matrix：812 passed；Ruff、architecture policy、mypy 635 source files 全绿。
+- Final clean-start canonical gate：backend `3271 passed, 1 skipped`；Vitest 209 files /
+  `1329 passed, 6 skipped`；Playwright `3/9/11/2/1 passed`；selected backend
+  `598 passed, 21 skipped`；changed coverage 3441/3868（88.96%）；final
+  `Critical quality gate passed`。
+- 首轮 canonical 暴露陈旧 `.next/dev` 复用导致外部 `NEXT_PUBLIC_*` 污染与 ENOSPC；TDD 修复
+  `scripts/dev-smoke-up.sh` 后，三个原失败 Playwright 用例 3 passed，完整 gate 从头自然通过。
 
 ## Definition of Done
 

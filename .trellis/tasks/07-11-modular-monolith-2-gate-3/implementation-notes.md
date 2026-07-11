@@ -76,3 +76,15 @@
   Provider/Grounding spec was not yet listed in the task JSONL. Both lists now include it and
   validate at 16 implement / 15 check entries. The repeated focused matrix is `812 passed`; Ruff,
   architecture policy and mypy (`635 source files`) are green. Canonical clean-start gate remains.
+- Task 8 first canonical run reached Playwright and exposed two environment failures rather than a
+  Gate 3 behavior regression: a stale 5.7 GiB `web/.next/dev/cache/turbopack` retained an external
+  `NEXT_PUBLIC_API_URL`, then exhausted the root filesystem and crashed Chromium. After preserving
+  failure evidence, clearing generated state made the three failed tests pass. A Red regression
+  test then proved smoke had no cache-reset authority; `scripts/dev-smoke-up.sh` now removes only
+  `web/.next/dev` before every local stack start. The script suite is `5 passed` and the fix commit
+  is `1da73ae0`.
+- Task 8 final clean-start canonical gate naturally exited 0 with final
+  `Critical quality gate passed`: backend unit+contract `3271 passed, 1 skipped`; Vitest 209 files /
+  `1329 passed, 6 skipped`; Playwright generic/smoke/newcomer/presentation/sales
+  `3/9/11/2/1 passed`; selected backend integration/E2E `598 passed, 21 skipped`; changed executable
+  lines 3441/3868 (88.96%), with no critical changed branch miss or adoption-floor regression.
