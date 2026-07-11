@@ -152,6 +152,9 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
 - Snapshot string, boolean, and integer fields use exact JSON scalar types. Restore rejects
   coercible wrong types, including strings/floats/booleans in integer slots, instead of
   reinterpreting them as a different state.
+- Evidence record-map keys are exact non-empty strings. `pending_flush_keys` and
+  `acknowledged_keys` are JSON arrays of exact non-empty strings; other iterables and element
+  types are rejected before evidence membership validation.
 - Engine evidence is record/dedupe metadata only. It does not create a second message, score,
   report, or audit writer.
 - Shared binary input returns an explicit acceptance disposition. It is `True` only after a
@@ -215,6 +218,7 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
 | Hook scenario differs from Engine scenario | Fail with `scenario_hook_mismatch` |
 | Unsupported Engine version or scenario on restore | Fail closed; do not partially restore |
 | Snapshot scalar field has a coercible wrong type | `ValueError`; do not reinterpret the persisted state |
+| Evidence record key is non-string, or pending/ack payload is not `list[str]` | `ValueError`; do not iterate or stringify it |
 | Restore after Engine state has progressed | Fail with `engine_restore_requires_pristine_state` |
 | Connection transition is out of order | `RealtimeStateTransitionError`; state unchanged |
 | Reconnect snapshot epoch is `n` | Restored connection epoch is `n + 1` |

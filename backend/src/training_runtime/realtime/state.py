@@ -181,6 +181,23 @@ def _require_non_negative_integer(
         raise ValueError(f"{field_name}_must_be_non_negative")
 
 
+def _require_json_string_list(
+    value: object,
+    field_name: str,
+    item_field_name: str,
+) -> set[str]:
+    if type(value) is not list:
+        raise ValueError(f"{field_name}_must_be_list")
+    validated: set[str] = set()
+    for item in cast(list[object], value):
+        if type(item) is not str:
+            raise ValueError(f"{item_field_name}_must_be_string")
+        if not item.strip():
+            raise ValueError(f"{item_field_name}_must_be_non_empty")
+        validated.add(item)
+    return validated
+
+
 def _is_finite_number(value: object) -> bool:
     if type(value) is int:
         return True
@@ -477,18 +494,25 @@ class EvidenceState:
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> EvidenceState:
         raw_records = _mapping(payload.get("records", {}), "evidence_records")
-        records = {
-            str(key): EvidenceRecord.from_dict(_mapping(record, "evidence_record"))
-            for key, record in raw_records.items()
-        }
+        records: dict[str, EvidenceRecord] = {}
+        for key, record in raw_records.items():
+            if type(key) is not str:
+                raise ValueError("evidence_record_key_must_be_string")
+            if not key.strip():
+                raise ValueError("evidence_record_key_must_be_non_empty")
+            records[key] = EvidenceRecord.from_dict(_mapping(record, "evidence_record"))
         return cls(
             records=records,
-            pending_flush_keys={
-                str(key) for key in payload.get("pending_flush_keys", [])
-            },
-            acknowledged_keys={
-                str(key) for key in payload.get("acknowledged_keys", [])
-            },
+            pending_flush_keys=_require_json_string_list(
+                payload.get("pending_flush_keys", []),
+                "pending_flush_keys",
+                "pending_flush_key",
+            ),
+            acknowledged_keys=_require_json_string_list(
+                payload.get("acknowledged_keys", []),
+                "acknowledged_keys",
+                "acknowledged_key",
+            ),
         )
 
 

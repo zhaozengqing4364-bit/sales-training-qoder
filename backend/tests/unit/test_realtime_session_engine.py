@@ -357,6 +357,71 @@ def test_should_reject_string_field_coercion_when_restoring_engine_snapshot(
         RealtimeSessionState.from_dict(snapshot)
 
 
+def test_should_require_exact_string_keys_in_restored_evidence_records() -> None:
+    with pytest.raises(ValueError, match="evidence_record_key_must_be_string"):
+        EvidenceState.from_dict(
+            {
+                "records": {
+                    1: {
+                        "evidence_key": "1",
+                        "evidence_type": "transcript",
+                        "turn_number": 1,
+                        "payload_digest": "sha256:stable",
+                    }
+                }
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value", "message"),
+    [
+        ("pending_flush_keys", "known", "pending_flush_keys_must_be_list"),
+        ("pending_flush_keys", {"known": True}, "pending_flush_keys_must_be_list"),
+        ("pending_flush_keys", ("known",), "pending_flush_keys_must_be_list"),
+        ("pending_flush_keys", 1, "pending_flush_keys_must_be_list"),
+        ("pending_flush_keys", None, "pending_flush_keys_must_be_list"),
+        ("pending_flush_keys", [1], "pending_flush_key_must_be_string"),
+        ("pending_flush_keys", [True], "pending_flush_key_must_be_string"),
+        ("pending_flush_keys", [None], "pending_flush_key_must_be_string"),
+        ("pending_flush_keys", [{"nested": True}], "pending_flush_key_must_be_string"),
+        ("pending_flush_keys", [""], "pending_flush_key_must_be_non_empty"),
+        ("acknowledged_keys", "known", "acknowledged_keys_must_be_list"),
+        ("acknowledged_keys", {"known": True}, "acknowledged_keys_must_be_list"),
+        ("acknowledged_keys", ("known",), "acknowledged_keys_must_be_list"),
+        ("acknowledged_keys", 1, "acknowledged_keys_must_be_list"),
+        ("acknowledged_keys", None, "acknowledged_keys_must_be_list"),
+        ("acknowledged_keys", [1], "acknowledged_key_must_be_string"),
+        ("acknowledged_keys", [True], "acknowledged_key_must_be_string"),
+        ("acknowledged_keys", [None], "acknowledged_key_must_be_string"),
+        ("acknowledged_keys", [{"nested": True}], "acknowledged_key_must_be_string"),
+        ("acknowledged_keys", [""], "acknowledged_key_must_be_non_empty"),
+    ],
+)
+def test_should_require_json_string_arrays_for_restored_evidence_key_sets(
+    field_name: str,
+    invalid_value: object,
+    message: str,
+) -> None:
+    records = {
+        key: {
+            "evidence_key": key,
+            "evidence_type": "transcript",
+            "turn_number": 1,
+            "payload_digest": "sha256:stable",
+        }
+        for key in ("known", "1", "True", "None", "{'nested': True}")
+    }
+
+    with pytest.raises(ValueError, match=message):
+        EvidenceState.from_dict(
+            {
+                "records": records,
+                field_name: invalid_value,
+            }
+        )
+
+
 def test_should_accept_versioned_grounding_diagnostics_allowlist() -> None:
     diagnostics: dict[str, object] = {
         "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
