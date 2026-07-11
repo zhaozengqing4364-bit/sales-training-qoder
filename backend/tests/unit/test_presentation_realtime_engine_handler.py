@@ -116,7 +116,7 @@ async def test_facade_explicitly_delegates_session_manager_surface() -> None:
     )
     handler = PresentationRealtimeEngineHandler(
         runtime_engine_factory=RealtimeSessionEngine,
-        runtime_adapter_factory=lambda *, runtime_engine: adapter
+        runtime_adapter_factory=lambda *, runtime_engine: adapter,
     )
     websocket = Mock()
     transition = SimpleNamespace(to_status="in_progress", ai_state="listening")
@@ -147,7 +147,7 @@ def test_facade_runtime_diagnostics_are_versioned_and_sanitized() -> None:
 
     handler = PresentationRealtimeEngineHandler(
         runtime_engine_factory=RealtimeSessionEngine,
-        runtime_adapter_factory=FakeRuntimeAdapter
+        runtime_adapter_factory=FakeRuntimeAdapter,
     )
 
     diagnostics = handler.get_runtime_diagnostics()
@@ -197,7 +197,9 @@ def test_facade_runtime_diagnostics_are_versioned_and_sanitized() -> None:
 
 
 @pytest.mark.asyncio
-async def test_pre_gate_snapshot_derives_engine_state_and_matches_legacy_epoch() -> None:
+async def test_pre_gate_snapshot_derives_engine_state_and_matches_legacy_epoch() -> (
+    None
+):
     engine = RealtimeSessionEngine(
         scenario_type="presentation",
         hooks=SimpleNamespace(
@@ -235,7 +237,9 @@ async def test_pre_gate_snapshot_derives_engine_state_and_matches_legacy_epoch()
 
 
 @pytest.mark.asyncio
-async def test_engine_snapshot_is_additive_and_round_trips_grounding_and_evidence() -> None:
+async def test_engine_snapshot_is_additive_and_round_trips_grounding_and_evidence() -> (
+    None
+):
     source_engine = RealtimeSessionEngine(
         scenario_type="presentation",
         hooks=SimpleNamespace(
@@ -295,7 +299,11 @@ async def test_engine_snapshot_is_additive_and_round_trips_grounding_and_evidenc
 
     await restored_adapter._restore_session_state(snapshot)
 
-    assert restored_engine.state.connection.epoch == restored_adapter._connection_epoch == 2
+    assert (
+        restored_engine.state.connection.epoch
+        == restored_adapter._connection_epoch
+        == 2
+    )
     assert restored_engine.state.grounding.phase is GroundingPhase.READY
     assert set(restored_engine.state.evidence.records) == {"transcript:1:user"}
 
@@ -339,7 +347,9 @@ async def test_adapter_maps_grounding_to_closed_diagnostics_vocabulary() -> None
 
 
 @pytest.mark.asyncio
-async def test_adapter_records_binary_audio_as_length_and_digest_metadata_only() -> None:
+async def test_adapter_records_binary_audio_as_length_and_digest_metadata_only() -> (
+    None
+):
     engine = RealtimeSessionEngine(
         scenario_type="presentation",
         hooks=SimpleNamespace(
@@ -361,7 +371,9 @@ async def test_adapter_records_binary_audio_as_length_and_digest_metadata_only()
     base_binary.assert_awaited_once_with(frame)
     [evidence_key] = engine.state.evidence.records
     assert evidence_key.startswith(f"audio:1:{len(frame) - 1}:")
-    assert engine.state.evidence.records[evidence_key].payload_digest.startswith("sha256:")
+    assert engine.state.evidence.records[evidence_key].payload_digest.startswith(
+        "sha256:"
+    )
     assert "sensitive-audio" not in repr(engine.snapshot())
 
 
@@ -401,9 +413,7 @@ async def test_response_done_completes_engine_turn_before_real_tool_followup() -
         scenario_type="presentation",
         hooks=SimpleNamespace(
             scenario_type="presentation",
-            on_transition=lambda transition: transitions.append(
-                transition.event_name
-            ),
+            on_transition=lambda transition: transitions.append(transition.event_name),
         ),
     )
     engine.begin_turn(request_id=1, stream_id="stream-1")
@@ -542,6 +552,8 @@ def _configure_golden_handler(
     handler.session_id = "session-golden"
     handler.user_id = "user-golden"
     handler.running = True
+    handler._connection_epoch = 1
+    handler._instruction_contract_hash = "sha256:golden-policy"
     handler._stepfun_transport = GoldenStepFunTransport(upstream_events)
     handler._ensure_upstream_keepalive_task = Mock()
     handler._maybe_start_kb_lock_warmup = AsyncMock()
@@ -549,7 +561,6 @@ def _configure_golden_handler(
     handler._analyze_and_emit_sales_stage = AsyncMock(return_value=None)
     handler._run_realtime_feedback = AsyncMock(return_value=None)
     handler._update_roleplay_disclosure_state = AsyncMock()
-    handler._prepare_grounding_context = AsyncMock()
     handler._load_page_requirements = AsyncMock(
         return_value={
             "total_pages": 2,
@@ -621,9 +632,16 @@ async def _drive_real_golden_conversation(
         mutate_transcript_event=mutate_transcript_event,
     )
 
-    with patch(
-        "presentation_coach.websocket.presentation_stepfun_realtime_handler.save_stepfun_message",
-        new=save_message,
+    with (
+        patch(
+            "presentation_coach.websocket.presentation_stepfun_realtime_handler.save_stepfun_message",
+            new=save_message,
+        ),
+        patch.object(
+            StepFunRealtimeUpstreamMixin,
+            "_prepare_grounding_context",
+            new=AsyncMock(),
+        ),
     ):
         await initial_handler.manager.connect(
             first_websocket,
@@ -647,6 +665,7 @@ async def _drive_real_golden_conversation(
         )
 
         frame = bytes([initial_handler.BINARY_AUDIO_CHUNK]) + b"golden-audio"
+        await initial_handler._handle_binary_frame(frame)
         await initial_handler._handle_binary_frame(frame)
         initial_handler._pending_response_after_commit = True
         transcription_event = {
@@ -690,6 +709,11 @@ async def _drive_real_golden_conversation(
         await reconnect_handler._restore_session_state(snapshot)
         await reconnect_handler._connect_upstream()
         await reconnect_handler._send_status(reconnect_handler.ai_state)
+        reconnect_snapshot = reconnect_handler._create_state_snapshot()
+        runtime_engine = reconnect_handler._runtime_engine
+        engine_snapshot = (
+            runtime_engine.snapshot() if runtime_engine is not None else None
+        )
         await reconnect_surface.close(code=1001, reason="golden_complete")
         await reconnect_handler.manager.disconnect(
             reconnect_handler.scenario,
@@ -702,19 +726,62 @@ async def _drive_real_golden_conversation(
         "downstream_events": _normalize_golden_value(downstream_events),
         "upstream_events": _normalize_golden_value(upstream_events),
         "persistence_writes": _normalize_golden_value(persistence_writes),
+        "initial_snapshot": snapshot,
+        "reconnect_snapshot": reconnect_snapshot,
+        "engine_snapshot": engine_snapshot,
+        "expected_reconnect_epoch": (
+            int(
+                (snapshot.runtime_state or {})
+                .get("reconnect_state", {})
+                .get("connection_epoch", 0)
+            )
+            + 1
+        ),
         "closed": reconnect_websocket.closed,
         "initial_surface": type(initial_surface).__name__,
     }
+
+
+def _legacy_snapshot_projection(snapshot: SessionStateSnapshot) -> dict[str, Any]:
+    return _normalize_golden_value(snapshot.to_dict())
 
 
 def _assert_golden_differential(
     legacy_result: dict[str, Any],
     engine_result: dict[str, Any],
 ) -> None:
+    assert _legacy_snapshot_projection(engine_result["initial_snapshot"]) == (
+        _legacy_snapshot_projection(legacy_result["initial_snapshot"])
+    )
+    assert _legacy_snapshot_projection(engine_result["reconnect_snapshot"]) == (
+        _legacy_snapshot_projection(legacy_result["reconnect_snapshot"])
+    )
     assert engine_result["downstream_events"] == legacy_result["downstream_events"]
     assert engine_result["upstream_events"] == legacy_result["upstream_events"]
     assert engine_result["persistence_writes"] == legacy_result["persistence_writes"]
     assert engine_result["closed"] == legacy_result["closed"]
+
+
+def _assert_golden_engine_terminal_state(result: dict[str, Any]) -> None:
+    engine_snapshot = result["engine_snapshot"]
+    assert isinstance(engine_snapshot, dict)
+    assert engine_snapshot["connection"]["phase"] == "connected"
+    assert engine_snapshot["connection"]["epoch"] == result["expected_reconnect_epoch"]
+    assert engine_snapshot["connection"]["epoch"] == 2
+    assert engine_snapshot["turn"]["phase"] == "completed"
+    assert engine_snapshot["grounding"]["phase"] == "ready"
+    assert engine_snapshot["grounding"]["frozen_policy_hash"] == (
+        "sha256:golden-policy"
+    )
+
+    records = engine_snapshot["evidence"]["records"]
+    audio_keys = [key for key in records if key.startswith("audio:2:")]
+    transcript_keys = [key for key in records if key == "transcript:2:user"]
+    assert len(audio_keys) == 1
+    assert len(transcript_keys) == 1
+    assert len(records) == 2
+    assert records[audio_keys[0]]["turn_number"] == 2
+    assert records[transcript_keys[0]]["turn_number"] == 2
 
 
 @pytest.mark.asyncio
@@ -772,9 +839,8 @@ async def test_golden_differential_preserves_external_single_writer_contract() -
     )
 
     _assert_golden_differential(legacy_result, engine_result)
-    downstream_types = {
-        event["type"] for event in engine_result["downstream_events"]
-    }
+    _assert_golden_engine_terminal_state(engine_result)
+    downstream_types = {event["type"] for event in engine_result["downstream_events"]}
     upstream_types = {event["type"] for event in engine_result["upstream_events"]}
     assert downstream_types >= {
         "connected",
@@ -796,6 +862,28 @@ async def test_golden_differential_preserves_external_single_writer_contract() -
     }
     assert len(persistence_keys) == len(engine_result["persistence_writes"])
     assert len(persistence_keys) == 4
+
+    snapshot_mutation = deepcopy(engine_result)
+    snapshot_mutation["initial_snapshot"].turn_count = 999
+    with pytest.raises(AssertionError):
+        _assert_golden_differential(legacy_result, snapshot_mutation)
+
+    epoch_mutation = deepcopy(engine_result)
+    epoch_mutation["engine_snapshot"]["connection"]["epoch"] = 1
+    with pytest.raises(AssertionError):
+        _assert_golden_engine_terminal_state(epoch_mutation)
+
+    grounding_mutation = deepcopy(engine_result)
+    grounding_mutation["engine_snapshot"]["grounding"]["phase"] = "empty"
+    with pytest.raises(AssertionError):
+        _assert_golden_engine_terminal_state(grounding_mutation)
+
+    evidence_mutation = deepcopy(engine_result)
+    evidence_records = evidence_mutation["engine_snapshot"]["evidence"]["records"]
+    audio_key = next(key for key in evidence_records if key.startswith("audio:2:"))
+    evidence_records.pop(audio_key)
+    with pytest.raises(AssertionError):
+        _assert_golden_engine_terminal_state(evidence_mutation)
 
 
 @pytest.mark.asyncio
