@@ -304,7 +304,7 @@ class StepFunEventCodec:
             )
         return ProviderEvent(
             kind=ProviderEventKind.UNKNOWN,
-            provider_event_type=event_type,
+            provider_event_type="unknown",
             connection_epoch=connection_epoch,
         )
 

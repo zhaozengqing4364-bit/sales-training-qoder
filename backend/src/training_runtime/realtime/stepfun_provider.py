@@ -9,6 +9,7 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from training_runtime.stepfun_transport import (
     STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES,
+    STEPFUN_SENSITIVE_QUERY_KEYS,
     StepFunBackpressurePolicy,
     StepFunBackpressureStatus,
     StepFunHealthStatus,
@@ -42,15 +43,6 @@ _CloseCleanupResult: TypeAlias = tuple[
     BaseException | None,
 ]
 _T = TypeVar("_T")
-_SENSITIVE_QUERY_KEY_PARTS = (
-    "api_key",
-    "auth",
-    "credential",
-    "key",
-    "secret",
-    "sig",
-    "token",
-)
 
 _STEPFUN_CAPABILITIES = RealtimeProviderCapabilities(
     supported=frozenset(ProviderCapability),
@@ -671,7 +663,7 @@ def _sensitive_identifier_fragments(api_key: str, url: str) -> tuple[str, ...]:
         values.extend(
             value
             for key, value in parse_qsl(parsed.query)
-            if value and any(part in key.lower() for part in _SENSITIVE_QUERY_KEY_PARTS)
+            if value and key.lower() in STEPFUN_SENSITIVE_QUERY_KEYS
         )
     except ValueError:
         pass

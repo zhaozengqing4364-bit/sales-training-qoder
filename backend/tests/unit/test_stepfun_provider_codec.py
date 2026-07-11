@@ -2519,3 +2519,74 @@ async def test_adapter_receive_should_preserve_legal_opaque_ids_but_redact_repr(
     assert event.event_id == opaque
     assert event.turn_id == opaque
     assert opaque not in f"{event!r} {event!s} {caplog.text}"
+
+
+@pytest.mark.parametrize(
+    "raw_event_type",
+    ["sk-live-secret", "provider.example", "query-secret"],
+)
+@pytest.mark.asyncio
+async def test_adapter_unknown_event_type_should_never_cross_raw_value(
+    raw_event_type: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    connection = FakeConnection(events=(json.dumps({"type": raw_event_type}),))
+    provider = StepFunRealtimeProvider(
+        api_key="sk-live-secret",
+        url="wss://provider.example/realtime?token=query-secret",
+        transport=FakeTransport(connection=connection),  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    event = await provider.receive(connection_epoch=3)
+
+    assert event.kind is ProviderEventKind.UNKNOWN
+    assert event.provider_event_type == "unknown"
+    rendered = f"{event!r} {event!s} {caplog.text}"
+    assert raw_event_type not in rendered
+
+
+@pytest.mark.parametrize(
+    "safe_query_key",
+    ["design", "author", "monkey", "signature_version"],
+)
+@pytest.mark.asyncio
+async def test_adapter_should_not_treat_query_key_substrings_as_sensitive(
+    safe_query_key: str,
+) -> None:
+    opaque = "opaque-query-value"
+    connection = FakeConnection(
+        events=(json.dumps({"type": "session.created", "event_id": opaque}),)
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="sk-live-secret",
+        url=f"wss://provider.example/realtime?{safe_query_key}={opaque}",
+        transport=FakeTransport(connection=connection),  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    event = await provider.receive(connection_epoch=3)
+
+    assert event.kind is ProviderEventKind.SESSION_READY
+    assert event.event_id == opaque
+
+
+@pytest.mark.asyncio
+async def test_adapter_should_reject_exact_sensitive_signature_query_key() -> None:
+    secret = "signature-secret"
+    connection = FakeConnection(
+        events=(json.dumps({"type": "session.created", "event_id": secret}),)
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="sk-live-secret",
+        url=f"wss://provider.example/realtime?signature={secret}",
+        transport=FakeTransport(connection=connection),  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    event = await provider.receive(connection_epoch=3)
+
+    assert event.kind is ProviderEventKind.ERROR
+    assert event.error_category is ProviderErrorCategory.PROTOCOL
+    assert event.error_reason is ProviderErrorReason.INVALID_EVENT
+    assert secret not in f"{event!r} {event!s}"
