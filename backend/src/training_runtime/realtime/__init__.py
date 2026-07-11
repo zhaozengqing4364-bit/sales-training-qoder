@@ -21,6 +21,7 @@ from .provider import (
     RealtimeProviderError,
     RealtimeProviderPort,
     RealtimeProviderSessionConfig,
+    validate_provider_capabilities,
 )
 from .state import (
     ENGINE_STATE_VERSION,
@@ -70,4 +71,5 @@ __all__ = [
     "ScenarioTurnHooks",
     "TurnPhase",
     "TurnState",
+    "validate_provider_capabilities",
 ]

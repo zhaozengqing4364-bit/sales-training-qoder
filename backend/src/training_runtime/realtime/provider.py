@@ -7,10 +7,20 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from math import isfinite
 from re import compile as compile_pattern
-from typing import Protocol, Self, TypeAlias, cast, runtime_checkable
+from typing import Protocol, Self, TypeAlias, Union, cast, runtime_checkable
 
 JsonScalar: TypeAlias = str | int | float | bool | None
-JsonValue: TypeAlias = JsonScalar | Mapping[str, "JsonValue"] | tuple["JsonValue", ...]
+JsonValue: TypeAlias = Union[  # noqa: UP007
+    JsonScalar,
+    "FrozenJsonMapping",
+    tuple["JsonValue", ...],
+]
+_JsonInputValue: TypeAlias = (
+    JsonScalar
+    | Mapping[str, "_JsonInputValue"]
+    | list["_JsonInputValue"]
+    | tuple["_JsonInputValue", ...]
+)
 _PROVIDER_EVENT_TYPE_PATTERN = compile_pattern(r"[a-z0-9][a-z0-9._:-]{0,127}")
 
 
@@ -20,7 +30,7 @@ class FrozenJsonMapping(Mapping[str, JsonValue]):
     __slots__ = ("_items",)
     _items: tuple[tuple[str, JsonValue], ...]
 
-    def __init__(self, source: Mapping[str, object] | None = None) -> None:
+    def __init__(self, source: Mapping[str, _JsonInputValue] | None = None) -> None:
         items: list[tuple[str, JsonValue]] = []
         for key, value in (source or {}).items():
             if type(key) is not str:
@@ -415,6 +425,30 @@ class RealtimeProviderSessionConfig(_ImmutableValue):
         )
 
 
+def validate_provider_capabilities(
+    *,
+    capabilities: RealtimeProviderCapabilities,
+    config: RealtimeProviderSessionConfig,
+) -> None:
+    """Fail closed when a provider cannot satisfy one frozen session config."""
+
+    missing = config.required_capabilities() - capabilities.supported
+    input_format_mismatch = (
+        capabilities.input_audio_formats is not None
+        and config.input_audio_format not in capabilities.input_audio_formats
+    )
+    output_format_mismatch = (
+        capabilities.output_audio_formats is not None
+        and config.output_audio_format not in capabilities.output_audio_formats
+    )
+    if missing or input_format_mismatch or output_format_mismatch:
+        raise RealtimeProviderError(
+            category=ProviderErrorCategory.PROTOCOL,
+            reason=ProviderErrorReason.INVALID_EVENT,
+            retryable=False,
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderSendResult(_ImmutableValue):
     accepted: bool
@@ -645,8 +679,8 @@ _EVENT_FIELDS: dict[
         frozenset(),
     ),
     ProviderEventKind.RESPONSE_TRANSCRIPT_FINAL: (
-        frozenset({"text"}),
         frozenset(),
+        frozenset({"text"}),
     ),
     ProviderEventKind.RESPONSE_AUDIO_DELTA: (
         frozenset({"audio"}),
@@ -657,8 +691,8 @@ _EVENT_FIELDS: dict[
         frozenset(),
     ),
     ProviderEventKind.THINKING_DONE: (
-        frozenset({"text"}),
         frozenset(),
+        frozenset({"text"}),
     ),
     ProviderEventKind.FUNCTION_ARGUMENTS_DELTA: (
         frozenset({"arguments"}),
@@ -681,11 +715,9 @@ _RESPONSE_EVENT_KINDS = frozenset(
         ProviderEventKind.RESPONSE_CREATED,
         ProviderEventKind.RESPONSE_TEXT_DELTA,
         ProviderEventKind.RESPONSE_TRANSCRIPT_DELTA,
-        ProviderEventKind.RESPONSE_TRANSCRIPT_FINAL,
         ProviderEventKind.RESPONSE_AUDIO_DELTA,
         ProviderEventKind.THINKING_DELTA,
         ProviderEventKind.THINKING_DONE,
-        ProviderEventKind.RESPONSE_DONE,
     }
 )
 _FUNCTION_EVENT_KINDS = frozenset(
@@ -764,11 +796,15 @@ def _validate_event_data(kind: ProviderEventKind, data: FrozenJsonMapping) -> No
         ProviderEventKind.TRANSCRIPTION_FINAL,
         ProviderEventKind.RESPONSE_TEXT_DELTA,
         ProviderEventKind.RESPONSE_TRANSCRIPT_DELTA,
-        ProviderEventKind.RESPONSE_TRANSCRIPT_FINAL,
         ProviderEventKind.THINKING_DELTA,
-        ProviderEventKind.THINKING_DONE,
     }:
         _require_string(data["text"], "provider_event_text", allow_empty=False)
+    elif kind in {
+        ProviderEventKind.RESPONSE_TRANSCRIPT_FINAL,
+        ProviderEventKind.THINKING_DONE,
+    }:
+        if "text" in data:
+            _require_string(data["text"], "provider_event_text", allow_empty=True)
     elif kind is ProviderEventKind.RESPONSE_AUDIO_DELTA:
         _require_string(data["audio"], "provider_event_audio")
     elif kind in _FUNCTION_EVENT_KINDS:
@@ -911,4 +947,5 @@ __all__ = [
     "RealtimeProviderError",
     "RealtimeProviderPort",
     "RealtimeProviderSessionConfig",
+    "validate_provider_capabilities",
 ]

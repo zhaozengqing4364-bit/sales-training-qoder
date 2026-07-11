@@ -29,6 +29,7 @@ from training_runtime.realtime.provider import (
     RealtimeProviderError,
     RealtimeProviderPort,
     RealtimeProviderSessionConfig,
+    validate_provider_capabilities,
 )
 
 FIXTURE_PATH = (
@@ -97,23 +98,45 @@ def test_inventory_should_cover_exact_provider_vocabulary() -> None:
         reason.value for reason in ProviderErrorReason
     }
 
-    raw_types: list[str] = []
+    raw_identities: list[tuple[str, tuple[str, str] | None]] = []
     current_module = inspect.getmodule(
         test_inventory_should_cover_exact_provider_vocabulary
     )
     assert current_module is not None
     for row in (*commands, *events):
-        assert set(row) == {
-            "raw_type",
-            "canonical_kind",
-            "required_fields",
-            "optional_fields",
-            "production_consumers",
-            "exact_tests",
-        }
+        assert set(row) in (
+            {
+                "raw_type",
+                "canonical_kind",
+                "required_fields",
+                "optional_fields",
+                "production_consumers",
+                "exact_tests",
+            },
+            {
+                "raw_type",
+                "discriminator",
+                "canonical_kind",
+                "required_fields",
+                "optional_fields",
+                "production_consumers",
+                "exact_tests",
+            },
+        )
         raw_type = row["raw_type"]
         assert type(raw_type) is str and raw_type
-        raw_types.append(raw_type)
+        discriminator = row.get("discriminator")
+        discriminator_identity: tuple[str, str] | None = None
+        if discriminator is not None:
+            assert isinstance(discriminator, dict)
+            assert set(discriminator) == {"field", "value"}
+            assert type(discriminator["field"]) is str and discriminator["field"]
+            assert type(discriminator["value"]) is str and discriminator["value"]
+            discriminator_identity = (
+                discriminator["field"],
+                discriminator["value"],
+            )
+        raw_identities.append((raw_type, discriminator_identity))
         for field_name in (
             "required_fields",
             "optional_fields",
@@ -125,9 +148,83 @@ def test_inventory_should_cover_exact_provider_vocabulary() -> None:
             assert all(type(value) is str and value for value in values)
         assert row["production_consumers"]
         assert row["exact_tests"]
-        for test_name in row["exact_tests"]:
+        for test_node in row["exact_tests"]:
+            test_path, separator, test_name = test_node.partition("::")
+            assert separator == "::"
+            assert test_path == "tests/unit/test_realtime_provider_contract.py"
+            assert (Path(__file__).parents[2] / test_path).is_file()
             assert callable(getattr(current_module, test_name, None))
-    assert len(raw_types) == len(set(raw_types))
+    assert len(raw_identities) == len(set(raw_identities))
+
+
+def test_inventory_should_lock_exact_wire_type_and_discriminator_pairs() -> None:
+    inventory = _inventory()
+    commands = _rows(inventory, "commands")
+    events = _rows(inventory, "events")
+
+    def identity(row: dict[str, object]) -> tuple[str, tuple[str, str] | None]:
+        raw_type = row["raw_type"]
+        assert isinstance(raw_type, str)
+        discriminator = row.get("discriminator")
+        if discriminator is None:
+            return raw_type, None
+        assert isinstance(discriminator, dict)
+        return raw_type, (
+            str(discriminator["field"]),
+            str(discriminator["value"]),
+        )
+
+    assert {identity(row) for row in commands} == {
+        ("input_audio_buffer.append", None),
+        ("input_audio_buffer.commit", None),
+        ("input_audio_buffer.clear", None),
+        ("response.create", None),
+        ("response.cancel", None),
+        ("conversation.item.create", ("item.type", "message")),
+        ("conversation.item.create", ("item.type", "function_call_output")),
+    }
+    assert {identity(row) for row in events} == {
+        (raw_type, None)
+        for raw_type in {
+            "session.created",
+            "session.updated",
+            "input_audio_buffer.committed",
+            "conversation.item.created",
+            "conversation.item.input_audio_transcription.delta",
+            "conversation.item.input_audio_transcription.text",
+            "conversation.item.input_audio_transcript.delta",
+            "conversation.item.input_audio_transcript.text",
+            "input_audio_buffer.transcription.delta",
+            "input_audio_buffer.transcription.text",
+            "input_audio_buffer.transcript.delta",
+            "input_audio_buffer.transcript.text",
+            "conversation.item.input_audio_transcription.completed",
+            "conversation.item.input_audio_transcription.done",
+            "conversation.item.input_audio_transcription.final",
+            "conversation.item.input_audio_transcript.completed",
+            "conversation.item.input_audio_transcript.done",
+            "conversation.item.input_audio_transcript.final",
+            "input_audio_buffer.transcription.completed",
+            "input_audio_buffer.transcription.done",
+            "input_audio_buffer.transcription.final",
+            "input_audio_buffer.transcript.completed",
+            "input_audio_buffer.transcript.done",
+            "input_audio_buffer.transcript.final",
+            "input_audio_buffer.speech_started",
+            "input_audio_buffer.speech_stopped",
+            "response.created",
+            "response.text.delta",
+            "response.audio_transcript.delta",
+            "response.audio_transcript.done",
+            "response.audio.delta",
+            "response.thinking.delta",
+            "response.thinking.done",
+            "response.function_call_arguments.delta",
+            "response.function_call_arguments.done",
+            "response.done",
+            "error",
+        }
+    }
 
 
 def test_inventory_should_include_high_risk_event_semantics() -> None:
@@ -147,6 +244,14 @@ def test_inventory_should_include_high_risk_event_semantics() -> None:
         "thinking_done"
     )
     assert "data.function_outputs" in event_by_type["response.done"]["optional_fields"]
+    assert event_by_type["response.done"]["required_fields"] == []
+    assert "response_id" in event_by_type["response.done"]["optional_fields"]
+    assert event_by_type["response.thinking.done"]["required_fields"] == ["response_id"]
+    assert "data.text" in event_by_type["response.thinking.done"]["optional_fields"]
+    assert event_by_type["response.audio_transcript.done"]["required_fields"] == []
+    assert {"response_id", "data.text"} <= set(
+        event_by_type["response.audio_transcript.done"]["optional_fields"]
+    )
 
     transcript_fields = set(
         event_by_type["response.audio_transcript.done"]["optional_fields"]
@@ -282,6 +387,48 @@ def test_event_should_validate_closed_fields_and_normalized_function_outputs() -
             connection_epoch=1,
             data={"arguments": "{}"},
         )
+
+
+def test_terminal_events_should_accept_existing_sparse_wire_shapes() -> None:
+    response_done = ProviderEvent(
+        kind=ProviderEventKind.RESPONSE_DONE,
+        provider_event_type="response.done",
+        connection_epoch=2,
+        data={},
+    )
+    assert response_done.response_id is None
+
+    thinking_done_without_text = ProviderEvent(
+        kind=ProviderEventKind.THINKING_DONE,
+        provider_event_type="response.thinking.done",
+        connection_epoch=2,
+        response_id="response-1",
+        data={},
+    )
+    thinking_done_with_empty_text = ProviderEvent(
+        kind=ProviderEventKind.THINKING_DONE,
+        provider_event_type="response.thinking.done",
+        connection_epoch=2,
+        response_id="response-1",
+        data={"text": ""},
+    )
+    assert thinking_done_without_text.data == {}
+    assert thinking_done_with_empty_text.data["text"] == ""
+
+    transcript_final = ProviderEvent(
+        kind=ProviderEventKind.RESPONSE_TRANSCRIPT_FINAL,
+        provider_event_type="response.audio_transcript.done",
+        connection_epoch=2,
+        data={},
+    )
+    transcript_final_with_empty_text = ProviderEvent(
+        kind=ProviderEventKind.RESPONSE_TRANSCRIPT_FINAL,
+        provider_event_type="response.audio_transcript.done",
+        connection_epoch=2,
+        data={"text": ""},
+    )
+    assert transcript_final.response_id is None
+    assert transcript_final_with_empty_text.data["text"] == ""
 
 
 @pytest.mark.parametrize(
@@ -491,6 +638,48 @@ def test_config_should_derive_required_capabilities_without_invented_formats() -
         )
 
 
+def test_capability_validation_should_fail_closed_on_declared_mismatch() -> None:
+    config = _session_config()
+    required = config.required_capabilities()
+
+    validate_provider_capabilities(
+        capabilities=RealtimeProviderCapabilities(
+            supported=required,
+            input_audio_formats=None,
+            output_audio_formats=None,
+        ),
+        config=config,
+    )
+    validate_provider_capabilities(
+        capabilities=RealtimeProviderCapabilities(
+            supported=required,
+            input_audio_formats=("pcm16",),
+            output_audio_formats=("pcm16",),
+        ),
+        config=config,
+    )
+
+    for capabilities in (
+        RealtimeProviderCapabilities(
+            supported=required - {ProviderCapability.SERVER_VAD},
+        ),
+        RealtimeProviderCapabilities(
+            supported=required,
+            input_audio_formats=("g711_ulaw",),
+            output_audio_formats=("pcm16",),
+        ),
+        RealtimeProviderCapabilities(
+            supported=required,
+            input_audio_formats=("pcm16",),
+            output_audio_formats=("mp3",),
+        ),
+    ):
+        with pytest.raises(RealtimeProviderError) as captured:
+            validate_provider_capabilities(capabilities=capabilities, config=config)
+        assert captured.value.category is ProviderErrorCategory.PROTOCOL
+        assert captured.value.reason is ProviderErrorReason.INVALID_EVENT
+
+
 class FakeRealtimeProvider:
     def __init__(
         self,
@@ -508,13 +697,10 @@ class FakeRealtimeProvider:
         return self._capabilities
 
     async def connect(self, config: RealtimeProviderSessionConfig) -> None:
-        missing = config.required_capabilities() - self.capabilities.supported
-        if missing:
-            raise RealtimeProviderError(
-                category=ProviderErrorCategory.PROTOCOL,
-                reason=ProviderErrorReason.INVALID_EVENT,
-                retryable=False,
-            )
+        validate_provider_capabilities(
+            capabilities=self.capabilities,
+            config=config,
+        )
         self.connected = True
 
     async def send(self, command: ProviderCommand) -> ProviderSendResult:
