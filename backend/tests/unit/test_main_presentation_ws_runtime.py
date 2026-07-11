@@ -38,6 +38,51 @@ def presentation_admission_blocked(
 
 
 @pytest.mark.asyncio
+async def test_presentation_websocket_route_rejects_invalid_session_before_runtime_side_effects() -> (
+    None
+):
+    websocket = MagicMock(headers={})
+    websocket.accept = AsyncMock()
+    websocket.close = AsyncMock()
+    admission_resolver = AsyncMock()
+    runtime_failure_writer = AsyncMock()
+
+    with (
+        patch(
+            "websocket_routes._resolve_presentation_admission_decision",
+            new=admission_resolver,
+        ),
+        patch("websocket_routes._instantiate_runtime_handler") as handler_factory,
+        patch("websocket_routes.AsyncSessionLocal") as persistence_factory,
+        patch(
+            "websocket_routes.mark_session_runtime_failed",
+            new=runtime_failure_writer,
+        ),
+        patch(
+            "common.websocket.session_manager.get_session_manager"
+        ) as session_manager_factory,
+    ):
+        await websocket_routes.presentation_websocket(
+            websocket=websocket,
+            session_id="not-a-uuid",
+            token="query-token",
+            voice_mode="stepfun_realtime",
+            trace_id="trace-invalid-session",
+        )
+
+    websocket.accept.assert_awaited_once()
+    websocket.close.assert_awaited_once_with(
+        code=4400,
+        reason="INVALID_SESSION_ID",
+    )
+    admission_resolver.assert_not_awaited()
+    handler_factory.assert_not_called()
+    session_manager_factory.assert_not_called()
+    persistence_factory.assert_not_called()
+    runtime_failure_writer.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_presentation_ws_uses_persisted_legacy_mode_and_registers_session() -> None:
     session_id = str(uuid.uuid4())
     websocket = MagicMock()

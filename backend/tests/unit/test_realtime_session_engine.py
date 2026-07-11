@@ -116,7 +116,7 @@ FIXTURE_PATH = (
 )
 GOLDEN_EVIDENCE_BY_CONTRACT = {
     "admission.invalid_session": [
-        "tests/contract/test_sales_websocket_contract.py::test_sales_websocket_contract_rejects_invalid_session_id"
+        "tests/unit/test_main_presentation_ws_runtime.py::test_presentation_websocket_route_rejects_invalid_session_before_runtime_side_effects"
     ],
     "admission.runtime_gate": [
         "tests/unit/test_main_presentation_ws_runtime.py::test_presentation_ws_rejects_when_kb_lock_unbound"
@@ -142,7 +142,8 @@ GOLDEN_EVIDENCE_BY_CONTRACT = {
         "tests/unit/test_stepfun_realtime_handler.py::test_prepare_grounding_context_blocks_bound_kb_query_when_retrieval_empty_and_lock_on",
     ],
     "reconnect.epoch_monotonic": [
-        "tests/integration/test_sales_realtime_reconnect_flow.py::test_sales_stepfun_reconnect_restores_turn_continuity_and_cleans_terminal_snapshot"
+        "tests/unit/test_presentation_realtime_engine_handler.py::test_golden_differential_preserves_external_single_writer_contract",
+        "tests/unit/test_presentation_realtime_engine_handler.py::test_pre_gate_snapshot_derives_engine_state_and_matches_legacy_epoch",
     ],
     "evidence.transcript_score_report_idempotent": [
         "tests/unit/test_stepfun_realtime_handler.py::test_handle_upstream_transcription_completed_ignores_duplicate_transcript_within_window",
