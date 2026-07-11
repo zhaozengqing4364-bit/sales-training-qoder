@@ -4,6 +4,7 @@ packages:
   - admin
   - agent
   - common
+  - configuration_governance
   - curriculum_analytics
   - curriculum_practice
   - evaluation
@@ -21,9 +22,11 @@ packages:
 # temporary groups below is forbidden.
 stable_edges:
   - [admin, common]
+  - [admin, configuration_governance]
   - [agent, common]
   - [curriculum_analytics, common]
   - [curriculum_practice, common]
+  - [curriculum_practice, configuration_governance]
   - [curriculum_practice, evaluation]
   - [curriculum_practice, roleplay]
   - [evaluation, common]
@@ -79,7 +82,7 @@ temporary_edges:
     expires_on: 2026-10-31
 
   - source: curriculum_practice
-    targets: [admin, agent, sales_trainer, support]
+    targets: [agent, sales_trainer, support]
     owner: curriculum-practice
     reason: >-
       Curriculum publishing and runtime still use transitional governance and

@@ -274,3 +274,55 @@ def test_roleplay_compiler_rollout_selects_one_differential_authority(
     assert Settings().ROLEPLAY_NEUTRAL_OWNER_ENABLED is True
     monkeypatch.setenv("ROLEPLAY_NEUTRAL_OWNER_ENABLED", "invalid")
     assert Settings().ROLEPLAY_NEUTRAL_OWNER_ENABLED is False
+
+
+def test_configuration_governance_is_neutral_and_selects_one_authority(
+    monkeypatch: Any,
+) -> None:
+    from common.config import Settings
+    from configuration_governance.lifecycle import ConfigBundleLifecycleService
+    from configuration_governance.rollout import select_configuration_authority
+
+    class FakeLifecycleBackend:
+        pass
+
+    backend = FakeLifecycleBackend()
+    neutral = select_configuration_authority(
+        enabled=True,
+        neutral_factory=lambda: ConfigBundleLifecycleService(backend),
+        legacy_factory=lambda: backend,
+    )
+    legacy = select_configuration_authority(
+        enabled=False,
+        neutral_factory=lambda: ConfigBundleLifecycleService(backend),
+        legacy_factory=lambda: backend,
+    )
+
+    assert isinstance(neutral, ConfigBundleLifecycleService)
+    assert legacy is backend
+
+    protected = {
+        "admin",
+        "agent",
+        "curriculum_practice",
+        "evaluation",
+        "presentation_coach",
+        "sales_bot",
+    }
+    governance_root = SRC_ROOT / "configuration_governance"
+    imported: set[str] = set()
+    for path in governance_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name.split(".", 1)[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module.split(".", 1)[0])
+
+    assert governance_root.is_dir()
+    assert imported.isdisjoint(protected)
+
+    monkeypatch.delenv("CONFIGURATION_GOVERNANCE_ENABLED", raising=False)
+    assert Settings().CONFIGURATION_GOVERNANCE_ENABLED is True
+    monkeypatch.setenv("CONFIGURATION_GOVERNANCE_ENABLED", "invalid")
+    assert Settings().CONFIGURATION_GOVERNANCE_ENABLED is False

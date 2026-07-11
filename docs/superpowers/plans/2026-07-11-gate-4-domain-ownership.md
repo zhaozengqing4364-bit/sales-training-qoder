@@ -46,7 +46,8 @@ architecture guard, Trellis, CodeGraph.
 - `backend/src/configuration_governance/contracts.py`: bundle/version/lifecycle immutable DTOs and ports.
 - `backend/src/configuration_governance/lifecycle.py`: `ConfigBundleLifecycleService` orchestration and
   audit decisions.
-- `backend/src/configuration_governance/sqlalchemy_adapter.py`: existing async SQL/BusinessRule adapter.
+- `backend/src/configuration_governance/sqlalchemy_adapter.py`: neutral async persistence port marker.
+- `backend/src/admin/config_bundles/sqlalchemy_adapter.py`: Admin-owned SQL/BusinessRule persistence adapter.
 - `backend/src/configuration_governance/rollout.py`: authority factory and Legacy rollback selector.
 - `backend/src/admin/config_bundles/composition.py`: admin inventory and projection adapter wiring.
 - Existing admin lifecycle/adapters paths: forwarding compatibility only.
@@ -229,6 +230,7 @@ architecture guard, Trellis, CodeGraph.
 - Create: `backend/src/configuration_governance/sqlalchemy_adapter.py`
 - Create: `backend/src/configuration_governance/rollout.py`
 - Create: `backend/src/admin/config_bundles/composition.py`
+- Create: `backend/src/admin/config_bundles/sqlalchemy_adapter.py`
 - Create: `backend/src/curriculum_practice/services/config_version_binding.py`
 - Modify: `backend/src/admin/api/config_bundles.py`
 - Modify: `backend/src/admin/config_bundles/lifecycle.py`
@@ -243,18 +245,18 @@ architecture guard, Trellis, CodeGraph.
 - Lifecycle methods preserve current keyword signatures and `ConfigLifecycleResult` response semantics.
 - SQL adapter owns AsyncSession/ORM mapping; core lifecycle decisions use immutable snapshots/ports.
 
-- [ ] **Step 1: Write lifecycle/HTTP differential Red tests**
+- [x] **Step 1: Write lifecycle/HTTP differential Red tests**
 
   Exercise list/versions, draft, validate, preview, publish, rollback, disable, not-found, schema-invalid,
   audit before/after/reason/trace and Situation Pack projection success/failure. Assert API status/body and
   database rows exactly match Legacy.
 
-- [ ] **Step 2: Implement contracts and lifecycle orchestration**
+- [x] **Step 2: Implement contracts and lifecycle orchestration**
 
   Preserve caller-owned commit/rollback. Projection failure remains observable in the lifecycle result;
   no network I/O is introduced inside the transaction.
 
-- [ ] **Step 3: Make Admin a delivery/composition adapter**
+- [x] **Step 3: Make Admin a delivery/composition adapter**
 
   Admin permission dependencies, request validation, response mapping and transaction control remain;
   domain transitions move to Configuration Governance. Existing import paths forward only.
@@ -262,16 +264,16 @@ architecture guard, Trellis, CodeGraph.
   Curriculum resolves only the immutable active `bundle_id/version_id` projection through
   `curriculum_practice.services.config_version_binding`; it no longer imports Admin lifecycle.
 
-- [ ] **Step 4: Add default-on rollback selection**
+- [x] **Step 4: Add default-on rollback selection**
 
   `CONFIGURATION_GOVERNANCE_ENABLED=true` selects one lifecycle at construction. False selects named
   Legacy. No request may invoke both or double-write audit/version rows.
 
-- [ ] **Step 5: Run ConfigBundle matrix and static checks**
+- [x] **Step 5: Run ConfigBundle matrix and static checks**
 
   Run ConfigBundle/Situation Pack/API contract tests, Ruff, mypy and architecture guard.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
   Commit as `refactor(config): neutralize bundle lifecycle ownership`.
 

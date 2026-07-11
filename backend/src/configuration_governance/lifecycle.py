@@ -1,23 +1,20 @@
-"""Compatibility import for the neutral configuration-governance lifecycle."""
+"""Deep lifecycle module over a persistence capability supplied at composition time."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from admin.config_bundles.composition import (
-    LegacyConfigBundleLifecycleService,
-    build_config_bundle_lifecycle,
+from configuration_governance.contracts import (
+    ConfigLifecycleBackend,
+    ConfigLifecycleResult,
 )
-from configuration_governance.contracts import ConfigLifecycleResult
 
 
 class ConfigBundleLifecycleService:
-    """Forward old construction to the single selected lifecycle authority."""
+    """Own the public lifecycle while delegating persistence mechanics to one backend."""
 
-    def __init__(self, db: AsyncSession) -> None:
-        self._authority = build_config_bundle_lifecycle(db)
+    def __init__(self, backend: ConfigLifecycleBackend) -> None:
+        self._backend = backend
 
     async def create_draft(
         self,
@@ -27,7 +24,7 @@ class ConfigBundleLifecycleService:
         actor_id: str,
         reason: str | None,
     ) -> ConfigLifecycleResult:
-        return await self._authority.create_draft(
+        return await self._backend.create_draft(
             bundle_key=bundle_key,
             value=value,
             actor_id=actor_id,
@@ -42,7 +39,7 @@ class ConfigBundleLifecycleService:
         actor_id: str,
         reason: str | None,
     ) -> ConfigLifecycleResult:
-        return await self._authority.validate(
+        return await self._backend.validate(
             bundle_key=bundle_key,
             value=value,
             actor_id=actor_id,
@@ -57,7 +54,7 @@ class ConfigBundleLifecycleService:
         actor_id: str,
         reason: str | None,
     ) -> ConfigLifecycleResult:
-        return await self._authority.preview(
+        return await self._backend.preview(
             bundle_key=bundle_key,
             value=value,
             actor_id=actor_id,
@@ -72,7 +69,7 @@ class ConfigBundleLifecycleService:
         config_id: str | None,
         reason: str | None,
     ) -> ConfigLifecycleResult:
-        return await self._authority.publish(
+        return await self._backend.publish(
             bundle_key=bundle_key,
             actor_id=actor_id,
             config_id=config_id,
@@ -88,7 +85,7 @@ class ConfigBundleLifecycleService:
         target_version: int | None,
         reason: str | None,
     ) -> ConfigLifecycleResult:
-        return await self._authority.rollback(
+        return await self._backend.rollback(
             bundle_key=bundle_key,
             actor_id=actor_id,
             target_config_id=target_config_id,
@@ -103,22 +100,14 @@ class ConfigBundleLifecycleService:
         actor_id: str,
         reason: str | None,
     ) -> ConfigLifecycleResult:
-        return await self._authority.disable(
+        return await self._backend.disable(
             bundle_key=bundle_key,
             actor_id=actor_id,
             reason=reason,
         )
 
     async def resolve_active_version(self, bundle_key: str) -> Any | None:
-        return await self._authority.resolve_active_version(bundle_key)
+        return await self._backend.resolve_active_version(bundle_key)
 
     def version_snapshot(self, version: Any | None) -> dict[str, Any] | None:
-        return self._authority.version_snapshot(version)
-
-
-__all__ = [
-    "ConfigBundleLifecycleService",
-    "ConfigLifecycleResult",
-    "LegacyConfigBundleLifecycleService",
-    "build_config_bundle_lifecycle",
-]
+        return self._backend.version_snapshot(version)

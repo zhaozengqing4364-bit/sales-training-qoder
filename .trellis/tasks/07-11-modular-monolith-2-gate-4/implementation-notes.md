@@ -47,3 +47,20 @@
   narrowed by changed behavior and direct callers while retaining the full canonical quality gate for
   Gate 4 closure. `evaluation -> curriculum_practice` is absent and its stale temporary exception was
   removed; `evaluation -> roleplay` and `sales_bot -> roleplay` are declared stable neutral edges.
+- Task 4 Red failed with `ModuleNotFoundError: configuration_governance`. The neutral package now owns
+  lifecycle contracts, the public lifecycle facade, immutable binding DTO and constructor-time rollout.
+  `CONFIGURATION_GOVERNANCE_ENABLED` is default-on and invalid-fail-closed; the false authority is
+  explicitly named Legacy and the parametrized publish/rollback test executes both authorities without
+  double invocation in one request.
+- Task 4 design deviation: placing concrete SQLAlchemy/BusinessRule imports inside the new neutral
+  package expanded the existing legacy SCC through `configuration_governance -> common`. The neutral
+  `sqlalchemy_adapter` therefore declares only the async persistence port; Admin owns the concrete
+  SQLAlchemy adapter and supplies it at composition time. This preserves dependency inversion and keeps
+  the new package outside every SCC. Curriculum now resolves an immutable ConfigVersion binding through
+  its own read adapter and no longer imports Admin lifecycle; the stale `curriculum_practice -> admin`
+  exception was removed.
+- Task 4 verification: lifecycle/HTTP/permission/schema/audit/projection matrix is 44 passed; affected
+  import/export and Curriculum lineage matrix is 27 passed; architecture plus migration-progress matrix
+  is 26 passed. Ruff passed for touched files and mypy passed for 14 focused source files. The HTTP
+  contract covers list, versions, validate, preview, draft, publish, rollback, disable, not-found,
+  invalid schema, RBAC, trace-bearing audit rows and Situation Pack projection.

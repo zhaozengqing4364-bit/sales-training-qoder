@@ -5,6 +5,7 @@ from copy import deepcopy
 import pytest
 
 from admin.config_bundles.adapters import list_config_bundle_adapters
+from admin.config_bundles.composition import build_config_bundle_lifecycle
 from admin.config_bundles.lifecycle import ConfigBundleLifecycleService
 from common.business_rules.defaults import (
     DEFAULT_ROLEPLAY_SITUATION_PACKS,
@@ -36,11 +37,16 @@ async def test_config_bundle_lists_roleplay_situation_pack_adapter() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("governance_enabled", [True, False])
 async def test_config_bundle_lifecycle_publishes_and_rolls_back_roleplay_packs(
     test_db,
+    governance_enabled: bool,
 ) -> None:
     admin = await _admin(test_db)
-    service = ConfigBundleLifecycleService(test_db)
+    service = build_config_bundle_lifecycle(
+        test_db,
+        governance_enabled=governance_enabled,
+    )
     first_value = deepcopy(DEFAULT_ROLEPLAY_SITUATION_PACKS)
     first_value["version"] = "roleplay_situation_packs_v1"
     second_value = deepcopy(DEFAULT_ROLEPLAY_SITUATION_PACKS)

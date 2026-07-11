@@ -24,7 +24,7 @@ from admin.config_bundles.adapters import (
     ConfigVersionSnapshot,
     list_config_bundle_adapters,
 )
-from admin.config_bundles.lifecycle import ConfigBundleLifecycleService
+from admin.config_bundles.composition import build_config_bundle_lifecycle
 from common.api.response import error_response, success_response
 from common.business_rules.validators import BusinessRuleValidationError
 from common.db.models import User
@@ -188,7 +188,7 @@ async def create_config_bundle_draft(
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_DRAFT_PERMISSION)),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    service = ConfigBundleLifecycleService(db)
+    service = build_config_bundle_lifecycle(db)
     try:
         result = await service.create_draft(
             bundle_key=bundle_key,
@@ -219,7 +219,7 @@ async def validate_config_bundle_value(
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_VALIDATE_PERMISSION)),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    service = ConfigBundleLifecycleService(db)
+    service = build_config_bundle_lifecycle(db)
     try:
         result = await service.validate(
             bundle_key=bundle_key,
@@ -245,7 +245,7 @@ async def preview_config_bundle_value(
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_PREVIEW_PERMISSION)),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    service = ConfigBundleLifecycleService(db)
+    service = build_config_bundle_lifecycle(db)
     try:
         result = await service.preview(
             bundle_key=bundle_key,
@@ -271,7 +271,7 @@ async def publish_config_bundle_version(
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_PUBLISH_PERMISSION)),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    service = ConfigBundleLifecycleService(db)
+    service = build_config_bundle_lifecycle(db)
     try:
         result = await service.publish(
             bundle_key=bundle_key,
@@ -302,7 +302,7 @@ async def rollback_config_bundle_version(
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_ROLLBACK_PERMISSION)),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    service = ConfigBundleLifecycleService(db)
+    service = build_config_bundle_lifecycle(db)
     try:
         result = await service.rollback(
             bundle_key=bundle_key,
@@ -334,7 +334,7 @@ async def disable_config_bundle_version(
     current_user: User = Depends(require_admin_permission(CONFIG_BUNDLE_DISABLE_PERMISSION)),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    service = ConfigBundleLifecycleService(db)
+    service = build_config_bundle_lifecycle(db)
     try:
         result = await service.disable(
             bundle_key=bundle_key,

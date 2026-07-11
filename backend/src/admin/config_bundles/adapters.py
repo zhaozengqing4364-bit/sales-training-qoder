@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
-from datetime import datetime
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,51 +22,16 @@ from common.effectiveness.scoring_rulesets import (
     ScoringRulesetService,
     ScoringRulesetView,
 )
+from configuration_governance.contracts import (
+    ConfigBundleAdapter,
+    ConfigBundleSnapshot,
+    ConfigVersionSnapshot,
+)
 
 if TYPE_CHECKING:
     from curriculum_practice.services.roleplay.situation_pack_projection_sync import (
         SituationPackProjectionSyncResult,
     )
-
-
-@dataclass(frozen=True)
-class ConfigVersionSnapshot:
-    source_config_id: str | None
-    version: int | None
-    version_label: str
-    status: str
-    snapshot: dict[str, Any]
-    created_at: datetime | None
-    updated_at: datetime | None
-
-
-@dataclass(frozen=True)
-class ConfigBundleSnapshot:
-    bundle_key: str
-    display_name: str
-    domain: str
-    legacy_domain: str
-    adapter_key: str
-    read_path: str
-    admin_entry: str
-    status: str
-    overview: dict[str, Any]
-    active_version: ConfigVersionSnapshot | None
-
-
-class ConfigBundleAdapter(Protocol):
-    """Read-only adapter that exposes legacy config as ConfigBundle snapshots."""
-
-    adapter_key: str
-    bundle_key: str
-
-    async def bundle(self, db: AsyncSession) -> ConfigBundleSnapshot:
-        """Return one bundle overview without mutating legacy config."""
-        ...
-
-    async def versions(self, db: AsyncSession) -> list[ConfigVersionSnapshot]:
-        """Return version snapshots without mutating legacy config."""
-        ...
 
 
 class BusinessRuleSalesCombinationConfigBundleAdapter:
