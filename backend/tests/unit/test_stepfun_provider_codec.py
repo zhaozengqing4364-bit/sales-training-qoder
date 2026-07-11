@@ -1895,6 +1895,25 @@ class BlockingCloseTransport(SequencedTransport):
         await connection.close()
 
 
+class CancelledSendTransport(BlockingCloseTransport):
+    def __init__(self, connections: tuple[FakeConnection, ...]) -> None:
+        super().__init__(connections)
+        self.send_started = asyncio.Event()
+
+    async def send_json(
+        self,
+        connection: object,
+        payload: dict[str, object],
+    ) -> StepFunSendResult:
+        del connection
+        self.sent.append(payload)
+        if payload.get("type") == "session.update":
+            return StepFunSendResult(status=StepFunSendStatus.SENT)
+        self.send_started.set()
+        await asyncio.Event().wait()
+        raise AssertionError("cancelled send must not resume")
+
+
 class RetryableCloseTransport(SequencedTransport):
     def __init__(self, connections: tuple[FakeConnection, ...]) -> None:
         super().__init__(connections)
@@ -1905,6 +1924,25 @@ class RetryableCloseTransport(SequencedTransport):
         if self.fail_close:
             raise Exception("wss://provider.example?token=secret-token raw-body")
         await connection.close()
+
+
+class CancelledSendRetryTransport(RetryableCloseTransport):
+    def __init__(self, connections: tuple[FakeConnection, ...]) -> None:
+        super().__init__(connections)
+        self.send_started = asyncio.Event()
+
+    async def send_json(
+        self,
+        connection: object,
+        payload: dict[str, object],
+    ) -> StepFunSendResult:
+        del connection
+        self.sent.append(payload)
+        if payload.get("type") == "session.update":
+            return StepFunSendResult(status=StepFunSendStatus.SENT)
+        self.send_started.set()
+        await asyncio.Event().wait()
+        raise AssertionError("cancelled send must not resume")
 
 
 @pytest.mark.asyncio
@@ -1967,6 +2005,132 @@ async def test_adapter_failed_public_close_should_require_safe_cleanup_retry() -
     assert failed_connection.close_count == 1
     await provider.connect(_session_config())
     assert reconnect_connection.close_count == 0
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_cancelled_send_cleanup_failure_should_preserve_retry() -> None:
+    failed_connection = FakeConnection()
+    reconnect_connection = FakeConnection()
+    transport = CancelledSendRetryTransport((failed_connection, reconnect_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    sending = asyncio.create_task(
+        provider.send(
+            ProviderCommand(
+                kind=ProviderCommandKind.APPEND_AUDIO,
+                data={"audio": "AAE="},
+            )
+        )
+    )
+    await transport.send_started.wait()
+
+    sending.cancel("send-cancel-before-cleanup-failure")
+    with pytest.raises(asyncio.CancelledError) as captured:
+        await sending
+
+    assert captured.value.args == ("send-cancel-before-cleanup-failure",)
+    assert transport.close_calls == 1
+    assert failed_connection.close_count == 0
+    with pytest.raises(RealtimeProviderError) as reconnect_blocked:
+        await provider.connect(_session_config())
+    assert reconnect_blocked.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+
+    transport.fail_close = False
+    await provider.close()
+    assert transport.close_calls == 2
+    assert failed_connection.close_count == 1
+    await provider.connect(_session_config())
+    assert len(transport.connect_calls) == 2
+    assert reconnect_connection.close_count == 0
+
+
+@pytest.mark.parametrize("repeat_cancel", [False, True])
+@pytest.mark.asyncio
+async def test_adapter_cancelled_send_should_retire_current_generation_before_raise(
+    repeat_cancel: bool,
+) -> None:
+    cancelled_connection = FakeConnection()
+    reconnect_connection = FakeConnection()
+    transport = CancelledSendTransport((cancelled_connection, reconnect_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    sending = asyncio.create_task(
+        provider.send(
+            ProviderCommand(
+                kind=ProviderCommandKind.APPEND_AUDIO,
+                data={"audio": "AAE="},
+            )
+        )
+    )
+    await transport.send_started.wait()
+    sending.cancel("first-send-cancel")
+    await asyncio.sleep(0)
+
+    assert sending.done() is False
+    await transport.close_started.wait()
+    if repeat_cancel:
+        sending.cancel("second-send-cancel")
+        await asyncio.sleep(0)
+        assert sending.done() is False
+
+    with pytest.raises(RealtimeProviderError) as reconnect_blocked:
+        await provider.connect(_session_config())
+    assert reconnect_blocked.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert len(transport.connect_calls) == 1
+
+    transport.release_close.set()
+    with pytest.raises(asyncio.CancelledError) as captured:
+        await sending
+
+    assert captured.value.args == ("first-send-cancel",)
+    assert transport.close_calls == 1
+    assert cancelled_connection.close_count == 1
+    await provider.connect(_session_config())
+    assert len(transport.connect_calls) == 2
+    assert reconnect_connection.close_count == 0
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_stale_cancelled_send_should_not_retire_new_generation() -> None:
+    stale_connection = FakeConnection()
+    current_connection = FakeConnection()
+    transport = LateSendTransport((stale_connection, current_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    stale_send = asyncio.create_task(
+        provider.send(
+            ProviderCommand(
+                kind=ProviderCommandKind.APPEND_AUDIO,
+                data={"audio": "AAE="},
+            )
+        )
+    )
+    await transport.send_started.wait()
+    await provider.close()
+    await provider.connect(_session_config())
+
+    stale_send.cancel("stale-send-cancel")
+    with pytest.raises(asyncio.CancelledError) as captured:
+        await stale_send
+
+    assert captured.value.args == ("stale-send-cancel",)
+    assert stale_connection.close_count == 1
+    assert current_connection.close_count == 0
     assert "connected=True" in repr(provider)
 
 
@@ -2455,6 +2619,7 @@ def _assert_sensitive_identifier_rejected(
     assert event.kind is ProviderEventKind.ERROR
     assert event.error_category is ProviderErrorCategory.PROTOCOL
     assert event.error_reason is ProviderErrorReason.INVALID_EVENT
+    assert event.request_id is None
     assert event.response_id is None
     assert event.stream_id is None
     assert event.call_id is None
@@ -2533,6 +2698,140 @@ async def test_adapter_receive_should_reject_known_secret_in_nested_call_id(
     event = await provider.receive(connection_epoch=3)
 
     _assert_sensitive_identifier_rejected(event, caplog)
+
+
+@pytest.mark.parametrize(
+    "raw_payload",
+    [
+        {
+            "type": "response.text.delta",
+            "response_id": "response-safe",
+            "delta": "Do not reveal sk-live-secret in text",
+        },
+        {
+            "type": "response.audio_transcript.done",
+            "response_id": "response-safe",
+            "transcript": "query-secret",
+        },
+        {
+            "type": "response.function_call_arguments.done",
+            "response_id": "response-safe",
+            "call_id": "call-safe",
+            "arguments": {"token": "query-secret"},
+        },
+        {
+            "type": "response.done",
+            "response": {
+                "id": "response-safe",
+                "output": [
+                    {
+                        "type": "function_call",
+                        "call_id": "call-safe",
+                        "name": "safe_name",
+                        "arguments": '{"token":"query-secret"}',
+                    }
+                ],
+            },
+        },
+    ],
+)
+@pytest.mark.asyncio
+async def test_adapter_receive_should_reject_secret_in_any_canonical_data_string(
+    raw_payload: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    connection = FakeConnection(events=(json.dumps(raw_payload),))
+    provider = StepFunRealtimeProvider(
+        api_key="sk-live-secret",
+        url="wss://provider.example/realtime?token=query-secret",
+        transport=FakeTransport(connection=connection),  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    event = await provider.receive(connection_epoch=3)
+
+    _assert_sensitive_identifier_rejected(event, caplog)
+
+
+@pytest.mark.asyncio
+async def test_adapter_receive_should_reject_numeric_request_id_matching_credential(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    connection = FakeConnection(
+        events=(json.dumps({"type": "session.created", "request_id": 12345}),)
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="sk-live-secret",
+        url="wss://provider.example/realtime?token=12345",
+        transport=FakeTransport(connection=connection),  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    event = await provider.receive(connection_epoch=3)
+
+    _assert_sensitive_identifier_rejected(event, caplog)
+    assert "12345" not in f"{event!r} {event!s} {caplog.text}"
+
+
+@pytest.mark.asyncio
+async def test_adapter_content_scan_should_keep_endpoint_language_and_substrings() -> (
+    None
+):
+    natural_text = (
+        "provider.example 的说明位于 wss://provider.example/realtime，"
+        "monkey 中的连续字母不应命中短 query secret。"
+    )
+    connection = FakeConnection(
+        events=(
+            json.dumps(
+                {
+                    "type": "response.text.delta",
+                    "response_id": "response-safe",
+                    "delta": natural_text,
+                }
+            ),
+        )
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="sk-live-secret",
+        url="wss://provider.example/realtime?token=key",
+        transport=FakeTransport(connection=connection),  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    event = await provider.receive(connection_epoch=3)
+
+    assert event.kind is ProviderEventKind.RESPONSE_TEXT_DELTA
+    assert event.data == {"text": natural_text}
+
+
+@pytest.mark.asyncio
+async def test_adapter_content_scan_should_reject_exact_short_query_token() -> None:
+    connection = FakeConnection(
+        events=(
+            json.dumps(
+                {
+                    "type": "response.function_call_arguments.done",
+                    "response_id": "response-safe",
+                    "call_id": "call-safe",
+                    "arguments": {"token": "key"},
+                }
+            ),
+        )
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="sk-live-secret",
+        url="wss://provider.example/realtime?token=key",
+        transport=FakeTransport(connection=connection),  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    event = await provider.receive(connection_epoch=3)
+
+    assert event.kind is ProviderEventKind.ERROR
+    assert event.error_category is ProviderErrorCategory.PROTOCOL
+    assert event.error_reason is ProviderErrorReason.INVALID_EVENT
+    assert event.data == {}
 
 
 @pytest.mark.asyncio

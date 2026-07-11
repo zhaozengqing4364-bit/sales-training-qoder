@@ -67,6 +67,7 @@ class StepFunRealtimeProvider:
         "_pending_connection",
         "_pending_generation",
         "_sensitive_identifier_fragments",
+        "_sensitive_query_values",
         "_transport",
         "_url",
     )
@@ -95,9 +96,11 @@ class StepFunRealtimeProvider:
         self._lifecycle_lock = asyncio.Lock()
         self._pending_connection: object | None = None
         self._pending_generation: int | None = None
+        self._sensitive_query_values = _sensitive_query_values(url)
         self._sensitive_identifier_fragments = _sensitive_identifier_fragments(
             api_key,
             url,
+            self._sensitive_query_values,
         )
         self._backpressure_policy = StepFunBackpressurePolicy(
             high_watermark_bytes=STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES
@@ -206,6 +209,20 @@ class StepFunRealtimeProvider:
                 if await self._connection_is_current(connection, generation):
                     return ProviderSendResult(accepted=True)
                 return _disconnected_send_result()
+        except asyncio.CancelledError as cancellation:
+            retirement_task = asyncio.create_task(
+                self._invalidate_current_connection(connection, generation)
+            )
+            try:
+                await _wait_task_preserving_cancellation(
+                    retirement_task,
+                    cancellation,
+                )
+            except BaseException:
+                cancellation.add_note(
+                    "StepFun send retirement cleanup failed; provider close retry required."
+                )
+            raise
         except Exception:
             pass
         await self._invalidate_current_connection(connection, generation)
@@ -243,11 +260,13 @@ class StepFunRealtimeProvider:
         except Exception:
             await self._invalidate_current_connection(connection, generation)
             raise _disconnected_error() from None
-        if _event_contains_sensitive_identifier(
+        if _event_contains_sensitive_value(
             event,
-            self._sensitive_identifier_fragments,
+            sensitive_identifier_fragments=self._sensitive_identifier_fragments,
+            api_key=self._api_key,
+            sensitive_query_values=self._sensitive_query_values,
         ):
-            event = _sensitive_identifier_error(connection_epoch)
+            event = _sensitive_event_error(connection_epoch)
         if not await self._connection_is_current(connection, generation):
             raise _disconnected_error()
         return event
@@ -645,7 +664,25 @@ def _unique_connections(*connections: object | None) -> tuple[object, ...]:
     return tuple(unique)
 
 
-def _sensitive_identifier_fragments(api_key: str, url: str) -> tuple[str, ...]:
+def _sensitive_query_values(url: str) -> tuple[str, ...]:
+    try:
+        parsed = urlsplit(url)
+        return tuple(
+            dict.fromkeys(
+                value
+                for key, value in parse_qsl(parsed.query)
+                if value and key.lower() in STEPFUN_SENSITIVE_QUERY_KEYS
+            )
+        )
+    except ValueError:
+        return ()
+
+
+def _sensitive_identifier_fragments(
+    api_key: str,
+    url: str,
+    sensitive_query_values: tuple[str, ...],
+) -> tuple[str, ...]:
     values = [api_key, url]
     try:
         parsed = urlsplit(url)
@@ -660,19 +697,18 @@ def _sensitive_identifier_fragments(api_key: str, url: str) -> tuple[str, ...]:
             )
             if candidate
         )
-        values.extend(
-            value
-            for key, value in parse_qsl(parsed.query)
-            if value and key.lower() in STEPFUN_SENSITIVE_QUERY_KEYS
-        )
     except ValueError:
         pass
+    values.extend(sensitive_query_values)
     return tuple(dict.fromkeys(value for value in values if value))
 
 
-def _event_contains_sensitive_identifier(
+def _event_contains_sensitive_value(
     event: ProviderEvent,
-    sensitive_fragments: tuple[str, ...],
+    *,
+    sensitive_identifier_fragments: tuple[str, ...],
+    api_key: str,
+    sensitive_query_values: tuple[str, ...],
 ) -> bool:
     identifiers = (
         event.response_id,
@@ -682,11 +718,23 @@ def _event_contains_sensitive_identifier(
         event.turn_id,
         *_nested_identifier_values(event.data),
     )
-    return any(
+    if any(
         fragment in identifier
         for identifier in identifiers
         if identifier is not None
-        for fragment in sensitive_fragments
+        for fragment in sensitive_identifier_fragments
+    ):
+        return True
+    credentials = (api_key, *sensitive_query_values)
+    if event.request_id is not None and str(event.request_id) in credentials:
+        return True
+    return any(
+        api_key in value
+        or any(
+            _contains_exact_secret_token(value, secret)
+            for secret in sensitive_query_values
+        )
+        for value in _nested_string_values(event.data)
     )
 
 
@@ -707,7 +755,40 @@ def _nested_identifier_values(
     return tuple(identifiers)
 
 
-def _sensitive_identifier_error(connection_epoch: int) -> ProviderEvent:
+def _nested_string_values(value: Mapping[str, JsonValue]) -> tuple[str, ...]:
+    strings: list[str] = []
+    pending: list[object] = [value]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, Mapping):
+            pending.extend(current.values())
+        elif type(current) is tuple:
+            pending.extend(current)
+        elif type(current) is str:
+            strings.append(current)
+    return tuple(strings)
+
+
+def _contains_exact_secret_token(value: str, secret: str) -> bool:
+    """Match a whole known query secret, not incidental text substrings."""
+    offset = 0
+    while True:
+        index = value.find(secret, offset)
+        if index < 0:
+            return False
+        end = index + len(secret)
+        before_is_boundary = index == 0 or not _is_secret_token_char(value[index - 1])
+        after_is_boundary = end == len(value) or not _is_secret_token_char(value[end])
+        if before_is_boundary and after_is_boundary:
+            return True
+        offset = index + 1
+
+
+def _is_secret_token_char(value: str) -> bool:
+    return value.isalnum() or value in {"_", "-"}
+
+
+def _sensitive_event_error(connection_epoch: int) -> ProviderEvent:
     return ProviderEvent(
         kind=ProviderEventKind.ERROR,
         provider_event_type="invalid",
