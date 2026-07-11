@@ -174,57 +174,228 @@ def test_inventory_should_lock_exact_wire_type_and_discriminator_pairs() -> None
             str(discriminator["value"]),
         )
 
-    assert {identity(row) for row in commands} == {
-        ("input_audio_buffer.append", None),
-        ("input_audio_buffer.commit", None),
-        ("input_audio_buffer.clear", None),
-        ("response.create", None),
-        ("response.cancel", None),
-        ("conversation.item.create", ("item.type", "message")),
-        ("conversation.item.create", ("item.type", "function_call_output")),
+    def schema(row: dict[str, object]) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
+        canonical_kind = row["canonical_kind"]
+        required_fields = row["required_fields"]
+        optional_fields = row["optional_fields"]
+        assert isinstance(canonical_kind, str)
+        assert isinstance(required_fields, list)
+        assert isinstance(optional_fields, list)
+        assert all(isinstance(field, str) for field in required_fields)
+        assert all(isinstance(field, str) for field in optional_fields)
+        return canonical_kind, tuple(required_fields), tuple(optional_fields)
+
+    expected_commands = {
+        ("input_audio_buffer.append", None): ("append_audio", ("audio",), ()),
+        ("input_audio_buffer.commit", None): ("commit_audio", (), ()),
+        ("input_audio_buffer.clear", None): ("clear_audio", (), ()),
+        ("response.create", None): (
+            "create_response",
+            ("modalities",),
+            ("instructions",),
+        ),
+        ("response.cancel", None): ("cancel_response", (), ("response_id",)),
+        ("conversation.item.create", ("item.type", "message")): (
+            "create_conversation_item",
+            ("role", "content"),
+            ("item_id",),
+        ),
+        ("conversation.item.create", ("item.type", "function_call_output")): (
+            "tool_output",
+            ("call_id", "output"),
+            (),
+        ),
     }
-    assert {identity(row) for row in events} == {
-        (raw_type, None)
-        for raw_type in {
-            "session.created",
-            "session.updated",
-            "input_audio_buffer.committed",
-            "conversation.item.created",
-            "conversation.item.input_audio_transcription.delta",
-            "conversation.item.input_audio_transcription.text",
-            "conversation.item.input_audio_transcript.delta",
-            "conversation.item.input_audio_transcript.text",
-            "input_audio_buffer.transcription.delta",
-            "input_audio_buffer.transcription.text",
-            "input_audio_buffer.transcript.delta",
-            "input_audio_buffer.transcript.text",
-            "conversation.item.input_audio_transcription.completed",
-            "conversation.item.input_audio_transcription.done",
-            "conversation.item.input_audio_transcription.final",
-            "conversation.item.input_audio_transcript.completed",
-            "conversation.item.input_audio_transcript.done",
-            "conversation.item.input_audio_transcript.final",
-            "input_audio_buffer.transcription.completed",
-            "input_audio_buffer.transcription.done",
-            "input_audio_buffer.transcription.final",
-            "input_audio_buffer.transcript.completed",
-            "input_audio_buffer.transcript.done",
-            "input_audio_buffer.transcript.final",
-            "input_audio_buffer.speech_started",
-            "input_audio_buffer.speech_stopped",
-            "response.created",
-            "response.text.delta",
-            "response.audio_transcript.delta",
-            "response.audio_transcript.done",
-            "response.audio.delta",
-            "response.thinking.delta",
-            "response.thinking.done",
-            "response.function_call_arguments.delta",
-            "response.function_call_arguments.done",
-            "response.done",
+    transcription_delta_types = {
+        "conversation.item.input_audio_transcription.delta",
+        "conversation.item.input_audio_transcription.text",
+        "conversation.item.input_audio_transcript.delta",
+        "conversation.item.input_audio_transcript.text",
+        "input_audio_buffer.transcription.delta",
+        "input_audio_buffer.transcription.text",
+        "input_audio_buffer.transcript.delta",
+        "input_audio_buffer.transcript.text",
+    }
+    transcription_final_types = {
+        "conversation.item.input_audio_transcription.completed",
+        "conversation.item.input_audio_transcription.done",
+        "conversation.item.input_audio_transcription.final",
+        "conversation.item.input_audio_transcript.completed",
+        "conversation.item.input_audio_transcript.done",
+        "conversation.item.input_audio_transcript.final",
+        "input_audio_buffer.transcription.completed",
+        "input_audio_buffer.transcription.done",
+        "input_audio_buffer.transcription.final",
+        "input_audio_buffer.transcript.completed",
+        "input_audio_buffer.transcript.done",
+        "input_audio_buffer.transcript.final",
+    }
+    expected_events = {
+        ("session.created", None): (
+            "session_ready",
+            (),
+            ("event_id", "timestamp_ms"),
+        ),
+        ("session.updated", None): (
+            "session_ready",
+            (),
+            ("event_id", "timestamp_ms"),
+        ),
+        ("input_audio_buffer.committed", None): (
+            "input_audio_committed",
+            (),
+            ("turn_id", "event_id", "timestamp_ms"),
+        ),
+        ("conversation.item.created", None): (
+            "conversation_item",
+            ("data.item_type",),
+            (
+                "call_id",
+                "turn_id",
+                "event_id",
+                "data.role",
+                "data.name",
+                "data.arguments",
+                "data.content",
+                "data.transcript",
+            ),
+        ),
+        ("input_audio_buffer.speech_started", None): (
+            "speech_started",
+            (),
+            ("turn_id", "event_id", "timestamp_ms"),
+        ),
+        ("input_audio_buffer.speech_stopped", None): (
+            "speech_stopped",
+            (),
+            ("turn_id", "event_id", "timestamp_ms"),
+        ),
+        ("response.created", None): (
+            "response_created",
+            ("response_id",),
+            ("request_id", "stream_id", "event_id", "timestamp_ms"),
+        ),
+        ("response.text.delta", None): (
+            "response_text_delta",
+            ("response_id", "data.text"),
+            ("request_id", "stream_id", "event_id"),
+        ),
+        ("response.audio_transcript.delta", None): (
+            "response_transcript_delta",
+            ("response_id", "data.text"),
+            ("request_id", "stream_id", "event_id"),
+        ),
+        ("response.audio_transcript.done", None): (
+            "response_transcript_final",
+            (),
+            (
+                "request_id",
+                "response_id",
+                "stream_id",
+                "turn_id",
+                "event_id",
+                "duration_ms",
+                "data.text",
+            ),
+        ),
+        ("response.audio.delta", None): (
+            "response_audio_delta",
+            ("response_id", "data.audio"),
+            ("request_id", "stream_id", "event_id"),
+        ),
+        ("response.thinking.delta", None): (
+            "thinking_delta",
+            ("response_id", "data.text"),
+            ("request_id", "event_id"),
+        ),
+        ("response.thinking.done", None): (
+            "thinking_done",
+            ("response_id",),
+            ("request_id", "event_id", "data.text"),
+        ),
+        ("response.function_call_arguments.delta", None): (
+            "function_arguments_delta",
+            ("call_id", "data.arguments"),
+            ("response_id", "data.name", "event_id"),
+        ),
+        ("response.function_call_arguments.done", None): (
+            "function_arguments_done",
+            ("call_id", "data.arguments"),
+            ("response_id", "data.name", "event_id"),
+        ),
+        ("response.done", None): (
+            "response_done",
+            (),
+            (
+                "request_id",
+                "response_id",
+                "stream_id",
+                "turn_id",
+                "event_id",
+                "timestamp_ms",
+                "duration_ms",
+                "data.function_outputs",
+            ),
+        ),
+        ("error", None): (
             "error",
-        }
+            ("error_category", "error_reason"),
+            ("request_id", "response_id", "event_id"),
+        ),
+        **{
+            (raw_type, None): (
+                "transcription_delta",
+                ("data.text",),
+                ("turn_id", "event_id"),
+            )
+            for raw_type in transcription_delta_types
+        },
+        **{
+            (raw_type, None): (
+                "transcription_final",
+                (),
+                ("turn_id", "event_id", "duration_ms", "data.text"),
+            )
+            for raw_type in transcription_final_types
+        },
     }
+
+    expected_test_node = (
+        "tests/unit/test_realtime_provider_contract.py::"
+        "test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"
+    )
+
+    def assert_exact_matrix(
+        command_rows: list[dict[str, object]],
+        event_rows: list[dict[str, object]],
+    ) -> None:
+        assert {identity(row): schema(row) for row in command_rows} == expected_commands
+        assert {identity(row): schema(row) for row in event_rows} == expected_events
+        for row in (*command_rows, *event_rows):
+            assert row["exact_tests"] == [expected_test_node]
+
+    assert_exact_matrix(commands, events)
+
+    mutations: tuple[tuple[str, int, str, object], ...] = (
+        ("commands", 0, "raw_type", "input_audio_buffer.mutated"),
+        (
+            "commands",
+            5,
+            "discriminator",
+            {"field": "item.type", "value": "mutated"},
+        ),
+        ("commands", 0, "canonical_kind", "mutated_kind"),
+        ("events", 0, "required_fields", ["mutated.required"]),
+        ("events", 0, "optional_fields", ["mutated.optional"]),
+        ("events", 0, "exact_tests", ["tests/unit/mutated.py::test_mutated"]),
+    )
+    for section, index, field_name, mutated_value in mutations:
+        mutated_commands = copy.deepcopy(commands)
+        mutated_events = copy.deepcopy(events)
+        target_rows = mutated_commands if section == "commands" else mutated_events
+        target_rows[index][field_name] = mutated_value
+        with pytest.raises(AssertionError):
+            assert_exact_matrix(mutated_commands, mutated_events)
 
 
 def test_inventory_should_include_high_risk_event_semantics() -> None:
@@ -390,6 +561,21 @@ def test_event_should_validate_closed_fields_and_normalized_function_outputs() -
 
 
 def test_terminal_events_should_accept_existing_sparse_wire_shapes() -> None:
+    transcription_final = ProviderEvent(
+        kind=ProviderEventKind.TRANSCRIPTION_FINAL,
+        provider_event_type="conversation.item.input_audio_transcription.completed",
+        connection_epoch=2,
+        data={},
+    )
+    transcription_final_with_empty_text = ProviderEvent(
+        kind=ProviderEventKind.TRANSCRIPTION_FINAL,
+        provider_event_type="input_audio_buffer.transcription.final",
+        connection_epoch=2,
+        data={"text": ""},
+    )
+    assert transcription_final.data == {}
+    assert transcription_final_with_empty_text.data["text"] == ""
+
     response_done = ProviderEvent(
         kind=ProviderEventKind.RESPONSE_DONE,
         provider_event_type="response.done",

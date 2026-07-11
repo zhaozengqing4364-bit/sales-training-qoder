@@ -664,8 +664,8 @@ _EVENT_FIELDS: dict[
         frozenset(),
     ),
     ProviderEventKind.TRANSCRIPTION_FINAL: (
-        frozenset({"text"}),
         frozenset(),
+        frozenset({"text"}),
     ),
     ProviderEventKind.SPEECH_STARTED: _NO_EVENT_DATA,
     ProviderEventKind.SPEECH_STOPPED: _NO_EVENT_DATA,
@@ -793,13 +793,13 @@ def _validate_event_data(kind: ProviderEventKind, data: FrozenJsonMapping) -> No
         _validate_conversation_item(data)
     elif kind in {
         ProviderEventKind.TRANSCRIPTION_DELTA,
-        ProviderEventKind.TRANSCRIPTION_FINAL,
         ProviderEventKind.RESPONSE_TEXT_DELTA,
         ProviderEventKind.RESPONSE_TRANSCRIPT_DELTA,
         ProviderEventKind.THINKING_DELTA,
     }:
         _require_string(data["text"], "provider_event_text", allow_empty=False)
     elif kind in {
+        ProviderEventKind.TRANSCRIPTION_FINAL,
         ProviderEventKind.RESPONSE_TRANSCRIPT_FINAL,
         ProviderEventKind.THINKING_DONE,
     }:

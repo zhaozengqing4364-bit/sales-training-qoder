@@ -18,7 +18,7 @@
       "required_fields": ["audio"],
       "optional_fields": [],
       "production_consumers": ["StepFunRealtimePolicyMixin._handle_binary_frame"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.commit",
@@ -26,7 +26,7 @@
       "required_fields": [],
       "optional_fields": [],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._commit_and_respond"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.clear",
@@ -34,7 +34,7 @@
       "required_fields": [],
       "optional_fields": [],
       "production_consumers": ["StepFunRealtimeConnectionMixin._clear_upstream_generation"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.create",
@@ -42,7 +42,7 @@
       "required_fields": ["modalities"],
       "optional_fields": ["instructions"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._create_response"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_command_should_validate_closed_fields_by_kind"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.cancel",
@@ -50,7 +50,7 @@
       "required_fields": [],
       "optional_fields": ["response_id"],
       "production_consumers": ["StepFunRealtimeConnectionMixin._clear_upstream_generation"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_command_should_validate_closed_fields_by_kind"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.create",
@@ -59,7 +59,7 @@
       "required_fields": ["role", "content"],
       "optional_fields": ["item_id"],
       "production_consumers": ["StepFunRealtimePolicyMixin._handle_client_text"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_command_should_validate_closed_fields_by_kind"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.create",
@@ -68,7 +68,7 @@
       "required_fields": ["call_id", "output"],
       "optional_fields": [],
       "production_consumers": ["build_function_call_output_event"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_command_should_validate_closed_fields_by_kind"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     }
   ],
   "events": [
@@ -78,7 +78,7 @@
       "required_fields": [],
       "optional_fields": ["event_id", "timestamp_ms"],
       "production_consumers": ["classify_upstream_event"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "session.updated",
@@ -86,7 +86,7 @@
       "required_fields": [],
       "optional_fields": ["event_id", "timestamp_ms"],
       "production_consumers": ["classify_upstream_event"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.committed",
@@ -94,7 +94,7 @@
       "required_fields": [],
       "optional_fields": ["turn_id", "event_id", "timestamp_ms"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_event"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_include_high_risk_event_semantics"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.created",
@@ -102,7 +102,7 @@
       "required_fields": ["data.item_type"],
       "optional_fields": ["call_id", "turn_id", "event_id", "data.role", "data.name", "data.arguments", "data.content", "data.transcript"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_conversation_item_created"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_event_should_validate_closed_fields_and_normalized_function_outputs"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.input_audio_transcription.delta",
@@ -110,7 +110,7 @@
       "required_fields": ["data.text"],
       "optional_fields": ["turn_id", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_delta"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.input_audio_transcription.text",
@@ -118,7 +118,7 @@
       "required_fields": ["data.text"],
       "optional_fields": ["turn_id", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_delta"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.input_audio_transcript.delta",
@@ -126,7 +126,7 @@
       "required_fields": ["data.text"],
       "optional_fields": ["turn_id", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_delta"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.input_audio_transcript.text",
@@ -134,7 +134,7 @@
       "required_fields": ["data.text"],
       "optional_fields": ["turn_id", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_delta"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.transcription.delta",
@@ -142,7 +142,7 @@
       "required_fields": ["data.text"],
       "optional_fields": ["turn_id", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_delta"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.transcription.text",
@@ -150,7 +150,7 @@
       "required_fields": ["data.text"],
       "optional_fields": ["turn_id", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_delta"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.transcript.delta",
@@ -158,7 +158,7 @@
       "required_fields": ["data.text"],
       "optional_fields": ["turn_id", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_delta"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.transcript.text",
@@ -166,103 +166,103 @@
       "required_fields": ["data.text"],
       "optional_fields": ["turn_id", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_delta"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.input_audio_transcription.completed",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_include_high_risk_event_semantics"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.input_audio_transcription.done",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.input_audio_transcription.final",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.input_audio_transcript.completed",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.input_audio_transcript.done",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "conversation.item.input_audio_transcript.final",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.transcription.completed",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.transcription.done",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.transcription.final",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.transcript.completed",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.transcript.done",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.transcript.final",
       "canonical_kind": "transcription_final",
-      "required_fields": ["data.text"],
-      "optional_fields": ["turn_id", "event_id", "duration_ms"],
+      "required_fields": [],
+      "optional_fields": ["turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_transcription_completed", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.speech_started",
@@ -270,7 +270,7 @@
       "required_fields": [],
       "optional_fields": ["turn_id", "event_id", "timestamp_ms"],
       "production_consumers": ["RealtimeTurnCoordinator.on_user_audio_start", "StepFunEmotionAnalyzer.on_speech_started"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_include_high_risk_event_semantics"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "input_audio_buffer.speech_stopped",
@@ -278,7 +278,7 @@
       "required_fields": [],
       "optional_fields": ["turn_id", "event_id", "timestamp_ms"],
       "production_consumers": ["RealtimeTurnCoordinator.on_user_audio_stop", "StepFunEmotionAnalyzer.on_speech_stopped"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_include_high_risk_event_semantics"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.created",
@@ -286,7 +286,7 @@
       "required_fields": ["response_id"],
       "optional_fields": ["request_id", "stream_id", "event_id", "timestamp_ms"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_response_created"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.text.delta",
@@ -294,7 +294,7 @@
       "required_fields": ["response_id", "data.text"],
       "optional_fields": ["request_id", "stream_id", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_response_text_delta"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.audio_transcript.delta",
@@ -302,7 +302,7 @@
       "required_fields": ["response_id", "data.text"],
       "optional_fields": ["request_id", "stream_id", "event_id"],
       "production_consumers": ["StepFunTurnTranscriptCapture.on_upstream_event", "StepFunRealtimeUpstreamMixin._handle_upstream_response_text_delta"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_include_high_risk_event_semantics"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.audio_transcript.done",
@@ -310,7 +310,7 @@
       "required_fields": [],
       "optional_fields": ["request_id", "response_id", "stream_id", "turn_id", "event_id", "duration_ms", "data.text"],
       "production_consumers": ["StepFunTurnTranscriptCapture.on_upstream_event", "StepFunEmotionAnalyzer.on_audio_transcript_done"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_include_high_risk_event_semantics"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.audio.delta",
@@ -318,7 +318,7 @@
       "required_fields": ["response_id", "data.audio"],
       "optional_fields": ["request_id", "stream_id", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_response_audio_delta"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.thinking.delta",
@@ -326,7 +326,7 @@
       "required_fields": ["response_id", "data.text"],
       "optional_fields": ["request_id", "event_id"],
       "production_consumers": ["StepFunRealtimeFeedbackMixin._handle_thinking_event"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_include_high_risk_event_semantics"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.thinking.done",
@@ -334,7 +334,7 @@
       "required_fields": ["response_id"],
       "optional_fields": ["request_id", "event_id", "data.text"],
       "production_consumers": ["StepFunRealtimeFeedbackMixin._handle_thinking_event"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_include_high_risk_event_semantics"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.function_call_arguments.delta",
@@ -342,7 +342,7 @@
       "required_fields": ["call_id", "data.arguments"],
       "optional_fields": ["response_id", "data.name", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._accumulate_function_call_arguments"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.function_call_arguments.done",
@@ -350,7 +350,7 @@
       "required_fields": ["call_id", "data.arguments"],
       "optional_fields": ["response_id", "data.name", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._accumulate_function_call_arguments"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_cover_exact_provider_vocabulary"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "response.done",
@@ -358,7 +358,7 @@
       "required_fields": [],
       "optional_fields": ["request_id", "response_id", "stream_id", "turn_id", "event_id", "timestamp_ms", "duration_ms", "data.function_outputs"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_response_done", "extract_response_done_function_calls", "StepFunEmotionAnalyzer.on_speech_stopped"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_event_should_validate_closed_fields_and_normalized_function_outputs", "tests/unit/test_realtime_provider_contract.py::test_inventory_should_include_high_risk_event_semantics"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     },
     {
       "raw_type": "error",
@@ -366,7 +366,7 @@
       "required_fields": ["error_category", "error_reason"],
       "optional_fields": ["request_id", "response_id", "event_id"],
       "production_consumers": ["StepFunRealtimeUpstreamMixin._handle_upstream_error"],
-      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_include_high_risk_event_semantics", "tests/unit/test_realtime_provider_contract.py::test_error_contract_should_be_closed_and_safe"]
+      "exact_tests": ["tests/unit/test_realtime_provider_contract.py::test_inventory_should_lock_exact_wire_type_and_discriminator_pairs"]
     }
   ],
   "error_categories": [
