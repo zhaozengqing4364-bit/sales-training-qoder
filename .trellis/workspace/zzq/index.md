@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
-- **Last Active**: 2026-07-10
+- **Total Sessions**: 14
+- **Last Active**: 2026-07-11
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~467 | Active |
+| `journal-1.md` | ~503 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-07-11 | 模块化单体 2.0 Gate 1B 闭环 | `fb69e828`, `0fef32cc`, `8275ab76`, `952897e7` | `codex/newcomer-training-v0-9-closure` |
 | 13 | 2026-07-10 | 模块化单体 2.0 Gate 0C 前端回归真相 | `a1d852f1`, `dd5cf226`, `9b0e1e6a` | `codex/newcomer-training-v0-9-closure` |
 | 12 | 2026-07-10 | 模块化单体 2.0 Gate 0B 后端回归真相 | `63a878db`, `0c418048`, `6453f6c3` | `codex/newcomer-training-v0-9-closure` |
 | 11 | 2026-07-10 | 模块化单体 2.0 Gate 1A 架构适应度 | `2e04bd77`, `0a1010ff`, `b2840c54`, `e9484687` | `codex/newcomer-training-v0-9-closure` |

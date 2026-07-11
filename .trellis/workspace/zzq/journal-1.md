@@ -465,3 +465,39 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: 模块化单体 2.0 Gate 1B 闭环
+
+**Date**: 2026-07-11
+**Task**: 模块化单体 2.0 Gate 1B 闭环
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+完成自动发现测试底座、保守慢测选择、changed-line/关键 branch coverage、CI 唯一门禁、跨 session/FSM 回归与全栈审计；完整门禁自然 exit 0，独立 Trellis check 剩余 finding=0。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fb69e828` | (see git log) |
+| `0fef32cc` | (see git log) |
+| `8275ab76` | (see git log) |
+| `952897e7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
