@@ -1,7 +1,7 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 0C、Gate 1A、Gate 1B、Gate 2、Gate 3 已完成）
+状态：已批准，分 Gate 实施中（Gate 0A–3 已完成；Gate 4 implementation complete / closure pending）
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 
 实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
@@ -24,8 +24,9 @@ canonical gate 自然 exit 0，backend `3271 passed, 1 skipped`、Vitest 209 fil
 `1329 passed, 6 skipped`、Playwright generic/smoke/newcomer/presentation/sales 为
 `3/9/11/2/1 passed`（newcomer 1 个既有真实 Provider 条件 skip）、selected backend
 `598 passed, 21 skipped`、changed executable lines 3441/3868（88.96%），critical branch 无
-changed missing line 或 adoption floor 回退，最终输出 `Critical quality gate passed`。Gate 4–6
-仍按路线图推进，本文件的目标架构尚未整体落地。
+changed missing line 或 adoption floor 回退，最终输出 `Critical quality gate passed`。Gate 4
+领域所有权实现已完成但仍待 closure canonical gate；Gate 5–6 按路线图推进，本文件的目标架构
+尚未整体落地。
 
 ## 1. 背景
 
@@ -44,8 +45,8 @@ changed missing line 或 adoption floor 回退，最终输出 `Critical quality 
 本设计获批时，代码结构尚未兑现文档声明的依赖方向。以 13 个后端顶层包为节点、
 扫描 Python 静态和字面量动态 import 后，基线存在 49 条跨包边，除 `supervisor` 外的
 12 个包处于同一个强连通分量；当时 Realtime 也主要完成了文件拆分。Gate 1A 已冻结该
-依赖/SCC 基线，Gate 2–3 已先收敛 Realtime 状态、Provider 和 Grounding 决策权；Gate 4–6
-继续处理领域所有权、Locality 和兼容边退役。
+依赖/SCC 基线，Gate 2–3 已先收敛 Realtime 状态、Provider 和 Grounding 决策权；Gate 4
+已完成领域所有权实现，Gate 5–6 继续处理 Locality 和兼容边退役。
 
 本设计采用渐进式模块化单体 2.0：不重写、不拆微服务，通过可验证的
 strangler 切片把现有物理目录逐步深化为真正的 Module。
@@ -203,15 +204,14 @@ Examiner = Engine/Exam Runtime Port + Exam Scorer + Completion Writer
 
 Presentation tracer bullet 已在 Gate 2 落地：façade 不再继承 Sales handler，兼容 Adapter
 从第一次 base 初始化即声明 `scenario="presentation"` 且不构造 SalesStage、FuzzyDetection、
-RealtimeScoring。兼容 Adapter 仍临时复用 `sales_bot` StepFun mixins，所以实际
-`presentation_coach -> sales_bot` 依赖和 architecture policy 临时例外尚未退役；Gate 3
-已经只中立化 Provider/Grounding 所有权。该边还包含 message persistence、prompt、Roleplay 和报告
-helper；Gate 4 完成相关所有权迁移后，Gate 6 才能依据实际 import graph 删除，不能以 façade
-或单个 Port 已组合化代替整条边退役事实。
+RealtimeScoring。兼容 Adapter 仍临时复用 `sales_bot` StepFun Shared Handler，所以实际
+`presentation_coach -> sales_bot` 依赖和 architecture policy 临时例外尚未退役。Gate 4 已迁移
+message persistence、Roleplay、Evaluation 以及中立 event/text helper；Gate 6 仍须依据实际
+import graph 删除 Shared Handler 兼容继承，不能以 façade 或单个 Port 已组合化代替整条边退役事实。
 
 ### 6.3 Roleplay Contract bounded context
 
-完成 ADR 2026-06-20 已声明但尚未完成的中立化：
+Gate 4 已完成 ADR 2026-06-20 声明的中立化实现：
 
 - 中立 Module 拥有 schema、compiler、hash/freeze、visible/hidden disclosure、
   turn context、compliance decision 和 runtime DTO；
@@ -221,8 +221,9 @@ helper；Gate 4 完成相关所有权迁移后，Gate 6 才能依据实际 impor
 
 ### 6.4 Configuration Governance
 
-`ConfigBundleLifecycleService` 等发布、审批、版本和影响预览能力从 `admin` 所有权中
-抽出。`admin` 是 delivery Adapter；evaluation 和 curriculum 不再反向依赖 admin。
+`ConfigBundleLifecycleService` 等发布、审批、版本和影响预览能力已从 `admin` 所有权中
+抽出。`admin` 是 delivery/SQL Adapter；evaluation 和 curriculum 通过本域 immutable binding
+read adapter 读取，不再反向依赖 admin。
 
 ### 6.5 Evaluation & Report
 

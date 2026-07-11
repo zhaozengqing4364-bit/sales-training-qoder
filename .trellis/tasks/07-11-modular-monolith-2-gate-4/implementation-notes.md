@@ -95,3 +95,19 @@
   focused persistence/Sales matrix is 219 passed; Presentation ownership/Golden matrix is 80 passed;
   architecture plus runtime plugin matrix is 45 passed. Ruff passed and mypy passed for 15 focused
   source files; no wire payload, snapshot, persistence or report writer changed.
+- Task 7 final AST inventory: `configuration_governance` and `roleplay` have no outgoing package edge;
+  Evaluation depends only on `common`, `configuration_governance`, `prompt_templates` and `roleplay`;
+  Presentation consumes stable Evaluation/Training Runtime seams while retaining the named Sales shared
+  handler edge. The Gate 1A 12-package SCC has contracted to one 7-package SCC:
+  `agent, common, curriculum_practice, evaluation, prompt_templates, sales_trainer, support`.
+  Policy baseline and temporary exceptions now match observed edges exactly.
+- Task 7 executable knowledge is captured in
+  `.trellis/spec/backend/domain-ownership-and-evaluation-ports.md` with all seven mandatory sections and
+  linked from the backend index. ADR, design, architecture and roadmap consistently state
+  `implementation complete / closure pending`; none claim canonical closure before Task 8.
+- Final seven-dimension artifact audit required two repair passes: it removed an uncreated Curriculum
+  adapter from the file map, corrected the scoring path to the ADR-protected
+  `/api/v1/evaluation/admin/scoring-rulesets`, synchronized two stale architecture tables, and fixed the
+  Task 7 pytest working directory. Re-audit result is hard finding=0, advisory finding=0. Architecture
+  plus migration-progress is 28 passed, direct guard passes, Trellis JSONL is 14/14 valid and
+  `git diff --check` is clean.

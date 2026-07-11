@@ -161,7 +161,7 @@ architecture guard, Trellis, CodeGraph.
 **Files:**
 - Create: `backend/src/roleplay/compiler.py`
 - Create: `backend/src/roleplay/rollout.py`
-- Create: `backend/src/curriculum_practice/services/roleplay/curriculum_adapter.py`
+- Compatibility: `backend/src/curriculum_practice/services/roleplay_contracts.py`
 - Modify: `backend/src/common/config.py`
 - Modify: `backend/src/common/conversation/replay.py`
 - Modify: `backend/src/curriculum_practice/api.py`
@@ -325,7 +325,8 @@ architecture guard, Trellis, CodeGraph.
   Replace Admin lifecycle lookup with an Evaluation-owned immutable config-binding projection. Replace
   Curriculum Roleplay import with neutral Roleplay. Remove Presentation and Sales implementation imports.
   Mount `admin.api.scoring_rulesets` directly from the root router registry at the unchanged
-  `/api/v1/admin/scoring-rulesets` path instead of nesting the Admin router inside Evaluation.
+  `/api/v1/evaluation/admin/scoring-rulesets` path instead of nesting the Admin router inside
+  Evaluation.
 
 - [x] **Step 5: Run differential and idempotency tests**
 
@@ -392,27 +393,27 @@ architecture guard, Trellis, CodeGraph.
 - Policy declares both new packages, stable directions and only observed temporary edges.
 - Every exception remains lifecycle-complete and stale entries fail the guard.
 
-- [ ] **Step 1: Run CodeGraph impact and AST inventory**
+- [x] **Step 1: Run CodeGraph impact and AST inventory**
 
   Record before/after direct edges, SCC membership, affected symbols/tests and remaining Gate 6
   compatibility consumers in implementation notes.
 
-- [ ] **Step 2: Remove stale policy exceptions**
+- [x] **Step 2: Remove stale policy exceptions**
 
   Delete the five vanished edges from policy in the same change. Do not add a baseline SCC or allowlist
   to accommodate a new cycle; fix the direction instead.
 
-- [ ] **Step 3: Write the 7-section executable Trellis contract**
+- [x] **Step 3: Write the 7-section executable Trellis contract**
 
   Specify scope, signatures, contracts, error matrix, good/base/bad cases, tests and wrong/correct
   examples for Roleplay, Config Governance and Evaluation ports.
 
-- [ ] **Step 4: Synchronize authority docs truthfully**
+- [x] **Step 4: Synchronize authority docs truthfully**
 
   Mark Gate 4 implementation complete only after focused checks and policy evidence are green; leave
   canonical/closure status explicit until Task 8.
 
-- [ ] **Step 5: Run design artifact audit and commit**
+- [x] **Step 5: Run design artifact audit and commit**
 
   Audit all seven dimensions, fix contradictions, validate Trellis JSONL, run `git diff --check`, then
   commit as `docs(architecture): codify gate 4 domain ownership`.
@@ -545,11 +546,12 @@ cd backend
 ### Task 7
 
 ```bash
+cd /home/dev/work/sales-training-qoder/backend
+.venv/bin/python -m pytest \
+  tests/unit/test_gate4_domain_ownership.py \
+  tests/unit/test_architecture_dependency_guard.py --no-cov -q
+.venv/bin/python scripts/architecture_dependency_guard.py --check
 cd /home/dev/work/sales-training-qoder
-backend/.venv/bin/python -m pytest \
-  backend/tests/unit/test_gate4_domain_ownership.py \
-  backend/tests/unit/test_architecture_dependency_guard.py --no-cov -q
-backend/.venv/bin/python backend/scripts/architecture_dependency_guard.py --check
 python3 ./.trellis/scripts/task.py validate \
   .trellis/tasks/07-11-modular-monolith-2-gate-4
 git diff --check

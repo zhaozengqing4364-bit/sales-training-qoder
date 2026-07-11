@@ -101,8 +101,9 @@ temporary_edges:
     owner: presentation-coach
     reason: >-
       The Presentation facade is composition-based and Gate 3 neutralized
-      Provider/Grounding, but its named compatibility adapter still imports
-      Sales message persistence, prompt, Roleplay, and report helpers.
+      Provider/Grounding; Gate 4 moved neutral event, text, persistence, Roleplay
+      and Evaluation helpers, but the named compatibility adapter still inherits
+      the Sales shared StepFun handler and imports prompt/support adapters.
     retire_when: >-
       Gate 4 moves those remaining owners behind neutral ports and Gate 6
       proves the presentation_coach -> sales_bot import edge is absent.
@@ -149,15 +150,10 @@ temporary_edges:
     expires_on: 2026-10-31
 
 baseline_sccs:
-  - - admin
-    - agent
+  - - agent
     - common
-    - curriculum_analytics
     - curriculum_practice
     - evaluation
-    - presentation_coach
     - prompt_templates
-    - sales_bot
     - sales_trainer
     - support
-    - training_runtime

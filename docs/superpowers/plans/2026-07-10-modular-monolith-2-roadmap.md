@@ -20,7 +20,8 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 | 1B | Completed（2026-07-11） | 唯一 release gate 从头自然 exit 0；backend 2665 passed；Vitest 209 files / 1329 passed；全部本地 Playwright、598 个 selected backend 测试和 82% changed coverage 通过 |
 | 2 | Completed（2026-07-11） | Presentation Engine tracer bullet 默认启用、单 flag 可回滚；canonical gate backend 2903 passed、Vitest 1329 passed、全部本地 Playwright、598 个 selected backend 测试和 91.34% changed coverage 通过 |
 | 3 | Completed（2026-07-11） | Provider Port/StepFun codec/Fake contract 与单 Grounding authority 已闭环；Brooks/Trellis review finding=0；canonical gate backend 3271、Vitest 1329、selected backend 598、changed coverage 88.96% 全绿 |
-| 4–6 | Not started | 按顺序实施领域所有权、Locality 和兼容层退役 |
+| 4 | Implementation complete / closure pending | Roleplay、Config Governance、Evaluation ports 与中立 realtime helpers 已落地；5 条反向边清零，SCC 从 12 包缩至 7 包；待 Brooks/Trellis 与 canonical gate |
+| 5–6 | Not started | 按顺序实施前端/模型 Locality 和兼容层退役 |
 
 Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进度，不把已批准的目标
 设计或已完成的单个基础设施 Gate 误写成模块化单体 2.0 整体完成。
@@ -152,8 +153,8 @@ branch 无 changed missing line、无 floor 回退，最终自然输出 `Critica
 
 Gate 2 没有完成 Provider/Grounding 中立化。兼容 Adapter 仍复用 `sales_bot` StepFun mixins，
 所以 `presentation_coach -> sales_bot` 临时 policy edge 继续保留。Gate 3 只中立化 Provider 与
-Grounding 所有权；该边还包含 message persistence、prompt、Roleplay 和报告 helper，必须等
-Gate 4 完成相关所有权迁移，并由 Gate 6 按实际 import graph 退役，不能预先删除 policy。
+Grounding 所有权；Gate 4 已迁移 message persistence、Roleplay、Evaluation 和中立 helper，
+Shared Handler 兼容继承仍必须由 Gate 6 按实际 import graph 退役，不能预先删除 policy。
 
 已完成变更包：
 
@@ -197,11 +198,18 @@ Provider 条件 skip），selected backend integration/E2E `598 passed, 21 skipp
 executable lines 3441/3868（88.96%），critical branch 无 changed missing line 或 adoption floor
 回退，最终输出 `Critical quality gate passed`。
 
-边界说明：Gate 3 不删除整条 `presentation_coach -> sales_bot` 临时边；该边剩余的 message
-persistence、prompt、Roleplay、report helper 由 Gate 4 迁移并在 Gate 6 依据实际 import graph
-退役。
+边界说明：Gate 4 已迁移 message persistence、Roleplay、Evaluation 和中立事件/文本 helper；
+`presentation_coach -> sales_bot` 仍因命名 Shared Handler 兼容继承而真实存在，只能由 Gate 6
+依据实际 import graph 退役。
 
 ## Gate 4：Roleplay、配置与评估所有权
+
+状态：**Implementation complete / closure pending（2026-07-11）**。中立 `roleplay` 和
+`configuration_governance` bounded context、Evaluation Evidence/Scenario frozen registry、
+Presentation/root adapter、ConfigVersion read binding 以及 `training_runtime.realtime` 中立 helper
+已落地。`curriculum_practice -> admin` 与 Evaluation 的四条反向边全部消失；实际 SCC 从 Gate 1A
+的 12 包缩至 7 包。聚焦 Roleplay、Config、Evaluation、Realtime 与 architecture matrices 全绿，
+最终 Brooks/Trellis review 和 clean-start canonical gate 仍由 closure Task 8 执行。
 
 变更包建议：
 
@@ -213,7 +221,7 @@ persistence、prompt、Roleplay、report helper 由 Gate 4 迁移并在 Gate 6 �
 6. Evaluation Evidence/Scenario ports；
 7. 删除 evaluation ↔ sales/presentation/curriculum 反向边。
 
-验收：Roleplay hash 和历史报告不变；相关 SCC 被拆开。
+验收：实现验收已通过；Gate closure 待最终独立审计与 canonical gate。
 
 ## Gate 5：训练闭环与前端 Locality
 

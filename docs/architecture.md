@@ -178,7 +178,7 @@
 | `/api/v1/admin/knowledge` | 知识库管理 |
 | `/api/v1/admin/presentations` | PPT 管理 |
 | `/api/v1/admin/presentation-ai` | PPT AI 策略管理 |
-| `/api/v1/admin/scoring-rulesets` | 评分规则集 |
+| `/api/v1/evaluation/admin/scoring-rulesets` | 评分规则集 |
 | `/api/v1/admin/voice-runtime` | 语音运行时配置 |
 | `/api/v1/admin/settings` | 系统设置 |
 | `/api/v1/admin/config-center` | 配置中心 |
@@ -197,7 +197,7 @@
 | `/api/v1/admin/supervisor-training` | 主管复训/培训管理 |
 | `/api/v1/admin/learning-contents` | 学习内容管理 |
 | `/api/v1/admin/test-bank` | 题库管理 |
-| `/api/v1/admin/scoring-rulesets` | 评分规则集 |
+| `/api/v1/evaluation/admin/scoring-rulesets` | 评分规则集 |
 | `/api/v1/admin/learning-contents` | 学习内容管理 |
 | `/api/v1/admin/test-bank` | 题库管理 |
 | `/api/v1/admin/interventions` | 干预管理 |
@@ -352,10 +352,10 @@ Gate 3 已在默认生产路径完成 Provider/Grounding 中立化：
 - Sales Provider/Grounding 2x2 与 Presentation Engine/Provider/Grounding 2x2x2 均只构造每轴
   一个 authority，Golden wire、snapshot、persistence、reconnect 和 single writer 保持一致。
 
-Gate 3 只中立化 Provider/Grounding。Presentation 兼容 Adapter 仍临时复用 `sales_bot`
-message persistence、prompt、Roleplay 和 report helpers，因此 `presentation_coach -> sales_bot`
-实际依赖和 architecture policy 临时例外仍存在；Gate 4 完成所有权迁移、Gate 6 以 import
-graph 证明边消失后才能退役，不能因 Port/Module 已中立化而提前删除。
+Gate 4 已在 Gate 3 Provider/Grounding 基础上迁移 message persistence、Roleplay、Evaluation 和
+中立 realtime helpers。Presentation 兼容 Adapter 仍临时继承 `sales_bot` Shared Handler，因此
+`presentation_coach -> sales_bot` 实际依赖和 architecture policy 临时例外仍存在；Gate 6 以
+import graph 证明边消失后才能退役，不能因 Port/Module 已中立化而提前删除。
 
 Gate 2 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
 `2903 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
@@ -1082,7 +1082,7 @@ Next.js (端口 3445)
 | `2026-05-11-architecture-boundary-domain-contract` | 领域边界与契约锁定（PRD #23） |
 | `2026-05-11-curriculum-practice-boundary-contract` | 课程考核模块边界契约 |
 | `2026-05-12-case-item-role-profile-pilot-contract` | 案例/角色/画像试点契约 |
-| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2 Engine 与 Gate 3 Provider/Grounding 已实施，Gate 4–6 待完成 |
+| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2–3 已闭环，Gate 4 实现完成/closure 待验，Gate 5–6 待完成 |
 
 详见 `docs/adr/`。
 

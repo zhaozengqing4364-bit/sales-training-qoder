@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–3 已完成；Gate 4–6
-待实施。
+Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–3 已完成；Gate 4
+implementation 已完成、closure 待最终独立审计与 canonical gate；Gate 5–6 待实施。
 本文描述目标边界和迁移约束，不把尚未完成的物理迁移写成当前事实。
 
 ## 背景
@@ -15,7 +15,7 @@ Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。
 - 第一轮 realtime Seam 已降低单文件复杂度；
 - 13 个后端顶层包存在 49 条跨包依赖，12 个包位于同一 SCC；
 - Realtime Mixin 仍通过数百个共享私有字段形成隐藏 Interface；
-- Roleplay Contract、Configuration Governance、Evaluation 的所有权仍是过渡态；
+- Roleplay Contract、Configuration Governance、Evaluation 的过渡所有权已由 Gate 4 实现迁移；
 - 发布门禁只执行部分测试，OpenAPI 和多组测试夹具已经漂移。
 
 AI 辅助开发显著提高提交吞吐。继续按传统人周规划或依赖人工记忆维护边界，会让
@@ -143,9 +143,10 @@ owner，stale epoch/correlation/decision 均 fail closed。Sales 2x2 和 Present
 score/report single writer 保持兼容。Engine 仍使用 diagnostics schema v1，frontend/runtime
 projection 不暴露 query、snippet、claim、raw Provider error 或 secret。
 
-Gate 3 不等于整条 Presentation 边退役。兼容 Adapter 仍复用 `sales_bot` 的 message
-persistence、prompt、Roleplay 和 report helpers，实际 `presentation_coach -> sales_bot`
-dependency policy 临时边继续保留；Gate 4 所有权迁移和 Gate 6 import-graph 证明完成前不得删除。
+Gate 3 不等于整条 Presentation 边退役。Gate 4 已把 message persistence、Roleplay、Evaluation
+和中立 realtime helper 移到稳定所有权，但兼容 Adapter 仍继承 `sales_bot` Shared Handler，
+实际 `presentation_coach -> sales_bot` dependency policy 临时边继续保留；Gate 6 import-graph
+证明完成前不得删除。
 Gate 3 closure 证据（2026-07-11 UTC）：whole-branch Brooks Architecture Audit 100/100 且
 Critical/Important finding=0，独立 Trellis check finding=0。最终 clean-start canonical gate
 自然 exit 0：backend unit+contract `3271 passed, 1 skipped`；Vitest 209 files /

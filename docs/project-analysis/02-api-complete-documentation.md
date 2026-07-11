@@ -276,8 +276,8 @@
 
 | 端点 | 方法 | 权限 | 功能 | 前端对应调用 |
 |------|------|------|------|-------------|
-| `/api/v1/admin/scoring-rulesets` | GET/POST | admin | 评分规则集 | `api.admin.scoringRulesets.getList()` / `create()` |
-| `/api/v1/admin/scoring-rulesets/:id` | GET/PUT/DELETE | admin | 规则集CRUD | `api.admin.scoringRulesets.getById()` / `update()` / `delete()` |
+| `/api/v1/evaluation/admin/scoring-rulesets` | GET/POST | admin | 评分规则集 | `api.admin.scoringRulesets.getList()` / `create()` |
+| `/api/v1/evaluation/admin/scoring-rulesets/:id` | GET/PUT/DELETE | admin | 规则集CRUD | `api.admin.scoringRulesets.getById()` / `update()` / `delete()` |
 
 ### 1.22 Admin — 题库管理
 
