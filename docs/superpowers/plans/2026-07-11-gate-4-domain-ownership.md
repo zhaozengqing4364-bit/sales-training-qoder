@@ -74,13 +74,13 @@ architecture guard, Trellis, CodeGraph.
 - Consumes: current Roleplay compiler/hash, ConfigBundle lifecycle and report services.
 - Produces: byte-stable oracle helpers and AST edge assertions used by every later task.
 
-- [ ] **Step 1: Write Golden capture tests before moving code**
+- [x] **Step 1: Write Golden capture tests before moving code**
 
   Add parametrized fixtures for published and legacy Roleplay contracts, Situation Pack hashes,
   initial/triggered disclosure states, compliance allow/warn/block decisions, Sales report and
   Presentation report. Assert compact sorted JSON or complete mapping equality, not selected fields.
 
-- [ ] **Step 2: Write architecture Red tests**
+- [x] **Step 2: Write architecture Red tests**
 
   Use `collect_edges()` to assert the desired final absence of:
 
@@ -97,12 +97,12 @@ architecture guard, Trellis, CodeGraph.
 
   Verify this test initially fails and preserve the failure in implementation notes.
 
-- [ ] **Step 3: Run the immutable baseline**
+- [x] **Step 3: Run the immutable baseline**
 
   Run the existing Roleplay, ConfigBundle, comprehensive/presentation report and architecture tests.
   Expected: existing behavior green; new final-edge test Red only.
 
-- [ ] **Step 4: Commit the executable baseline**
+- [x] **Step 4: Commit the executable baseline**
 
   Commit fixtures/tests/notes as `test(architecture): freeze gate 4 ownership contracts`.
 

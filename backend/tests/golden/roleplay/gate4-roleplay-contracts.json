@@ -1,0 +1,197 @@
+{
+  "contract": {
+    "audit": {
+      "compiled_at": "2026-07-11T00:00:00+00:00",
+      "compiled_by": "gate4",
+      "compiler_version": "roleplay_contract_compiler_v1",
+      "contract_hash": "sha256:c49e9a6502210fb43fd41aaa09c3244b61e985433476c7c4d374df95a8309f44"
+    },
+    "behavior_rules_for_prompt_only": [],
+    "conflict_response_strategy": "customer_confused_correction",
+    "contract_id": "sha256:c49e9a6502210fb43fd41aaa09c3244b61e985433476c7c4d374df95a8309f44",
+    "disclosure_policy": {
+      "default_hidden": true,
+      "never_disclose_keys": [],
+      "phases": [
+        {
+          "disclose": {"text": "预算仍需采购委员会确认。"},
+          "disclose_keys": ["budget"],
+          "keywords": ["预算"]
+        }
+      ]
+    },
+    "forbidden_claim_patterns": [
+      "上次拜访",
+      "之前我们聊",
+      "上次方案",
+      "之前报价",
+      "之前合作",
+      "上次沟通",
+      "上次见面",
+      "之前你给"
+    ],
+    "forbidden_topic_codes": ["contract_closing"],
+    "relationship_context": {
+      "has_discussed_budget": false,
+      "has_existing_partnership": false,
+      "has_prior_meeting": false,
+      "has_seen_proposal": false,
+      "meeting_history_summary": null,
+      "prior_interactions": "none"
+    },
+    "runtime_violation_policy": {
+      "forbidden_topic": "mark_and_continue",
+      "hidden_information_leak": "cancel_or_regenerate_once",
+      "persona_style_drift": "mark_for_report",
+      "relationship_history_contradiction": "cancel_or_regenerate_once"
+    },
+    "sales_stage_policy": {
+      "forbidden_stage_codes": ["price_negotiation", "contract_closing"],
+      "initial_stage_hint": "opening",
+      "stage_authority": "SalesStageCapability",
+      "stage_transition_notes": []
+    },
+    "schema_version": "roleplay_contract_v1",
+    "situation": {"code": "first_visit", "label": "首次拜访", "version": "v1"},
+    "source_refs": [
+      {
+        "asset_id": "gate4-persona",
+        "asset_type": "persona",
+        "hash": "sha256:dae9296fae4a0bca7506d83f582b1c0d6c51cb95434782c813eec10961754a4c",
+        "status": null,
+        "version": null
+      }
+    ],
+    "source_track": "direct_practice",
+    "visible_information_scope": {
+      "conditionally_visible_keys": ["budget", "decision_chain", "hidden_information"],
+      "hidden_by_default_keys": ["budget", "decision_chain"],
+      "initial_visible_keys": ["industry", "company_profile"]
+    }
+  },
+  "decisions": {
+    "allow": {
+      "action": "allow",
+      "allowed": true,
+      "audit_payload": {
+        "contract_hash": "sha256:c49e9a6502210fb43fd41aaa09c3244b61e985433476c7c4d374df95a8309f44"
+      },
+      "matched_pattern": null,
+      "severity": "none",
+      "violation_code": null
+    },
+    "block_or_record": {
+      "action": "regenerate_once",
+      "allowed": false,
+      "audit_payload": {
+        "configured_action": "cancel_or_regenerate_once",
+        "contract_hash": "sha256:c49e9a6502210fb43fd41aaa09c3244b61e985433476c7c4d374df95a8309f44",
+        "policy_key": "relationship_history_contradiction"
+      },
+      "matched_pattern": "上次拜访",
+      "severity": "blocking",
+      "violation_code": "ROLEPLAY_HISTORY_CONTRADICTION"
+    }
+  },
+  "initial_disclosure": {
+    "contract_hash": "sha256:c49e9a6502210fb43fd41aaa09c3244b61e985433476c7c4d374df95a8309f44",
+    "disclosed_keys": [],
+    "disclosed_payload": {},
+    "events": [],
+    "last_updated_at": "2026-07-11T00:01:00+00:00",
+    "pending_trigger_evidence": [],
+    "situation_code": "first_visit",
+    "status": "ready",
+    "visible_keys": ["industry", "company_profile"]
+  },
+  "situation_pack": {
+    "content_hash": "sha256:5abb8786878111b61be75869f79892b35ee9d008d8c78e7fccfbedb2c5f92202",
+    "payload": {
+      "behavior_rules_for_prompt_only": [],
+      "code": "first_visit",
+      "compatible_practice_modes": ["customer_roleplay"],
+      "compatible_scenario_types": ["sales"],
+      "conflict_response_strategy": "customer_confused_correction",
+      "disclosure_policy": {},
+      "forbidden_claim_patterns": [
+        "上次拜访",
+        "之前我们聊",
+        "上次方案",
+        "之前报价",
+        "之前合作",
+        "上次沟通",
+        "上次见面",
+        "之前你给"
+      ],
+      "forbidden_stage_codes": ["price_negotiation", "contract_closing"],
+      "forbidden_topic_codes": ["contract_closing"],
+      "initial_stage_hint": "opening",
+      "label": "首次拜访",
+      "relationship_context": {
+        "has_discussed_budget": false,
+        "has_existing_partnership": false,
+        "has_prior_meeting": false,
+        "has_seen_proposal": false,
+        "meeting_history_summary": null,
+        "prior_interactions": "none"
+      },
+      "runtime_violation_policy": {
+        "forbidden_topic": "mark_and_continue",
+        "hidden_information_leak": "cancel_or_regenerate_once",
+        "persona_style_drift": "mark_for_report",
+        "relationship_history_contradiction": "cancel_or_regenerate_once"
+      },
+      "status": "published",
+      "version": "v1",
+      "visible_information_scope": {
+        "conditionally_visible_keys": ["hidden_information"],
+        "hidden_by_default_keys": [
+          "hidden_information",
+          "budget",
+          "decision_chain",
+          "competitor_quote"
+        ],
+        "initial_visible_keys": [
+          "industry",
+          "company_profile",
+          "customer_role",
+          "pain_points",
+          "objections",
+          "success_criteria"
+        ]
+      }
+    }
+  },
+  "triggered_disclosure": {
+    "contract_hash": "sha256:c49e9a6502210fb43fd41aaa09c3244b61e985433476c7c4d374df95a8309f44",
+    "disclosed_keys": ["budget"],
+    "disclosed_payload": {"budget": "预算仍需采购委员会确认。"},
+    "events": [
+      {
+        "created_at": "2026-07-11T00:02:00+00:00",
+        "event_type": "disclosure_phase_matched",
+        "evidence": {},
+        "matched_keys": ["budget"],
+        "phase_index": 0,
+        "sales_stage": "discovery",
+        "trace_id": null,
+        "trigger": "",
+        "turn_number": 2
+      }
+    ],
+    "last_updated_at": "2026-07-11T00:02:00+00:00",
+    "pending_trigger_evidence": [],
+    "situation_code": "first_visit",
+    "status": "ready",
+    "visible_keys": ["industry", "company_profile", "budget"]
+  },
+  "turn_context": {
+    "contract_hash": "sha256:c49e9a6502210fb43fd41aaa09c3244b61e985433476c7c4d374df95a8309f44",
+    "current_sales_stage": "discovery",
+    "disclosed_keys": ["budget"],
+    "disclosure_state_status": "ready",
+    "situation_code": "first_visit",
+    "visible_keys": ["industry", "company_profile", "budget"],
+    "visible_payload": {"budget": "预算仍需确认", "industry": "制造业"}
+  }
+}

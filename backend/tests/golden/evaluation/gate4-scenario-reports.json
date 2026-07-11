@@ -1,0 +1,28 @@
+{
+  "detailed_feedback": "保持证据可追溯。",
+  "dimension_scores": [
+    {"description": "事实准确", "name": "准确性", "score": 85.0, "weight": 0.6},
+    {"description": "表达清晰", "name": "表达", "score": 78.75, "weight": 0.4}
+  ],
+  "generated_at": "2026-07-11T00:00:00+00:00",
+  "key_improvements": ["更简洁"],
+  "key_strengths": ["事实准确"],
+  "overall_score": 82.5,
+  "recommendations": ["下一轮缩短开场"],
+  "ruleset_id": "ruleset-gate4",
+  "ruleset_source": "published",
+  "ruleset_version": "v1",
+  "score_basis": "weighted_dimensions",
+  "scoring_metadata": {"source": "published"},
+  "session_id": "gate4-session",
+  "stage_summaries": [
+    {
+      "average_score": 82.5,
+      "end_turn": 2,
+      "key_points": ["价值表达"],
+      "stage_number": 1,
+      "start_turn": 1,
+      "summary": "完成"
+    }
+  ]
+}
