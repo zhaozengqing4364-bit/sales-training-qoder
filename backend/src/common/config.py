@@ -48,6 +48,10 @@ class Settings:
             "CURRICULUM_EXAMINER_ENABLED",
             False,
         )
+        self.PRESENTATION_REALTIME_ENGINE_ENABLED = _env_bool(
+            "PRESENTATION_REALTIME_ENGINE_ENABLED",
+            True,
+        )
         self.SITUATION_PACK_DUAL_READ = _env_bool(
             "SITUATION_PACK_DUAL_READ",
             False,
@@ -256,6 +260,10 @@ class Settings:
     CURRICULUM_EXAMINER_ENABLED: bool = _env_bool(
         "CURRICULUM_EXAMINER_ENABLED",
         False,
+    )
+    PRESENTATION_REALTIME_ENGINE_ENABLED: bool = _env_bool(
+        "PRESENTATION_REALTIME_ENGINE_ENABLED",
+        True,
     )
     SITUATION_PACK_DUAL_READ: bool = _env_bool(
         "SITUATION_PACK_DUAL_READ",

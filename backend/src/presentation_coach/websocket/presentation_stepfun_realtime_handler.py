@@ -50,16 +50,9 @@ from sales_bot.websocket.stepfun_realtime_handler import (
     TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS,
     StepFunRealtimeSharedHandler,
 )
-from training_runtime.realtime import (
-    GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
-    ConnectionPhase,
-    RealtimeSessionEngine,
-    RealtimeSessionState,
-    RealtimeStateTransitionError,
-    TurnPhase,
-)
 
 logger = get_logger(__name__)
+GROUNDING_DIAGNOSTICS_SCHEMA_VERSION = 1
 
 
 class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
@@ -71,7 +64,7 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         stepfun_transport: Any | None = None,
         db_session_factory: Any | None = None,
         knowledge_service_factory: Any | None = None,
-        runtime_engine: RealtimeSessionEngine | None = None,
+        runtime_engine: Any | None = None,
     ) -> None:
         super_kwargs: dict[str, Any] = {
             "stepfun_transport": stepfun_transport,
@@ -152,7 +145,7 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             self._runtime_engine is not None
             and self._runtime_engine.state.connection.epoch != self._connection_epoch
         ):
-            raise RealtimeStateTransitionError("engine_legacy_epoch_mismatch")
+            raise RuntimeError("engine_legacy_epoch_mismatch")
 
     @staticmethod
     def _engine_restore_payload(
@@ -165,11 +158,18 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         if isinstance(raw_engine_payload, Mapping):
             payload = copy.deepcopy(dict(raw_engine_payload))
         else:
-            payload = RealtimeSessionState(scenario_type="presentation").to_dict()
+            payload = {
+                "version": 1,
+                "scenario_type": "presentation",
+                "connection": {},
+                "turn": {},
+                "grounding": {},
+                "evidence": {},
+            }
             request_id = int(runtime_state.get("current_request_id") or 0)
             if request_id > 0:
                 payload["turn"] = {
-                    "phase": TurnPhase.COMPLETED.value,
+                    "phase": "completed",
                     "request_id": request_id,
                     "response_id": None,
                     "stream_id": None,
@@ -187,7 +187,7 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         )
         connection.update(
             {
-                "phase": ConnectionPhase.CONNECTING.value,
+                "phase": "connecting",
                 "session_id": session_id,
                 "healthy": False,
                 "reconnecting": target_epoch > 1,
@@ -201,23 +201,23 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
     async def _connect_upstream(self) -> None:
         if self._runtime_engine is not None:
             connection = self._runtime_engine.state.connection
-            if connection.phase is ConnectionPhase.DISCONNECTED:
+            if self._phase_value(connection.phase) == "disconnected":
                 self._runtime_engine.begin_connection(self.session_id or "presentation")
         await super()._connect_upstream()
         if (
             self._runtime_engine is not None
-            and self._runtime_engine.state.connection.phase
-            is ConnectionPhase.CONNECTING
+            and self._phase_value(self._runtime_engine.state.connection.phase)
+            == "connecting"
         ):
             self._runtime_engine.mark_connected()
 
     async def _save_session_state(self) -> None:
         if self._runtime_engine is not None:
             connection = self._runtime_engine.state.connection
-            if connection.phase in {
-                ConnectionPhase.CONNECTING,
-                ConnectionPhase.CONNECTED,
-                ConnectionPhase.DEGRADED,
+            if self._phase_value(connection.phase) in {
+                "connecting",
+                "connected",
+                "degraded",
             }:
                 reason = self._last_disconnect_reason or "connection_closed"
                 self._runtime_engine.begin_close(reason=reason)
@@ -258,7 +258,7 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         response_id = self._active_response.response_id
         if (
             response_id
-            and self._runtime_engine.state.turn.phase is TurnPhase.RECEIVING
+            and self._phase_value(self._runtime_engine.state.turn.phase) == "receiving"
         ):
             self._runtime_engine.mark_response_started(response_id=str(response_id))
 
@@ -269,7 +269,7 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         if (
             self._runtime_engine is not None
             and event.get("delta")
-            and self._runtime_engine.state.turn.phase is TurnPhase.GENERATING
+            and self._phase_value(self._runtime_engine.state.turn.phase) == "generating"
         ):
             self._runtime_engine.mark_streaming()
 
@@ -285,7 +285,7 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         engine_turn = self._runtime_engine.state.turn
         if (
             engine_turn.request_id == expected_request_id
-            and engine_turn.phase in {TurnPhase.GENERATING, TurnPhase.STREAMING}
+            and self._phase_value(engine_turn.phase) in {"generating", "streaming"}
         ):
             self._runtime_engine.complete_turn(request_id=expected_request_id)
 
@@ -372,6 +372,11 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             "degraded": status == "degraded",
             "blocked": status == "blocked",
         }
+
+    @staticmethod
+    def _phase_value(phase: object) -> str:
+        value = getattr(phase, "value", phase)
+        return str(value)
 
     async def _load_effective_policy(self) -> None:
         await super()._load_effective_policy()

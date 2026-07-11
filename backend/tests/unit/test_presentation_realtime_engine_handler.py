@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
@@ -13,6 +15,7 @@ from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeSharedHandler
 from sales_bot.websocket.stepfun_realtime_policy import StepFunRealtimePolicyMixin
 from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstreamMixin
+from training_runtime import PresentationScenarioPlugin, TrainingRuntimeDescriptor
 from training_runtime.realtime import (
     GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
     GroundingPhase,
@@ -59,7 +62,10 @@ def test_facade_composes_one_adapter_without_sales_handler_inheritance() -> None
         constructed.append(adapter)
         return adapter
 
-    handler = PresentationRealtimeEngineHandler(runtime_adapter_factory=factory)
+    handler = PresentationRealtimeEngineHandler(
+        runtime_engine_factory=RealtimeSessionEngine,
+        runtime_adapter_factory=factory,
+    )
 
     assert not isinstance(handler, StepFunRealtimeSharedHandler)
     assert len(constructed) == 1
@@ -85,6 +91,7 @@ async def test_facade_explicitly_delegates_session_manager_surface() -> None:
         )
     )
     handler = PresentationRealtimeEngineHandler(
+        runtime_engine_factory=RealtimeSessionEngine,
         runtime_adapter_factory=lambda *, runtime_engine: adapter
     )
     websocket = Mock()
@@ -115,6 +122,7 @@ def test_facade_runtime_diagnostics_are_versioned_and_sanitized() -> None:
     )
 
     handler = PresentationRealtimeEngineHandler(
+        runtime_engine_factory=RealtimeSessionEngine,
         runtime_adapter_factory=FakeRuntimeAdapter
     )
 
@@ -371,3 +379,140 @@ async def test_normalized_transcript_records_deduped_engine_evidence() -> None:
 
     assert set(engine.state.evidence.records) == {"transcript:1:user"}
     assert engine.state.evidence.records["transcript:1:user"].turn_number == 1
+
+
+class GoldenConversationAdapter(FakeRuntimeAdapter):
+    def __init__(self, *, runtime_engine: RealtimeSessionEngine | None) -> None:
+        if runtime_engine is None:
+            self.runtime_engine = None
+            self.scenario = "presentation"
+            self.session_status = "preparing"
+            self.ai_state = "idle"
+            self.websocket = None
+            self.session_id = None
+            self.user_id = None
+            self.handle_connection = AsyncMock()
+            self.send_message = AsyncMock(return_value="sent")
+            self.close = AsyncMock(return_value=None)
+            self.sync_lifecycle_transition = AsyncMock()
+        else:
+            super().__init__(runtime_engine=runtime_engine)
+            self.close = AsyncMock(return_value=None)
+        self.external_events: list[dict[str, object]] = []
+        self.persistence_keys: set[str] = set()
+        self.write_count = 0
+
+    def emit(self, event_type: str, **stable: object) -> None:
+        self.external_events.append({"type": event_type, **stable})
+
+    def persist_once(self, key: str) -> None:
+        if key not in self.persistence_keys:
+            self.persistence_keys.add(key)
+            self.write_count += 1
+
+
+async def _drive_golden_conversation(adapter: GoldenConversationAdapter) -> None:
+    engine = adapter.runtime_engine
+    adapter.emit("connected", session_id="session-golden")
+    adapter.emit("status", session_status="in_progress", ai_state="listening")
+    if engine is not None:
+        engine.begin_connection("session-golden")
+        engine.mark_connected()
+        engine.begin_turn(request_id=1, stream_id="stream-stable")
+        engine.begin_grounding(
+            decision_id="presentation:golden:1",
+            policy_hash="sha256:frozen-policy",
+        )
+        engine.resolve_grounding(
+            outcome="ready",
+            mode="grounded",
+            diagnostics={
+                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+                "status": "ready",
+                "reason_code": "presentation_feedback_ready",
+                "source": "presentation",
+                "mode": "grounded",
+            },
+        )
+        engine.record_evidence(
+            evidence_key="audio:1:4:stable",
+            evidence_type="audio",
+            turn_number=1,
+            payload=b"audio",
+        )
+    adapter.emit("asr_transcript", text="讲解第一页", is_final=True)
+    adapter.persist_once("transcript:1:user")
+    adapter.persist_once("transcript:1:user")
+    if engine is not None:
+        engine.record_evidence(
+            evidence_key="transcript:1:user",
+            evidence_type="transcript",
+            turn_number=1,
+            payload="讲解第一页".encode(),
+        )
+        engine.record_evidence(
+            evidence_key="transcript:1:user",
+            evidence_type="transcript",
+            turn_number=1,
+            payload="讲解第一页".encode(),
+        )
+        engine.mark_response_started(response_id="response-stable")
+        engine.mark_streaming()
+        engine.complete_turn(request_id=1)
+    adapter.emit("tts_audio", request_id=1, is_final=True)
+    if engine is not None:
+        engine.begin_close(reason="network_reset")
+        engine.mark_disconnected(reason="network_reset")
+        engine.begin_connection("session-golden")
+        engine.mark_connected()
+    adapter.emit("connected", session_id="session-golden")
+    adapter.emit("status", session_status="in_progress", ai_state="listening")
+
+
+@pytest.mark.asyncio
+async def test_golden_differential_preserves_external_single_writer_contract() -> None:
+    fixture_path = (
+        Path(__file__).parents[1]
+        / "fixtures/realtime/golden_conversation_contract_v1.json"
+    )
+    inventory = json.loads(fixture_path.read_text(encoding="utf-8"))
+    contract_ids = {item["id"] for item in inventory["contracts"]}
+    assert "conversation.connect_start_text_audio_response_done" in contract_ids
+    assert "rollout.single_writer_rollback" in contract_ids
+
+    descriptor = TrainingRuntimeDescriptor(
+        session_id="session-golden",
+        scenario_type="presentation",
+        voice_mode="stepfun_realtime",
+    )
+    selection = PresentationScenarioPlugin(
+        rollout_resolver=lambda: True
+    ).select_runtime_handler(descriptor)
+    assert selection.handler_factory_name == "PresentationRealtimeEngineHandler"
+
+    legacy = GoldenConversationAdapter(runtime_engine=None)
+    from presentation_coach.websocket.presentation_realtime_engine_handler import (
+        PresentationRealtimeEngineHandler,
+    )
+
+    facade = PresentationRealtimeEngineHandler(
+        runtime_engine_factory=RealtimeSessionEngine,
+        runtime_adapter_factory=GoldenConversationAdapter
+    )
+    engine_adapter = facade.runtime_adapter
+    assert isinstance(engine_adapter, GoldenConversationAdapter)
+
+    await _drive_golden_conversation(legacy)
+    await _drive_golden_conversation(engine_adapter)
+
+    assert engine_adapter.external_events == legacy.external_events
+    assert engine_adapter.persistence_keys == legacy.persistence_keys
+    assert engine_adapter.write_count == legacy.write_count == 1
+    assert await facade.close() == await legacy.close()
+    assert facade.engine.state.connection.epoch == 2
+    assert facade.engine.state.turn.phase is TurnPhase.COMPLETED
+    assert facade.engine.state.grounding.phase is GroundingPhase.READY
+    assert set(facade.engine.state.evidence.records) == {
+        "audio:1:4:stable",
+        "transcript:1:user",
+    }

@@ -112,8 +112,8 @@ async def test_presentation_ws_uses_persisted_stepfun_mode() -> None:
 
     legacy_handler = MagicMock()
     legacy_handler.handle_connection = AsyncMock()
-    stepfun_handler = MagicMock()
-    stepfun_handler.handle_connection = AsyncMock()
+    engine_handler = MagicMock()
+    engine_handler.handle_connection = AsyncMock()
 
     session_manager = MagicMock()
     session_manager.register_session = AsyncMock()
@@ -137,9 +137,12 @@ async def test_presentation_ws_uses_persisted_stepfun_mode() -> None:
             return_value=legacy_handler,
         ),
         patch(
-            "presentation_coach.websocket.presentation_stepfun_realtime_handler.PresentationStepFunRealtimeHandler",
-            return_value=stepfun_handler,
-        ),
+            "presentation_coach.websocket.presentation_realtime_engine_handler.PresentationRealtimeEngineHandler",
+            return_value=engine_handler,
+        ) as engine_factory,
+        patch(
+            "presentation_coach.websocket.presentation_stepfun_realtime_handler.LegacyPresentationStepFunRealtimeHandler"
+        ) as rollback_factory,
         patch(
             "common.websocket.session_manager.get_session_manager",
             return_value=session_manager,
@@ -155,17 +158,88 @@ async def test_presentation_ws_uses_persisted_stepfun_mode() -> None:
 
     session_manager.register_session.assert_awaited_once_with(
         session_id,
-        stepfun_handler,
+        engine_handler,
         user_id="u-456",
     )
-    stepfun_handler.handle_connection.assert_awaited_once_with(
+    engine_handler.handle_connection.assert_awaited_once_with(
         websocket,
         session_id,
         "query-token",
         trace_id=None,
     )
+    engine_factory.assert_called_once()
+    assert set(engine_factory.call_args.kwargs) == {"runtime_engine_factory"}
+    rollback_factory.assert_not_called()
     legacy_handler.handle_connection.assert_not_called()
     session_manager.unregister_session.assert_awaited_once_with(session_id)
+
+
+@pytest.mark.asyncio
+async def test_presentation_ws_flag_false_constructs_only_rollback_handler() -> None:
+    session_id = str(uuid.uuid4())
+    websocket = MagicMock(headers={})
+    websocket.accept = AsyncMock()
+    websocket.close = AsyncMock()
+    rollback_handler = MagicMock()
+    rollback_handler.handle_connection = AsyncMock()
+    session_manager = MagicMock()
+    session_manager.register_session = AsyncMock()
+    session_manager.unregister_session = AsyncMock()
+
+    with (
+        patch(
+            "main._resolve_presentation_runtime",
+            new=AsyncMock(return_value=("presentation", "stepfun_realtime")),
+        ),
+        patch(
+            "main._is_presentation_kb_lock_unbound_session",
+            new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "main._resolve_presentation_admission_decision",
+            new=AsyncMock(return_value=presentation_admission_ok()),
+        ),
+        patch(
+            "main._resolve_presentation_session_owner_id",
+            new=AsyncMock(return_value="u-rollback"),
+        ),
+        patch(
+            "training_runtime.plugins.settings.PRESENTATION_REALTIME_ENGINE_ENABLED",
+            False,
+        ),
+        patch(
+            "presentation_coach.websocket.presentation_stepfun_realtime_handler.LegacyPresentationStepFunRealtimeHandler",
+            return_value=rollback_handler,
+        ) as rollback_factory,
+        patch(
+            "presentation_coach.websocket.presentation_realtime_engine_handler.PresentationRealtimeEngineHandler"
+        ) as engine_factory,
+        patch(
+            "common.websocket.session_manager.get_session_manager",
+            return_value=session_manager,
+        ),
+        patch("common.auth.service.verify_token", return_value={"sub": "u-rollback"}),
+    ):
+        await main._handle_presentation_websocket(
+            websocket=websocket,
+            session_id=session_id,
+            token="query-token",
+            voice_mode="legacy",
+        )
+
+    rollback_factory.assert_called_once_with()
+    engine_factory.assert_not_called()
+    session_manager.register_session.assert_awaited_once_with(
+        session_id,
+        rollback_handler,
+        user_id="u-rollback",
+    )
+    rollback_handler.handle_connection.assert_awaited_once_with(
+        websocket,
+        session_id,
+        "query-token",
+        trace_id=None,
+    )
 
 
 @pytest.mark.asyncio

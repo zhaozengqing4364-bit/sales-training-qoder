@@ -82,7 +82,10 @@ async def _reject_presentation_admission(
 def _instantiate_runtime_handler(selection: Any) -> Any:
     handler_module = import_module(selection.handler_factory_path)
     handler_factory = getattr(handler_module, selection.handler_factory_name)
-    return handler_factory()
+    factory_kwargs = getattr(selection, "handler_factory_kwargs", {})
+    return handler_factory(
+        **(factory_kwargs if isinstance(factory_kwargs, dict) else {})
+    )
 
 
 async def _handle_presentation_websocket(

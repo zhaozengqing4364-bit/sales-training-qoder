@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import importlib.util
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from common.config import settings
 from common.runtime_descriptor import TrainingRuntimeDescriptor
+
+from .realtime import ENGINE_STATE_VERSION, RealtimeSessionEngine
 
 PluginAction = str
 LEGACY_SALES_HANDLER_MODULES = (
@@ -39,6 +43,7 @@ class ScenarioRuntimeHandlerSelection:
     websocket_route: str
     handler_factory_path: str
     handler_factory_name: str
+    handler_factory_kwargs: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -223,17 +228,31 @@ class PresentationScenarioPlugin:
 
     scenario_type = "presentation"
 
+    def __init__(
+        self,
+        *,
+        rollout_resolver: Callable[[], bool] | None = None,
+    ) -> None:
+        self._rollout_resolver = rollout_resolver or (
+            lambda: bool(settings.PRESENTATION_REALTIME_ENGINE_ENABLED)
+        )
+
     def on_session_start(
         self,
         descriptor: TrainingRuntimeDescriptor,
     ) -> ScenarioPluginEntrypoint:
         runtime_mode = self._runtime_mode(descriptor)
-        handler_path = (
-            "presentation_coach.websocket.presentation_stepfun_realtime_handler."
-            "PresentationStepFunRealtimeHandler"
-            if runtime_mode == "stepfun_realtime"
-            else "presentation_coach.websocket.presentation_handler.PresentationWebSocketHandler"
-        )
+        if runtime_mode == "stepfun_realtime":
+            realtime_engine_enabled = bool(self._rollout_resolver())
+            handler_module, handler_name = self._stepfun_handler_selection(
+                realtime_engine_enabled
+            )
+            handler_path = f"{handler_module}.{handler_name}"
+        else:
+            handler_path = (
+                "presentation_coach.websocket.presentation_handler."
+                "PresentationWebSocketHandler"
+            )
         return self._entrypoint(
             descriptor,
             action="on_session_start",
@@ -254,13 +273,19 @@ class PresentationScenarioPlugin:
     ) -> ScenarioRuntimeHandlerSelection:
         runtime_mode = self._runtime_mode(descriptor)
         if runtime_mode == "stepfun_realtime":
-            handler_factory_path = (
-                "presentation_coach.websocket.presentation_stepfun_realtime_handler"
+            realtime_engine_enabled = bool(self._rollout_resolver())
+            handler_factory_path, handler_factory_name = (
+                self._stepfun_handler_selection(realtime_engine_enabled)
             )
-            handler_factory_name = "PresentationStepFunRealtimeHandler"
+            handler_factory_kwargs: dict[str, object] = (
+                {"runtime_engine_factory": RealtimeSessionEngine}
+                if realtime_engine_enabled
+                else {}
+            )
         else:
             handler_factory_path = "presentation_coach.websocket.presentation_handler"
             handler_factory_name = "PresentationWebSocketHandler"
+            handler_factory_kwargs = {}
 
         return ScenarioRuntimeHandlerSelection(
             scenario_type=self.scenario_type,
@@ -268,6 +293,7 @@ class PresentationScenarioPlugin:
             websocket_route="/ws/presentation/{session_id}",
             handler_factory_path=handler_factory_path,
             handler_factory_name=handler_factory_name,
+            handler_factory_kwargs=handler_factory_kwargs,
         )
 
     def build_evidence(
@@ -306,6 +332,7 @@ class PresentationScenarioPlugin:
         )
 
     def diagnostics(self) -> ScenarioPluginDiagnostics:
+        realtime_engine_enabled = bool(self._rollout_resolver())
         return ScenarioPluginDiagnostics(
             scenario_type=self.scenario_type,
             runtime_family="presentation_training_flow",
@@ -320,10 +347,35 @@ class PresentationScenarioPlugin:
             details={
                 "legacy_handler": "presentation_coach.websocket.presentation_handler.PresentationWebSocketHandler",
                 "stepfun_handler": (
-                    "presentation_coach.websocket.presentation_stepfun_realtime_handler."
-                    "PresentationStepFunRealtimeHandler"
+                    "presentation_coach.websocket.presentation_realtime_engine_handler."
+                    "PresentationRealtimeEngineHandler"
                 ),
+                "rollback_handler": (
+                    "presentation_coach.websocket.presentation_stepfun_realtime_handler."
+                    "LegacyPresentationStepFunRealtimeHandler"
+                ),
+                "realtime_engine_enabled": realtime_engine_enabled,
+                "selected_stepfun_runtime": (
+                    "presentation_realtime_engine"
+                    if realtime_engine_enabled
+                    else "legacy_presentation_stepfun"
+                ),
+                "engine_state_version": ENGINE_STATE_VERSION,
             },
+        )
+
+    @staticmethod
+    def _stepfun_handler_selection(
+        realtime_engine_enabled: bool,
+    ) -> tuple[str, str]:
+        if realtime_engine_enabled:
+            return (
+                "presentation_coach.websocket.presentation_realtime_engine_handler",
+                "PresentationRealtimeEngineHandler",
+            )
+        return (
+            "presentation_coach.websocket.presentation_stepfun_realtime_handler",
+            "LegacyPresentationStepFunRealtimeHandler",
         )
 
     def _report_trigger_entrypoint(

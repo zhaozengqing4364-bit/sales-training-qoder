@@ -4,6 +4,7 @@ import importlib.util
 
 import pytest
 
+from common.config import Settings
 from training_runtime import (
     LEGACY_SALES_HANDLER_MODULES,
     PresentationScenarioPlugin,
@@ -160,7 +161,7 @@ def test_should_keep_presentation_training_flow_entrypoints() -> None:
     assert legacy_start.runtime_mode == "legacy"
     assert legacy_start.service_path.endswith("PresentationWebSocketHandler")
     assert stepfun_start.runtime_mode == "stepfun_realtime"
-    assert stepfun_start.service_path.endswith("PresentationStepFunRealtimeHandler")
+    assert stepfun_start.service_path.endswith("PresentationRealtimeEngineHandler")
     assert diagnostics.runtime_family == "presentation_training_flow"
 
 
@@ -190,9 +191,110 @@ def test_should_select_presentation_runtime_handler_by_voice_mode() -> None:
     assert stepfun_selection.runtime_mode == "stepfun_realtime"
     assert stepfun_selection.websocket_route == "/ws/presentation/{session_id}"
     assert stepfun_selection.handler_factory_path == (
+        "presentation_coach.websocket.presentation_realtime_engine_handler"
+    )
+    assert stepfun_selection.handler_factory_name == "PresentationRealtimeEngineHandler"
+
+
+def test_presentation_stepfun_defaults_to_engine_facade() -> None:
+    descriptor = TrainingRuntimeDescriptor(
+        session_id="presentation-engine",
+        scenario_type="presentation",
+        voice_mode="stepfun_realtime",
+    )
+    plugin = PresentationScenarioPlugin(rollout_resolver=lambda: True)
+
+    selection = plugin.select_runtime_handler(descriptor)
+
+    assert selection.handler_factory_path == (
+        "presentation_coach.websocket.presentation_realtime_engine_handler"
+    )
+    assert selection.handler_factory_name == "PresentationRealtimeEngineHandler"
+    assert callable(selection.handler_factory_kwargs["runtime_engine_factory"])
+
+
+def test_presentation_stepfun_flag_false_atomically_selects_legacy_adapter() -> None:
+    descriptor = TrainingRuntimeDescriptor(
+        session_id="presentation-rollback",
+        scenario_type="presentation",
+        voice_mode="stepfun_realtime",
+    )
+    plugin = PresentationScenarioPlugin(rollout_resolver=lambda: False)
+
+    selection = plugin.select_runtime_handler(descriptor)
+
+    assert selection.handler_factory_path == (
         "presentation_coach.websocket.presentation_stepfun_realtime_handler"
     )
-    assert stepfun_selection.handler_factory_name == "PresentationStepFunRealtimeHandler"
+    assert selection.handler_factory_name == "LegacyPresentationStepFunRealtimeHandler"
+    assert selection.handler_factory_kwargs == {}
+
+
+def test_presentation_rollout_resolver_is_read_once_per_atomic_selection() -> None:
+    descriptor = TrainingRuntimeDescriptor(
+        session_id="presentation-atomic",
+        scenario_type="presentation",
+        voice_mode="stepfun_realtime",
+    )
+    values = iter((True, False))
+    calls = 0
+
+    def changing_resolver() -> bool:
+        nonlocal calls
+        calls += 1
+        return next(values)
+
+    selection = PresentationScenarioPlugin(
+        rollout_resolver=changing_resolver
+    ).select_runtime_handler(descriptor)
+
+    assert calls == 1
+    assert selection.handler_factory_name == "PresentationRealtimeEngineHandler"
+    assert callable(selection.handler_factory_kwargs["runtime_engine_factory"])
+
+
+def test_presentation_rollout_does_not_change_legacy_voice_mode() -> None:
+    descriptor = TrainingRuntimeDescriptor(
+        session_id="presentation-legacy-voice",
+        scenario_type="presentation",
+        voice_mode="legacy",
+    )
+
+    for enabled in (True, False):
+        selection = PresentationScenarioPlugin(
+            rollout_resolver=lambda enabled=enabled: enabled
+        ).select_runtime_handler(descriptor)
+        assert selection.handler_factory_path == (
+            "presentation_coach.websocket.presentation_handler"
+        )
+        assert selection.handler_factory_name == "PresentationWebSocketHandler"
+
+
+def test_presentation_rollout_diagnostics_identify_selected_and_rollback_paths() -> None:
+    enabled = PresentationScenarioPlugin(
+        rollout_resolver=lambda: True
+    ).diagnostics().details
+    disabled = PresentationScenarioPlugin(
+        rollout_resolver=lambda: False
+    ).diagnostics().details
+
+    assert enabled["realtime_engine_enabled"] is True
+    assert enabled["selected_stepfun_runtime"] == "presentation_realtime_engine"
+    assert disabled["realtime_engine_enabled"] is False
+    assert disabled["selected_stepfun_runtime"] == "legacy_presentation_stepfun"
+    assert enabled["rollback_handler"].endswith(
+        "LegacyPresentationStepFunRealtimeHandler"
+    )
+
+
+def test_presentation_realtime_engine_setting_defaults_true_and_supports_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("PRESENTATION_REALTIME_ENGINE_ENABLED", raising=False)
+    assert Settings().PRESENTATION_REALTIME_ENGINE_ENABLED is True
+
+    monkeypatch.setenv("PRESENTATION_REALTIME_ENGINE_ENABLED", "false")
+    assert Settings().PRESENTATION_REALTIME_ENGINE_ENABLED is False
 
 
 def test_should_reject_unknown_scenario_type() -> None:
