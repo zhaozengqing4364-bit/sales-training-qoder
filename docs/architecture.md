@@ -343,10 +343,10 @@ Gate 2 没有完成 Provider/Grounding 中立化。Presentation façade 已不�
 宣称这些边界已完成。
 
 Gate 2 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
-`2870 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
+`2903 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
 generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 仅保留 1 个既有
 真实收费 Provider 条件 skip）；selected backend integration/E2E `598 passed, 21 skipped`；
-changed executable lines 773/849（91.05%），critical branch 无 changed missing line、无
+changed executable lines 802/878（91.34%），critical branch 无 changed missing line、无
 adoption floor 回退，最终输出 `Critical quality gate passed`。
 
 可执行合同：`.trellis/spec/backend/realtime-session-engine.md`。实施计划：
