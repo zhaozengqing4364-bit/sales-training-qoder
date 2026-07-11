@@ -79,6 +79,14 @@ class RealtimeSessionEngine:
         turn_number: int,
         payload: bytes,
     ) -> bool: ...
+    def record_evidence_digest(
+        self,
+        *,
+        evidence_key: str,
+        evidence_type: str,
+        turn_number: int,
+        payload_digest: str,
+    ) -> bool: ...
     def mark_evidence_pending(self, evidence_key: str) -> bool: ...
     def acknowledge_evidence(self, evidence_key: str) -> bool: ...
 
@@ -142,9 +150,21 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
   non-pristine Engine fails.
 - Engine evidence is record/dedupe metadata only. It does not create a second message, score,
   report, or audit writer.
-- Binary audio evidence records digest/length-derived keys, never raw audio in diagnostics.
-  Turn ownership uses the transcript turn resolver: same-turn replay dedupes; identical bytes
-  in different turns produce distinct keys.
+- Shared binary input returns an explicit acceptance disposition. It is `True` only after a
+  non-empty audio chunk passes lifecycle, upstream-ready, and backpressure checks, the upstream
+  append is accepted, and the local audio flow is appended. Empty/invalid/interrupt, lifecycle or
+  readiness rejection, upstream rejection, and backpressure drop all return `False` and create no
+  audio evidence.
+- Presentation maintains one O(1) per-user-turn audio accumulator only for accepted chunks:
+  streaming SHA-256, chunk count, byte count, and a frozen transcript-resolved turn number. It
+  never retains raw audio or a chunk list and never transitions Engine state per frame.
+- After local input-audio commit succeeds and before response scheduling, the shared narrow hook
+  records exactly one Presentation evidence key
+  `audio:{turn}:chunks:{count}:bytes:{bytes}` through `record_evidence_digest`, then clears the
+  accumulator. Sales uses the no-op hook. Duplicate commit creates no second record; identical
+  bytes committed in different turns remain separate turn-scoped records.
+- `record_evidence_digest` accepts only `sha256:` followed by 64 lowercase hexadecimal digits and
+  reuses the same evidence idempotency, conflict, and transition semantics as `record_evidence`.
 - The façade preserves legacy adapter diagnostics at their existing **top-level** keys:
   `session_status`, `ai_state`, `current_request_id`, `live_session_summary`, `claim_truth`,
   `coach_health`, `knowledge_answer_diagnostics`, `reconnect_state`, and `runtime_events`.
@@ -200,8 +220,10 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
 | Same evidence key and same payload replay | Return `False`; count unchanged |
 | Same evidence key with conflicting metadata/digest | `RealtimeStateTransitionError` |
 | Evidence acknowledgement without pending state | `RealtimeStateTransitionError` |
-| Same audio bytes replayed in one user turn | One audio evidence record |
-| Same audio bytes in different turns | Separate turn-scoped evidence keys |
+| 1,000 accepted chunks followed by one local commit | One audio evidence/transition; accumulator and snapshot growth remain O(1) |
+| Empty/invalid/interrupt/rejected/dropped audio | Return `False`; zero audio evidence |
+| Duplicate commit without newly accepted local audio | No hook effect; evidence count unchanged |
+| Same committed audio bytes in different turns | Separate frozen turn-scoped evidence keys |
 | Pre-Gate snapshot lacks `realtime_engine` | Derive valid Engine state and preserve every legacy field |
 | Façade diagnostics are read by practice API | Legacy top-level fields remain available |
 | Adapter reports token/raw prompt/transcript fields | Sanitize; do not propagate |
@@ -217,8 +239,9 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
   persistence behavior; Sales keeps its existing default constructor and reconnect flow.
 - **Bad**: a plugin passes a factory callable or kwargs dict, the façade nests/removes legacy
   diagnostics, Engine writes a second message/score/report, `response.done` completes the new
-  follow-up turn, audio keys use mutable `turn_count`, or documentation claims Provider/Grounding
-  neutrality while the compatibility adapter still imports `sales_bot` mixins.
+  follow-up turn, rejected or per-frame audio creates evidence, raw chunks accumulate in memory,
+  audio keys use mutable `turn_count`, or documentation claims Provider/Grounding neutrality while
+  the compatibility adapter still imports `sales_bot` mixins.
 
 ## 6. Tests Required
 

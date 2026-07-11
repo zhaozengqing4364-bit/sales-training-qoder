@@ -119,13 +119,15 @@ handler。Engine 显式拥有 versioned Connection/Turn/Grounding/Evidence 状�
 新增 `runtime_state.realtime_engine` 并兼容 pre-Gate 恢复。Presentation 从第一次 base 初始化
 即禁用 Sales capability construction，Sales 默认行为不变。真实 Golden differential 覆盖
 connect/start/text/audio/transcript/response.done/reconnect/close、完整 legacy snapshot 投影、
-epoch/grounding/evidence terminal state 和 mutation sensitivity。
+epoch/grounding/evidence terminal state 和 mutation sensitivity。二进制音频只有在共享入口确认
+upstream 与本地 audio flow 均 accepted 后才进入 Presentation 的 O(1) turn 累加器；本地 commit
+成功后、response 调度前仅写一条 SHA-256 digest Evidence，拒绝帧、逐帧和重复 commit 均不写。
 
 Gate 2 唯一 canonical gate 从 clean start 重跑并自然 exit 0：backend unit+contract
-`2846 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright generic/smoke/
+`2868 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright generic/smoke/
 newcomer/presentation/sales 分别为 `3/9/11/2/1 passed`（newcomer 保留 1 个既有真实收费
 Provider 条件 skip）；selected backend integration/E2E `598 passed, 21 skipped`；changed
-executable lines 723/799（90.49%），critical branch 无 changed missing line、无 adoption floor
+executable lines 770/847（90.91%），critical branch 无 changed missing line、无 adoption floor
 回退，最终输出 `Critical quality gate passed`。
 
 该完成事实不包含 Gate 3。兼容 Adapter 仍复用 `sales_bot` StepFun mixins，实际

@@ -18,7 +18,7 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 | 0C | Completed（2026-07-10） | 17 项失败按时区/fixture/旧语义清零；209 files / 1327 passed / 6 skipped；5:54.32 自然 exit 0 |
 | 1A | Completed（2026-07-10） | 49 条边全部受 policy 治理；12 包 SCC 只许缩小；guard 已进入主门禁 |
 | 1B | Completed（2026-07-11） | 唯一 release gate 从头自然 exit 0；backend 2665 passed；Vitest 209 files / 1329 passed；全部本地 Playwright、598 个 selected backend 测试和 82% changed coverage 通过 |
-| 2 | Completed（2026-07-11） | Presentation Engine tracer bullet 默认启用、单 flag 可回滚；canonical gate backend 2846 passed、Vitest 1329 passed、全部本地 Playwright、598 个 selected backend 测试和 90.49% changed coverage 通过 |
+| 2 | Completed（2026-07-11） | Presentation Engine tracer bullet 默认启用、单 flag 可回滚；canonical gate backend 2868 passed、Vitest 1329 passed、全部本地 Playwright、598 个 selected backend 测试和 90.91% changed coverage 通过 |
 | 3–6 | Not started | 按顺序实施 Provider/Grounding 中立化、领域所有权、Locality 和兼容层退役 |
 
 Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进度，不把已批准的目标
@@ -140,10 +140,10 @@ message/score/report/reconnect 单 writer，Presentation 不构造 Sales capabil
 默认仍启用自身能力。真实 Golden differential 已覆盖完整事件、持久化、snapshot、reconnect
 epoch、grounding/evidence terminal state 和 mutation sensitivity。
 
-完整门禁证据：backend unit+contract `2846 passed, 1 skipped`；Vitest 209 files /
+完整门禁证据：backend unit+contract `2868 passed, 1 skipped`；Vitest 209 files /
 `1329 passed, 6 skipped`；generic/smoke/newcomer/presentation/sales Playwright 分别为
 `3/9/11/2/1 passed`（newcomer 仅 1 个既有真实收费 Provider 条件 skip）；selected backend
-integration/E2E `598 passed, 21 skipped`；changed executable lines 723/799（90.49%），critical
+integration/E2E `598 passed, 21 skipped`；changed executable lines 770/847（90.91%），critical
 branch 无 changed missing line、无 floor 回退，最终自然输出 `Critical quality gate passed`。
 
 详细计划：

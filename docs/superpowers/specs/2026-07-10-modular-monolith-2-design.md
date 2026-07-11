@@ -16,10 +16,10 @@ integration/E2E `598 passed, 21 skipped`、changed coverage 82%，并自然输�
 `Critical quality gate passed`。Gate 2 已于 2026-07-11 完成 Presentation tracer bullet：默认
 Engine façade、单 flag Legacy 回滚、显式 versioned state、additive/pre-Gate snapshot、单 writer、
 零 Presentation Sales capability construction 和真实 Golden differential 已进入生产路径。
-本 Gate canonical gate 从头自然 exit 0：backend `2846 passed, 1 skipped`、Vitest 209 files /
+本 Gate canonical gate 从头自然 exit 0：backend `2868 passed, 1 skipped`、Vitest 209 files /
 `1329 passed, 6 skipped`、Playwright generic/smoke/newcomer/presentation/sales 为
 `3/9/11/2/1 passed`、selected backend `598 passed, 21 skipped`、changed coverage
-723/799（90.49%）。Gate 3–6 仍按路线图推进，本文件的目标架构尚未整体落地。
+770/847（90.91%）。Gate 3–6 仍按路线图推进，本文件的目标架构尚未整体落地。
 
 ## 1. 背景
 
@@ -172,8 +172,10 @@ StepFun 是 `RealtimeProviderPort` 的第一个 Adapter，而不是 Engine 的�
 Gate 2 当前实现只兑现了该目标的 Presentation tracer bullet：
 `training_runtime.realtime` 已拥有 versioned Connection/Turn/Grounding/Evidence state 和
 invariant-checked transitions；Presentation 通过组合 façade 接入，兼容 Adapter 保留现有
-StepFun wire/persistence 单 writer。当前 `GroundingState` 记录一次决策结果，但 Tool/Grounding
-缓存尚未收敛为单一权威；`RealtimeProviderPort` 和 provider event codec 也尚未落地。
+StepFun wire/persistence 单 writer。音频 Evidence 只聚合共享入口 accepted 的 chunk，以 O(1)
+流式 digest/count 元数据在本地 commit 后按 turn 写一次，拒绝帧和逐帧路径不写。当前
+`GroundingState` 记录一次决策结果，但 Tool/Grounding 缓存尚未收敛为单一权威；
+`RealtimeProviderPort` 和 provider event codec 也尚未落地。
 因此上段完整 WebSocket/Provider/Grounding 描述仍是 Gate 3+ 目标，不是 Gate 2 当前事实。
 
 ### 6.2 Scenario 组合

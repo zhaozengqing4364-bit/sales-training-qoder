@@ -325,8 +325,10 @@ PresentationScenarioPlugin
   `EvidenceState`，并拒绝非法转换、旧 request、active-turn 重入和 evidence 冲突；
 - reconnect snapshot 只新增 `runtime_state.realtime_engine`，缺少该 key 的 Gate 2 前
   snapshot 会从既有字段派生恢复，connection epoch 按持久值单调 +1；
-- `response.done` 在 flush 后、tool follow-up 创建前完成捕获的 Engine turn；音频 Evidence
-  使用 transcript turn resolver，同轮 replay 去重且不把原始音频暴露到诊断；
+- `response.done` 在 flush 后、tool follow-up 创建前完成捕获的 Engine turn；共享二进制入口只在
+  lifecycle/upstream/backpressure 校验和上游、本地 append 均成功时返回 accepted；Presentation
+  仅对 accepted chunk 维护 O(1) 流式 SHA-256/块数/字节数/冻结 turn 累加器，并在本地 commit
+  成功后、response 调度前按 turn 写入唯一 Evidence，不保留原始音频或逐帧触发 Engine 转换；
 - façade 在顶层保留既有 adapter diagnostics 字段，同时 additive 暴露 Engine version/state、
   selected runtime 和 rollback path；
 - 现有 StepFun Adapter 仍是 message/score/report/session persistence 的唯一 writer，Engine
@@ -341,10 +343,10 @@ Gate 2 没有完成 Provider/Grounding 中立化。Presentation façade 已不�
 宣称这些边界已完成。
 
 Gate 2 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
-`2846 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
+`2868 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
 generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 仅保留 1 个既有
 真实收费 Provider 条件 skip）；selected backend integration/E2E `598 passed, 21 skipped`；
-changed executable lines 723/799（90.49%），critical branch 无 changed missing line、无
+changed executable lines 770/847（90.91%），critical branch 无 changed missing line、无
 adoption floor 回退，最终输出 `Critical quality gate passed`。
 
 可执行合同：`.trellis/spec/backend/realtime-session-engine.md`。实施计划：

@@ -476,12 +476,12 @@ Canonical `critical-quality-gate.sh` was rerun from clean start after a first en
 Chromium loader failure was minimized to a missing local-library loader path. The complete rerun
 naturally exited 0 with:
 
-- backend unit+contract `2846 passed, 1 skipped`;
+- backend unit+contract `2868 passed, 1 skipped`;
 - Vitest 209 files / `1329 passed, 6 skipped`;
 - Playwright generic/smoke/newcomer/presentation/sales `3/9/11/2/1 passed`, plus the one existing
   conditional real paid Provider skip;
 - selected backend integration/E2E `598 passed, 21 skipped`;
-- changed executable lines 723/799（90.49%）, no changed critical-branch gaps or floor regression;
+- changed executable lines 770/847（90.91%）, no changed critical-branch gaps or floor regression;
 - final `Critical quality gate passed`.
 
 Gate 3 remains responsible for `RealtimeProviderPort`, provider event codec, Fake Provider
