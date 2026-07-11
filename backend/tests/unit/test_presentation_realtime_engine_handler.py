@@ -25,6 +25,12 @@ from training_runtime import (
 )
 from training_runtime.realtime import (
     GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+    GroundingCacheDisposition,
+    GroundingDecisionResult,
+    GroundingDiagnostics,
+    GroundingEvidence,
+    GroundingMode,
+    GroundingOutcome,
     GroundingPhase,
     ProviderBackpressureResult,
     ProviderCommand,
@@ -162,8 +168,7 @@ def test_presentation_engine_and_provider_rollouts_select_exactly_one_2x2_path(
             provider_factory=provider_factory,
         )
         assert (
-            selection.handler_factory_name
-            == "LegacyPresentationStepFunRealtimeHandler"
+            selection.handler_factory_name == "LegacyPresentationStepFunRealtimeHandler"
         )
 
     assert adapter._provider_port_enabled is provider_enabled
@@ -463,6 +468,68 @@ async def test_adapter_maps_grounding_to_closed_diagnostics_vocabulary() -> None
         "blocked": True,
     }
     assert "provider token" not in repr(engine.snapshot())
+    assert "provider token" not in repr(adapter._frontend_grounding_diagnostics())
+
+
+@pytest.mark.asyncio
+async def test_adapter_projects_exact_grounding_result_into_engine() -> None:
+    engine = RealtimeSessionEngine(
+        scenario_type="presentation",
+        hooks=SimpleNamespace(
+            scenario_type="presentation",
+            on_transition=lambda _transition: None,
+        ),
+    )
+    adapter = LegacyPresentationStepFunRealtimeHandler(runtime_engine=engine)
+    decision = GroundingDecisionResult(
+        decision_id="grounding:3:7",
+        frozen_policy_hash="sha256:frozen-policy",
+        outcome=GroundingOutcome.DEGRADED,
+        mode=GroundingMode.DEGRADED,
+        allow_generation=True,
+        grounding_context="",
+        blocked_response="",
+        output_guard_required=False,
+        evidence=GroundingEvidence(
+            citations=(),
+            rewritten_queries=(),
+            answerability="insufficient",
+            source_status="timeout",
+            retrieval_mode="unknown",
+        ),
+        cache_disposition=GroundingCacheDisposition.BYPASS,
+        diagnostics=GroundingDiagnostics(
+            schema_version=1,
+            status="degraded",
+            reason_code="timeout with provider secret",
+            source="retrieval",
+            mode="degraded",
+            degraded=True,
+            blocked=False,
+            cache_disposition=GroundingCacheDisposition.BYPASS,
+            result_count=0,
+            duration_ms=220.0,
+        ),
+    )
+
+    async def prepare_from_module(_self: Any, _query: str) -> None:
+        adapter._grounding_result = decision
+
+    with patch.object(
+        StepFunRealtimeUpstreamMixin,
+        "_prepare_grounding_context",
+        new=prepare_from_module,
+    ):
+        await adapter._prepare_grounding_context("learner query")
+
+    state = engine.state.grounding
+    assert state.decision_id == "grounding:3:7"
+    assert state.frozen_policy_hash == "sha256:frozen-policy"
+    assert state.phase is GroundingPhase.DEGRADED
+    assert state.diagnostics["reason_code"] == "retrieval_timeout"
+    assert state.diagnostics["latency_ms"] == 220.0
+    assert "cache_disposition" not in state.diagnostics
+    assert "provider secret" not in repr(engine.snapshot())
 
 
 def _configure_accepted_audio_input(

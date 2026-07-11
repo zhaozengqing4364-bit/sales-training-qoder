@@ -53,3 +53,11 @@
   exact former Pipeline plus result-cache behavior is isolated in the named Legacy adapter.
   Focused behavior matrix `267 passed`, affected realtime matrix `873 passed`, architecture guard
   `19 passed`, Ruff passed, and mypy passed across `635 source files`.
+- Task 6 Red: compatibility diagnostics had no exact cache disposition, late results could overwrite
+  a newer decision, timeout left no immutable result, and Presentation generated a separate Engine
+  decision ID.
+- Task 6 Green: one immutable result now projects closed Engine schema v1, bounded Legacy fields and
+  redacted frontend diagnostics; generation-aware application rejects stale results and the
+  low-level durable metric callback remains the only query-bearing writer. Focused matrix
+  `529 passed`, broad affected realtime matrix `887 passed`, architecture guard `19 passed`, Ruff
+  passed and mypy passed across `635 source files`.

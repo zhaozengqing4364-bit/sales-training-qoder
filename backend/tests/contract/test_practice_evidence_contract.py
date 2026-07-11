@@ -33,6 +33,86 @@ from main import app
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
+def test_grounding_decision_projects_redacted_engine_evidence_contract() -> None:
+    from training_runtime.realtime import (
+        GroundingCacheDisposition,
+        GroundingCitation,
+        GroundingDecisionResult,
+        GroundingDiagnostics,
+        GroundingEvidence,
+        GroundingMode,
+        GroundingOutcome,
+        NoopScenarioTurnHooks,
+        RealtimeSessionEngine,
+    )
+
+    decision = GroundingDecisionResult(
+        decision_id="grounding:2:4",
+        frozen_policy_hash="sha256:frozen",
+        outcome=GroundingOutcome.READY,
+        mode=GroundingMode.GROUNDED,
+        allow_generation=True,
+        grounding_context="private grounding context",
+        blocked_response="",
+        output_guard_required=False,
+        evidence=GroundingEvidence(
+            citations=(
+                GroundingCitation(
+                    knowledge_base_id="private-kb",
+                    knowledge_base_name="private name",
+                    document_title="private title",
+                    snippet="private transcript evidence",
+                    claim="private claim",
+                ),
+            ),
+            rewritten_queries=("private query",),
+            answerability="sufficient",
+            source_status="hit",
+            retrieval_mode="vector",
+        ),
+        cache_disposition=GroundingCacheDisposition.HIT,
+        diagnostics=GroundingDiagnostics(
+            schema_version=1,
+            status="grounded",
+            reason_code="provider credential raw failure",
+            source="internal_knowledge",
+            mode="grounded",
+            degraded=False,
+            blocked=False,
+            cache_disposition=GroundingCacheDisposition.HIT,
+            result_count=1,
+            duration_ms=4.0,
+        ),
+        knowledge_base_count=1,
+    )
+    engine = RealtimeSessionEngine(
+        scenario_type="presentation",
+        hooks=NoopScenarioTurnHooks(scenario_type="presentation"),
+    )
+    engine.begin_grounding(
+        decision_id=decision.decision_id,
+        policy_hash=decision.frozen_policy_hash,
+    )
+    engine.resolve_grounding(
+        outcome=decision.to_engine_outcome(),
+        mode=decision.mode.value,
+        diagnostics=decision.to_engine_diagnostics(),
+    )
+
+    snapshot = engine.snapshot()
+    assert snapshot["grounding"]["decision_id"] == "grounding:2:4"  # type: ignore[index]
+    serialized = repr(snapshot)
+    for unsafe in (
+        "private-kb",
+        "private name",
+        "private title",
+        "private transcript",
+        "private query",
+        "credential",
+    ):
+        assert unsafe not in serialized
+
+
 def test_practice_application_service_inventory_exposes_named_route_clusters() -> None:
     from common.services.practice_service import (
         PRACTICE_APPLICATION_SEAMS,
@@ -48,9 +128,14 @@ def test_practice_application_service_inventory_exposes_named_route_clusters() -
         "audio_audit_and_signing",
         "runtime_descriptor",
     )
-    assert PracticeRouteServices.__dataclass_fields__["seam_names"].default == PRACTICE_APPLICATION_SEAMS
+    assert (
+        PracticeRouteServices.__dataclass_fields__["seam_names"].default
+        == PRACTICE_APPLICATION_SEAMS
+    )
     assert PracticeAudioAuditService.__name__ == "PracticeAudioAuditService"
-    assert PracticeRuntimeDescriptorService.__name__ == "PracticeRuntimeDescriptorService"
+    assert (
+        PracticeRuntimeDescriptorService.__name__ == "PracticeRuntimeDescriptorService"
+    )
 
 
 @pytest.mark.asyncio
@@ -69,7 +154,10 @@ async def test_practice_application_service_bundle_wires_existing_dependencies(
     assert isinstance(services.lifecycle, SessionLifecycleService)
     assert isinstance(services.evidence, SessionEvidenceService)
     assert services.audio_audit.__class__.__name__ == "PracticeAudioAuditService"
-    assert services.runtime_descriptor.__class__.__name__ == "PracticeRuntimeDescriptorService"
+    assert (
+        services.runtime_descriptor.__class__.__name__
+        == "PracticeRuntimeDescriptorService"
+    )
     assert callable(services.get_oss_signing_service)
 
 
@@ -87,7 +175,9 @@ async def test_practice_application_service_bundle_exposes_extracted_session_and
     services = build_practice_route_services(db_session)
 
     assert isinstance(services.session_create, PracticeSessionCreateService)
-    assert isinstance(services.session_lifecycle, PracticeSessionLifecycleApplicationService)
+    assert isinstance(
+        services.session_lifecycle, PracticeSessionLifecycleApplicationService
+    )
     assert isinstance(services.session_report, PracticeReportService)
 
 
@@ -103,11 +193,15 @@ async def test_practice_application_service_bundle_reuses_session_evidence_as_ca
 
     assert isinstance(services.session_report.evidence_service, SessionEvidenceService)
     assert services.session_report.evidence_service is services.evidence
-    assert isinstance(services.session_report.audio_audit_service, PracticeAudioAuditService)
+    assert isinstance(
+        services.session_report.audio_audit_service, PracticeAudioAuditService
+    )
     assert services.session_report.audio_audit_service is services.audio_audit
 
 
-def test_architecture_scan_documents_practice_service_seams_and_canonical_read_model_consumers() -> None:
+def test_architecture_scan_documents_practice_service_seams_and_canonical_read_model_consumers() -> (
+    None
+):
     repo_root = Path(__file__).resolve().parents[3]
     contract_docs = [
         (repo_root / "docs/api-contract/sessions.md").read_text(encoding="utf-8"),
@@ -117,9 +211,9 @@ def test_architecture_scan_documents_practice_service_seams_and_canonical_read_m
         (repo_root / "backend/src/common/services/practice_service.py").read_text(
             encoding="utf-8"
         ),
-        (repo_root / "backend/src/common/services/practice_report_service.py").read_text(
-            encoding="utf-8"
-        ),
+        (
+            repo_root / "backend/src/common/services/practice_report_service.py"
+        ).read_text(encoding="utf-8"),
     ]
 
     architecture_scan = "\n".join(contract_docs + service_sources)
@@ -130,7 +224,9 @@ def test_architecture_scan_documents_practice_service_seams_and_canonical_read_m
     assert "M021" in architecture_scan
 
 
-def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict[str, object]:
+def _make_effectiveness_snapshot(
+    *, evaluable: bool, reason: str | None
+) -> dict[str, object]:
     return {
         "pass_flags": {
             "pass_3min_flow": False,
@@ -240,7 +336,9 @@ async def test_engine():
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session(test_engine):
-    async_session = sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = sessionmaker(
+        test_engine, class_=AsyncSession, expire_on_commit=False
+    )
     async with async_session() as session:
         yield session
 
@@ -366,7 +464,11 @@ async def test_report_and_replay_contract_share_same_session_evidence_fields(
     report_data = report_resp.json()["data"]
     replay_data = replay_resp.json()["data"]
 
-    assert report_data["overall_score"] == replay_data["overall_score"] == pytest.approx(70.2, abs=0.05)
+    assert (
+        report_data["overall_score"]
+        == replay_data["overall_score"]
+        == pytest.approx(70.2, abs=0.05)
+    )
     assert report_data["logic_score"] == pytest.approx(75.6)
     assert report_data["accuracy_score"] == pytest.approx(62.1)
     assert report_data["completeness_score"] == pytest.approx(72.8)
@@ -378,32 +480,53 @@ async def test_report_and_replay_contract_share_same_session_evidence_fields(
     )
     assert report_data["main_issue"]["issue_type"] == "evidence_gap"
     assert report_data["next_goal"]["goal_type"] == "evidence_backing"
-    assert report_data["not_evaluable_reason"] == replay_data["not_evaluable_reason"] == "INSUFFICIENT_TURN_DATA"
+    assert (
+        report_data["not_evaluable_reason"]
+        == replay_data["not_evaluable_reason"]
+        == "INSUFFICIENT_TURN_DATA"
+    )
     assert report_data["evaluable"] is False
     assert replay_data["evaluable"] is False
-    assert report_data["stage_summary"] == replay_data["stage_summary"] == [
-        {"stage": "opening", "duration_ms": 1200, "score": 76},
-        {"stage": "discovery", "duration_ms": 1800, "score": 84},
-    ]
+    assert (
+        report_data["stage_summary"]
+        == replay_data["stage_summary"]
+        == [
+            {"stage": "opening", "duration_ms": 1200, "score": 76},
+            {"stage": "discovery", "duration_ms": 1800, "score": 84},
+        ]
+    )
     assert report_data["evidence_completeness"]["legacy_score_key_used"] is True
     assert replay_data["evidence_completeness"]["legacy_score_key_used"] is True
-    assert report_data["conclusion_evidence"] == replay_data["conclusion_evidence"] == {
-        "main_issue": {
-            "retrieval_source": {"available": False, "reason": "no_voice_policy_snapshot"},
-            "transcript_source": {"available": True, "turn_count": 1},
-            "audio_source": {"available": True, "reason": None},
-        },
-        "next_goal": {
-            "retrieval_source": {"available": False, "reason": "no_voice_policy_snapshot"},
-            "transcript_source": {"available": True, "turn_count": 1},
-            "audio_source": {"available": True, "reason": None},
-        },
-        "claim_truth": {
-            "retrieval_source": {"available": False, "reason": "no_voice_policy_snapshot"},
-            "transcript_source": {"available": True, "turn_count": 1},
-            "audio_source": {"available": True, "reason": None},
-        },
-    }
+    assert (
+        report_data["conclusion_evidence"]
+        == replay_data["conclusion_evidence"]
+        == {
+            "main_issue": {
+                "retrieval_source": {
+                    "available": False,
+                    "reason": "no_voice_policy_snapshot",
+                },
+                "transcript_source": {"available": True, "turn_count": 1},
+                "audio_source": {"available": True, "reason": None},
+            },
+            "next_goal": {
+                "retrieval_source": {
+                    "available": False,
+                    "reason": "no_voice_policy_snapshot",
+                },
+                "transcript_source": {"available": True, "turn_count": 1},
+                "audio_source": {"available": True, "reason": None},
+            },
+            "claim_truth": {
+                "retrieval_source": {
+                    "available": False,
+                    "reason": "no_voice_policy_snapshot",
+                },
+                "transcript_source": {"available": True, "turn_count": 1},
+                "audio_source": {"available": True, "reason": None},
+            },
+        }
+    )
 
 
 @pytest.mark.asyncio
@@ -665,29 +788,35 @@ async def test_report_and_replay_contract_override_stale_sales_snapshot_with_ali
     report_data = report_resp.json()["data"]
     replay_data = replay_resp.json()["data"]
 
-    assert _without_replay_anchor(report_data["main_issue"]) == _without_replay_anchor(
-        replay_data["main_issue"]
-    ) == {
-        "issue_type": "evidence_gap",
-        "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
-        "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
-    }
-    assert _without_replay_anchor(report_data["next_goal"]) == _without_replay_anchor(
-        replay_data["next_goal"]
-    ) == {
-        "goal_type": "evidence_backing",
-        "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
-        "rule": "至少补上一条证据和一个明确的下一步动作。",
-    }
-    assert report_data["effectiveness_snapshot"]["claim_truth"] == replay_data["effectiveness_snapshot"][
-        "claim_truth"
-    ] == {
-        "status": "weak_evidence",
-        "label": "证据偏弱",
-        "source": "score_snapshot",
-        "reason": "low_evidence_score",
-        "evidence_score": 58.0,
-    }
+    assert (
+        _without_replay_anchor(report_data["main_issue"])
+        == _without_replay_anchor(replay_data["main_issue"])
+        == {
+            "issue_type": "evidence_gap",
+            "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+            "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+        }
+    )
+    assert (
+        _without_replay_anchor(report_data["next_goal"])
+        == _without_replay_anchor(replay_data["next_goal"])
+        == {
+            "goal_type": "evidence_backing",
+            "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+            "rule": "至少补上一条证据和一个明确的下一步动作。",
+        }
+    )
+    assert (
+        report_data["effectiveness_snapshot"]["claim_truth"]
+        == replay_data["effectiveness_snapshot"]["claim_truth"]
+        == {
+            "status": "weak_evidence",
+            "label": "证据偏弱",
+            "source": "score_snapshot",
+            "reason": "low_evidence_score",
+            "evidence_score": 58.0,
+        }
+    )
 
 
 @pytest.mark.asyncio
@@ -753,15 +882,17 @@ async def test_report_and_replay_contract_surface_verified_claim_truth_for_stron
     report_data = report_resp.json()["data"]
     replay_data = replay_resp.json()["data"]
 
-    assert report_data["effectiveness_snapshot"]["claim_truth"] == replay_data["effectiveness_snapshot"][
-        "claim_truth"
-    ] == {
-        "status": "evidence_verified",
-        "label": "证据已验证",
-        "source": "score_snapshot",
-        "reason": "strong_evidence_score",
-        "evidence_score": 89.0,
-    }
+    assert (
+        report_data["effectiveness_snapshot"]["claim_truth"]
+        == replay_data["effectiveness_snapshot"]["claim_truth"]
+        == {
+            "status": "evidence_verified",
+            "label": "证据已验证",
+            "source": "score_snapshot",
+            "reason": "strong_evidence_score",
+            "evidence_score": 89.0,
+        }
+    )
 
 
 @pytest.mark.asyncio
@@ -951,9 +1082,14 @@ async def test_knowledge_check_prefers_live_session_summary_over_stale_completed
             "reason": "gap_acknowledged",
             "closure_state": "gap_acknowledged",
         }
-        assert knowledge_check_data["live_session_summary"]["focus_type"] == "objection_handling_gap"
+        assert (
+            knowledge_check_data["live_session_summary"]["focus_type"]
+            == "objection_handling_gap"
+        )
     finally:
-        await session_manager.unregister_session(session.session_id, reason="test_cleanup")
+        await session_manager.unregister_session(
+            session.session_id, reason="test_cleanup"
+        )
 
 
 @pytest.mark.asyncio
@@ -1034,9 +1170,7 @@ async def test_knowledge_check_reads_legacy_diagnostics_fields_through_presentat
 
         assert response.status_code == 200
         data = response.json()["data"]
-        assert data["live_session_summary"]["focus_type"] == (
-            "objection_handling_gap"
-        )
+        assert data["live_session_summary"]["focus_type"] == ("objection_handling_gap")
         assert data["claim_truth"]["source"] == "objection_ledger"
         assert data["coach_health"]["status"] == "healthy"
         assert data["knowledge_answer_diagnostics"]["status"] == "ready"
@@ -1109,7 +1243,9 @@ async def test_knowledge_check_does_not_revive_stale_snapshot_when_live_summary_
         assert knowledge_check_data["claim_truth"] is None
         assert knowledge_check_data["live_session_summary"] is None
     finally:
-        await session_manager.unregister_session(session.session_id, reason="test_cleanup")
+        await session_manager.unregister_session(
+            session.session_id, reason="test_cleanup"
+        )
 
 
 @pytest.mark.asyncio
@@ -1201,7 +1337,9 @@ async def test_sales_background_finalization_unlocks_same_session_replay_and_hig
     mock_report_service.generate_report = AsyncMock(
         return_value=Result.fail("[ENHANCED_REPORT_FAILED]")
     )
-    await ReportGenerationTrigger(db_session, mock_report_service).trigger_on_session_end(
+    await ReportGenerationTrigger(
+        db_session, mock_report_service
+    ).trigger_on_session_end(
         str(session.session_id),
         "sales",
     )
@@ -1234,24 +1372,31 @@ async def test_sales_background_finalization_unlocks_same_session_replay_and_hig
     replay_after_data = replay_after.json()["data"]
     highlight_after_data = highlights_after.json()["data"]["highlights"][0]
 
-    assert report_after_data["effectiveness_snapshot"]["claim_truth"] == replay_after_data[
-        "effectiveness_snapshot"
-    ]["claim_truth"] == {
-        "status": "evidence_verified",
-        "label": "证据已验证",
-        "source": "score_snapshot",
-        "reason": "strong_evidence_score",
-        "evidence_score": 89.0,
-    }
-    assert _without_replay_anchor(report_after_data["main_issue"]) == _without_replay_anchor(
-        replay_after_data["main_issue"]
+    assert (
+        report_after_data["effectiveness_snapshot"]["claim_truth"]
+        == replay_after_data["effectiveness_snapshot"]["claim_truth"]
+        == {
+            "status": "evidence_verified",
+            "label": "证据已验证",
+            "source": "score_snapshot",
+            "reason": "strong_evidence_score",
+            "evidence_score": 89.0,
+        }
     )
-    assert _without_replay_anchor(report_after_data["next_goal"]) == _without_replay_anchor(
-        replay_after_data["next_goal"]
+    assert _without_replay_anchor(
+        report_after_data["main_issue"]
+    ) == _without_replay_anchor(replay_after_data["main_issue"])
+    assert _without_replay_anchor(
+        report_after_data["next_goal"]
+    ) == _without_replay_anchor(replay_after_data["next_goal"])
+    assert (
+        report_after_data["main_issue"] != scoring_report.json()["data"]["main_issue"]
     )
-    assert report_after_data["main_issue"] != scoring_report.json()["data"]["main_issue"]
     assert report_after_data["next_goal"] != scoring_report.json()["data"]["next_goal"]
-    assert report_after_data["main_issue"]["issue_type"] == highlight_after_data["learning_evidence"]["issue_family"]
+    assert (
+        report_after_data["main_issue"]["issue_type"]
+        == highlight_after_data["learning_evidence"]["issue_family"]
+    )
     assert replay_after_data["main_issue"]["replay_anchor"]["status"] == "resolved"
     assert replay_after_data["next_goal"]["replay_anchor"]["status"] == "resolved"
 
@@ -1389,31 +1534,39 @@ async def test_same_session_report_stays_available_during_scoring_and_replay_mat
     completed_report_data = completed_report_resp.json()["data"]
     completed_replay_data = completed_replay_resp.json()["data"]
 
-    assert scoring_report_data["main_issue"] == _make_stale_sales_snapshot()["main_issue"]
+    assert (
+        scoring_report_data["main_issue"] == _make_stale_sales_snapshot()["main_issue"]
+    )
     assert scoring_report_data["next_goal"] == _make_stale_sales_snapshot()["next_goal"]
-    assert completed_report_data["effectiveness_snapshot"]["claim_truth"] == completed_replay_data[
-        "effectiveness_snapshot"
-    ]["claim_truth"] == {
-        "status": "evidence_verified",
-        "label": "证据已验证",
-        "source": "score_snapshot",
-        "reason": "strong_evidence_score",
-        "evidence_score": 89.0,
-    }
-    assert _without_replay_anchor(completed_report_data["main_issue"]) == _without_replay_anchor(
-        completed_replay_data["main_issue"]
+    assert (
+        completed_report_data["effectiveness_snapshot"]["claim_truth"]
+        == completed_replay_data["effectiveness_snapshot"]["claim_truth"]
+        == {
+            "status": "evidence_verified",
+            "label": "证据已验证",
+            "source": "score_snapshot",
+            "reason": "strong_evidence_score",
+            "evidence_score": 89.0,
+        }
     )
-    assert _without_replay_anchor(completed_report_data["next_goal"]) == _without_replay_anchor(
-        completed_replay_data["next_goal"]
+    assert _without_replay_anchor(
+        completed_report_data["main_issue"]
+    ) == _without_replay_anchor(completed_replay_data["main_issue"])
+    assert _without_replay_anchor(
+        completed_report_data["next_goal"]
+    ) == _without_replay_anchor(completed_replay_data["next_goal"])
+    assert (
+        completed_report_data["main_issue"]["issue_type"]
+        != scoring_report_data["main_issue"]["issue_type"]
     )
-    assert completed_report_data["main_issue"]["issue_type"] != scoring_report_data["main_issue"][
-        "issue_type"
-    ]
-    assert completed_report_data["next_goal"]["goal_type"] != scoring_report_data["next_goal"][
-        "goal_type"
-    ]
+    assert (
+        completed_report_data["next_goal"]["goal_type"]
+        != scoring_report_data["next_goal"]["goal_type"]
+    )
     assert completed_replay_data["main_issue"]["replay_anchor"]["status"] == "resolved"
     assert completed_replay_data["next_goal"]["replay_anchor"]["status"] == "resolved"
+
+
 # ---------------------------------------------------------------------------
 # S02: retrieval_facts parity contract tests
 # ---------------------------------------------------------------------------
@@ -1484,7 +1637,9 @@ def _make_voice_policy_snapshot_with_retrieval_ledger(
     }
 
 
-def _make_audio_audit_runtime_metrics(*, recording_status: str = "completed", storage_prefix: str = "sessions/audio") -> dict[str, object]:
+def _make_audio_audit_runtime_metrics(
+    *, recording_status: str = "completed", storage_prefix: str = "sessions/audio"
+) -> dict[str, object]:
     return {
         "runtime_metrics": {
             "audio_audit": {
@@ -1506,7 +1661,8 @@ async def _persist_audio_segments(
             SessionAudioSegment(
                 session_id=session_id,
                 segment_sequence=segment["segment_sequence"],
-                object_key=segment.get("object_key") or f"audio/{session_id}/seg_{segment['segment_sequence']:04d}.webm",
+                object_key=segment.get("object_key")
+                or f"audio/{session_id}/seg_{segment['segment_sequence']:04d}.webm",
                 content_type=segment.get("content_type") or "audio/webm",
                 size_bytes=segment.get("size_bytes"),
                 duration_ms=segment.get("duration_ms"),
@@ -1738,7 +1894,10 @@ async def test_replay_payload_includes_same_audio_audit_structure_as_report(
 
     assert report_response.status_code == 200
     assert replay_response.status_code == 200
-    assert replay_response.json()["data"]["audio_audit"] == report_response.json()["data"]["audio_audit"]
+    assert (
+        replay_response.json()["data"]["audio_audit"]
+        == report_response.json()["data"]["audio_audit"]
+    )
 
 
 @pytest.mark.asyncio
@@ -1779,9 +1938,13 @@ async def test_audio_segment_playback_redirects_to_signed_url_for_owner(
     )
 
     signing_service = MagicMock()
-    signing_service.generate_get_url.return_value = "https://signed.example.com/audio/seg_0000.webm"
+    signing_service.generate_get_url.return_value = (
+        "https://signed.example.com/audio/seg_0000.webm"
+    )
 
-    with patch("common.oss.signing.get_oss_signing_service", return_value=signing_service):
+    with patch(
+        "common.oss.signing.get_oss_signing_service", return_value=signing_service
+    ):
         response = await async_client.get(
             f"/api/v1/sessions/{session.session_id}/audio-segments/0",
             headers=owner_headers,
@@ -1789,7 +1952,9 @@ async def test_audio_segment_playback_redirects_to_signed_url_for_owner(
         )
 
     assert response.status_code == 307
-    assert response.headers["location"] == "https://signed.example.com/audio/seg_0000.webm"
+    assert (
+        response.headers["location"] == "https://signed.example.com/audio/seg_0000.webm"
+    )
     signing_service.generate_get_url.assert_called_once_with(object_key, expires=3600)
 
 
@@ -1910,9 +2075,13 @@ async def test_signed_audio_segment_urls_are_not_persisted_in_database_state(
     )
 
     signing_service = MagicMock()
-    signing_service.generate_get_url.return_value = "https://signed.example.com/audio/seg_0000.webm?signature=secret"
+    signing_service.generate_get_url.return_value = (
+        "https://signed.example.com/audio/seg_0000.webm?signature=secret"
+    )
 
-    with patch("common.oss.signing.get_oss_signing_service", return_value=signing_service):
+    with patch(
+        "common.oss.signing.get_oss_signing_service", return_value=signing_service
+    ):
         playback_response = await async_client.get(
             f"/api/v1/sessions/{session.session_id}/audio-segments/0",
             headers=owner_headers,
@@ -1969,7 +2138,9 @@ async def test_report_and_knowledge_check_return_identical_retrieval_facts_for_c
         accuracy_score=62.1,
         completeness_score=72.8,
         total_duration_seconds=180,
-        effectiveness_snapshot=_make_effectiveness_snapshot(evaluable=True, reason=None),
+        effectiveness_snapshot=_make_effectiveness_snapshot(
+            evaluable=True, reason=None
+        ),
         voice_policy_snapshot=_make_voice_policy_snapshot_with_retrieval_ledger(),
     )
     db_session.add_all([scenario, session])
@@ -2016,12 +2187,21 @@ async def test_report_and_knowledge_check_return_identical_retrieval_facts_for_c
 
     # Structural parity: same canonical keys
     for key in (
-        "kb_bound", "knowledge_base_ids", "knowledge_base_count",
-        "retrieval_enabled", "status", "summary",
-        "attempt_count", "hit_count", "hit_rate",
-        "latest_attempt", "recent_attempts",
+        "kb_bound",
+        "knowledge_base_ids",
+        "knowledge_base_count",
+        "retrieval_enabled",
+        "status",
+        "summary",
+        "attempt_count",
+        "hit_count",
+        "hit_rate",
+        "latest_attempt",
+        "recent_attempts",
     ):
-        assert report_rf[key] == kc_rf[key], f"retrieval_facts.{key} mismatch: report={report_rf[key]!r} vs kc={kc_rf[key]!r}"
+        assert report_rf[key] == kc_rf[key], (
+            f"retrieval_facts.{key} mismatch: report={report_rf[key]!r} vs kc={kc_rf[key]!r}"
+        )
 
     assert report_rf["status"] == "hit"
     assert kc_rf["status"] == "hit"
@@ -2063,7 +2243,9 @@ async def test_retrieval_facts_and_claim_truth_are_independent_retrieval_hit_wit
         accuracy_score=62.1,
         completeness_score=72.8,
         total_duration_seconds=180,
-        effectiveness_snapshot=_make_effectiveness_snapshot(evaluable=True, reason=None),
+        effectiveness_snapshot=_make_effectiveness_snapshot(
+            evaluable=True, reason=None
+        ),
         voice_policy_snapshot=_make_voice_policy_snapshot_with_retrieval_ledger(),
     )
     db_session.add_all([scenario, session])
@@ -2150,7 +2332,9 @@ async def test_retrieval_facts_parity_with_miss_status(
         accuracy_score=65.0,
         completeness_score=68.0,
         total_duration_seconds=150,
-        effectiveness_snapshot=_make_effectiveness_snapshot(evaluable=True, reason=None),
+        effectiveness_snapshot=_make_effectiveness_snapshot(
+            evaluable=True, reason=None
+        ),
         voice_policy_snapshot=_make_voice_policy_snapshot_with_retrieval_ledger(
             attempt_count=1,
             hit_query_count=0,
@@ -2438,8 +2622,14 @@ async def test_replay_audio_audit_includes_degraded_reasons_for_failed_segments(
     replay_audit = replay_resp.json()["data"]["audio_audit"]
 
     # Both should have same degraded reasons
-    assert report_audit["summary"]["degraded_reasons"] == replay_audit["summary"]["degraded_reasons"]
-    assert set(report_audit["summary"]["degraded_reasons"]) == {"upload_failed", "segments_pending"}
+    assert (
+        report_audit["summary"]["degraded_reasons"]
+        == replay_audit["summary"]["degraded_reasons"]
+    )
+    assert set(report_audit["summary"]["degraded_reasons"]) == {
+        "upload_failed",
+        "segments_pending",
+    }
     assert report_audit["summary"]["failed_segments"] == 1
 
 
@@ -2506,7 +2696,10 @@ async def test_report_and_replay_contract_expose_shared_canonical_kernel_and_com
     report_data = report_resp.json()["data"]
     replay_data = replay_resp.json()["data"]
 
-    assert report_data["canonical_evaluation_kernel"] == replay_data["canonical_evaluation_kernel"]
+    assert (
+        report_data["canonical_evaluation_kernel"]
+        == replay_data["canonical_evaluation_kernel"]
+    )
     assert report_data["compatibility_readers"] == replay_data["compatibility_readers"]
 
     kernel = report_data["canonical_evaluation_kernel"]
@@ -2527,7 +2720,9 @@ async def test_report_and_replay_contract_expose_shared_canonical_kernel_and_com
         "completeness_score": pytest.approx(report_data["completeness_score"]),
         "overall_score": pytest.approx(report_data["overall_score"]),
     }
-    assert list(compat["sales_realtime_score_snapshot_v1"]["dimension_scores"].keys()) == [
+    assert list(
+        compat["sales_realtime_score_snapshot_v1"]["dimension_scores"].keys()
+    ) == [
         "价值表达",
         "客户收益连接",
         "证据使用",

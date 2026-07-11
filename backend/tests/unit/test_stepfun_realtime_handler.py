@@ -41,6 +41,7 @@ from sales_bot.websocket.stepfun_tool_execution import (
 from sales_bot.websocket.voice_runtime_profile import VoiceRuntimeProfile
 from training_runtime import StepFunSessionConfig, build_stepfun_session_update_payload
 from training_runtime.realtime import (
+    GroundingOutcome,
     ProviderBackpressureResult,
     ProviderCommand,
     ProviderCommandKind,
@@ -363,6 +364,150 @@ async def test_connection_cleanup_awaits_selected_grounding_runtime(
     await handler._finalize_connection_cleanup("session-grounding-close")
 
     handler._grounding_module.close.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_default_grounding_cache_hit_does_not_duplicate_durable_metric(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_GROUNDING_MODULE_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-grounding-single-writer"
+    handler._instruction_contract_hash = "policy-v1"
+    handler._effective_policy = {
+        "instruction_contract_hash": "policy-v1",
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {"retrieval_top_k": 3},
+    }
+    handler._record_knowledge_runtime_metric = AsyncMock()
+
+    async def execute_once(
+        _tool_call: dict[str, Any], *, context: Any
+    ) -> dict[str, Any]:
+        await context.record_metric(
+            query="产品能力",
+            result_count=1,
+            status="hit",
+            knowledge_base_ids=["kb-1"],
+        )
+        return {
+            "query": "产品能力",
+            "count": 1,
+            "retrieval_mode": "vector",
+            "results": [{"snippet": "产品支持实时训练。"}],
+        }
+
+    handler._tool_execution.execute_tool = AsyncMock(side_effect=execute_once)
+
+    await handler._tool_search_internal_knowledge({"query": "产品能力"})
+    await handler._tool_search_internal_knowledge({"query": "产品能力"})
+
+    assert handler._tool_execution.execute_tool.await_count == 1
+    handler._record_knowledge_runtime_metric.assert_awaited_once_with(
+        query="产品能力",
+        result_count=1,
+        status="hit",
+        knowledge_base_ids=["kb-1"],
+    )
+    assert handler._latest_knowledge_answer_diagnostics is not None
+    assert handler._latest_knowledge_answer_diagnostics["cache_disposition"] == "hit"
+    frontend = handler._frontend_grounding_diagnostics()
+    assert frontend is not None
+    assert frontend["cache_disposition"] == "hit"
+    assert "rewritten_queries" not in frontend
+    assert "产品能力" not in repr(frontend)
+    assert "产品支持实时训练" not in repr(frontend)
+    runtime_diagnostics = handler.get_runtime_diagnostics()
+    assert "产品能力" not in repr(runtime_diagnostics["knowledge_answer_diagnostics"])
+    assert "产品支持实时训练" not in repr(
+        runtime_diagnostics["knowledge_answer_diagnostics"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_late_grounding_result_cannot_overwrite_newer_decision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_GROUNDING_MODULE_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-grounding-stale-result"
+    handler._instruction_contract_hash = "policy-v1"
+    handler._effective_policy = {
+        "instruction_contract_hash": "policy-v1",
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {"retrieval_top_k": 3},
+    }
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+
+    async def retrieve_by_query(
+        tool_call: dict[str, Any],
+        *,
+        context: Any,
+    ) -> dict[str, Any]:
+        del context
+        query = str(tool_call["arguments"]["query"])
+        if query == "first":
+            first_started.set()
+            await release_first.wait()
+        return {
+            "query": query,
+            "count": 1,
+            "retrieval_mode": "vector",
+            "results": [{"snippet": f"{query}-evidence"}],
+        }
+
+    handler._tool_execution.execute_tool = AsyncMock(side_effect=retrieve_by_query)
+    first_task = asyncio.create_task(
+        handler._tool_search_internal_knowledge({"query": "first"})
+    )
+    await first_started.wait()
+    await handler._tool_search_internal_knowledge({"query": "second"})
+    release_first.set()
+    await first_task
+
+    assert handler._latest_knowledge_answer_diagnostics is not None
+    assert (
+        handler._latest_knowledge_answer_diagnostics["citations"][0]["snippet"]
+        == "second-evidence"
+    )
+
+
+@pytest.mark.asyncio
+async def test_prefetch_timeout_projects_closed_grounding_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_GROUNDING_MODULE_ENABLED", "true")
+    monkeypatch.setenv("STEPFUN_GROUNDING_PREFETCH_TIMEOUT_MS", "1")
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-grounding-timeout-result"
+    handler._instruction_contract_hash = "policy-v1"
+    handler._effective_policy = {
+        "instruction_contract_hash": "policy-v1",
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "require_kb_grounding": False,
+            "retrieval_top_k": 3,
+        },
+    }
+
+    async def block_retrieval(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+    handler._tool_execution.execute_tool = AsyncMock(side_effect=block_retrieval)
+
+    await handler._prepare_grounding_context("产品能力")
+
+    assert handler._grounding_result is not None
+    assert handler._grounding_result.outcome is GroundingOutcome.BLOCKED
+    assert handler._latest_knowledge_answer_diagnostics is not None
+    assert handler._latest_knowledge_answer_diagnostics["timeout"] is True
+    assert (
+        handler._latest_knowledge_answer_diagnostics["reason_code"]
+        == "retrieval_timeout"
+    )
+    await handler._close_selected_grounding_runtime()
 
 
 @pytest.mark.asyncio
@@ -6234,7 +6379,7 @@ async def test_handle_upstream_response_text_delta_does_not_cancel_stream_on_que
 
 
 @pytest.mark.asyncio
-async def test_flush_active_response_emits_runtime_answer_diagnostics_and_citations():
+async def test_flush_active_response_emits_redacted_answer_diagnostics_and_citations():
     handler = StepFunRealtimeHandler()
     handler.websocket = MagicMock()
     handler.manager = MagicMock()
@@ -6282,9 +6427,10 @@ async def test_flush_active_response_emits_runtime_answer_diagnostics_and_citati
         sent_payload["data"]["knowledge_answer_diagnostics"]["audit_run_id"]
         == "run-knowledge-1"
     )
-    assert sent_payload["data"]["knowledge_answer_diagnostics"][
-        "rewritten_queries"
-    ] == ["实习专家 产品介绍", "实习专家 核心能力"]
+    public_diagnostics = sent_payload["data"]["knowledge_answer_diagnostics"]
+    assert "rewritten_queries" not in public_diagnostics
+    assert "snippet" not in public_diagnostics["citations"][0]
+    assert "claim" not in public_diagnostics["citations"][0]
     assert (
         sent_payload["data"]["knowledge_answer_diagnostics"]["citations"][0][
             "document_title"

@@ -13,6 +13,14 @@ from training_runtime.realtime import (
     ConnectionPhase,
     ConnectionState,
     EvidenceState,
+    GroundingCacheDisposition,
+    GroundingCacheStats,
+    GroundingCitation,
+    GroundingDecisionResult,
+    GroundingDiagnostics,
+    GroundingEvidence,
+    GroundingMode,
+    GroundingOutcome,
     GroundingPhase,
     GroundingState,
     NoopScenarioTurnHooks,
@@ -458,6 +466,249 @@ def test_should_accept_versioned_grounding_diagnostics_allowlist() -> None:
 
     assert engine.state.grounding.diagnostics == diagnostics
     json.dumps(engine.snapshot(), allow_nan=False)
+
+
+@pytest.mark.parametrize(
+    ("disposition", "cache_hit"),
+    [
+        (GroundingCacheDisposition.HIT, True),
+        (GroundingCacheDisposition.SHARED, True),
+        (GroundingCacheDisposition.MISS, False),
+        (GroundingCacheDisposition.BYPASS, False),
+    ],
+)
+def test_grounding_decision_projects_closed_engine_schema_v1_without_free_text(
+    disposition: GroundingCacheDisposition,
+    cache_hit: bool,
+) -> None:
+    evidence = GroundingEvidence(
+        citations=(
+            GroundingCitation(
+                knowledge_base_id="kb-secret-id",
+                knowledge_base_name="客户私有库",
+                document_title="私有文档",
+                snippet="不得进入 Engine 的原文",
+                claim="不得进入 Engine 的主张",
+                score=0.9,
+            ),
+        ),
+        rewritten_queries=("不得进入 Engine 的问题",),
+        answerability="sufficient",
+        source_status="hit",
+        retrieval_mode="vector",
+    )
+    decision = GroundingDecisionResult(
+        decision_id="grounding:4:9",
+        frozen_policy_hash="sha256:frozen",
+        outcome=GroundingOutcome.READY,
+        mode=GroundingMode.GROUNDED,
+        allow_generation=True,
+        grounding_context="不得进入 Engine 的上下文",
+        blocked_response="",
+        output_guard_required=False,
+        evidence=evidence,
+        cache_disposition=disposition,
+        diagnostics=GroundingDiagnostics(
+            schema_version=1,
+            status="grounded",
+            reason_code="provider token must not escape",
+            source="internal_knowledge",
+            mode="grounded",
+            degraded=False,
+            blocked=False,
+            cache_disposition=disposition,
+            result_count=1,
+            duration_ms=12.5,
+        ),
+        knowledge_base_count=1,
+    )
+    stats = GroundingCacheStats(
+        hit_count=2,
+        miss_count=3,
+        shared_count=1,
+        bypass_count=4,
+        eviction_count=0,
+        cache_size=5,
+        inflight_count=0,
+    )
+
+    diagnostics = decision.to_engine_diagnostics(cache_stats=stats)
+
+    assert diagnostics == {
+        "schema_version": 1,
+        "status": "ready",
+        "reason_code": "retrieval_ready",
+        "source": "knowledge",
+        "mode": "grounded",
+        "error_type": "none",
+        "fallback_reason": "none",
+        "latency_ms": 12.5,
+        "result_count": 1,
+        "kb_count": 1,
+        "hit_count": 3,
+        "miss_count": 3,
+        "cache_size": 5,
+        "cache_hit": cache_hit,
+        "timeout": False,
+        "degraded": False,
+        "blocked": False,
+    }
+    assert "cache_disposition" not in diagnostics
+    serialized = repr(diagnostics)
+    for unsafe in ("kb-secret-id", "客户私有库", "私有文档", "原文", "token"):
+        assert unsafe not in serialized
+
+
+def test_grounding_decision_compatibility_projection_keeps_exact_disposition() -> None:
+    decision = GroundingDecisionResult(
+        decision_id="grounding:1:2",
+        frozen_policy_hash="sha256:frozen",
+        outcome=GroundingOutcome.DEGRADED,
+        mode=GroundingMode.DEGRADED,
+        allow_generation=True,
+        grounding_context="",
+        blocked_response="",
+        output_guard_required=False,
+        evidence=GroundingEvidence(
+            citations=(),
+            rewritten_queries=("改写问题",),
+            answerability="insufficient",
+            source_status="Bearer raw provider error",
+            retrieval_mode="private transcript mode",
+        ),
+        cache_disposition=GroundingCacheDisposition.BYPASS,
+        diagnostics=GroundingDiagnostics(
+            schema_version=1,
+            status="degraded",
+            reason_code="timeout",
+            source="retrieval",
+            mode="degraded",
+            degraded=True,
+            blocked=False,
+            cache_disposition=GroundingCacheDisposition.BYPASS,
+            result_count=0,
+            duration_ms=220.0,
+        ),
+    )
+
+    compatibility = decision.to_compatibility_diagnostics()
+
+    assert compatibility["decision_id"] == "grounding:1:2"
+    assert compatibility["outcome"] == "degraded"
+    assert compatibility["cache_disposition"] == "bypass"
+    assert compatibility["rewritten_queries"] == ["改写问题"]
+    assert compatibility["timeout"] is True
+    frontend = decision.to_frontend_diagnostics()
+    assert frontend["source_status"] == "timeout"
+    assert frontend["retrieval_mode"] == "unknown"
+    assert "Bearer" not in repr(frontend)
+    assert "transcript" not in repr(frontend)
+
+
+@pytest.mark.parametrize(
+    (
+        "outcome",
+        "mode",
+        "reason",
+        "output_guard_required",
+        "expected_status",
+        "expected_reason",
+        "expected_fallback",
+    ),
+    [
+        (
+            GroundingOutcome.READY,
+            GroundingMode.GROUNDED,
+            "partial_answerability",
+            True,
+            "ready",
+            "retrieval_ready",
+            "none",
+        ),
+        (
+            GroundingOutcome.BLOCKED,
+            GroundingMode.BLOCKED,
+            "insufficient",
+            False,
+            "blocked",
+            "kb_lock_blocked",
+            "policy_blocked",
+        ),
+        (
+            GroundingOutcome.DEGRADED,
+            GroundingMode.DEGRADED,
+            "timeout",
+            False,
+            "degraded",
+            "retrieval_timeout",
+            "timeout",
+        ),
+        (
+            GroundingOutcome.DEGRADED,
+            GroundingMode.DEGRADED,
+            "raw provider stack",
+            False,
+            "degraded",
+            "provider_unavailable",
+            "unavailable",
+        ),
+        (
+            GroundingOutcome.SKIPPED,
+            GroundingMode.UNRESTRICTED,
+            "arbitrary",
+            False,
+            "skipped",
+            "not_applicable",
+            "not_applicable",
+        ),
+    ],
+)
+def test_grounding_decision_maps_ready_blocked_degraded_error_partial_and_skipped(
+    outcome: GroundingOutcome,
+    mode: GroundingMode,
+    reason: str,
+    output_guard_required: bool,
+    expected_status: str,
+    expected_reason: str,
+    expected_fallback: str,
+) -> None:
+    blocked = outcome is GroundingOutcome.BLOCKED
+    decision = GroundingDecisionResult(
+        decision_id=f"decision-{outcome.value}",
+        frozen_policy_hash="sha256:frozen",
+        outcome=outcome,
+        mode=mode,
+        allow_generation=not blocked,
+        grounding_context="",
+        blocked_response="safe blocked copy" if blocked else "",
+        output_guard_required=output_guard_required,
+        evidence=GroundingEvidence(
+            citations=(),
+            rewritten_queries=(),
+            answerability="partial" if output_guard_required else "insufficient",
+            source_status="miss",
+            retrieval_mode="unknown",
+        ),
+        cache_disposition=GroundingCacheDisposition.BYPASS,
+        diagnostics=GroundingDiagnostics(
+            schema_version=1,
+            status=outcome.value,
+            reason_code=reason,
+            source="retrieval",
+            mode=mode.value,
+            degraded=outcome is GroundingOutcome.DEGRADED,
+            blocked=blocked,
+            cache_disposition=GroundingCacheDisposition.BYPASS,
+            result_count=0,
+            duration_ms=1.0,
+        ),
+    )
+
+    projected = decision.to_engine_diagnostics()
+
+    assert projected["status"] == expected_status
+    assert projected["reason_code"] == expected_reason
+    assert projected["fallback_reason"] == expected_fallback
 
 
 @pytest.mark.parametrize(

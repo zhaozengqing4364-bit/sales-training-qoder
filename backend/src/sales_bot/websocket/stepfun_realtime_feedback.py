@@ -352,10 +352,10 @@ class StepFunRealtimeFeedbackMixin(StepFunRealtimeStateBase):
         if claim_truth is None and isinstance(self._latest_claim_truth, dict):
             claim_truth = copy.deepcopy(self._latest_claim_truth)
 
-        knowledge_answer_diagnostics = None
-        if isinstance(self._latest_knowledge_answer_diagnostics, dict):
+        knowledge_answer_diagnostics = self._frontend_grounding_diagnostics()
+        if isinstance(knowledge_answer_diagnostics, dict):
             knowledge_answer_diagnostics = enrich_knowledge_answer_diagnostics(
-                self._latest_knowledge_answer_diagnostics
+                knowledge_answer_diagnostics
             )
 
         runtime_events = merge_runtime_events(

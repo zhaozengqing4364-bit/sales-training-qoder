@@ -18,6 +18,7 @@ from common.knowledge.kb_lock_guard import (
     evaluate_retrieval_grounding_decision,
 )
 from training_runtime.realtime.provider import FrozenJsonMapping, JsonValue
+from training_runtime.realtime.state import GroundingState
 
 if TYPE_CHECKING:
     from training_runtime.realtime.grounding_cache import GroundingRetrievalCache
@@ -299,6 +300,7 @@ class GroundingDecisionResult:
     evidence: GroundingEvidence
     cache_disposition: GroundingCacheDisposition
     diagnostics: GroundingDiagnostics
+    knowledge_base_count: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -329,6 +331,7 @@ class GroundingDecisionResult:
             raise ValueError("grounding_cache_disposition_invalid")
         if not isinstance(self.diagnostics, GroundingDiagnostics):
             raise ValueError("grounding_diagnostics_invalid")
+        _non_negative_int(self.knowledge_base_count, "knowledge_base_count")
         if self.outcome is GroundingOutcome.BLOCKED:
             if self.allow_generation or not self.blocked_response.strip():
                 raise ValueError("grounding_blocked_decision_invariant")
@@ -336,6 +339,202 @@ class GroundingDecisionResult:
             raise ValueError("grounding_non_blocked_decision_must_allow_generation")
         if self.output_guard_required and not self.allow_generation:
             raise ValueError("grounding_output_guard_requires_generation")
+
+    def to_engine_outcome(self) -> str:
+        if self.outcome is GroundingOutcome.BLOCKED:
+            return GroundingOutcome.BLOCKED.value
+        if self.outcome is GroundingOutcome.DEGRADED:
+            return GroundingOutcome.DEGRADED.value
+        return GroundingOutcome.READY.value
+
+    def to_engine_diagnostics(
+        self,
+        *,
+        cache_stats: GroundingCacheStats | None = None,
+    ) -> dict[str, str | int | float | bool]:
+        """Project one decision into the closed, redacted Engine schema v1."""
+        reason_code = self._closed_reason_code()
+        cache_hit = self.cache_disposition in {
+            GroundingCacheDisposition.HIT,
+            GroundingCacheDisposition.SHARED,
+        }
+        if cache_stats is None:
+            hit_count = int(cache_hit)
+            miss_count = int(not cache_hit)
+            cache_size = 0
+        else:
+            hit_count = cache_stats.hit_count + cache_stats.shared_count
+            miss_count = cache_stats.miss_count
+            cache_size = cache_stats.cache_size
+        diagnostics: dict[str, object] = {
+            "schema_version": 1,
+            "status": self.to_engine_outcome()
+            if self.outcome is not GroundingOutcome.SKIPPED
+            else GroundingOutcome.SKIPPED.value,
+            "reason_code": reason_code,
+            "source": self._closed_source(),
+            "mode": self.mode.value,
+            "error_type": self._closed_error_type(reason_code),
+            "fallback_reason": self._closed_fallback_reason(reason_code),
+            "latency_ms": self.diagnostics.duration_ms,
+            "result_count": self.diagnostics.result_count,
+            "kb_count": self.knowledge_base_count,
+            "hit_count": hit_count,
+            "miss_count": miss_count,
+            "cache_size": cache_size,
+            "cache_hit": cache_hit,
+            "timeout": reason_code == "retrieval_timeout",
+            "degraded": self.outcome is GroundingOutcome.DEGRADED,
+            "blocked": self.outcome is GroundingOutcome.BLOCKED,
+        }
+        return GroundingState.validate_diagnostics(diagnostics)
+
+    def to_compatibility_diagnostics(
+        self,
+        *,
+        cache_stats: GroundingCacheStats | None = None,
+    ) -> dict[str, Any]:
+        """Project bounded legacy fields without creating another decision authority."""
+        engine = self.to_engine_diagnostics(cache_stats=cache_stats)
+        return {
+            **engine,
+            "decision_id": self.decision_id,
+            "frozen_policy_hash": self.frozen_policy_hash,
+            "outcome": self.outcome.value,
+            "cache_disposition": self.cache_disposition.value,
+            "cache_hit_internal_retrieval": engine["cache_hit"],
+            "duration_ms": self.diagnostics.duration_ms,
+            "answerability": self.evidence.answerability,
+            "source_status": self.evidence.source_status,
+            "retrieval_mode": self.evidence.retrieval_mode,
+            "rewritten_queries": list(self.evidence.rewritten_queries),
+            "citations": [
+                {
+                    "knowledge_base_id": citation.knowledge_base_id,
+                    "knowledge_base_name": citation.knowledge_base_name,
+                    "document_title": citation.document_title,
+                    "snippet": citation.snippet,
+                    "claim": citation.claim,
+                    "score": citation.score,
+                }
+                for citation in self.evidence.citations
+            ],
+        }
+
+    def to_frontend_diagnostics(
+        self,
+        *,
+        cache_stats: GroundingCacheStats | None = None,
+    ) -> dict[str, Any]:
+        """Project diagnostics without query, transcript-like evidence or raw errors."""
+        compatibility = self.to_compatibility_diagnostics(cache_stats=cache_stats)
+        compatibility.pop("frozen_policy_hash", None)
+        compatibility.pop("rewritten_queries", None)
+        compatibility["answerability"] = (
+            self.evidence.answerability
+            if self.evidence.answerability
+            in {
+                "sufficient",
+                "partial",
+                "insufficient",
+                "blocked",
+                "unanswered",
+                "not_applicable",
+            }
+            else "unanswered"
+        )
+        compatibility["source_status"] = self._closed_frontend_source_status()
+        compatibility["retrieval_mode"] = (
+            self.evidence.retrieval_mode
+            if self.evidence.retrieval_mode
+            in {
+                "vector",
+                "hybrid",
+                "mixed",
+                "keyword_fallback",
+                "unavailable",
+                "unknown",
+                "not_applicable",
+            }
+            else "unknown"
+        )
+        compatibility["citations"] = [
+            {
+                "knowledge_base_id": citation.knowledge_base_id,
+                "knowledge_base_name": citation.knowledge_base_name,
+                "document_title": citation.document_title,
+                "score": citation.score,
+            }
+            for citation in self.evidence.citations
+        ]
+        compatibility["citation_count"] = len(self.evidence.citations)
+        return compatibility
+
+    def _closed_frontend_source_status(self) -> str:
+        reason_code = self._closed_reason_code()
+        if reason_code == "retrieval_ready":
+            return "hit" if self.diagnostics.result_count else "ready"
+        return {
+            "retrieval_timeout": "timeout",
+            "retrieval_no_hit": "miss",
+            "provider_unavailable": "unavailable",
+            "retrieval_error": "unavailable",
+            "policy_blocked": "blocked",
+            "kb_lock_blocked": "blocked",
+            "not_applicable": "not_applicable",
+        }.get(reason_code, "unavailable")
+
+    def _closed_reason_code(self) -> str:
+        if self.outcome is GroundingOutcome.READY:
+            return "retrieval_ready"
+        if self.outcome is GroundingOutcome.SKIPPED:
+            return "not_applicable"
+        raw_reason = self.diagnostics.reason_code.lower()
+        raw_status = self.diagnostics.status.lower()
+        combined = f"{raw_reason}:{raw_status}"
+        if "timeout" in combined:
+            return "retrieval_timeout"
+        if "unavailable" in combined or "provider" in combined:
+            return "provider_unavailable"
+        if any(item in combined for item in ("scope", "policy", "configuration")):
+            return "policy_blocked"
+        if self.outcome is GroundingOutcome.BLOCKED:
+            return "kb_lock_blocked"
+        if any(item in combined for item in ("no_hit", "miss", "empty")):
+            return "retrieval_no_hit"
+        return "retrieval_error"
+
+    def _closed_source(self) -> str:
+        source = self.diagnostics.source.lower()
+        if source in {"policy", "provider", "cache", "presentation", "sales"}:
+            return source
+        if source in {"knowledge", "retrieval", "internal_knowledge", "kb_lock"}:
+            return "knowledge"
+        return "runtime"
+
+    @staticmethod
+    def _closed_error_type(reason_code: str) -> str:
+        if reason_code == "retrieval_timeout":
+            return "timeout"
+        if reason_code == "provider_unavailable":
+            return "provider"
+        if reason_code == "policy_blocked":
+            return "configuration"
+        if reason_code in {"retrieval_error", "retrieval_no_hit"}:
+            return "retrieval"
+        return "none"
+
+    @staticmethod
+    def _closed_fallback_reason(reason_code: str) -> str:
+        return {
+            "retrieval_timeout": "timeout",
+            "retrieval_no_hit": "no_hit",
+            "provider_unavailable": "unavailable",
+            "policy_blocked": "policy_blocked",
+            "kb_lock_blocked": "policy_blocked",
+            "retrieval_error": "unavailable",
+            "not_applicable": "not_applicable",
+        }.get(reason_code, "none")
 
 
 class GroundingRetrieverPort(Protocol):
@@ -674,6 +873,56 @@ class RealtimeGroundingModule:
             evidence=retrieval.evidence,
             cache_disposition=retrieval.diagnostics.cache_disposition,
             diagnostics=diagnostics,
+            knowledge_base_count=len(request.knowledge_base_ids),
+        )
+
+    def cache_stats(self) -> GroundingCacheStats:
+        return self._cache.stats()
+
+    @staticmethod
+    def failure_result(
+        request: GroundingRequest,
+        *,
+        reason: str,
+        blocked: bool,
+        blocked_response: str = "",
+        duration_ms: float = 0.0,
+    ) -> GroundingDecisionResult:
+        normalized_reason = "timeout" if reason == "timeout" else "retrieval_failed"
+        outcome = GroundingOutcome.BLOCKED if blocked else GroundingOutcome.DEGRADED
+        mode = GroundingMode.BLOCKED if blocked else GroundingMode.DEGRADED
+        evidence = GroundingEvidence(
+            citations=(),
+            rewritten_queries=(),
+            answerability="insufficient",
+            source_status=normalized_reason,
+            retrieval_mode="unavailable",
+        )
+        diagnostics = GroundingDiagnostics(
+            schema_version=1,
+            status=outcome.value,
+            reason_code=normalized_reason,
+            source="retrieval",
+            mode=mode.value,
+            degraded=not blocked,
+            blocked=blocked,
+            cache_disposition=GroundingCacheDisposition.BYPASS,
+            result_count=0,
+            duration_ms=duration_ms,
+        )
+        return GroundingDecisionResult(
+            decision_id=request.decision_id,
+            frozen_policy_hash=request.frozen_policy_hash,
+            outcome=outcome,
+            mode=mode,
+            allow_generation=not blocked,
+            grounding_context="",
+            blocked_response=blocked_response if blocked else "",
+            output_guard_required=False,
+            evidence=evidence,
+            cache_disposition=GroundingCacheDisposition.BYPASS,
+            diagnostics=diagnostics,
+            knowledge_base_count=len(request.knowledge_base_ids),
         )
 
     def build_overlay(self, result: GroundingDecisionResult) -> str:
@@ -753,6 +1002,7 @@ class RealtimeGroundingModule:
             evidence=evidence,
             cache_disposition=GroundingCacheDisposition.BYPASS,
             diagnostics=diagnostics,
+            knowledge_base_count=len(request.knowledge_base_ids),
         )
 
     def _from_kb_lock_decision(
@@ -800,6 +1050,7 @@ class RealtimeGroundingModule:
             evidence=evidence,
             cache_disposition=disposition,
             diagnostics=diagnostics,
+            knowledge_base_count=len(request.knowledge_base_ids),
         )
 
     @staticmethod

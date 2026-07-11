@@ -494,6 +494,8 @@ class StepFunRealtimeSharedHandler(
         self._legacy_grounding_runtime: LegacyRealtimeGroundingAdapter | None = None
         self._grounding_pipeline: GroundingDecisionPipeline | None = None
         self._grounding_result: GroundingDecisionResult | None = None
+        self._grounding_decision_sequence = 0
+        self._active_grounding_decision_id: str | None = None
         if self._grounding_module_enabled:
             grounding_cache = GroundingRetrievalCache(
                 ttl_seconds=self._internal_retrieval_cache_ttl_seconds,
@@ -616,6 +618,7 @@ class StepFunRealtimeSharedHandler(
         self._pending_grounding_context = ""
         self._pending_blocked_response_text = ""
         self._grounding_result = None
+        self._active_grounding_decision_id = None
         self._roleplay_regenerate_attempted_for_turn = False
         self._roleplay_repair_instruction = ""
         self._latest_input_transcript_delta = ""
@@ -745,6 +748,57 @@ class StepFunRealtimeSharedHandler(
             response_text,
             self._latest_knowledge_answer_diagnostics,
         )
+
+    def _frontend_grounding_diagnostics(self) -> dict[str, Any] | None:
+        result = self._grounding_result
+        if result is not None:
+            module = self._grounding_module
+            return result.to_frontend_diagnostics(
+                cache_stats=module.cache_stats() if module is not None else None
+            )
+        if isinstance(self._latest_knowledge_answer_diagnostics, dict):
+            diagnostics = self._latest_knowledge_answer_diagnostics
+            projected = {
+                key: copy.deepcopy(diagnostics[key])
+                for key in (
+                    "answerability",
+                    "audit_run_id",
+                    "blocked",
+                    "citation_count",
+                    "degraded",
+                    "live_audit_run_id",
+                    "mode",
+                    "path_mode",
+                    "reason_code",
+                    "result_count",
+                    "retrieval_mode",
+                    "rollout_mode",
+                    "shadow_audit_run_id",
+                    "source",
+                    "source_status",
+                    "status",
+                    "timeout",
+                )
+                if key in diagnostics
+            }
+            raw_citations = diagnostics.get("citations")
+            if isinstance(raw_citations, list):
+                projected["citations"] = [
+                    {
+                        key: copy.deepcopy(item[key])
+                        for key in (
+                            "knowledge_base_id",
+                            "knowledge_base_name",
+                            "document_title",
+                            "score",
+                        )
+                        if key in item
+                    }
+                    for item in raw_citations
+                    if isinstance(item, dict)
+                ]
+            return projected
+        return None
 
     @staticmethod
     def _merge_transcript_normalization_lexicon(
@@ -1315,6 +1369,7 @@ class StepFunRealtimeSharedHandler(
             raise cleanup_error
 
     async def _close_selected_grounding_runtime(self) -> None:
+        self._active_grounding_decision_id = None
         runtime = (
             self._grounding_module
             if self._grounding_module_enabled

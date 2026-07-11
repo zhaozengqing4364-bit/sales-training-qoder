@@ -355,8 +355,13 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             or self._effective_policy.get("instruction_contract_hash")
             or "unversioned"
         ).strip()
+        self._grounding_decision_sequence += 1
+        decision_id = (
+            f"grounding:{self._connection_epoch}:{self._grounding_decision_sequence}"
+        )
+        self._active_grounding_decision_id = decision_id
         return GroundingRequest(
-            decision_id=uuid.uuid4().hex[:12],
+            decision_id=decision_id,
             query=str(query or "").strip(),
             frozen_policy_hash=policy_hash,
             knowledge_base_ids=knowledge_base_ids,
@@ -364,45 +369,31 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             metadata_filter=metadata_filter,
         )
 
-    @staticmethod
-    def _legacy_answerability_diagnostics_from_grounding(
-        result: GroundingDecisionResult,
-    ) -> dict[str, Any]:
-        return {
-            "answerability": result.evidence.answerability,
-            "source_status": result.evidence.source_status,
-            "rewritten_queries": list(result.evidence.rewritten_queries),
-            "citations": [
-                {
-                    "knowledge_base_id": citation.knowledge_base_id,
-                    "knowledge_base_name": citation.knowledge_base_name,
-                    "document_title": citation.document_title,
-                    "snippet": citation.snippet,
-                    "claim": citation.claim,
-                    "score": citation.score,
-                }
-                for citation in result.evidence.citations
-            ],
-            "status": result.diagnostics.status,
-            "reason_code": result.diagnostics.reason_code,
-            "mode": result.mode.value,
-        }
-
-    def _apply_grounding_result(self, result: GroundingDecisionResult) -> None:
+    def _apply_grounding_result(self, result: GroundingDecisionResult) -> bool:
+        if result.decision_id != self._active_grounding_decision_id:
+            self._log_grounding_debug(
+                "grounding_result_stale",
+                decision_id=result.decision_id,
+            )
+            return False
+        module = self._grounding_module
+        cache_stats = module.cache_stats() if module is not None else None
         self._grounding_result = result
-        self._latest_knowledge_answer_diagnostics = (
-            self._legacy_answerability_diagnostics_from_grounding(result)
+        self._latest_knowledge_answer_diagnostics = result.to_compatibility_diagnostics(
+            cache_stats=cache_stats
         )
         self._pending_grounding_context = result.grounding_context
         self._pending_blocked_response_text = (
             "" if result.allow_generation else result.blocked_response
         )
+        return True
 
     async def _prepare_grounding_context_with_module(self, query: str) -> None:
         normalized_query = str(query or "").strip()
         self._pending_grounding_context = ""
         self._pending_blocked_response_text = ""
         self._grounding_result = None
+        self._active_grounding_decision_id = None
         if not normalized_query:
             self._log_grounding_debug("prefetch_skipped", reason="empty_query")
             return
@@ -453,6 +444,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 policy=self._effective_policy,
             )
 
+        decision_started_at = asyncio.get_running_loop().time()
         try:
             result = (
                 await asyncio.wait_for(decide(), timeout=timeout_seconds)
@@ -460,12 +452,23 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 else await decide()
             )
         except TimeoutError:
-            self._pending_grounding_context = ""
-            if has_bound_kb:
-                self._pending_blocked_response_text = (
-                    "当前内部知识检索超时，暂时无法基于内部资料回答这个问题。"
-                    "请稍后重试，或补充更具体的关键词、版本信息或业务场景。"
-                )
+            blocked_response = (
+                "当前内部知识检索超时，暂时无法基于内部资料回答这个问题。"
+                "请稍后重试，或补充更具体的关键词、版本信息或业务场景。"
+                if has_bound_kb
+                else ""
+            )
+            result = module.failure_result(
+                request,
+                reason="timeout",
+                blocked=has_bound_kb,
+                blocked_response=blocked_response,
+                duration_ms=round(
+                    (asyncio.get_running_loop().time() - decision_started_at) * 1000,
+                    1,
+                ),
+            )
+            self._apply_grounding_result(result)
             self._log_grounding_debug(
                 "prefetch_timeout",
                 query_length=len(normalized_query),
@@ -473,8 +476,8 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 kb_count=len(request.knowledge_base_ids),
             )
             return
-        self._apply_grounding_result(result)
-        if require_kb_grounding:
+        applied = self._apply_grounding_result(result)
+        if require_kb_grounding and applied:
             await self._record_kb_lock_decision(
                 status=result.diagnostics.status,
                 blocked=not result.allow_generation,
@@ -2305,9 +2308,10 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             "fallback": "browser_tts",
             "playback_rate": self._stepfun_playback_rate,
         }
-        if isinstance(self._latest_knowledge_answer_diagnostics, dict):
-            payload_data["knowledge_answer_diagnostics"] = copy.deepcopy(
-                self._latest_knowledge_answer_diagnostics
+        frontend_grounding_diagnostics = self._frontend_grounding_diagnostics()
+        if frontend_grounding_diagnostics is not None:
+            payload_data["knowledge_answer_diagnostics"] = (
+                frontend_grounding_diagnostics
             )
         await self.manager.send_json(
             self.websocket,

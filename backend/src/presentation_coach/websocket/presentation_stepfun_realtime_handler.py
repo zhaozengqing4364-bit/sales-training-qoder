@@ -351,19 +351,14 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             await super()._prepare_grounding_context(user_text)
             return
 
-        self._grounding_decision_sequence += 1
-        decision_id = (
-            f"presentation:{self.current_request_id + 1}:"
-            f"{self._grounding_decision_sequence}"
-        )
-        policy_hash = self._instruction_contract_hash or "sha256:unavailable"
-        self._runtime_engine.begin_grounding(
-            decision_id=decision_id,
-            policy_hash=policy_hash,
-        )
         try:
             await super()._prepare_grounding_context(user_text)
         except Exception:
+            decision_id, policy_hash = self._legacy_grounding_identity()
+            self._runtime_engine.begin_grounding(
+                decision_id=decision_id,
+                policy_hash=policy_hash,
+            )
             self._runtime_engine.resolve_grounding(
                 outcome="degraded",
                 mode="degraded",
@@ -374,6 +369,27 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             )
             raise
 
+        result = self._grounding_result
+        if result is not None:
+            self._runtime_engine.begin_grounding(
+                decision_id=result.decision_id,
+                policy_hash=result.frozen_policy_hash,
+            )
+            module = self._grounding_module
+            self._runtime_engine.resolve_grounding(
+                outcome=result.to_engine_outcome(),
+                mode=result.mode.value,
+                diagnostics=result.to_engine_diagnostics(
+                    cache_stats=module.cache_stats() if module is not None else None
+                ),
+            )
+            return
+
+        decision_id, policy_hash = self._legacy_grounding_identity()
+        self._runtime_engine.begin_grounding(
+            decision_id=decision_id,
+            policy_hash=policy_hash,
+        )
         blocked = bool(self._pending_blocked_response_text.strip())
         if blocked:
             outcome = "blocked"
@@ -394,6 +410,14 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
                 status=outcome,
                 reason_code=reason_code,
             ),
+        )
+
+    def _legacy_grounding_identity(self) -> tuple[str, str]:
+        self._grounding_decision_sequence += 1
+        return (
+            f"presentation:{self.current_request_id + 1}:"
+            f"{self._grounding_decision_sequence}",
+            self._instruction_contract_hash or "sha256:unavailable",
         )
 
     @staticmethod

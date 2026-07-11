@@ -158,6 +158,8 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
     _legacy_grounding_runtime: LegacyRealtimeGroundingAdapter | None
     _grounding_pipeline: GroundingDecisionPipeline | None
     _grounding_result: GroundingDecisionResult | None
+    _grounding_decision_sequence: int
+    _active_grounding_decision_id: str | None
     _kb_lock_warmup_enabled: bool
     _kb_lock_warmup_task: asyncio.Task[Any] | None
     _upstream_auto_recover_enabled: bool
