@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–2 已完成，Gate 3–6
-仍待实施。本文描述目标边界和迁移约束，不把尚未完成的物理迁移写成当前事实。
+Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–2 已完成；Gate 3
+Provider/Grounding 实现与聚焦验证已完成，canonical closure 正在执行；Gate 4–6 待实施。
+本文描述目标边界和迁移约束，不把尚未完成的物理迁移写成当前事实。
 
 ## 背景
 
@@ -130,9 +131,22 @@ Provider 条件 skip）；selected backend integration/E2E `598 passed, 21 skipp
 executable lines 802/878（91.34%），critical branch 无 changed missing line、无 adoption floor
 回退，最终输出 `Critical quality gate passed`。
 
-该完成事实不包含 Gate 3。兼容 Adapter 仍复用 `sales_bot` StepFun mixins，实际
-`presentation_coach -> sales_bot` dependency policy 临时边仍保留；
-`RealtimeProviderPort`、provider event codec 和 Grounding 单一状态/缓存权威仍待 Gate 3。
+Gate 3 实现事实（2026-07-11 UTC）：`training_runtime.realtime` 已拥有 immutable/versioned
+Provider command/event/capability/error DTO、`RealtimeProviderPort`、StepFun codec/Adapter、
+Fake Provider contract suite，以及 immutable Grounding request/retrieval/evidence/decision DTO、
+单 session TTL/LRU/single-flight cache 和 closed projection mapper。共享 handler 构造时一次性
+冻结 `REALTIME_PROVIDER_PORT_ENABLED` 与 `REALTIME_GROUNDING_MODULE_ENABLED`，两者默认 true，
+未知值 fail-safe Legacy false；默认 Tool execution 不再拥有 result cache。strict KB、prefetch
+与 model tool retrieval 共用一个低层检索权威；session close cancel + await Provider/Grounding
+owner，stale epoch/correlation/decision 均 fail closed。Sales 2x2 和 Presentation 2x2x2 选择只
+构造每轴一个 authority；外部 Golden fixture 未修改，wire、snapshot、persistence、reconnect、
+score/report single writer 保持兼容。Engine 仍使用 diagnostics schema v1，frontend/runtime
+projection 不暴露 query、snippet、claim、raw Provider error 或 secret。
+
+Gate 3 不等于整条 Presentation 边退役。兼容 Adapter 仍复用 `sales_bot` 的 message
+persistence、prompt、Roleplay 和 report helpers，实际 `presentation_coach -> sales_bot`
+dependency policy 临时边继续保留；Gate 4 所有权迁移和 Gate 6 import-graph 证明完成前不得删除。
+Gate 3 canonical gate、Trellis check 与归档证据由本 Gate 最终闭环步骤补记。
 
 ### 8. 使用可验证变更包衡量进度
 

@@ -96,10 +96,12 @@ temporary_edges:
     targets: [agent, evaluation, prompt_templates, sales_bot, support]
     owner: presentation-coach
     reason: >-
-      Presentation StepFun runtime inherits sales shared implementation and
-      report helpers.
+      The Presentation facade is composition-based and Gate 3 neutralized
+      Provider/Grounding, but its named compatibility adapter still imports
+      Sales message persistence, prompt, Roleplay, and report helpers.
     retire_when: >-
-      Presentation uses RealtimeSessionEngine composition and evidence ports.
+      Gate 4 moves those remaining owners behind neutral ports and Gate 6
+      proves the presentation_coach -> sales_bot import edge is absent.
     expires_on: 2026-10-31
 
   - source: sales_bot

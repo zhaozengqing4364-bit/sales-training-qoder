@@ -4,6 +4,12 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
+**Execution status (2026-07-11 UTC):** Tasks 1–6 are implemented, verified and committed; Task 7
+documentation/differential closure is in progress; Task 8 owns the independent whole-branch review,
+canonical gate and Trellis archive. The user explicitly prohibited sub-agent dispatch after Task 3,
+so Tasks 3 final review onward are executed and independently re-checked by the primary agent only;
+this user instruction overrides the plan's original sub-agent recommendation.
+
 **Goal:** Introduce a neutral realtime Provider Port/StepFun codec and make one neutral Grounding
 module the only realtime decision/cache authority without changing current user, wire,
 persistence, scoring, report or reconnect behavior.
@@ -242,7 +248,7 @@ class RealtimeProviderPort(Protocol):
     async def close(self) -> None: ...
 ```
 
-- [ ] **Step 1: Write the inventory/validation tests first**
+- [x] **Step 1: Write the inventory/validation tests first**
 
 Tests must load `provider_contract_v1.json` whose rows map raw StepFun type -> canonical kind ->
 required/optional fields -> production consumers -> exact tests. Assert exact enum parity; thinking,
@@ -251,7 +257,7 @@ emotion timing and ASR/voice/idle-timeout reasons; strict scalar/container valid
 copies; no numeric coercion; redacted `repr`; capability mismatch; and a local Fake implementing
 every Port method.
 
-- [ ] **Step 2: Run Red**
+- [x] **Step 2: Run Red**
 
 ```bash
 cd backend
@@ -261,7 +267,7 @@ cd backend
 
 Expected: collection/import failure because `training_runtime.realtime.provider` does not exist.
 
-- [ ] **Step 3: Implement the closed DTO/Protocol module**
+- [x] **Step 3: Implement the closed DTO/Protocol module**
 
 Define a local recursive `FrozenJsonMapping`/tuple freeze in
 `training_runtime.realtime.provider`, with Mapping semantics and `__deepcopy__` returning the
@@ -270,7 +276,7 @@ recursively without `Any`; reject unknown fields per command/event kind. Credent
 raw error text are not DTO fields. `RealtimeProviderSessionConfig.required_capabilities()` returns
 the requested set. Unknown audio-format capability is `None`, not an invented allowlist/limit.
 
-- [ ] **Step 4: Run Green and static checks**
+- [x] **Step 4: Run Green and static checks**
 
 ```bash
 cd backend
@@ -282,7 +288,7 @@ cd backend
 
 Expected: all pass; no `Any` on the Port boundary and no secret-bearing field.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/training_runtime/realtime/provider.py \
@@ -326,14 +332,14 @@ class StepFunRealtimeProvider(RealtimeProviderPort):
     ) -> None: ...
 ```
 
-- [ ] **Step 1: Add golden codec/adapter failing tests**
+- [x] **Step 1: Add golden codec/adapter failing tests**
 
 Cover every inventory command/event, alternate transcript payloads already accepted by current
 extractors, response/function IDs, bytes-vs-text, unknown event, malformed JSON/non-object payload,
 StepFun 401/402/403/429 mapping, send failure, health timeout, backpressure and idempotent close.
 Assert raw API key/URL/error body never appears in Event/repr/diagnostics.
 
-- [ ] **Step 2: Run Red**
+- [x] **Step 2: Run Red**
 
 ```bash
 cd backend
@@ -343,7 +349,7 @@ cd backend
 
 Expected: missing codec/adapter imports.
 
-- [ ] **Step 3: Implement codec and adapter by composing existing transport**
+- [x] **Step 3: Implement codec and adapter by composing existing transport**
 
 Do not duplicate endpoint/auth/send/health/backpressure logic. Adapter owns its connected socket;
 constructor freezes credential/endpoint, while `connect(config)` validates capabilities, uses
@@ -352,7 +358,7 @@ constructor freezes credential/endpoint, while `connect(config)` validates capab
 failures to category+reason. Recognized reasons retain exact safe messages; UNKNOWN uses the fixed
 fallback and never transports arbitrary raw text.
 
-- [ ] **Step 4: Run Green and compatibility snapshots**
+- [x] **Step 4: Run Green and compatibility snapshots**
 
 ```bash
 cd backend
@@ -366,7 +372,7 @@ cd backend
 
 Expected: StepFun payload snapshots byte-for-byte unchanged.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/training_runtime/realtime/stepfun_codec.py \
@@ -407,7 +413,7 @@ git commit -m "feat(realtime): adapt stepfun to provider port"
 - Consumes: `RealtimeProviderPort`, `StepFunRealtimeProvider`, canonical commands/events.
 - Produces: default-on construction-time Provider selection and sanitized diagnostics.
 
-- [ ] **Step 1: Write rollout and differential tests**
+- [x] **Step 1: Write rollout and differential tests**
 
 Add tests for flag unset true; normalized truthy/falsy; unknown value fail-safe Legacy false;
 read-once semantics; one selected object; no shadow
@@ -415,7 +421,7 @@ connection, Fake Provider driving connect/text/audio/tool/response/reconnect, ca
 before socket connect, and the 2x2 Presentation Engine/Provider matrix. Mutation probes must fail if
 event order, persistence, epoch or tool follow-up changes.
 
-- [ ] **Step 2: Run Red**
+- [x] **Step 2: Run Red**
 
 ```bash
 cd backend
@@ -427,7 +433,7 @@ cd backend
 
 Expected: new default selection and canonical event assertions fail on raw transport path.
 
-- [ ] **Step 3: Implement Branch by Abstraction**
+- [x] **Step 3: Implement Branch by Abstraction**
 
 Extend `StepFunRealtimeSharedHandler.__init__` with an injected `provider_factory` and one frozen
 selection boolean. Port path uses `connect/send/receive/check_health/decide_backpressure/close` and
@@ -438,7 +444,7 @@ re-read settings during reconnect. Presentation consumes provider-neutral behavi
 inherited compatibility adapter/local Protocol; do not add a static `presentation_coach ->
 training_runtime` import absent from architecture policy.
 
-- [ ] **Step 4: Run Green, reconnect and architecture checks**
+- [x] **Step 4: Run Green, reconnect and architecture checks**
 
 ```bash
 cd backend
@@ -461,7 +467,7 @@ cd backend
 
 Expected: no wire/persistence/epoch mutation; architecture policy satisfied.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/common/config.py \
@@ -654,7 +660,7 @@ class KbLockRetriever(Protocol):
     ) -> dict[str, Any]: ...
 ```
 
-- [ ] **Step 1: Write complete result/cache failing matrix**
+- [x] **Step 1: Write complete result/cache failing matrix**
 
 Test strict request/evidence validation and exact citation/rewritten-query legacy round trip;
 canonical hashed key; frozen policy/KB isolation; deep copy; TTL;
@@ -665,7 +671,7 @@ strict KB/no KB/not-ready/partial/grounded parity; and citations driving output 
 diagnostics contain closed scalars only. Cover the full existing Engine mode vocabulary, including
 `kb_lock`, `unrestricted`, and `not_applicable`.
 
-- [ ] **Step 2: Run Red**
+- [x] **Step 2: Run Red**
 
 ```bash
 cd backend
@@ -675,7 +681,7 @@ cd backend
 
 Expected: missing Grounding modules.
 
-- [ ] **Step 3: Implement minimal deep modules**
+- [x] **Step 3: Implement minimal deep modules**
 
 Use `OrderedDict` + monotonic clock for bounded TTL and an in-flight task map keyed by digest. Put
 the configured timeout inside the shared owner coroutine; shield waiters; store only non-empty
@@ -685,7 +691,7 @@ retriever seam whose default preserves current direct search; the Module injects
 retriever. Keep free-form citation evidence separate from closed diagnostics and preserve current
 thresholds/Chinese user messages.
 
-- [ ] **Step 4: Run Green and common KB parity**
+- [x] **Step 4: Run Green and common KB parity**
 
 ```bash
 cd backend
@@ -696,7 +702,7 @@ cd backend
 .venv/bin/mypy src/training_runtime/realtime
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/training_runtime/realtime/grounding.py \
@@ -731,7 +737,7 @@ git commit -m "feat(realtime): centralize grounding decisions and cache"
 - Consumes: `RealtimeGroundingModule` and its immutable result/cache.
 - Produces: one selected Grounding path and a cache-free Tool execution module.
 
-- [ ] **Step 1: Add default/rollback and one-retrieval failing tests**
+- [x] **Step 1: Add default/rollback and one-retrieval failing tests**
 
 Assert Grounding flag normalization/read-once, one Module/cache, strict/prefetch/tool non-empty
 cacheable success with identical frozen request executes the low-level retriever once, inverse order
@@ -739,7 +745,7 @@ also once, concurrent calls single-flight, different frozen policy/KB scope miss
 no-hit executes twice, and Legacy false preserves current behavior. Assert
 `StepFunToolExecutionModule` no longer exposes or stores result-cache state on the default path.
 
-- [ ] **Step 2: Run Red**
+- [x] **Step 2: Run Red**
 
 ```bash
 cd backend
@@ -748,7 +754,7 @@ cd backend
   tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_upstream.py -q
 ```
 
-- [ ] **Step 3: Integrate one Module and remove duplicate cache ownership**
+- [x] **Step 3: Integrate one Module and remove duplicate cache ownership**
 
 Construct Grounding selection once. The new low-level retriever calls
 `StepFunToolExecutionModule.execute_tool` without caching; both prefetch and function-tool routes
@@ -757,7 +763,7 @@ Move the exact old Pipeline + result-cache behavior into named `LegacyRealtimeGr
 `LegacyToolResultCache`, constructed only when flag false and retained to Gate 6. Keep call-id/turn
 dedupe and tool response unchanged. Session close always awaits selected Grounding runtime close.
 
-- [ ] **Step 4: Run Green and behavior matrix**
+- [x] **Step 4: Run Green and behavior matrix**
 
 ```bash
 cd backend
@@ -769,7 +775,7 @@ cd backend
 .venv/bin/mypy src
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/common/config.py \
@@ -811,7 +817,7 @@ git commit -m "refactor(realtime): use one grounding retrieval authority"
 - Produces: one closed/redacted mapper feeding compatibility fields, Engine state and durable metric
   writer.
 
-- [ ] **Step 1: Write projection/timeout/metrics failing tests**
+- [x] **Step 1: Write projection/timeout/metrics failing tests**
 
 For ready/blocked/degraded/timeout/error/partial, assert one result/evidence produces all three surfaces with
 the same decision ID/outcome/cache status; existing top-level diagnostics and user messages remain;
@@ -826,7 +832,7 @@ Owner timeout/cancel/session close does not later overwrite the active decision.
 log/new DTOs contain no raw query/token/prompt/transcript/provider error, while existing durable
 `last_query/recent_queries` remain unchanged and single-writer. Include stale epoch and tool-followup.
 
-- [ ] **Step 2: Run Red**
+- [x] **Step 2: Run Red**
 
 ```bash
 cd backend
@@ -837,7 +843,7 @@ cd backend
   tests/contract/test_practice_evidence_contract.py -q
 ```
 
-- [ ] **Step 3: Implement a single projection mapper**
+- [x] **Step 3: Implement a single projection mapper**
 
 Add `GroundingDecisionResult.to_engine_diagnostics()` and a compatibility projection with closed
 status/reason/source/mode/error/fallback/cache fields. Handler assigns one `_grounding_result`;
@@ -852,7 +858,7 @@ projections or narrow setters used only by the Legacy rollback. Presentation cal
 query-bearing mutation. Module/cache outcomes do not call it and never persist independently; they
 remain closed decision diagnostics.
 
-- [ ] **Step 4: Run Green and broad realtime regression**
+- [x] **Step 4: Run Green and broad realtime regression**
 
 ```bash
 cd backend
@@ -868,7 +874,7 @@ cd backend
 .venv/bin/mypy src
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/training_runtime/realtime/grounding.py \
@@ -907,7 +913,7 @@ git commit -m "refactor(realtime): project one grounding decision"
 - Consumes: Tasks 1–6 public contracts and rollout diagnostics.
 - Produces: machine-traceable Gate 3 completion evidence and executable Trellis contract.
 
-- [ ] **Step 1: Add final differential and mutation tests**
+- [x] **Step 1: Add final differential and mutation tests**
 
 Run Sales 2x2=4 and Presentation Engine/Provider/Grounding 2x2x2=8 selections. Compare downstream wire,
 upstream StepFun wire, persistence, snapshot, Engine terminal state, grounding result/cache stats,
@@ -916,7 +922,7 @@ event, decision, cache scope, metric or write changes. Keep the existing externa
 unchanged unless a true external contract change is separately approved; Gate 3 internal inventory
 evidence uses exact `file::test_name` and semantic validation.
 
-- [ ] **Step 2: Run focused Gate 3 verification**
+- [x] **Step 2: Run focused Gate 3 verification**
 
 ```bash
 cd backend
@@ -935,20 +941,20 @@ cd backend
 .venv/bin/mypy src
 ```
 
-- [ ] **Step 3: Write the executable 7-section Trellis contract and truthful authority docs**
+- [x] **Step 3: Write the executable 7-section Trellis contract and truthful authority docs**
 
 Document Scope/Trigger, Signatures, Contracts, Validation & Error Matrix, Good/Base/Bad, Tests
 Required and Wrong vs Correct. State current facts only. If `presentation_coach -> sales_bot` still
 exists, keep the exception and explicitly defer full retirement; if a target disappeared, update the
 policy in the same commit and prove no stale exception.
 
-- [ ] **Step 4: Run design artifact audit and docs checks**
+- [x] **Step 4: Run design artifact audit and docs checks**
 
 Trace every referenced type/flag/test/import to source, verify no invented knowledge revision,
 ensure plan/PRD/spec terminology matches, run `git diff --check`, architecture guard, and grep for
 unchecked implementation-plan boxes after marking completed work.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/tests/unit/test_presentation_realtime_engine_handler.py \

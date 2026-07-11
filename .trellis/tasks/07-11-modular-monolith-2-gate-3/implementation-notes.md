@@ -61,3 +61,10 @@
   low-level durable metric callback remains the only query-bearing writer. Focused matrix
   `529 passed`, broad affected realtime matrix `887 passed`, architecture guard `19 passed`, Ruff
   passed and mypy passed across `635 source files`.
+- Task 7 differential expanded Sales selection to Provider/Grounding 2x2 and Presentation selection
+  plus real Golden conversation to Engine/Provider/Grounding 2x2x2. The unchanged external Golden
+  fixture preserves wire/snapshot/persistence/reconnect/single-writer behavior; focused Gate 3
+  verification is `812 passed` with architecture policy, Ruff and mypy (635 source files) green.
+- Task 7 documentation audit traced every public Provider/Grounding symbol and exact rollout test.
+  The real `presentation_coach -> sales_bot` edge remains; only its stale reason/retire condition
+  was corrected to the remaining persistence/prompt/Roleplay/report ownership and Gate 4/6 exit.

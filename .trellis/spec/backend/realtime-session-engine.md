@@ -1,7 +1,7 @@
 # Realtime Session Engine
 
-> Executable contract for the Gate 2 Presentation tracer bullet, its rollback adapter,
-> state transitions, snapshot compatibility, diagnostics, and single-writer boundary.
+> Executable contract for the Gate 2 Presentation tracer bullet plus Gate 3 Provider/Grounding
+> integration, rollback adapters, state transitions, snapshots, diagnostics and single writers.
 
 ## 1. Scope / Trigger
 
@@ -17,11 +17,11 @@ Apply this contract when a change:
 - touches shared StepFun construction used by Sales and Presentation; or
 - changes the Golden Conversation differential or realtime release-gate selection.
 
-Gate 2 is a Presentation tracer bullet. It establishes explicit Engine state and a composition
-façade while keeping the StepFun wire/persistence implementation in a compatibility adapter.
-It does **not** complete Gate 3: `RealtimeProviderPort`, the provider event codec, and one
-Grounding cache/state authority remain future work. The temporary
-`presentation_coach -> sales_bot` implementation edge is therefore still real.
+Gate 2 established explicit Engine state and a Presentation composition façade. Gate 3 now supplies
+the neutral `RealtimeProviderPort`, StepFun codec/adapter and one default Grounding decision/cache
+authority. The StepFun wire/persistence implementation remains in a compatibility adapter, so the
+temporary `presentation_coach -> sales_bot` implementation edge is still real for persistence,
+prompt, Roleplay and report helpers. See `realtime-provider-grounding.md`.
 
 ## 2. Signatures
 
@@ -198,6 +198,8 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
 
 - The differential drives a real Legacy handler and the real façade's real compatibility
   adapter through connect/start/text/binary/transcription/`response.done`/reconnect/close.
+- Gate 3 executes all Presentation Engine/Provider/Grounding 2x2x2 selections and the Sales
+  Provider/Grounding 2x2 construction matrix. Every combination selects one authority per axis.
 - It compares ordered stable downstream events, upstream events, persistence writes, close
   result, and every legacy snapshot field after removing only the additive Engine subtree and
   genuinely nondeterministic timestamps/trace/generated IDs.
@@ -249,14 +251,17 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
 - **Bad**: a plugin passes a factory callable or kwargs dict, the façade nests/removes legacy
   diagnostics, Engine writes a second message/score/report, `response.done` completes the new
   follow-up turn, rejected or per-frame audio creates evidence, raw chunks accumulate in memory,
-  audio keys use mutable `turn_count`, or documentation claims Provider/Grounding neutrality while
-  the compatibility adapter still imports `sales_bot` mixins.
+  audio keys use mutable `turn_count`, Tool execution owns a second retrieval cache, or
+  documentation claims the full Presentation-to-Sales edge is retired while the compatibility
+  adapter still imports `sales_bot` persistence/prompt/Roleplay/report helpers.
 
 ## 6. Tests Required
 
 - Engine state/validation: `backend/tests/unit/test_realtime_session_engine.py`.
 - Façade, snapshots, follow-up ordering, diagnostics, evidence, and real Golden differential:
   `backend/tests/unit/test_presentation_realtime_engine_handler.py`.
+- Provider/Grounding DTO, codec, cache and projection rules:
+  `.trellis/spec/backend/realtime-provider-grounding.md` and its required test matrix.
 - Presentation constructor/event/persistence compatibility:
   `backend/tests/unit/test_presentation_stepfun_realtime_handler.py`.
 - Rollout/default/rollback/immutable selection:

@@ -191,6 +191,46 @@ def test_grounding_module_default_selection_is_frozen_and_unknown_uses_legacy(
     assert legacy_handler._grounding_pipeline is not None
 
 
+@pytest.mark.parametrize("provider_enabled", [False, True])
+@pytest.mark.parametrize("grounding_enabled", [False, True])
+def test_sales_provider_and_grounding_rollouts_select_exactly_one_2x2_path(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_enabled: bool,
+    grounding_enabled: bool,
+) -> None:
+    monkeypatch.setenv(
+        "REALTIME_PROVIDER_PORT_ENABLED",
+        "true" if provider_enabled else "false",
+    )
+    monkeypatch.setenv(
+        "REALTIME_GROUNDING_MODULE_ENABLED",
+        "true" if grounding_enabled else "false",
+    )
+    providers: list[object] = []
+
+    def provider_factory(**_kwargs: object) -> object:
+        provider = object()
+        providers.append(provider)
+        return provider
+
+    handler = StepFunRealtimeHandler(provider_factory=provider_factory)
+
+    assert handler._provider_port_enabled is provider_enabled
+    assert handler._selected_provider_path == (
+        "provider_port" if provider_enabled else "legacy_stepfun_transport"
+    )
+    assert (handler._grounding_module is not None) is grounding_enabled
+    assert (handler._legacy_grounding_runtime is not None) is not grounding_enabled
+    assert (handler._grounding_pipeline is None) is grounding_enabled
+    if provider_enabled:
+        assert handler._get_or_create_realtime_provider() is providers[0]
+        assert handler._get_or_create_realtime_provider() is providers[0]
+        assert len(providers) == 1
+    else:
+        assert handler._realtime_provider is None
+        assert providers == []
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("inverse_order", [False, True])
 async def test_default_grounding_prefetch_and_tool_share_one_retrieval(

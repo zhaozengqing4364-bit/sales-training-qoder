@@ -123,10 +123,12 @@ def test_facade_composes_one_adapter_without_sales_handler_inheritance() -> None
 
 @pytest.mark.parametrize("engine_enabled", [True, False])
 @pytest.mark.parametrize("provider_enabled", [True, False])
-def test_presentation_engine_and_provider_rollouts_select_exactly_one_2x2_path(
+@pytest.mark.parametrize("grounding_enabled", [True, False])
+def test_presentation_rollouts_select_exactly_one_2x2x2_path(
     monkeypatch: pytest.MonkeyPatch,
     engine_enabled: bool,
     provider_enabled: bool,
+    grounding_enabled: bool,
 ) -> None:
     from presentation_coach.websocket.presentation_realtime_engine_handler import (
         PresentationRealtimeEngineHandler,
@@ -135,6 +137,10 @@ def test_presentation_engine_and_provider_rollouts_select_exactly_one_2x2_path(
     monkeypatch.setenv(
         "REALTIME_PROVIDER_PORT_ENABLED",
         "true" if provider_enabled else "false",
+    )
+    monkeypatch.setenv(
+        "REALTIME_GROUNDING_MODULE_ENABLED",
+        "true" if grounding_enabled else "false",
     )
     descriptor = TrainingRuntimeDescriptor(
         session_id="presentation-provider-matrix",
@@ -175,6 +181,9 @@ def test_presentation_engine_and_provider_rollouts_select_exactly_one_2x2_path(
     assert adapter._selected_provider_path == (
         "provider_port" if provider_enabled else "legacy_stepfun_transport"
     )
+    assert (adapter._grounding_module is not None) is grounding_enabled
+    assert (adapter._legacy_grounding_runtime is not None) is not grounding_enabled
+    assert (adapter._grounding_pipeline is None) is grounding_enabled
     if provider_enabled:
         assert adapter._get_or_create_realtime_provider() is provider_instances[0]
         assert adapter._get_or_create_realtime_provider() is provider_instances[0]
@@ -1308,6 +1317,8 @@ async def _drive_real_golden_conversation(
 
     downstream_events.extend(first_websocket.events)
     downstream_events.extend(reconnect_websocket.events)
+    grounding_module = initial_handler._grounding_module
+    legacy_grounding = initial_handler._legacy_grounding_runtime
     return {
         "downstream_events": _normalize_golden_value(downstream_events),
         "upstream_events": _normalize_golden_value(upstream_events),
@@ -1338,6 +1349,17 @@ async def _drive_real_golden_conversation(
             for event_type in upstream.received_event_types
         ],
         "tool_calls": list(initial_handler._golden_tool_calls),
+        "grounding_path": (
+            "module" if grounding_module is not None else "legacy_adapter"
+        ),
+        "grounding_result": initial_handler._grounding_result,
+        "grounding_cache_entry_count": (
+            grounding_module.cache_stats().cache_size
+            if grounding_module is not None
+            else len(legacy_grounding.tool_cache._entries)
+            if legacy_grounding is not None
+            else -1
+        ),
     }
 
 
@@ -1487,61 +1509,76 @@ async def test_golden_differential_preserves_external_single_writer_contract(
         PresentationRealtimeEngineHandler,
     )
 
-    results: dict[tuple[bool, bool], dict[str, Any]] = {}
+    results: dict[tuple[bool, bool, bool], dict[str, Any]] = {}
     for engine_enabled in (False, True):
         for provider_enabled in (False, True):
-            with monkeypatch.context() as scoped:
-                scoped.setenv(
-                    "REALTIME_PROVIDER_PORT_ENABLED",
-                    "true" if provider_enabled else "false",
-                )
-                if engine_enabled:
-                    surface = PresentationRealtimeEngineHandler(
-                        runtime_engine_factory=RealtimeSessionEngine,
-                    )
-                    adapter = surface.runtime_adapter
-                else:
-                    adapter = LegacyPresentationStepFunRealtimeHandler()
-                    surface = adapter
-
-            def reconnect_factory(
-                *,
-                engine_enabled: bool = engine_enabled,
-                provider_enabled: bool = provider_enabled,
-            ) -> tuple[Any, Any]:
-                with monkeypatch.context() as reconnect_scope:
-                    reconnect_scope.setenv(
+            for grounding_enabled in (False, True):
+                with monkeypatch.context() as scoped:
+                    scoped.setenv(
                         "REALTIME_PROVIDER_PORT_ENABLED",
                         "true" if provider_enabled else "false",
                     )
+                    scoped.setenv(
+                        "REALTIME_GROUNDING_MODULE_ENABLED",
+                        "true" if grounding_enabled else "false",
+                    )
                     if engine_enabled:
-                        reconnect_surface = PresentationRealtimeEngineHandler(
+                        surface = PresentationRealtimeEngineHandler(
                             runtime_engine_factory=RealtimeSessionEngine,
                         )
-                        return (
-                            reconnect_surface.runtime_adapter,
-                            reconnect_surface,
+                        adapter = surface.runtime_adapter
+                    else:
+                        adapter = LegacyPresentationStepFunRealtimeHandler()
+                        surface = adapter
+
+                def reconnect_factory(
+                    *,
+                    engine_enabled: bool = engine_enabled,
+                    provider_enabled: bool = provider_enabled,
+                    grounding_enabled: bool = grounding_enabled,
+                ) -> tuple[Any, Any]:
+                    with monkeypatch.context() as reconnect_scope:
+                        reconnect_scope.setenv(
+                            "REALTIME_PROVIDER_PORT_ENABLED",
+                            "true" if provider_enabled else "false",
                         )
-                    reconnect_adapter = LegacyPresentationStepFunRealtimeHandler()
-                    return reconnect_adapter, reconnect_adapter
+                        reconnect_scope.setenv(
+                            "REALTIME_GROUNDING_MODULE_ENABLED",
+                            "true" if grounding_enabled else "false",
+                        )
+                        if engine_enabled:
+                            reconnect_surface = PresentationRealtimeEngineHandler(
+                                runtime_engine_factory=RealtimeSessionEngine,
+                            )
+                            return (
+                                reconnect_surface.runtime_adapter,
+                                reconnect_surface,
+                            )
+                        reconnect_adapter = LegacyPresentationStepFunRealtimeHandler()
+                        return reconnect_adapter, reconnect_adapter
 
-            results[
-                (engine_enabled, provider_enabled)
-            ] = await _drive_real_golden_conversation(
-                initial_handler=adapter,
-                initial_surface=surface,
-                reconnect_factory=reconnect_factory,
-                provider_enabled=provider_enabled,
-            )
+                results[
+                    (engine_enabled, provider_enabled, grounding_enabled)
+                ] = await _drive_real_golden_conversation(
+                    initial_handler=adapter,
+                    initial_surface=surface,
+                    reconnect_factory=reconnect_factory,
+                    provider_enabled=provider_enabled,
+                )
 
-    baseline = results[(False, False)]
+    baseline = results[(False, False, False)]
     for combination, result in results.items():
         _assert_golden_differential(baseline, result)
         _assert_golden_expected_oracle(result)
+        assert result["grounding_path"] == (
+            "module" if combination[2] else "legacy_adapter"
+        )
+        assert result["grounding_result"] is None
+        assert result["grounding_cache_entry_count"] == 0
         if combination[0]:
             _assert_golden_engine_terminal_state(result)
 
-    engine_result = results[(True, True)]
+    engine_result = results[(True, True, True)]
     downstream_types = {event["type"] for event in engine_result["downstream_events"]}
     upstream_types = {event["type"] for event in engine_result["upstream_events"]}
     assert downstream_types >= {
@@ -1566,39 +1603,44 @@ async def test_golden_differential_preserves_external_single_writer_contract(
     assert len(persistence_keys) == 5
     assert len(engine_result["tool_calls"]) == 1
     for provider_enabled in (False, True):
-        provider_kinds = results[(True, provider_enabled)]["provider_received_kinds"]
-        raw_types = results[(True, provider_enabled)]["raw_received_types"]
-        if provider_enabled:
-            assert {
-                "transcription_delta",
-                "transcription_final",
-                "response_audio_delta",
-                "thinking_delta",
-                "thinking_done",
-                "response_done",
-                "conversation_item",
-                "function_arguments_done",
-                "unknown",
-                "error",
-                "session_ready",
-            }.issubset(provider_kinds)
-            assert raw_types == []
-        else:
-            assert provider_kinds == []
-            assert {
-                "response.created",
-                "response.text.delta",
-                "response.audio.delta",
-                "conversation.item.input_audio_transcription.delta",
-                "conversation.item.input_audio_transcription.completed",
-                "conversation.item.created",
-                "response.function_call_arguments.delta",
-                "response.function_call_arguments.done",
-                "response.done",
-                "vendor.unknown.event",
-                "error",
-                "session.updated",
-            }.issubset(raw_types)
+        for grounding_enabled in (False, True):
+            provider_kinds = results[(True, provider_enabled, grounding_enabled)][
+                "provider_received_kinds"
+            ]
+            raw_types = results[(True, provider_enabled, grounding_enabled)][
+                "raw_received_types"
+            ]
+            if provider_enabled:
+                assert {
+                    "transcription_delta",
+                    "transcription_final",
+                    "response_audio_delta",
+                    "thinking_delta",
+                    "thinking_done",
+                    "response_done",
+                    "conversation_item",
+                    "function_arguments_done",
+                    "unknown",
+                    "error",
+                    "session_ready",
+                }.issubset(provider_kinds)
+                assert raw_types == []
+            else:
+                assert provider_kinds == []
+                assert {
+                    "response.created",
+                    "response.text.delta",
+                    "response.audio.delta",
+                    "conversation.item.input_audio_transcription.delta",
+                    "conversation.item.input_audio_transcription.completed",
+                    "conversation.item.created",
+                    "response.function_call_arguments.delta",
+                    "response.function_call_arguments.done",
+                    "response.done",
+                    "vendor.unknown.event",
+                    "error",
+                    "session.updated",
+                }.issubset(raw_types)
 
     snapshot_mutation = deepcopy(engine_result)
     snapshot_mutation["initial_snapshot"].turn_count = 999

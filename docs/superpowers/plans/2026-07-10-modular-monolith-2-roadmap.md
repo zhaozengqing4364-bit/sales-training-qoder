@@ -19,7 +19,8 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 | 1A | Completed（2026-07-10） | 49 条边全部受 policy 治理；12 包 SCC 只许缩小；guard 已进入主门禁 |
 | 1B | Completed（2026-07-11） | 唯一 release gate 从头自然 exit 0；backend 2665 passed；Vitest 209 files / 1329 passed；全部本地 Playwright、598 个 selected backend 测试和 82% changed coverage 通过 |
 | 2 | Completed（2026-07-11） | Presentation Engine tracer bullet 默认启用、单 flag 可回滚；canonical gate backend 2903 passed、Vitest 1329 passed、全部本地 Playwright、598 个 selected backend 测试和 91.34% changed coverage 通过 |
-| 3–6 | Not started | 按顺序实施 Provider/Grounding 中立化、领域所有权、Locality 和兼容层退役 |
+| 3 | Closure verification（2026-07-11） | Provider Port/StepFun codec/Fake contract 与单 Grounding authority 已实现；Sales 2x2、Presentation 2x2x2、focused/affected 回归已绿；canonical gate/Trellis closure 执行中 |
+| 4–6 | Not started | 按顺序实施领域所有权、Locality 和兼容层退役 |
 
 Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进度，不把已批准的目标
 设计或已完成的单个基础设施 Gate 误写成模块化单体 2.0 整体完成。
@@ -168,6 +169,8 @@ Gate 4 完成相关所有权迁移，并由 Gate 6 按实际 import graph 退役
 
 ## Gate 3：Provider 与 Grounding 深化
 
+状态：**实现完成，closure 验证中（2026-07-11 UTC）**。
+
 变更包建议：
 
 1. `RealtimeProviderPort` 和 provider capability contract；
@@ -178,6 +181,19 @@ Gate 4 完成相关所有权迁移，并由 Gate 6 按实际 import graph 退役
 6. 统一 timeout、fallback、diagnostics 和 metrics。
 
 验收：Fake Provider 不修改 Engine 即可运行；Grounding 只有一个状态和缓存权威。
+
+当前实现证据：immutable Provider DTO/Port、StepFun codec/Adapter、Fake Provider suite、
+统一 generation rollover、immutable Grounding DTO/Module、单 session TTL/LRU/single-flight
+cache、cache-free Tool execution、closed Engine schema-v1 mapper、redacted frontend mapper 和
+default-on/Legacy rollback 已进入生产路径。Sales Provider/Grounding 2x2=4、Presentation
+Engine/Provider/Grounding 2x2x2=8 均只构造每轴一个 authority；Golden fixture 不变，wire、
+snapshot、persistence、reconnect、score/report single writer 保持兼容。聚焦 Task 6 matrix
+`529 passed`、broader affected realtime matrix `887 passed`、mypy `635 source files`、architecture
+guard `19 passed`。最终 canonical gate、Trellis check 和归档由 Gate 3 closure 步骤补记。
+
+边界说明：Gate 3 不删除整条 `presentation_coach -> sales_bot` 临时边；该边剩余的 message
+persistence、prompt、Roleplay、report helper 由 Gate 4 迁移并在 Gate 6 依据实际 import graph
+退役。
 
 ## Gate 4：Roleplay、配置与评估所有权
 

@@ -1,7 +1,7 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 0C、Gate 1A、Gate 1B、Gate 2 已完成）
+状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 0C、Gate 1A、Gate 1B、Gate 2 已完成；Gate 3 实现完成、closure 验证中）
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 
 实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
@@ -19,7 +19,8 @@ Engine façade、单 flag Legacy 回滚、显式 versioned state、additive/pre-
 本 Gate canonical gate 从头自然 exit 0：backend `2903 passed, 1 skipped`、Vitest 209 files /
 `1329 passed, 6 skipped`、Playwright generic/smoke/newcomer/presentation/sales 为
 `3/9/11/2/1 passed`、selected backend `598 passed, 21 skipped`、changed coverage
-802/878（91.34%）。Gate 3–6 仍按路线图推进，本文件的目标架构尚未整体落地。
+802/878（91.34%）。Gate 3 已完成 Provider/Grounding 实现和聚焦/affected 验证，正在执行
+canonical closure；Gate 4–6 仍按路线图推进，本文件的目标架构尚未整体落地。
 
 ## 1. 背景
 
@@ -31,14 +32,15 @@ Engine façade、单 flag Legacy 回滚、显式 versioned state、additive/pre-
 - 会话读取冻结的 voice、curriculum、Roleplay Contract snapshot；
 - RuntimeGate、对象级权限、reconnect epoch、KB fail-closed、record-only
   Roleplay observation 等关键不变量已有测试；
-- `StepFunTransport`、`RealtimeTurnCoordinator`、
-  `GroundingDecisionPipeline`、`StepFunToolExecutionModule` 等第一轮 Seam 已进入
-  生产路径。
+- `RealtimeSessionEngine`、`RealtimeProviderPort`、StepFun Adapter、
+  `RealtimeGroundingModule` 和 cache-free `StepFunToolExecutionModule` 已按 Gate 2–3
+  进入生产路径，Legacy Pipeline 仅保留为 flag-false rollback。
 
-但是，当前代码结构还没有兑现文档声明的依赖方向。以 13 个后端顶层包为节点、
-扫描 Python 静态和字面量动态 import 后，当前存在 49 条跨包边，除
-`supervisor` 外的 12 个包处于同一个强连通分量。Realtime 也主要完成了文件拆分，
-尚未完成状态和决策权拆分。
+本设计获批时，代码结构尚未兑现文档声明的依赖方向。以 13 个后端顶层包为节点、
+扫描 Python 静态和字面量动态 import 后，基线存在 49 条跨包边，除 `supervisor` 外的
+12 个包处于同一个强连通分量；当时 Realtime 也主要完成了文件拆分。Gate 1A 已冻结该
+依赖/SCC 基线，Gate 2–3 已先收敛 Realtime 状态、Provider 和 Grounding 决策权；Gate 4–6
+继续处理领域所有权、Locality 和兼容边退役。
 
 本设计采用渐进式模块化单体 2.0：不重写、不拆微服务，通过可验证的
 strangler 切片把现有物理目录逐步深化为真正的 Module。
@@ -169,14 +171,20 @@ flowchart TB
 WebSocket Adapter 只负责：鉴权、协议解析、调用 Engine、把 Engine 输出写回客户端。
 StepFun 是 `RealtimeProviderPort` 的第一个 Adapter，而不是 Engine 的内部主语。
 
-Gate 2 当前实现只兑现了该目标的 Presentation tracer bullet：
+Gate 2 已兑现 Presentation tracer bullet：
 `training_runtime.realtime` 已拥有 versioned Connection/Turn/Grounding/Evidence state 和
 invariant-checked transitions；Presentation 通过组合 façade 接入，兼容 Adapter 保留现有
 StepFun wire/persistence 单 writer。音频 Evidence 只聚合共享入口 accepted 的 chunk，以 O(1)
-流式 digest/count 元数据在本地 commit 后按 turn 写一次，拒绝帧和逐帧路径不写。当前
-`GroundingState` 记录一次决策结果，但 Tool/Grounding 缓存尚未收敛为单一权威；
-`RealtimeProviderPort` 和 provider event codec 也尚未落地。
-因此上段完整 WebSocket/Provider/Grounding 描述仍是 Gate 3+ 目标，不是 Gate 2 当前事实。
+流式 digest/count 元数据在本地 commit 后按 turn 写一次，拒绝帧和逐帧路径不写。
+
+Gate 3 已兑现 Provider/Grounding 深化：`RealtimeProviderPort`、immutable command/event/
+capability/error DTO、StepFun codec/Adapter 与 Fake Provider contract 已落地；默认生产路径使用
+一个 `RealtimeGroundingModule` 和一个 session-local bounded single-flight cache，strict KB、
+prefetch、model tool retrieval 共用 frozen request/result authority，Tool execution 不再拥有
+result cache。Provider/Grounding 两个 default-on flag 均构造时读一次，Legacy path 保留为命名
+rollback；Engine schema v1、内部 compatibility 和 frontend diagnostics 由同一 immutable
+decision 投影。Sales 2x2 与 Presentation 2x2x2 differential 保持外部 wire、snapshot、
+persistence、reconnect 和 score/report single writer。
 
 ### 6.2 Scenario 组合
 
@@ -192,7 +200,7 @@ Presentation tracer bullet 已在 Gate 2 落地：façade 不再继承 Sales han
 从第一次 base 初始化即声明 `scenario="presentation"` 且不构造 SalesStage、FuzzyDetection、
 RealtimeScoring。兼容 Adapter 仍临时复用 `sales_bot` StepFun mixins，所以实际
 `presentation_coach -> sales_bot` 依赖和 architecture policy 临时例外尚未退役；Gate 3
-只中立化 Provider/Grounding 所有权。该边还包含 message persistence、prompt、Roleplay 和报告
+已经只中立化 Provider/Grounding 所有权。该边还包含 message persistence、prompt、Roleplay 和报告
 helper；Gate 4 完成相关所有权迁移后，Gate 6 才能依据实际 import graph 删除，不能以 façade
 或单个 Port 已组合化代替整条边退役事实。
 

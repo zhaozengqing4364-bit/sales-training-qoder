@@ -305,7 +305,7 @@ preparing → in_progress → paused → in_progress → completed
 - 下行音频流通过同一 WebSocket 返回给前端
 - 支持函数调用（知识检索、评分等）和工具链编排
 
-### 4.2 Realtime Session Engine（Gate 2 当前事实）
+### 4.2 Realtime Session Engine、Provider 与 Grounding（Gate 2–3 当前事实）
 
 Presentation 的 `stepfun_realtime` 生产入口已采用组合式 tracer bullet：
 
@@ -336,11 +336,26 @@ PresentationScenarioPlugin
 - Sales 构造默认仍为 `scenario="sales"`、Sales 能力启用；Presentation 兼容 Adapter 从首次
   base 初始化即为 `scenario="presentation"` 且不构造 SalesStage/FuzzyDetection/RealtimeScoring。
 
-Gate 2 没有完成 Provider/Grounding 中立化。Presentation façade 已不继承 Sales handler，
-但兼容 Adapter 仍临时复用 `sales_bot` StepFun mixins，因此
-`presentation_coach -> sales_bot` 实际依赖和 architecture policy 临时例外仍存在。Gate 3
-负责 `RealtimeProviderPort`、provider event codec 和 Grounding 单一状态/缓存权威，当前不得
-宣称这些边界已完成。
+Gate 3 已在默认生产路径完成 Provider/Grounding 中立化：
+
+- `REALTIME_PROVIDER_PORT_ENABLED=true`（默认）选择 `RealtimeProviderPort` 的 StepFun Adapter
+  和唯一 event codec；`false` 原子回滚到 raw `StepFunTransport`；
+- `REALTIME_GROUNDING_MODULE_ENABLED=true`（默认）选择每 session 一个
+  `RealtimeGroundingModule` 和一个 TTL/LRU/single-flight cache；`false` 才构造命名 Legacy
+  Pipeline/tool cache；
+- strict KB、prefetch 和 model tool retrieval 使用同一冻结 request/result authority；Tool
+  execution 不再拥有 result cache；
+- Provider rollover 统一 reconnect/refresh generation，Grounding close cancel + await owner；
+  stale epoch、correlation ID 和 decision ID 均不能污染当前轮；
+- Engine schema v1、内部 compatibility 和 frontend diagnostics 均由同一 immutable decision
+  投影；Engine/frontend 不传播 query、snippet、claim、raw Provider error 或 secret；
+- Sales Provider/Grounding 2x2 与 Presentation Engine/Provider/Grounding 2x2x2 均只构造每轴
+  一个 authority，Golden wire、snapshot、persistence、reconnect 和 single writer 保持一致。
+
+Gate 3 只中立化 Provider/Grounding。Presentation 兼容 Adapter 仍临时复用 `sales_bot`
+message persistence、prompt、Roleplay 和 report helpers，因此 `presentation_coach -> sales_bot`
+实际依赖和 architecture policy 临时例外仍存在；Gate 4 完成所有权迁移、Gate 6 以 import
+graph 证明边消失后才能退役，不能因 Port/Module 已中立化而提前删除。
 
 Gate 2 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
 `2903 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
@@ -349,8 +364,10 @@ generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 仅
 changed executable lines 802/878（91.34%），critical branch 无 changed missing line、无
 adoption floor 回退，最终输出 `Critical quality gate passed`。
 
-可执行合同：`.trellis/spec/backend/realtime-session-engine.md`。实施计划：
-`docs/superpowers/plans/2026-07-11-gate-2-realtime-session-engine.md`。
+可执行合同：`.trellis/spec/backend/realtime-session-engine.md`、
+`.trellis/spec/backend/realtime-provider-grounding.md`。实施计划：
+`docs/superpowers/plans/2026-07-11-gate-2-realtime-session-engine.md`、
+`docs/superpowers/plans/2026-07-11-gate-3-provider-grounding.md`。
 
 ### 4.3 TTS 降级链
 
@@ -1056,7 +1073,7 @@ Next.js (端口 3445)
 | `2026-05-11-architecture-boundary-domain-contract` | 领域边界与契约锁定（PRD #23） |
 | `2026-05-11-curriculum-practice-boundary-contract` | 课程考核模块边界契约 |
 | `2026-05-12-case-item-role-profile-pilot-contract` | 案例/角色/画像试点契约 |
-| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2 Realtime Engine tracer bullet 已实施，Gate 3–6 待完成 |
+| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2 Engine 与 Gate 3 Provider/Grounding 已实施，Gate 4–6 待完成 |
 
 详见 `docs/adr/`。
 
