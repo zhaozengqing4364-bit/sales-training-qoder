@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -113,6 +114,48 @@ FIXTURE_PATH = (
     / "realtime"
     / "golden_conversation_contract_v1.json"
 )
+GOLDEN_EVIDENCE_BY_CONTRACT = {
+    "admission.invalid_session": [
+        "tests/contract/test_sales_websocket_contract.py::test_sales_websocket_contract_rejects_invalid_session_id"
+    ],
+    "admission.runtime_gate": [
+        "tests/unit/test_main_presentation_ws_runtime.py::test_presentation_ws_rejects_when_kb_lock_unbound"
+    ],
+    "admission.unauthorized": [
+        "tests/unit/test_main_presentation_ws_runtime.py::test_presentation_ws_rejects_invalid_token_before_registering_session"
+    ],
+    "admission.owner_scope": [
+        "tests/unit/test_main_presentation_ws_runtime.py::test_presentation_ws_rejects_owner_mismatch_before_registering_session"
+    ],
+    "conversation.connect_start_text_audio_response_done": [
+        "tests/unit/test_presentation_realtime_engine_handler.py::test_golden_differential_preserves_external_single_writer_contract"
+    ],
+    "transport.binary_audio": [
+        "tests/unit/test_stepfun_realtime_handler.py::test_binary_audio_disposition_rejects_non_accepted_frames"
+    ],
+    "transport.timeout_backpressure_degraded": [
+        "tests/unit/test_stepfun_realtime_upstream.py::test_upstream_idle_timeout_error_refreshes_connection_before_forwarding_error",
+        "tests/unit/test_stepfun_realtime_handler.py::test_binary_audio_quality_does_not_count_backpressure_dropped_audio",
+    ],
+    "snapshot.frozen_policy_kb_fail_closed": [
+        "tests/unit/test_stepfun_realtime_handler.py::test_load_effective_policy_prefers_frozen_session_snapshot_over_live_resolution",
+        "tests/unit/test_stepfun_realtime_handler.py::test_prepare_grounding_context_blocks_bound_kb_query_when_retrieval_empty_and_lock_on",
+    ],
+    "reconnect.epoch_monotonic": [
+        "tests/integration/test_sales_realtime_reconnect_flow.py::test_sales_stepfun_reconnect_restores_turn_continuity_and_cleans_terminal_snapshot"
+    ],
+    "evidence.transcript_score_report_idempotent": [
+        "tests/unit/test_stepfun_realtime_handler.py::test_handle_upstream_transcription_completed_ignores_duplicate_transcript_within_window",
+        "tests/integration/test_session_lifecycle_api.py::test_sales_end_response_stays_scoring_but_background_finalization_can_complete_session",
+        "tests/integration/test_session_lifecycle_api.py::test_lifecycle_api_end_is_idempotent_and_logs_unified_terminal_context",
+    ],
+    "roleplay.observation_record_only": [
+        "tests/unit/test_sales_trainer_roleplay_observation_service.py::test_should_allow_non_blocking_store_failure_without_poisoning_main_flow"
+    ],
+    "rollout.single_writer_rollback": [
+        "tests/unit/test_presentation_realtime_engine_handler.py::test_golden_differential_preserves_external_single_writer_contract"
+    ],
+}
 
 
 def test_should_freeze_required_golden_conversation_contracts() -> None:
@@ -133,6 +176,25 @@ def test_should_freeze_required_golden_conversation_contracts() -> None:
         for contract in contracts
     )
     assert all(contract["evidence"] for contract in contracts)
+    assert {
+        contract["id"]: contract["evidence"] for contract in contracts
+    } == GOLDEN_EVIDENCE_BY_CONTRACT
+
+    evidence_reference_pattern = re.compile(
+        r"^tests/(?:unit|integration|contract)/[^:]+\.py::test_[A-Za-z0-9_]+$"
+    )
+    backend_root = Path(__file__).parents[2]
+    for references in GOLDEN_EVIDENCE_BY_CONTRACT.values():
+        for reference in references:
+            assert evidence_reference_pattern.fullmatch(reference)
+            relative_path, test_name = reference.split("::", maxsplit=1)
+            source_path = backend_root / relative_path
+            assert source_path.is_file()
+            assert re.search(
+                rf"^(?:async )?def {re.escape(test_name)}\(",
+                source_path.read_text(encoding="utf-8"),
+                flags=re.MULTILINE,
+            )
 
 
 def test_should_create_explicit_default_state() -> None:
