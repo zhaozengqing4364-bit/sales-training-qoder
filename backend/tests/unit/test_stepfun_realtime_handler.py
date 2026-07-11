@@ -639,23 +639,6 @@ async def test_stale_provider_event_epoch_is_ignored_before_legacy_side_effects(
             data={"name": "search_internal_knowledge", "arguments": "{}"},
         ),
         ProviderEvent(
-            kind=ProviderEventKind.RESPONSE_DONE,
-            provider_event_type="response.done",
-            connection_epoch=8,
-            request_id=5,
-            response_id="response-current",
-            stream_id="stream-current",
-            data={
-                "function_outputs": (
-                    {
-                        "call_id": "call-stale",
-                        "name": "search_internal_knowledge",
-                        "arguments": "{}",
-                    },
-                )
-            },
-        ),
-        ProviderEvent(
             kind=ProviderEventKind.CONVERSATION_ITEM,
             provider_event_type="conversation.item.created",
             connection_epoch=8,
@@ -672,7 +655,6 @@ async def test_stale_provider_event_epoch_is_ignored_before_legacy_side_effects(
         "thinking-stream",
         "done-response",
         "args-call",
-        "done-tool-call",
         "tool-request",
     ],
 )
@@ -796,15 +778,22 @@ async def test_function_call_first_event_binds_explicit_active_authority() -> No
 
 
 @pytest.mark.asyncio
-async def test_response_done_sparse_tool_output_requires_existing_current_binding() -> None:
+async def test_matching_provider_response_done_can_bind_first_tool_and_finalize() -> None:
     handler = StepFunRealtimeHandler()
     handler._connection_epoch = 8
     handler.current_request_id = 5
+    handler.turn_count = 1
     handler._active_response = RealtimeResponseState(
         request_id=5,
         stream_id="stream-current",
         response_id="response-current",
+        text_parts=["合法正文"],
     )
+    handler._persist_message = AsyncMock()
+    handler._apply_roleplay_output_guard = AsyncMock(
+        side_effect=lambda text, **_kwargs: text
+    )
+    handler._send_status = AsyncMock()
     handler._execute_function_call = AsyncMock(return_value=True)  # type: ignore[method-assign]
 
     await handler._handle_provider_event(
@@ -828,7 +817,210 @@ async def test_response_done_sparse_tool_output_requires_existing_current_bindin
     )
 
     assert handler._active_response is not None
-    handler._execute_function_call.assert_not_awaited()
+    assert handler._active_response.request_id == 6
+    handler._persist_message.assert_awaited_once()
+    handler._execute_function_call.assert_awaited_once_with(
+        call_id="call-unbound",
+        function_name="search_internal_knowledge",
+        raw_arguments="{}",
+        trigger_followup_response=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_matching_response_done_can_bind_first_tool_call_and_finalize() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.turn_count = 1
+    handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+        response_id="response-current",
+        text_parts=["最终回应"],
+    )
+    handler._persist_message = AsyncMock()
+    handler._apply_roleplay_output_guard = AsyncMock(
+        side_effect=lambda text, **_kwargs: text
+    )
+    handler._send_status = AsyncMock()
+    handler._execute_function_call = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handler._create_response = AsyncMock(return_value=True)  # type: ignore[method-assign]
+
+    await handler._handle_upstream_response_done(
+        {
+            "type": "response.done",
+            "request_id": 5,
+            "stream_id": "stream-current",
+            "response": {
+                "id": "response-current",
+                "output": [
+                    {
+                        "type": "function_call",
+                        "call_id": "call-from-done",
+                        "name": "search_internal_knowledge",
+                        "arguments": '{"query":"产品"}',
+                    }
+                ],
+            },
+        }
+    )
+
+    assert handler._active_response is None
+    assert handler._function_call_authorities["call-from-done"] == (
+        FunctionCallAuthority(
+            request_id=5,
+            response_id="response-current",
+            stream_id="stream-current",
+        )
+    )
+    handler._persist_message.assert_awaited_once()
+    handler._send_status.assert_awaited_with("listening")
+    handler._execute_function_call.assert_awaited_once_with(
+        call_id="call-from-done",
+        function_name="search_internal_knowledge",
+        raw_arguments='{"query":"产品"}',
+        trigger_followup_response=False,
+    )
+    handler._create_response.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_done_tool_is_filtered_but_response_still_finalizes() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.turn_count = 1
+    handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+        response_id="response-current",
+        text_parts=["仍需持久化"],
+    )
+    handler._function_call_authorities = {
+        "call-allowed": FunctionCallAuthority(
+            request_id=5,
+            response_id="response-current",
+            stream_id="stream-current",
+        ),
+        "call-stale": FunctionCallAuthority(
+            request_id=4,
+            response_id="response-old",
+            stream_id="stream-old",
+        ),
+    }
+    handler._persist_message = AsyncMock()
+    handler._apply_roleplay_output_guard = AsyncMock(
+        side_effect=lambda text, **_kwargs: text
+    )
+    handler._send_status = AsyncMock()
+    handler._execute_function_call = AsyncMock(return_value=False)  # type: ignore[method-assign]
+
+    await handler._handle_upstream_response_done(
+        {
+            "type": "response.done",
+            "request_id": 5,
+            "stream_id": "stream-current",
+            "response": {
+                "id": "response-current",
+                "output": [
+                    {
+                        "type": "function_call",
+                        "call_id": call_id,
+                        "name": "search_internal_knowledge",
+                        "arguments": "{}",
+                    }
+                    for call_id in ("call-stale", "call-allowed")
+                ],
+            },
+        }
+    )
+
+    assert handler._active_response is None
+    handler._persist_message.assert_awaited_once()
+    handler._send_status.assert_awaited_with("listening")
+    handler._execute_function_call.assert_awaited_once_with(
+        call_id="call-allowed",
+        function_name="search_internal_knowledge",
+        raw_arguments="{}",
+        trigger_followup_response=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_response_id_cannot_prebind_before_response_created() -> None:
+    handler = StepFunRealtimeHandler()
+    handler._connection_epoch = 8
+    handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+    )
+    handler._handle_upstream_event = AsyncMock()  # type: ignore[method-assign]
+
+    prebind_events = [
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_TEXT_DELTA,
+            provider_event_type="response.text.delta",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-old",
+            stream_id="stream-current",
+            data={"text": "不得预绑定"},
+        ),
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_AUDIO_DELTA,
+            provider_event_type="response.audio.delta",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-old",
+            stream_id="stream-current",
+            data={"audio": "AAE="},
+        ),
+        ProviderEvent(
+            kind=ProviderEventKind.THINKING_DONE,
+            provider_event_type="response.thinking.done",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-old",
+            stream_id="stream-current",
+            data={"text": "旧思考"},
+        ),
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_DONE,
+            provider_event_type="response.done",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-old",
+            stream_id="stream-current",
+            data={},
+        ),
+        ProviderEvent(
+            kind=ProviderEventKind.CONVERSATION_ITEM,
+            provider_event_type="conversation.item.created",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-old",
+            stream_id="stream-current",
+            call_id="call-old",
+            data={
+                "item_type": "function_call",
+                "name": "search_internal_knowledge",
+            },
+        ),
+    ]
+    for event in prebind_events:
+        await handler._handle_provider_event(event)
+
+    handler._handle_upstream_event.assert_not_awaited()
+    assert handler._active_response.response_id is None
+
+    await handler._handle_provider_event(
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_CREATED,
+            provider_event_type="response.created",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-current",
+            stream_id="stream-current",
+        )
+    )
+    handler._handle_upstream_event.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -3207,7 +3399,7 @@ async def test_response_done_clears_stale_followup_without_creating_when_no_acti
 
 
 @pytest.mark.asyncio
-async def test_response_done_skips_function_calls_when_no_active_response():
+async def test_response_done_with_id_is_rejected_when_no_active_response():
     handler = StepFunRealtimeHandler()
     handler._flush_active_response = AsyncMock(return_value=False)
     handler._handle_function_calls_from_response_done = AsyncMock(return_value=True)
@@ -3217,7 +3409,7 @@ async def test_response_done_skips_function_calls_when_no_active_response():
         {"type": "response.done", "response": {"id": "resp-stale", "output": []}}
     )
 
-    handler._flush_active_response.assert_awaited_once()
+    handler._flush_active_response.assert_not_awaited()
     handler._handle_function_calls_from_response_done.assert_not_awaited()
     handler._create_response.assert_not_awaited()
 

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "downstream_types": [
+    "connected", "status", "slide_update", "points_reset", "point_covered", "status",
+    "status", "tts_chunk", "status", "tts_chunk", "status", "error",
+    "asr_transcript", "asr_transcript", "status", "tts_audio", "status", "status",
+    "tts_audio", "status", "connected", "reconnected", "status"
+  ],
+  "status_states": [
+    "listening", "listening", "thinking", "speaking", "listening",
+    "thinking", "listening", "thinking", "listening", "listening"
+  ],
+  "upstream_types": [
+    "session.update", "conversation.item.create", "response.create",
+    "input_audio_buffer.append", "input_audio_buffer.append", "input_audio_buffer.commit",
+    "response.create", "conversation.item.create", "response.create", "session.update"
+  ],
+  "upstream_payloads": [
+    {"type": "session.update"},
+    {"type": "conversation.item.create", "item_type": "message", "role": "user", "text": "讲解第一页"},
+    {"type": "response.create"},
+    {"type": "input_audio_buffer.append", "audio": "Z29sZGVuLWF1ZGlv"},
+    {"type": "input_audio_buffer.append", "audio": "Z29sZGVuLWF1ZGlv"},
+    {"type": "input_audio_buffer.commit"},
+    {"type": "response.create"},
+    {"type": "conversation.item.create", "item_type": "function_call_output", "call_id": "call-current", "output": "{\"count\":1}"},
+    {"type": "response.create"},
+    {"type": "session.update"}
+  ],
+  "asr_payloads": [
+    {"text": "补充", "is_final": false},
+    {"text": "补充客户收益", "is_final": true}
+  ],
+  "persistence": [
+    [1, "user", "讲解第一页"],
+    [1, "assistant", "第一轮回应"],
+    [2, "user", "补充客户收益"],
+    [2, "assistant", "第二轮回应"],
+    [2, "assistant", "工具跟进回应"]
+  ],
+  "tts_payloads": [
+    {"type": "tts_chunk", "audio": "Z29sZGVuLWF1ZGlv", "text": null, "is_final": false},
+    {"type": "tts_chunk", "audio": "", "text": "第一轮回应", "is_final": true},
+    {"type": "tts_audio", "audio": "", "text": "第二轮回应", "is_final": null},
+    {"type": "tts_audio", "audio": "", "text": "工具跟进回应", "is_final": null}
+  ],
+  "tool_calls": [["call-current", "search_internal_knowledge", "{\"query\":\"产品价值\"}", true]],
+  "reconnect_epoch": 2
+}

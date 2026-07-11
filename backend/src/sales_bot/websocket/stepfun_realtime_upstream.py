@@ -1244,12 +1244,18 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             and event.request_id != active_response.request_id
         ):
             return False
-        if (
-            event.response_id is not None
-            and active_response.response_id is not None
-            and event.response_id != active_response.response_id
-        ):
-            return False
+        if event.response_id is not None:
+            if event.kind is ProviderEventKind.RESPONSE_CREATED:
+                if (
+                    active_response.response_id is not None
+                    and event.response_id != active_response.response_id
+                ):
+                    return False
+            elif (
+                active_response.response_id is None
+                or event.response_id != active_response.response_id
+            ):
+                return False
         if event.stream_id is not None and event.stream_id != active_response.stream_id:
             return False
 
@@ -1276,14 +1282,17 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 name=name,
                 allow_register=True,
             )
-        if event.kind is ProviderEventKind.RESPONSE_DONE:
-            return self._response_done_function_calls_are_authorized(legacy_event)
-
         return True
 
     async def _handle_upstream_event(self, event: dict[str, Any]) -> None:
         """Map selected StepFun events to existing frontend contract."""
         event_type = str(event.get("type", ""))
+        if not self._raw_response_event_has_active_authority(event, event_type):
+            self._log_grounding_debug(
+                "stale_raw_response_event_ignored",
+                event_type=event_type,
+            )
+            return
         self._last_upstream_event_type = event_type
         await self._handle_emotion_event(event)
         await self._handle_thinking_event(event)
@@ -1338,6 +1347,30 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         if route == UpstreamEventRoute.ERROR:
             await self._handle_upstream_error(event)
             return
+
+    def _raw_response_event_has_active_authority(
+        self,
+        event: dict[str, Any],
+        event_type: str,
+    ) -> bool:
+        if not event_type.startswith("response."):
+            return True
+        _request_id, response_id, _stream_id = self._function_event_authority(event)
+        active = self._active_response
+        if event_type == "response.created":
+            if active is None:
+                return True
+            return bool(
+                response_id is not None
+                and (active.response_id is None or response_id == active.response_id)
+            )
+        if response_id is None:
+            return True
+        return bool(
+            active is not None
+            and active.response_id is not None
+            and response_id == active.response_id
+        )
 
     async def _handle_upstream_conversation_item_created(self, event: dict) -> None:
         """Track function-call state and user-item transcript hints from upstream."""
@@ -1452,22 +1485,30 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         )
         return True
 
-    def _response_done_function_calls_are_authorized(
+    def _authorized_response_done_function_calls(
         self,
         event: dict[str, Any],
-    ) -> bool:
+    ) -> list[dict[str, str]]:
         function_calls = extract_response_done_function_calls(event)
         if not function_calls:
-            return True
-        return all(
-            self._authorize_function_call_event(
+            return []
+        _request_id, response_id, _stream_id = self._function_event_authority(event)
+        active = self._active_response
+        allow_register = bool(
+            active is not None
+            and active.response_id is not None
+            and response_id == active.response_id
+        )
+        return [
+            function_call
+            for function_call in function_calls
+            if self._authorize_function_call_event(
                 event,
                 call_id=function_call["call_id"],
                 name=function_call["name"],
-                allow_register=False,
+                allow_register=allow_register,
             )
-            for function_call in function_calls
-        )
+        ]
 
     async def _handle_final_user_transcript(self, transcript: str) -> None:
         """Persist one final ASR transcript and continue response chain."""
@@ -2592,12 +2633,15 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
 
     async def _handle_upstream_response_done(self, event: dict) -> None:
         """Finalize response and execute potential tool follow-ups."""
-        if not self._response_done_function_calls_are_authorized(event):
+        all_function_calls = extract_response_done_function_calls(event)
+        authorized_function_calls = self._authorized_response_done_function_calls(event)
+        if len(authorized_function_calls) != len(all_function_calls):
             self._log_grounding_debug(
-                "stale_function_call_response_done_ignored",
+                "unauthorized_response_done_tool_filtered",
                 event_type=str(event.get("type") or ""),
+                total_call_count=len(all_function_calls),
+                authorized_call_count=len(authorized_function_calls),
             )
-            return
         expected_request_id = (
             self._active_response.request_id
             if self._active_response is not None
@@ -2612,7 +2656,8 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         handled_from_done = False
         if had_active_response:
             handled_from_done = await self._handle_function_calls_from_response_done(
-                event
+                event,
+                function_calls=authorized_function_calls,
             )
         if handled_from_done:
             self._pending_tool_followup_response = False
@@ -2773,13 +2818,17 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         return delta_arguments, "delta_invalid_json"
 
     async def _handle_function_calls_from_response_done(
-        self, response_done_event: dict
+        self,
+        response_done_event: dict,
+        *,
+        function_calls: list[dict[str, str]] | None = None,
     ) -> bool:
         """
         Execute function calls emitted in `response.done`.
         Returns True if at least one function call was handled.
         """
-        function_calls = extract_response_done_function_calls(response_done_event)
+        if function_calls is None:
+            function_calls = extract_response_done_function_calls(response_done_event)
         if not function_calls:
             return False
 

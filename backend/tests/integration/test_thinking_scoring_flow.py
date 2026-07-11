@@ -51,6 +51,7 @@ if "chromadb" not in sys.modules:
     sys.modules["chromadb.config"] = chromadb_config_stub
 
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
+from sales_bot.websocket.stepfun_runtime_types import RealtimeResponseState
 
 
 async def _create_sales_session(db: AsyncSession) -> PracticeSession:
@@ -166,6 +167,11 @@ async def test_stepfun_handler_delegates_thinking_events_without_inline_chunk_as
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     handler = StepFunRealtimeHandler()
+    handler._active_response = RealtimeResponseState(
+        request_id=1,
+        stream_id="stream-delegate",
+        response_id="resp_delegate",
+    )
     captured_entries: list[ThinkingEntry] = []
 
     async def persist(entry: ThinkingEntry) -> None:

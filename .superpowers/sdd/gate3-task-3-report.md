@@ -4,7 +4,8 @@
 
 - 原始实现 commit：`ec7067f0 refactor(realtime): route sessions through provider port`
 - Review 修复 commit：`e9df6d8d fix(realtime): enforce provider rollout and event authority`
-- Review 2 修复 commit：`fix(realtime): verify raw differential and tool authority`
+- Review 2 修复 commit：`cff26400 fix(realtime): verify raw differential and tool authority`
+- Review 3 修复 commit：本提交 `fix(realtime): close response authority and golden oracle`
 - 风险等级：P1（共享 Sales/Presentation realtime 生产 Provider 路径默认切换；保留 server-only
   Legacy 回滚）。
 - 严格只完成 Task 3：未实现 Grounding Module/单 cache（Task 4+），未调用真实收费 Provider，未改
@@ -38,7 +39,13 @@
 - Review 2 新增独立 `_function_call_authorities`：只有携带至少一个显式 authority ID、且所有已提供
   request/response/stream 均匹配当前 active response 的首个 call event，才能注册完整
   `call_id -> (request_id, response_id, stream_id)` binding。后续 sparse delta/done 可依 call binding
-  继续；空 registry sparse call、旧 binding、未知 `response.done` output 一律 fail closed，不能执行 tool。
+  继续；空 registry sparse call 与旧 binding 一律 fail closed；`response.done` 首事件规则由 Review 3
+  进一步收口为“done 自身必须显式匹配 active response”。
+- Review 3 收紧 response authority：active response 尚未由 `response.created` 绑定 ID 时，所有携带
+  `response_id` 的 text/audio/thinking/done/function-call 事件均在副作用前拒绝；`response.created` 是唯一
+  response ID 绑定入口。已明确匹配 active response 的 `response.done` 可作为某个 call 的首个显式
+  authority 事件；同一 done 中真正属于旧 response 的 call 只过滤 tool side effect，当前 response 仍会
+  flush、持久化、结束 turn 并回到 listening，不再因一个非法 call 整事件 return 而悬挂。
 - handler close 与主连接 lifecycle 采用 shielded cleanup：单次或重复 cancellation 都先完成 Provider
   close、本地 upstream/timing reset、snapshot save 与 manager disconnect，再传播首次
   `CancelledError`；清理步骤发生普通错误时仍继续尝试其余步骤并上抛首个错误。
@@ -47,13 +54,15 @@
 - sanitized diagnostics 增加 `provider_port_enabled` 与 `selected_provider_path`；Presentation façade 只
   allowlist 这两个 closed 字段。Presentation 只通过继承的 Sales compatibility adapter 接入，未新增
   `presentation_coach -> training_runtime` 静态 import。
-- Golden 已重写为真正的 Engine × Provider 四组合。Provider=true 使用 canonical Fake queue；
-  Provider=false 使用 Fake raw websocket 投递序列化 JSON，真实经过
-  `recv -> json.loads -> _handle_upstream_event`。两条路径都运行生产 `_receive_upstream_events()`，覆盖
+- Golden 已重写为真正的 Engine × Provider 四组合，并新增版本化、独立于生产 projector 的
+  `stepfun_raw_conversation_v1.json` 与 `stepfun_raw_conversation_expected_v1.json`。Provider=false 直接把
+  同一 raw JSON fixture 送入 Fake raw websocket；Provider=true 仅通过真实 `StepFunEventCodec.decode_event`
+  解码同一 raw fixture 后进入 canonical Fake queue。两条路径都运行生产 `_receive_upstream_events()`，覆盖
   ASR delta/final、speech timing/emotion、TTS、thinking、persistence、合法 call binding、tool
-  output/follow-up、reconnect、UNKNOWN/error；stale authority 由独立 fail-closed tests 覆盖。
-  四组合逐项比较 ordered downstream/upstream、snapshot/persistence、reconnect epoch、tool follow-up
-  与 Engine single-writer terminal state；mutation probes 仍保留。
+  output/follow-up、reconnect、UNKNOWN/error；stale authority 由独立 fail-closed tests 覆盖。独立 expected
+  oracle 锁定 ordered downstream/upstream key payload、ASR text、TTS audio/text、status、persistence、tool
+  与 reconnect epoch；生产 `_legacy_event_from_provider_event` 被故意损坏时，raw baseline 不受影响且
+  differential/expected oracle 均按预期失败。
 
 ## TDD 证据
 
@@ -98,18 +107,39 @@ Review 2 Red/Green：
    Green 后三项均通过，并由真实 raw/canonical Golden 验证“首事件显式绑定 → sparse delta/done →
    response.done 重放去重 → 单次 tool follow-up”。
 
+Review 3 Red/Green：
+
+1. response.done Red：合法、明确匹配 active response 的 done 首次 call 没有 binding，且包含旧 binding
+   call 的 done 会整事件 return，导致 active response、持久化与 listening status 悬挂；pre-bind stale text
+   还会越过 canonical boundary。三个定向用例结果 `3 failed, 167 deselected`。Green 后 done 逐 call
+   过滤、先完成当前 response，再只执行授权 call；定向 `3 passed`。
+2. broader Red：旧测试仍把“matching done 首次 call”视为非法、把携带 stale response ID 且无 active 的
+   done 视为可 flush，并在无 active response 时投递 thinking；首次两文件回归为
+   `3 failed, 194 passed`，首次 14 文件全集为 `1 failed, 321 passed`。更新测试前置 authority 后全集
+   `322 passed`。
+3. Golden oracle Red：旧 harness 在 Legacy 分支直接调用生产 `_legacy_event_from_provider_event`，两腿共享
+   projector，无法构造独立 corruption oracle。Green 后 fixture 不 import projector；独立 mutation probe
+   修改生产 projector 时 raw 结果仍通过 expected oracle，而 canonical 结果被 differential 和 expected
+   oracle 同时捕获。
+
 ## 最终验证
 
-Brief 全量 pytest（14 个 unit/integration 文件，Review 后新增 13 个回归 case）：
+Brief 全量 pytest（14 个 unit/integration 文件）：
 
 ```text
-319 passed, 1 warning in 12.36s
+322 passed, 1 warning in 12.90s
 ```
 
-CodeGraph affected payload snapshots：
+CodeGraph affected 全集（20 个 contract/e2e/integration/unit 文件）：
 
 ```text
-11 passed, 1 warning in 2.24s
+794 passed, 1 warning in 40.70s
+```
+
+其中 payload snapshots 独立复核：
+
+```text
+11 passed, 1 warning in 2.14s
 ```
 
 其余质量门禁：
@@ -134,6 +164,8 @@ git diff --check: exit 0
   response/tool/audio 与 Sales/Presentation 调用链。
 - `_close_upstream --depth 3`：21 affected symbols；覆盖主 lifecycle、refresh/recovery 与取消测试。
 - `_handle_provider_event --depth 3`：9 affected symbols；覆盖 canonical queue 与 stale authority tests。
+- `_provider_event_has_active_authority`：9 affected symbols；覆盖 canonical receive、text/audio/thinking/done、
+  call binding 与 pre-bind stale ID 拒绝。
 - `_authorize_function_call_event --depth 3`：18 affected symbols；覆盖 Provider/Legacy 首事件注册、
   sparse delta/done、response.done、tool execution 与 reconnect reset。
 - `_receive_upstream_events --depth 3`：8 affected symbols；由 canonical Fake Provider queue 与 Fake raw
