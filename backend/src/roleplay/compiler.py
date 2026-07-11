@@ -1,54 +1,73 @@
-# ruff: noqa: E402 -- compatibility aliases are installed after Legacy definitions.
+"""Neutral Roleplay compiler, disclosure state and turn context authority."""
+
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from inspect import isawaitable
-from typing import Any
+from typing import Any, Protocol
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from agent.models import Persona
-from common.business_rules.defaults import (
-    DEFAULT_ROLEPLAY_SITUATION_PACKS,
-    ROLEPLAY_SITUATION_PACKS_KEY,
-)
-from common.business_rules.service import BusinessRuleConfigService
-from common.roleplay_contracts import (
+from roleplay.contracts import (
     LEGACY_ROLEPLAY_STATUS,
-    ROLEPLAY_COMPLIANCE_METRICS_KEY,
     ROLEPLAY_CONTRACT_COMPILER_VERSION,
     ROLEPLAY_CONTRACT_SCHEMA_VERSION,
-    ROLEPLAY_DISCLOSURE_STATE_KEY,
     ROLEPLAY_STAGE_AUTHORITY,
     check_roleplay_output,
     roleplay_contract_hash,
 )
-from common.roleplay_contracts import (
+from roleplay.contracts import (
+    ROLEPLAY_COMPLIANCE_METRICS_KEY as ROLEPLAY_COMPLIANCE_METRICS_KEY,
+)
+from roleplay.contracts import (
+    ROLEPLAY_DISCLOSURE_STATE_KEY as ROLEPLAY_DISCLOSURE_STATE_KEY,
+)
+from roleplay.contracts import (
     roleplay_audit_hash as _audit_hash,
 )
-from curriculum_practice.models import CaseItem, PracticeTemplate
-from curriculum_practice.schemas import (
-    GateResult,
-    PracticeTemplatePublishCandidate,
-    PublishedAssetRef,
-    ReferenceReader,
-)
-from curriculum_practice.services.asset_references import stable_hash
-from curriculum_practice.services.asset_resolution import (
-    build_config_asset_runtime_metadata,
-    resolve_session_asset_resolution,
-)
-from curriculum_practice.services.roleplay.situation_pack_dto import SituationPackDTO
-from curriculum_practice.services.roleplay.situation_pack_hasher import (
+from roleplay.situation_packs import (
+    BundledSituationPackSource,
+    SituationPackPort,
+    SituationPackSnapshot,
     situation_pack_content_hash,
 )
-from curriculum_practice.services.roleplay.situation_pack_reference_query import (
-    SituationPackReferenceQuery,
-)
-from curriculum_practice.services.roleplay.situation_pack_repository import (
-    SituationPackRepository,
-)
+
+
+@dataclass(frozen=True, slots=True)
+class RoleplayGateResult:
+    gate_name: str
+    status: str
+    reason_code: str
+    message: str
+
+    def model_dump(self) -> dict[str, str]:
+        return {
+            "gate_name": self.gate_name,
+            "status": self.status,
+            "reason_code": self.reason_code,
+            "message": self.message,
+        }
+
+
+class PracticeTemplatePublishCandidate(Protocol):
+    mode: str
+
+    def model_dump(self) -> dict[str, Any]: ...
+
+
+class PublishedAssetRef(Protocol):
+    asset_code: str
+    content_hash: str
+
+    def can_reconstruct_from_snapshot(self) -> bool: ...
+
+
+ReferenceReader = Callable[[str, str], object]
+GateResult = RoleplayGateResult
+SituationPackDTO = SituationPackSnapshot
+SituationPackRepository = SituationPackPort
+stable_hash = roleplay_contract_hash
+
 
 GENERAL_PRACTICE_SITUATION = "general_practice"
 
@@ -107,7 +126,7 @@ class RoleplayContractCompiler:
     ) -> None:
         self._reference_reader = reference_reader
         self._situation_packs = (
-            situation_packs or SituationPackRepository.from_defaults()
+            situation_packs or BundledSituationPackSource()
         )
 
     async def compile_from_template(
@@ -778,179 +797,6 @@ def build_roleplay_turn_context(
     }
 
 
-def roleplay_compliance_summary_from_session(
-    *,
-    curriculum_snapshot: object,
-    voice_policy_snapshot: object,
-    runtime_state: object,
-) -> dict[str, Any]:
-    contract = None
-    if isinstance(curriculum_snapshot, dict):
-        contract = curriculum_snapshot.get("roleplay_contract")
-    if not isinstance(contract, dict) and isinstance(voice_policy_snapshot, dict):
-        contract = voice_policy_snapshot.get("roleplay_contract")
-    readiness = roleplay_readiness_from_contract(contract)
-    runtime_metrics = (
-        voice_policy_snapshot.get("runtime_metrics")
-        if isinstance(voice_policy_snapshot, dict)
-        else None
-    )
-    roleplay_metrics = (
-        runtime_metrics.get("roleplay_compliance")
-        if isinstance(runtime_metrics, dict)
-        else None
-    )
-    if not isinstance(roleplay_metrics, dict):
-        roleplay_metrics = {}
-    disclosure_state = (
-        runtime_state.get(ROLEPLAY_DISCLOSURE_STATE_KEY)
-        if isinstance(runtime_state, dict)
-        else None
-    )
-    if not isinstance(disclosure_state, dict):
-        disclosure_state = initial_roleplay_disclosure_state(contract)
-    template_id = None
-    published_asset_refs = None
-    if isinstance(curriculum_snapshot, dict):
-        asset_resolution = curriculum_snapshot.get("asset_resolution")
-        if isinstance(asset_resolution, dict):
-            template_id = asset_resolution.get("practice_template_id")
-            published_asset_refs = asset_resolution.get("published_asset_refs")
-        practice_template = curriculum_snapshot.get("practice_template")
-        if isinstance(practice_template, dict):
-            template_id = template_id or practice_template.get("asset_id")
-    config_asset_runtime = build_config_asset_runtime_metadata(
-        practice_template_id=str(template_id) if template_id else None,
-        published_asset_refs=published_asset_refs,
-        curriculum_snapshot=curriculum_snapshot,
-        voice_policy_snapshot=voice_policy_snapshot,
-    )
-    if not config_asset_runtime.get("published_asset_refs") and isinstance(
-        voice_policy_snapshot, dict
-    ):
-        runtime_metrics = voice_policy_snapshot.get("runtime_metrics")
-        if isinstance(runtime_metrics, dict):
-            center = runtime_metrics.get("config_asset_center")
-            if isinstance(center, dict) and center.get("published_asset_refs"):
-                config_asset_runtime = center
-    asset_resolution = resolve_session_asset_resolution(
-        practice_template_id=str(template_id) if template_id else None,
-        published_asset_refs=config_asset_runtime.get("published_asset_refs"),
-        curriculum_snapshot=curriculum_snapshot,
-    )
-    return {
-        **readiness,
-        "asset_resolution": asset_resolution,
-        "config_asset_runtime": config_asset_runtime,
-        "violation_count": int(roleplay_metrics.get("violation_count") or 0),
-        "blocking_violation_count": int(
-            roleplay_metrics.get("blocking_violation_count") or 0
-        ),
-        "regenerate_count": int(roleplay_metrics.get("regenerate_count") or 0),
-        "cancel_stream_count": int(roleplay_metrics.get("cancel_stream_count") or 0),
-        "hidden_leak_prevented_count": int(
-            roleplay_metrics.get("hidden_leak_prevented_count") or 0
-        ),
-        "last_decision": roleplay_metrics.get("last_decision"),
-        "last_action_at": roleplay_metrics.get("last_action_at"),
-        "timeline": _as_list_of_dicts(roleplay_metrics.get("timeline")),
-        "disclosed_keys_count": len(
-            _as_string_list(disclosure_state.get("disclosed_keys"))
-        ),
-        "visible_keys_count": len(
-            _as_string_list(disclosure_state.get("visible_keys"))
-        ),
-        "disclosure_state_status": str(disclosure_state.get("status") or "missing"),
-    }
-
-
-def roleplay_compliance_timeline_from_session(
-    *,
-    voice_policy_snapshot: object,
-    runtime_state: object,
-    include_internal_details: bool = False,
-) -> list[dict[str, Any]]:
-    runtime_metrics = (
-        voice_policy_snapshot.get("runtime_metrics")
-        if isinstance(voice_policy_snapshot, dict)
-        else None
-    )
-    roleplay_metrics = (
-        runtime_metrics.get(ROLEPLAY_COMPLIANCE_METRICS_KEY)
-        if isinstance(runtime_metrics, dict)
-        else None
-    )
-    if not isinstance(roleplay_metrics, dict):
-        roleplay_metrics = {}
-    disclosure_state = (
-        runtime_state.get(ROLEPLAY_DISCLOSURE_STATE_KEY)
-        if isinstance(runtime_state, dict)
-        else None
-    )
-    disclosure_events = (
-        _as_list_of_dicts(disclosure_state.get("events"))
-        if isinstance(disclosure_state, dict)
-        else []
-    )
-    timeline: list[dict[str, Any]] = []
-    for item in _as_list_of_dicts(roleplay_metrics.get("timeline")):
-        decision = _as_dict(item.get("decision"))
-        timeline_item = {
-            "event_type": "compliance_decision",
-            "turn_number": item.get("turn_number"),
-            "response_id": item.get("response_id"),
-            "action": item.get("action"),
-            "violation_code": decision.get("violation_code"),
-            "severity": decision.get("severity"),
-            "sales_stage": item.get("sales_stage"),
-            "visible_keys_count": len(_as_string_list(item.get("visible_keys"))),
-            "disclosed_keys_count": len(_as_string_list(item.get("disclosed_keys"))),
-            "created_at": item.get("created_at"),
-            "trace_id": item.get("trace_id"),
-        }
-        if include_internal_details:
-            timeline_item.update(
-                {
-                    "matched_pattern": decision.get("matched_pattern"),
-                    "decision": decision,
-                    "visible_keys": _as_string_list(item.get("visible_keys")),
-                    "disclosed_keys": _as_string_list(item.get("disclosed_keys")),
-                }
-            )
-        timeline.append(timeline_item)
-    for event in disclosure_events:
-        timeline_item = {
-            "event_type": "disclosure",
-            "turn_number": event.get("turn_number"),
-            "response_id": None,
-            "action": "disclose_keys",
-            "violation_code": None,
-            "severity": "info",
-            "sales_stage": event.get("sales_stage"),
-            "visible_keys_count": None,
-            "disclosed_keys_count": len(_as_string_list(event.get("matched_keys"))),
-            "created_at": event.get("created_at"),
-            "trace_id": event.get("trace_id"),
-        }
-        if include_internal_details:
-            timeline_item.update(
-                {
-                    "matched_pattern": event.get("trigger"),
-                    "decision": None,
-                    "visible_keys": [],
-                    "disclosed_keys": _as_string_list(event.get("matched_keys")),
-                    "evidence": _as_dict(event.get("evidence")),
-                }
-            )
-        timeline.append(timeline_item)
-    timeline.sort(
-        key=lambda item: (
-            str(item.get("created_at") or ""),
-            int(item.get("turn_number") or 0),
-        )
-    )
-    return timeline
-
 
 def roleplay_readiness_from_contract(contract: object) -> dict[str, Any]:
     if not isinstance(contract, dict):
@@ -1022,76 +868,6 @@ def visible_case_payload(
             visible_payload[key] = str(value).strip()
     return visible_payload
 
-
-class RoleplaySituationPackAdminService:
-    """Admin read model for Roleplay Situation Pack governance."""
-
-    def __init__(self, db: AsyncSession) -> None:
-        self._db = db
-
-    async def repository(self) -> SituationPackRepository:
-        return await SituationPackRepository.from_database(self._db)
-
-    async def list_packs(self) -> dict[str, Any]:
-        repo = await self.repository()
-        packs = repo.list_all()
-        return {
-            "items": [_pack_admin_payload(pack.as_legacy_dict()) for pack in packs],
-            "total": len(packs),
-            "config_key": ROLEPLAY_SITUATION_PACKS_KEY,
-            "management": {
-                "bundle_key": ROLEPLAY_SITUATION_PACKS_KEY,
-                "read_path": "curriculum_practice.services.roleplay.situation_pack_repository.SituationPackRepository.from_database",
-                "admin_entry": "/admin/curriculum-practice/roleplay-situation-packs",
-                "publish_entry": f"/api/v1/admin/config-bundles/{ROLEPLAY_SITUATION_PACKS_KEY}/publish",
-                "rollback_entry": f"/api/v1/admin/config-bundles/{ROLEPLAY_SITUATION_PACKS_KEY}/rollback",
-            },
-        }
-
-    async def get_pack(self, code: str) -> dict[str, Any] | None:
-        repo = await self.repository()
-        pack = repo.get_any(code)
-        if pack is None:
-            return None
-        payload = _pack_admin_payload(pack.as_legacy_dict())
-        payload["references"] = await self.references_for(code)
-        return payload
-
-    async def resolve_published(self, code: str) -> dict[str, Any] | None:
-        repo = await self.repository()
-        pack = repo.get_published(code)
-        if pack is None:
-            return None
-        resolution = await BusinessRuleConfigService(self._db).resolve_active_config(
-            ROLEPLAY_SITUATION_PACKS_KEY,
-            fallback_value=DEFAULT_ROLEPLAY_SITUATION_PACKS,
-            fallback_source="bundled_roleplay_situation_packs",
-        )
-        ruleset = resolution.value if isinstance(resolution.value, dict) else {}
-        return {
-            "pack": pack.as_canonical_dict(),
-            "metadata": {
-                "config_key": ROLEPLAY_SITUATION_PACKS_KEY,
-                "read_path": "curriculum_practice.services.roleplay.situation_pack_repository.SituationPackRepository.from_database",
-                "ruleset_version": str(ruleset.get("version") or ""),
-                "source": resolution.source,
-                "config_id": resolution.config_id,
-                "config_version": resolution.version,
-                "resolved_at": datetime.now(UTC).isoformat(),
-            },
-        }
-
-    async def pack_publish_state(self, code: str) -> str | None:
-        repo = await self.repository()
-        pack = repo.get_any(code)
-        if pack is None:
-            return None
-        if repo.get_published(code) is not None:
-            return "published"
-        return str(pack.status or "draft")
-
-    async def references_for(self, code: str) -> dict[str, Any]:
-        return await SituationPackReferenceQuery(self._db).list_references(code)
 
 
 def _resolve_situation_pack_for_compile(
@@ -1226,98 +1002,6 @@ def _build_contract(
     contract["contract_id"] = contract_hash
     contract["audit"]["contract_hash"] = contract_hash
     return contract
-
-
-def _pack_admin_payload(pack: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "code": pack.get("code"),
-        "label": pack.get("label"),
-        "version": pack.get("version"),
-        "status": pack.get("status"),
-        "initial_stage_hint": pack.get("initial_stage_hint"),
-        "relationship_context_defaults": _as_dict(
-            pack.get("default_relationship_context")
-        ),
-        "default_visible_information_scope": _as_dict(
-            pack.get("default_visible_information_scope")
-        ),
-        "default_forbidden_claim_patterns": _as_string_list(
-            pack.get("default_forbidden_claim_patterns")
-        ),
-        "default_forbidden_topic_codes": _as_string_list(
-            pack.get("default_forbidden_topic_codes")
-        ),
-        "default_forbidden_stage_codes": _as_string_list(
-            pack.get("default_forbidden_stage_codes")
-        ),
-        "stage_transition_notes": _as_string_list(pack.get("stage_transition_notes")),
-        "default_conflict_response_strategy": pack.get(
-            "default_conflict_response_strategy"
-        ),
-        "default_behavior_rules_for_prompt_only": _as_string_list(
-            pack.get("default_behavior_rules_for_prompt_only")
-        ),
-        "default_runtime_violation_policy": _as_dict(
-            pack.get("default_runtime_violation_policy")
-        ),
-        "default_disclosure_policy": _as_dict(pack.get("default_disclosure_policy")),
-        "compatible_practice_modes": _as_string_list(
-            pack.get("compatible_practice_modes")
-        ),
-        "compatible_scenario_types": _as_string_list(
-            pack.get("compatible_scenario_types")
-        ),
-        "audit": _as_dict(pack.get("audit")),
-    }
-
-
-def _template_situation_code(timeout_config: dict[str, Any]) -> str | None:
-    roleplay = _as_dict(timeout_config.get("roleplay"))
-    return _none_if_blank(roleplay.get("situation_code"))
-
-
-def _case_situation_code(allowed_disclosure_policy: dict[str, Any]) -> str | None:
-    return _none_if_blank(
-        _as_dict(allowed_disclosure_policy.get("roleplay")).get("situation_code")
-    )
-
-
-def _persona_situation_code(persona_policy: dict[str, Any]) -> str | None:
-    return _none_if_blank(
-        _as_dict(persona_policy.get("roleplay_defaults")).get("situation_code")
-    )
-
-
-def _template_reference_payload(template: PracticeTemplate) -> dict[str, Any]:
-    return {
-        "asset_type": "practice_template",
-        "asset_id": str(template.template_id),
-        "name": template.name,
-        "status": template.status,
-        "version": template.version,
-        "content_hash": template.content_hash,
-    }
-
-
-def _case_item_reference_payload(case_item: CaseItem) -> dict[str, Any]:
-    return {
-        "asset_type": "case_item",
-        "asset_id": str(case_item.case_item_id),
-        "label": f"{case_item.industry} / {case_item.customer_role}",
-        "status": case_item.status,
-        "version": case_item.version,
-        "content_hash": case_item.content_hash,
-    }
-
-
-def _persona_reference_payload(persona: Persona) -> dict[str, Any]:
-    return {
-        "asset_type": "persona",
-        "asset_id": str(persona.id),
-        "name": persona.name,
-        "status": persona.status,
-        "category": persona.category,
-    }
 
 
 def _validate_pack_compatibility(
@@ -1841,73 +1525,3 @@ def _first_non_blank(*values: object) -> str:
 def _none_if_blank(value: object) -> str | None:
     text = str(value or "").strip()
     return text or None
-
-
-# Named rollback authority retained until Gate 6 proves it has no production consumers.
-LegacyRoleplayCompileFailure = RoleplayCompileFailure
-LegacyRoleplayContractCompileError = RoleplayContractCompileError
-LegacyRoleplayContractCompiler = RoleplayContractCompiler
-
-from common.config import Settings as _RoleplaySettings  # noqa: E402
-from roleplay.compiler import (  # noqa: E402
-    RoleplayCompileFailure as NeutralRoleplayCompileFailure,
-)
-from roleplay.compiler import (
-    RoleplayContractCompileError as NeutralRoleplayContractCompileError,
-)
-from roleplay.compiler import (
-    RoleplayContractCompiler as NeutralRoleplayContractCompiler,
-)
-from roleplay.compiler import (
-    build_roleplay_turn_context as neutral_build_roleplay_turn_context,
-)
-from roleplay.compiler import (
-    initial_roleplay_disclosure_state as neutral_initial_roleplay_disclosure_state,
-)
-from roleplay.compiler import (
-    normalize_roleplay_disclosure_state as neutral_normalize_roleplay_disclosure_state,
-)
-from roleplay.compiler import (
-    resolve_roleplay_disclosure_state as neutral_resolve_roleplay_disclosure_state,
-)
-from roleplay.compiler import (
-    roleplay_readiness_from_contract as neutral_roleplay_readiness_from_contract,
-)
-from roleplay.compiler import (
-    visible_case_payload as neutral_visible_case_payload,
-)
-from roleplay.rollout import (
-    select_roleplay_authority as _select_roleplay_authority,  # noqa: E402
-)
-
-globals()["RoleplayCompileFailure"] = NeutralRoleplayCompileFailure
-globals()["RoleplayContractCompileError"] = NeutralRoleplayContractCompileError
-globals()["RoleplayContractCompiler"] = NeutralRoleplayContractCompiler
-globals()["build_roleplay_turn_context"] = neutral_build_roleplay_turn_context
-globals()["initial_roleplay_disclosure_state"] = neutral_initial_roleplay_disclosure_state
-globals()["normalize_roleplay_disclosure_state"] = (
-    neutral_normalize_roleplay_disclosure_state
-)
-globals()["resolve_roleplay_disclosure_state"] = neutral_resolve_roleplay_disclosure_state
-globals()["roleplay_readiness_from_contract"] = neutral_roleplay_readiness_from_contract
-globals()["visible_case_payload"] = neutral_visible_case_payload
-
-
-def build_roleplay_contract_compiler(
-    *args: Any,
-    neutral_enabled: bool | None = None,
-    **kwargs: Any,
-) -> Any:
-    """Construct exactly one neutral or named Legacy compiler authority."""
-
-    enabled = (
-        _RoleplaySettings().ROLEPLAY_NEUTRAL_OWNER_ENABLED
-        if neutral_enabled is None
-        else neutral_enabled
-    )
-    factory = _select_roleplay_authority(
-        enabled=enabled,
-        neutral_factory=NeutralRoleplayContractCompiler,
-        legacy_factory=LegacyRoleplayContractCompiler,
-    )
-    return factory(*args, **kwargs)

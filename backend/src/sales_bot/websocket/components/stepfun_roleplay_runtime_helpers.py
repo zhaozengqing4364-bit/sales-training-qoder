@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from common.roleplay_contracts import ROLEPLAY_COMPLIANCE_METRICS_KEY
+from roleplay.contracts import ROLEPLAY_COMPLIANCE_METRICS_KEY
 from sales_bot.services.roleplay_state_card import (
     RoleplayStateCardUpdateResult,
     StateCardUpdateStatus,

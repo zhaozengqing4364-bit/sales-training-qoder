@@ -4,7 +4,7 @@ from collections import Counter
 from copy import deepcopy
 from typing import Any
 
-from common.roleplay_contracts import roleplay_contract_hash
+from roleplay.contracts import roleplay_contract_hash
 
 V1_ASSET_REVISION = "it_leader_roleplay_v1_2026_06_23"
 V1_SCENARIO_CODE = "it_leader_first_visit_shixi_v1"

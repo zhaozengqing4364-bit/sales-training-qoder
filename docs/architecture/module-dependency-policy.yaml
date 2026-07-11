@@ -28,9 +28,11 @@ stable_edges:
   - [curriculum_practice, roleplay]
   - [evaluation, common]
   - [evaluation, prompt_templates]
+  - [evaluation, roleplay]
   - [presentation_coach, common]
   - [prompt_templates, common]
   - [sales_bot, common]
+  - [sales_bot, roleplay]
   - [sales_trainer, common]
   - [sales_trainer, prompt_templates]
   - [supervisor, common]
@@ -87,7 +89,7 @@ temporary_edges:
     expires_on: 2026-10-31
 
   - source: evaluation
-    targets: [admin, curriculum_practice, presentation_coach, sales_bot]
+    targets: [admin, presentation_coach, sales_bot]
     owner: evaluation
     reason: >-
       Report composition still imports scenario and governance implementations.

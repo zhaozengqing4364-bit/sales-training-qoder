@@ -7,6 +7,8 @@ from hashlib import sha256
 from json import dumps
 from typing import Any, Protocol
 
+from roleplay.defaults import DEFAULT_ROLEPLAY_SITUATION_PACKS
+
 _VOLATILE_HASH_FIELDS = {
     "actor_id",
     "created_at",
@@ -200,6 +202,26 @@ class SituationPackSnapshot:
 
 class SituationPackPort(Protocol):
     def get_published(self, code: str) -> SituationPackSnapshot | None: ...
+
+
+class BundledSituationPackSource:
+    """In-memory source for versioned defaults when no governed adapter is supplied."""
+
+    def __init__(self, ruleset: dict[str, Any] | None = None) -> None:
+        payload = ruleset or DEFAULT_ROLEPLAY_SITUATION_PACKS
+        self._published = {
+            snapshot.code: snapshot
+            for item in payload.get("packs", [])
+            if isinstance(item, dict)
+            and (snapshot := SituationPackSnapshot.from_ruleset_entry(item)).status
+            == "published"
+        }
+
+    def get_published(self, code: str) -> SituationPackSnapshot | None:
+        return self._published.get(str(code or "").strip())
+
+    def list_published(self) -> list[SituationPackSnapshot]:
+        return [self._published[code] for code in sorted(self._published)]
 
 
 def situation_pack_content_hash(snapshot: SituationPackSnapshot) -> str:

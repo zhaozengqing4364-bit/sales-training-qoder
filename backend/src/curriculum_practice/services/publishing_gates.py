@@ -14,7 +14,9 @@ from curriculum_practice.services.published_asset_refs import build_published_as
 from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
 )
-from curriculum_practice.services.roleplay_contracts import RoleplayContractCompiler
+from curriculum_practice.services.roleplay_contracts import (
+    build_roleplay_contract_compiler,
+)
 
 _REFERENCE_MISSING_FAILURES: dict[str, tuple[str, str]] = {
     "case_item": ("content_asset_reference", "asset_unpublished"),
@@ -233,11 +235,14 @@ class PublishingGateService:
                 )
 
         if not results:
-            roleplay_gate_results = await RoleplayContractCompiler(
+            roleplay_gate_results = await build_roleplay_contract_compiler(
                 self._reference_reader,
                 situation_packs=self._situation_packs,
             ).validate_template_candidate(candidate, actor_id="publish_gate")
-            results.extend(roleplay_gate_results)
+            results.extend(
+                GateResult.model_validate(item.model_dump())
+                for item in roleplay_gate_results
+            )
 
         return PublishGateDecision(can_publish=not results, results=results)
 

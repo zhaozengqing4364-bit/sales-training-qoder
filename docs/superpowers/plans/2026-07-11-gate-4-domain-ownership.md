@@ -189,34 +189,34 @@ architecture guard, Trellis, CodeGraph.
   `RoleplayCompileFailure` do not expose Curriculum Pydantic models.
 - `select_roleplay_authority(enabled: bool)` returns exactly one Neutral or Legacy compiler factory.
 
-- [ ] **Step 1: Write compiler/differential Red tests**
+- [x] **Step 1: Write compiler/differential Red tests**
 
   Cover template/persona/legacy compilation, frozen refs, missing/unpublished pack, hash mismatch,
   version mismatch, prompt conflict, visible/hidden validation, disclosure triggers and runtime turn
   context. Instantiate both authorities with the same fake ports and assert full output equality.
 
-- [ ] **Step 2: Extract the compiler as a deep module**
+- [x] **Step 2: Extract the compiler as a deep module**
 
   Keep curriculum candidate/GateResult conversion in the Curriculum adapter. The neutral compiler
   accepts mappings/Protocols only and owns no SQLAlchemy session or HTTP concept.
 
-- [ ] **Step 3: Route production factories through one constructor-time flag**
+- [x] **Step 3: Route production factories through one constructor-time flag**
 
   `ROLEPLAY_NEUTRAL_OWNER_ENABLED=true` is read once per compiler/factory construction. The false path
   is explicitly named Legacy and remains behaviorally frozen; diagnostics expose only selected path and
   schema version, never prompts or hidden payload.
 
-- [ ] **Step 4: Migrate Evaluation and runtime consumers**
+- [x] **Step 4: Migrate Evaluation and runtime consumers**
 
   Evaluation imports neutral Roleplay public API. Sales/Presentation runtime helpers consume the
   neutral compliance/turn-context contract. Curriculum keeps asset adapters and publishing gates.
 
-- [ ] **Step 5: Run focused and affected matrices**
+- [x] **Step 5: Run focused and affected matrices**
 
   Use CodeGraph impact before/after; run all affected Roleplay/runtime/reconnect/report tests, Ruff,
   mypy and architecture guard. Expected: `evaluation -> curriculum_practice` disappears.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
   Commit as `refactor(roleplay): move compiler and runtime authority`.
 

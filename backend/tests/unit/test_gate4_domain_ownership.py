@@ -228,3 +228,49 @@ def test_roleplay_neutral_primitives_do_not_import_protected_domains() -> None:
 
     assert roleplay_root.is_dir()
     assert imported.isdisjoint(protected)
+
+
+def test_roleplay_compiler_rollout_selects_one_differential_authority(
+    monkeypatch: Any,
+) -> None:
+    from common.config import Settings
+    from curriculum_practice.services.roleplay_contracts import (
+        LegacyRoleplayContractCompiler,
+        build_roleplay_contract_compiler,
+    )
+    from curriculum_practice.services.roleplay_contracts import (
+        RoleplayContractCompiler as CompatibilityCompiler,
+    )
+    from roleplay.compiler import RoleplayContractCompiler as NeutralCompiler
+
+    persona = {
+        "id": "gate4-rollout-persona",
+        "persona_policy": {
+            "roleplay_defaults": {
+                "situation_code": "first_visit",
+                "visible_information_keys": ["industry"],
+                "hidden_information_keys": ["budget"],
+            }
+        },
+    }
+    compiled_at = "2026-07-11T00:00:00+00:00"
+    neutral = build_roleplay_contract_compiler(neutral_enabled=True)
+    legacy = build_roleplay_contract_compiler(neutral_enabled=False)
+
+    assert CompatibilityCompiler is NeutralCompiler
+    assert type(neutral) is NeutralCompiler
+    assert type(legacy) is LegacyRoleplayContractCompiler
+    assert neutral.compile_from_persona_sync(
+        persona,
+        actor_id="gate4",
+        compiled_at=compiled_at,
+    ) == legacy.compile_from_persona_sync(
+        persona,
+        actor_id="gate4",
+        compiled_at=compiled_at,
+    )
+
+    monkeypatch.delenv("ROLEPLAY_NEUTRAL_OWNER_ENABLED", raising=False)
+    assert Settings().ROLEPLAY_NEUTRAL_OWNER_ENABLED is True
+    monkeypatch.setenv("ROLEPLAY_NEUTRAL_OWNER_ENABLED", "invalid")
+    assert Settings().ROLEPLAY_NEUTRAL_OWNER_ENABLED is False

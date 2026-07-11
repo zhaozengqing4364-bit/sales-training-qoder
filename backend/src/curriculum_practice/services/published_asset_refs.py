@@ -25,7 +25,7 @@ from curriculum_practice.services.roleplay.situation_pack_hasher import (
 from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
 )
-from curriculum_practice.services.roleplay_contracts import (
+from roleplay.compiler import (
     GENERAL_PRACTICE_SITUATION,
     _as_dict,
     _case_roleplay_policy,

@@ -73,7 +73,7 @@ from curriculum_practice.services.runtime_dossier import (
     CurriculumRuntimeDossierHydrator,
     compose_curriculum_runtime_instructions,
 )
-from curriculum_practice.services.roleplay_contracts import (
+from roleplay.compiler import (
     ROLEPLAY_DISCLOSURE_STATE_KEY,
     initial_roleplay_disclosure_state,
     normalize_roleplay_disclosure_state,

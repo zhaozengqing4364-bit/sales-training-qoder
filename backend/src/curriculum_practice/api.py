@@ -102,9 +102,8 @@ from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
 )
 from curriculum_practice.services.roleplay_contracts import (
-    RoleplayContractCompileError,
-    RoleplayContractCompiler,
     RoleplaySituationPackAdminService,
+    build_roleplay_contract_compiler,
 )
 from curriculum_practice.services.roleplay_runtime_dossier_preview import (
     RoleplayRuntimeDossierPreviewService,
@@ -123,6 +122,7 @@ from curriculum_practice.services.voice_clone import (
     VoiceCloneHTTPTransport,
     VoiceCloneService,
 )
+from roleplay.compiler import RoleplayContractCompileError
 
 ALLOWED_VOICE_AUDIO_CONTENT_TYPES = frozenset(
     {"audio/wav", "audio/mpeg", "audio/webm", "audio/mp4"}
@@ -1732,7 +1732,7 @@ async def get_practice_template_runtime_dossier_preview(
         reference_reader = CurriculumAssetReferenceReader(db).read_reference
         situation_packs = await SituationPackRepository.from_database(db)
         try:
-            roleplay_contract = await RoleplayContractCompiler(
+            roleplay_contract = await build_roleplay_contract_compiler(
                 reference_reader,
                 situation_packs=situation_packs,
             ).compile_from_template(

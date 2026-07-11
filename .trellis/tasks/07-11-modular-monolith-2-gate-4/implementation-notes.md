@@ -34,3 +34,16 @@
   frozen-ref, projection, import/export and runtime impact matrix is `47 passed`; architecture guard
   and its 19 tests, Ruff and mypy (7 focused source files) are green. The new package is declared in
   policy and is not added to the legacy SCC.
+- Task 3 Red exposed a cross-boundary DTO leak: neutral compiler failures could not be appended to the
+  Curriculum publishing gate's Pydantic `GateResult` list. The Curriculum adapter now performs an
+  explicit `GateResult.model_validate(item.model_dump())` conversion; the neutral compiler accepts
+  only mappings and Protocols. A default-on, invalid-fail-closed
+  `ROLEPLAY_NEUTRAL_OWNER_ENABLED` constructor flag selects exactly one Neutral or named Legacy
+  authority, and the differential test proves complete contract equality for both paths.
+- Task 3 verification: 122 focused compiler/frozen-ref/Evaluation/realtime/publishing/snapshot/voice
+  tests passed; architecture and migration-progress matrix is 25 passed; Ruff passed for every
+  touched source/test; mypy passed for 16 focused source files. After CodeGraph sync, the conservative
+  impact traversal reported 467 tests because `common.config` is a graph-wide root, so selection was
+  narrowed by changed behavior and direct callers while retaining the full canonical quality gate for
+  Gate 4 closure. `evaluation -> curriculum_practice` is absent and its stale temporary exception was
+  removed; `evaluation -> roleplay` and `sales_bot -> roleplay` are declared stable neutral edges.

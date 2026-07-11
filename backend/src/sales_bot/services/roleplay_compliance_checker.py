@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from common.roleplay_contracts import check_roleplay_output
+from roleplay.contracts import check_roleplay_output
 
 
 def check_realtime_roleplay_output(

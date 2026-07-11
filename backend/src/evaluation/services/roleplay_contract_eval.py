@@ -3,11 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from common.business_rules.defaults import DEFAULT_ROLEPLAY_EVAL_RELEASE_GATE
-from common.roleplay_contracts import check_roleplay_output
-from curriculum_practice.services.roleplay_contracts import (
-    RoleplayContractCompiler,
-)
+from roleplay.compiler import RoleplayContractCompiler
+from roleplay.contracts import check_roleplay_output
+from roleplay.defaults import DEFAULT_ROLEPLAY_EVAL_RELEASE_GATE
 
 
 @dataclass(frozen=True, slots=True)

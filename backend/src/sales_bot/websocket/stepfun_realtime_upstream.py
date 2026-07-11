@@ -75,15 +75,15 @@ from sales_bot.services.transcript_normalization import (
     TranscriptNormalizationResult,
     TranscriptNormalizationService,
 )
-from curriculum_practice.services.roleplay_contracts import (
+from roleplay.compiler import (
     ROLEPLAY_COMPLIANCE_METRICS_KEY,
     ROLEPLAY_DISCLOSURE_STATE_KEY,
+    _as_dict as _roleplay_as_dict,
     build_roleplay_turn_context,
     initial_roleplay_disclosure_state,
     normalize_roleplay_disclosure_state,
     resolve_roleplay_disclosure_state,
     visible_case_payload,
-    _as_dict as _roleplay_as_dict,
 )
 from sales_bot.services.roleplay_compliance_checker import (
     check_realtime_roleplay_output,

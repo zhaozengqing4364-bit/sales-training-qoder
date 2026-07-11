@@ -32,9 +32,9 @@ from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
 )
 from curriculum_practice.services.roleplay_contracts import (
-    RoleplayContractCompileError,
-    RoleplayContractCompiler,
+    build_roleplay_contract_compiler,
 )
+from roleplay.compiler import RoleplayContractCompileError
 from sales_bot.services.it_leader_roleplay_v1 import (
     V1_SCENARIO_CODE,
     get_default_state_card,
@@ -1146,7 +1146,7 @@ class VoiceRuntimePolicyService:
         if _is_it_leader_roleplay_v1_enabled(resolve_persona_policy(persona)):
             return get_roleplay_contract(), False
 
-        compiler = RoleplayContractCompiler(situation_packs=situation_packs)
+        compiler = build_roleplay_contract_compiler(situation_packs=situation_packs)
         try:
             compiled = compiler.compile_from_persona_sync(
                 persona,

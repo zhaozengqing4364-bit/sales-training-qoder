@@ -83,6 +83,10 @@ class Settings:
             "REALTIME_GROUNDING_MODULE_ENABLED",
             True,
         )
+        self.ROLEPLAY_NEUTRAL_OWNER_ENABLED = _env_server_rollout_bool(
+            "ROLEPLAY_NEUTRAL_OWNER_ENABLED",
+            True,
+        )
         self.SITUATION_PACK_DUAL_READ = _env_bool(
             "SITUATION_PACK_DUAL_READ",
             False,

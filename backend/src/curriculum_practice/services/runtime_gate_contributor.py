@@ -23,13 +23,11 @@ from curriculum_practice.services.asset_resolution import (
 from curriculum_practice.services.examiner_scoring_service import (
     build_llm_exam_scorer,
 )
-from curriculum_practice.services.roleplay_contracts import (
-    roleplay_readiness_from_contract,
-)
 from curriculum_practice.websocket.examiner_runtime import (
     ExaminerRuntime,
     FrozenExamQuestion,
 )
+from roleplay.compiler import roleplay_readiness_from_contract
 
 CURRICULUM_PRACTICE_RUNTIME_GATE_CONTRIBUTOR = "curriculum_practice.runtime_gate"
 

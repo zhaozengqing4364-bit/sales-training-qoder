@@ -7,11 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from curriculum_practice.models import CaseItem, RoleProfile
 from curriculum_practice.services.asset_references import stable_hash
-from curriculum_practice.services.roleplay_contracts import (
-    LEGACY_ROLEPLAY_STATUS,
+from roleplay.compiler import (
     roleplay_readiness_from_contract,
     visible_case_payload,
 )
+from roleplay.contracts import LEGACY_ROLEPLAY_STATUS
 
 CURRICULUM_RUNTIME_SNAPSHOT_STALE = "CURRICULUM_RUNTIME_SNAPSHOT_STALE"
 

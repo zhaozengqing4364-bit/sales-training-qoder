@@ -39,9 +39,9 @@ from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
 )
 from curriculum_practice.services.roleplay_contracts import (
-    RoleplayContractCompileError,
-    RoleplayContractCompiler,
+    build_roleplay_contract_compiler,
 )
+from roleplay.compiler import RoleplayContractCompileError
 
 
 class RuntimeSnapshotBuildError(ValueError):
@@ -171,7 +171,7 @@ class RuntimeSnapshotService:
                 )
             )
         try:
-            compiler = RoleplayContractCompiler(
+            compiler = build_roleplay_contract_compiler(
                 self._reference_reader,
                 situation_packs=self._situation_packs,
             )
