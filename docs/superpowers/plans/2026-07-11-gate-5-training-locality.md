@@ -166,35 +166,35 @@
 - Produces: `JourneyReadRepository` and `TrainingJourneyProjection`; public service signatures and payloads
   remain unchanged.
 
-- [ ] **Step 1: Add failing repository contract tests**
+- [x] **Step 1: Add failing repository contract tests**
 
   Cover learner found/missing, admin department/role scope, inactive learner, roleplay outcome revision scope,
   frozen session fields and deterministic ordering. Assert returned dataclasses are frozen and contain no ORM.
 
-- [ ] **Step 2: Implement the SQLAlchemy adapter**
+- [x] **Step 2: Implement the SQLAlchemy adapter**
 
   Import owner-specific registry models, execute async `select`, map rows immediately and return tuples/page
   DTOs. The adapter owns query details; it does not decide Journey stage or next action.
 
-- [ ] **Step 3: Add failing projection differential tests**
+- [x] **Step 3: Add failing projection differential tests**
 
   Feed frozen outcome fixtures for audio, quiz, learning topic, AI coach, realtime and regrade. Compare complete
   payloads with the current service for success, failure, remediation, manual review, transient/terminal error,
   legacy snapshot and missing config.
 
-- [ ] **Step 4: Move deterministic Journey policy behind one projection interface**
+- [x] **Step 4: Move deterministic Journey policy behind one projection interface**
 
   Move module payload, stage, completion, next action, retraining target, progress, diagnostics, capability,
   learner-level and analytics pure logic. Keep DB/table-existence and operation-log reads in orchestration or
   adapters. `TrainingJourneyService` constructor accepts optional repository/projection and defaults to the SQL
   adapter plus production projection.
 
-- [ ] **Step 5: Remove foreign ORM imports and verify callers**
+- [x] **Step 5: Remove foreign ORM imports and verify callers**
 
   The service may use immutable DTOs only. Run CodeGraph callers/impact, Journey/learner-access/API/seed tests,
   architecture guard, Ruff and mypy.
 
-- [ ] **Step 6: Commit Journey locality**
+- [x] **Step 6: Commit Journey locality**
 
   Commit as `refactor(journey): project training state behind read ports`.
 

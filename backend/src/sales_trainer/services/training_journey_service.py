@@ -1,22 +1,20 @@
 from __future__ import annotations
 
-import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
 from pydantic import ValidationError
-from sqlalchemy import and_, func, inspect, or_, select
+from sqlalchemy import inspect, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.auth.service import DEV_LOGIN_EMAIL, DEV_LOGIN_WECHAT_USER_ID
 from common.business_rules.defaults import (
     SALES_TRAINER_LEARNER_LEVEL_POLICY_KEY,
     SALES_TRAINER_ROLE_LEVEL_POLICY_KEY,
 )
 from common.business_rules.service import BusinessRuleConfigService
-from common.db.models import PracticeSession, User
 from common.db.typing import json_dict_or_empty
 from common.services.runtime_outcome_projection import (
     RuntimeOutcomeProjection,
@@ -39,6 +37,15 @@ from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
 from sales_trainer.services.audio_submission_service import AudioSubmissionService
+from sales_trainer.services.journey_read_repository import (
+    JourneyLearnerProjection,
+    JourneyReadRepository,
+    JourneyRoleplaySessionProjection,
+    JourneyViewer,
+)
+from sales_trainer.services.journey_sqlalchemy_adapter import (
+    SqlAlchemyJourneyReadRepository,
+)
 from sales_trainer.services.learning_topic_projection_service import (
     LearningTopicProjectionService,
 )
@@ -56,53 +63,13 @@ from sales_trainer.services.readiness_state import (
     module_capability_keys,
     unique_non_empty,
 )
+from sales_trainer.services.training_journey_projection import (
+    TrainingJourneyProjection,
+    TrainingStage,
+)
 from sales_trainer.services.training_record_lineage import (
     TrainingRecordLineageFields,
     training_record_lineage_fields,
-)
-
-TrainingStage = Literal[
-    "not_started",
-    "in_progress",
-    "waiting_upload",
-    "processing",
-    "scored",
-    "passed",
-    "failed",
-    "needs_remediation",
-    "manual_review",
-    "disabled",
-    "archived",
-    "error_terminal",
-    "error_transient",
-]
-
-RISK_MODULE_STATUSES: frozenset[str] = frozenset(
-    {
-        "failed",
-        "needs_remediation",
-        "manual_review",
-        "error_terminal",
-        "error_transient",
-    }
-)
-
-TRAINING_STAGE_VALUES: frozenset[str] = frozenset(
-    {
-        "not_started",
-        "in_progress",
-        "waiting_upload",
-        "processing",
-        "scored",
-        "passed",
-        "failed",
-        "needs_remediation",
-        "manual_review",
-        "disabled",
-        "archived",
-        "error_terminal",
-        "error_transient",
-    }
 )
 
 ROLEPLAY_OBSERVATION_TABLE_NAME = "sales_trainer_roleplay_observations"
@@ -160,14 +127,22 @@ class JourneyModule:
 
 
 class TrainingJourneyService:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        read_repository: JourneyReadRepository | None = None,
+        projection: TrainingJourneyProjection | None = None,
+    ) -> None:
         self._db = db
+        self._read_repository = read_repository or SqlAlchemyJourneyReadRepository(db)
+        self._projection = projection or TrainingJourneyProjection()
 
     async def get_learner_journey(
         self,
         learner_id: str,
         *,
-        viewer: User,
+        viewer: JourneyViewer,
     ) -> dict[str, Any]:
         if str(viewer.user_id) != learner_id:
             raise TrainingJourneyError(
@@ -175,7 +150,7 @@ class TrainingJourneyService:
                 "学员只能查看自己的训练进度。",
                 403,
             )
-        learner = await self._db.get(User, learner_id)
+        learner = await self._read_repository.learner(learner_id)
         if learner is None:
             raise TrainingJourneyError(
                 "[TRAINING_RECORD_NOT_FOUND]",
@@ -188,16 +163,16 @@ class TrainingJourneyService:
         self,
         learner_id: str,
         *,
-        viewer: User,
+        viewer: JourneyViewer,
         team_department: str | None,
     ) -> dict[str, Any]:
-        if not can_view_sales_trainer_records(viewer):
+        if not can_view_sales_trainer_records(cast(Any, viewer)):
             raise TrainingJourneyError(
                 "[ROLE_REQUIRED]",
                 "当前账号无权查看学员记录。",
                 403,
             )
-        learner = await self._db.get(User, learner_id)
+        learner = await self._read_repository.learner(learner_id)
         if learner is None:
             raise TrainingJourneyError(
                 "[TRAINING_RECORD_NOT_FOUND]",
@@ -218,7 +193,7 @@ class TrainingJourneyService:
     async def list_admin_journeys(
         self,
         *,
-        viewer: User,
+        viewer: JourneyViewer,
         team_department: str | None,
         department: str | None = None,
         training_stage: str | None = None,
@@ -228,7 +203,7 @@ class TrainingJourneyService:
         limit: int = 50,
         offset: int = 0,
     ) -> dict[str, Any]:
-        if not can_view_sales_trainer_records(viewer):
+        if not can_view_sales_trainer_records(cast(Any, viewer)):
             raise TrainingJourneyError(
                 "[ROLE_REQUIRED]",
                 "当前账号无权查看学员记录。",
@@ -257,7 +232,7 @@ class TrainingJourneyService:
     async def get_admin_analytics(
         self,
         *,
-        viewer: User,
+        viewer: JourneyViewer,
         team_department: str | None,
         department: str | None = None,
         training_stage: str | None = None,
@@ -282,7 +257,7 @@ class TrainingJourneyService:
             else raw_total
         )
         loaded_journeys = journeys
-        module_scoped_journeys = self._journeys_with_module_scope(
+        module_scoped_journeys = self._projection._journeys_with_module_scope(
             loaded_journeys,
             module_key,
         )
@@ -292,29 +267,35 @@ class TrainingJourneyService:
         )
         return {
             "generated_at": datetime.now(UTC),
-            "summary": self._analytics_summary(loaded_journeys, filtered_total),
-            "funnel": self._analytics_funnel(loaded_journeys),
-            "module_summaries": self._analytics_modules(module_scoped_journeys),
-            "learning_topic_summaries": self._analytics_learning_topics(
-                loaded_journeys
+            "summary": self._projection._analytics_summary(
+                loaded_journeys, filtered_total
             ),
-            "weakness_heatmap": self._analytics_weakness_heatmap(
+            "funnel": self._projection._analytics_funnel(loaded_journeys),
+            "module_summaries": self._projection._analytics_modules(
                 module_scoped_journeys
             ),
-            "trend_data": self._analytics_trend(module_scoped_journeys),
-            "learner_level_summaries": self._analytics_group_counts(
+            "learning_topic_summaries": self._projection._analytics_learning_topics(
+                loaded_journeys
+            ),
+            "weakness_heatmap": self._projection._analytics_weakness_heatmap(
+                module_scoped_journeys
+            ),
+            "trend_data": self._projection._analytics_trend(module_scoped_journeys),
+            "learner_level_summaries": self._projection._analytics_group_counts(
                 loaded_journeys,
                 key_fn=lambda journey: str(journey["learner_level"]["level_key"]),
                 label_fn=lambda journey: str(journey["learner_level"]["label"]),
                 source_fn=lambda journey: str(journey["learner_level"]["source"]),
             ),
-            "role_level_summaries": self._analytics_group_counts(
+            "role_level_summaries": self._projection._analytics_group_counts(
                 loaded_journeys,
                 key_fn=lambda journey: str(journey["role_level"]["level_key"]),
                 label_fn=lambda journey: str(journey["role_level"]["label"]),
                 source_fn=lambda journey: str(journey["role_level"]["source"]),
             ),
-            "risk_learners": self._analytics_risk_learners(module_scoped_journeys),
+            "risk_learners": self._projection._analytics_risk_learners(
+                module_scoped_journeys
+            ),
             "additive_observation": additive_observation,
             "filters": {
                 "department": team_department or department,
@@ -329,7 +310,7 @@ class TrainingJourneyService:
     async def _filtered_admin_journeys(
         self,
         *,
-        viewer: User,
+        viewer: JourneyViewer,
         team_department: str | None,
         department: str | None,
         training_stage: str | None,
@@ -365,30 +346,20 @@ class TrainingJourneyService:
         team_department: str | None,
         department: str | None,
         limit: int | None = None,
-    ) -> tuple[list[User], int]:
-        if team_department is not None and department and department != team_department:
-            return [], 0
-        effective_department = team_department or department
-        base_filters = [_team_visible_learner_role_filter(), User.is_active.is_(True)]
-        if effective_department:
-            base_filters.append(User.department == effective_department)
-        total = int(
-            await self._db.scalar(
-                select(func.count()).select_from(User).where(*base_filters)
-            )
-            or 0
+    ) -> tuple[list[JourneyLearnerProjection], int]:
+        page = await self._read_repository.learners(
+            team_department=team_department,
+            department=department,
+            limit=limit,
         )
-        statement = (
-            select(User)
-            .where(*base_filters)
-            .order_by(User.created_at.desc(), User.user_id.asc())
-        )
-        if limit is not None:
-            statement = statement.limit(limit)
-        result = await self._db.execute(statement)
-        return list(result.scalars().all()), total
+        return list(page.items), page.total
 
-    async def _build_journey(self, *, learner: User, viewer: User) -> dict[str, Any]:
+    async def _build_journey(
+        self,
+        *,
+        learner: JourneyLearnerProjection,
+        viewer: JourneyViewer,
+    ) -> dict[str, Any]:
         active = await SalesTrainerAssetRevisionService(self._db).active_revision(
             resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
             logical_id=NEWCOMER_PATH_LOGICAL_ID,
@@ -417,8 +388,8 @@ class TrainingJourneyService:
             )
             for module in modules
         ]
-        initial_overall = self._overall_progress(initial_module_payloads)
-        initial_training_stage = self._journey_stage(
+        initial_overall = self._projection._overall_progress(initial_module_payloads)
+        initial_training_stage = self._projection._journey_stage(
             initial_module_payloads,
             path_payload.enabled,
         )
@@ -439,9 +410,13 @@ class TrainingJourneyService:
             )
             for module in modules
         ]
-        overall = self._overall_progress(module_payloads)
-        diagnostics = self._journey_diagnostics(path_payload.enabled, modules)
-        training_stage = self._journey_stage(module_payloads, path_payload.enabled)
+        overall = self._projection._overall_progress(module_payloads)
+        diagnostics = self._projection._journey_diagnostics(
+            path_payload.enabled, modules
+        )
+        training_stage = self._projection._journey_stage(
+            module_payloads, path_payload.enabled
+        )
         retraining_requests = await self._retraining_requests(
             learner_id=str(learner.user_id),
             modules=module_payloads,
@@ -524,7 +499,7 @@ class TrainingJourneyService:
             lock_status = "disabled"
             block_reason = module.disabled_reason or "实时对练运行时尚未接入。"
             diagnostics.append(
-                self._diagnostic(
+                self._projection._diagnostic(
                     "[NEWCOMER_REALTIME_BINDING_INVALID]",
                     "实时对练缺少受治理的 runtime binding，当前只返回 unsupported 状态。",
                     terminal=True,
@@ -539,7 +514,7 @@ class TrainingJourneyService:
                 block_reason = "实时对练缺少 runtime binding。"
                 lock_status = "error_terminal"
                 diagnostics.append(
-                    self._diagnostic(
+                    self._projection._diagnostic(
                         "[NEWCOMER_REALTIME_BINDING_INVALID]",
                         "active path revision 中该模块缺少受治理的 runtime binding。",
                         terminal=True,
@@ -549,7 +524,7 @@ class TrainingJourneyService:
                 block_reason = "实时对练 provider readiness 未通过。"
                 lock_status = "error_terminal"
                 diagnostics.append(
-                    self._diagnostic(
+                    self._projection._diagnostic(
                         "[NEWCOMER_REALTIME_PROVIDER_NOT_READY]",
                         "实时对练 provider readiness 未通过，learner 不得进入运行时。",
                         terminal=True,
@@ -564,7 +539,7 @@ class TrainingJourneyService:
             block_reason = "模块缺少 target_unit_id 绑定。"
             lock_status = "error_terminal"
             diagnostics.append(
-                self._diagnostic(
+                self._projection._diagnostic(
                     "[NEWCOMER_MODULE_BINDING_MISSING]",
                     "active path revision 中该模块缺少目标训练单元绑定。",
                     terminal=True,
@@ -611,7 +586,7 @@ class TrainingJourneyService:
             locked = True
             block_reason = "AI Coach 配置非法。"
             diagnostics.append(
-                self._diagnostic(
+                self._projection._diagnostic(
                     "[AI_COACH_PROMPT_CONFIG_INVALID]",
                     "AI Coach 配置非法，不能作为已完成训练。",
                     terminal=True,
@@ -625,7 +600,7 @@ class TrainingJourneyService:
             locked = True
             block_reason = "AI Coach 缺少生成 Prompt 绑定。"
             diagnostics.append(
-                self._diagnostic(
+                self._projection._diagnostic(
                     "[AI_COACH_PROMPT_TEMPLATE_MISSING]",
                     "AI Coach 已启用但缺少生成 Prompt 绑定。",
                     terminal=True,
@@ -673,7 +648,7 @@ class TrainingJourneyService:
             module.lock_status = "disabled"
             module.block_reason = "当前学员等级暂不可进入该模块。"
             module.diagnostics.append(
-                self._diagnostic(
+                self._projection._diagnostic(
                     "[NEWCOMER_LEARNER_LEVEL_NOT_ALLOWED]",
                     "当前学员等级不满足 active path revision 的模块开放条件。",
                     severity="warning",
@@ -1148,8 +1123,10 @@ class TrainingJourneyService:
             "module_type": module.module_type,
             "kind": module.kind,
             "status": status,
-            "score": self._float_or_none(after_snapshot.get("total_score")),
-            "max_score": self._float_or_none(after_snapshot.get("max_score")),
+            "score": self._projection._float_or_none(after_snapshot.get("total_score")),
+            "max_score": self._projection._float_or_none(
+                after_snapshot.get("max_score")
+            ),
             "passed": passed,
             "failure_type": failure_type,
             "failure_code": failure_code,
@@ -1197,8 +1174,8 @@ class TrainingJourneyService:
             "module_type": module.module_type,
             "kind": module.kind,
             "status": status,
-            "score": self._float_or_none(score),
-            "max_score": self._float_or_none(max_score),
+            "score": self._projection._float_or_none(score),
+            "max_score": self._projection._float_or_none(max_score),
             "passed": passed,
             "failure_type": failure_type,
             "failure_code": failure_code,
@@ -1225,12 +1202,12 @@ class TrainingJourneyService:
         active: Any,
     ) -> dict[str, Any]:
         latest = history[0] if history else None
-        status = self._module_stage(module, latest)
-        completion_satisfied = self._completion_satisfied(module, latest)
+        status = self._projection._module_stage(module, latest)
+        completion_satisfied = self._projection._completion_satisfied(module, latest)
         diagnostics = list(module.diagnostics)
         if module.kind == "ai_coach" and latest and latest.get("passed") is False:
             diagnostics.append(
-                self._diagnostic(
+                self._projection._diagnostic(
                     "[AI_COACH_NOT_MASTERED]",
                     "AI Coach 尚未达标，需要继续训练或补救。",
                     severity="warning",
@@ -1269,160 +1246,12 @@ class TrainingJourneyService:
             "outcome_history": history,
             "unmet_reasons": diagnostics,
             "diagnostics": diagnostics,
-            "next_action": self._next_action(module, status),
+            "next_action": self._projection._next_action(module, status),
         }
 
     @staticmethod
     def _bucket_key(module: JourneyModule) -> str:
         return f"{module.kind}:{module.module_key}"
-
-    @staticmethod
-    def _module_stage(
-        module: JourneyModule,
-        latest: dict[str, Any] | None,
-    ) -> TrainingStage:
-        if module.locked:
-            return module.lock_status
-        if latest is None:
-            return "not_started"
-        status = latest.get("status")
-        if isinstance(status, str) and status in TRAINING_STAGE_VALUES:
-            return cast(TrainingStage, status)
-        return "not_started"
-
-    @staticmethod
-    def _completion_satisfied(
-        module: JourneyModule,
-        latest: dict[str, Any] | None,
-    ) -> bool:
-        if module.locked or latest is None:
-            return False
-        status = latest.get("status")
-        if status in {
-            "error_terminal",
-            "error_transient",
-            "not_started",
-            "in_progress",
-        }:
-            return False
-        if latest.get("passed") is False:
-            return False
-        if module.completion_rule == "passed":
-            return latest.get("passed") is True
-        if module.completion_rule == "submitted":
-            return bool(latest.get("submitted_at") or latest.get("completed_at"))
-        if module.completion_rule == "scored":
-            return status in {"scored", "passed", "failed"}
-        return False
-
-    @staticmethod
-    def _next_action(
-        module: JourneyModule,
-        status: TrainingStage,
-    ) -> dict[str, Any] | None:
-        if module.kind == "audio_submission":
-            target_path = _module_practice_path(module)
-            action_key = (
-                "retry_audio_submission"
-                if status in {"scored", "passed", "failed", "needs_remediation"}
-                else "start_audio_submission"
-            )
-            if module.locked or target_path is None:
-                return {
-                    "action_key": action_key,
-                    "label": "上传录音",
-                    "target_path": target_path,
-                    "disabled": True,
-                    "disabled_reason": module.block_reason or "该录音训练暂不可用。",
-                }
-            return {
-                "action_key": action_key,
-                "label": "重新上传录音"
-                if action_key == "retry_audio_submission"
-                else "上传录音",
-                "target_path": target_path,
-                "disabled": False,
-                "disabled_reason": None,
-            }
-        if module.kind == "quiz_attempt":
-            target_path = _module_practice_path(module)
-            action_key = (
-                "retry_quiz_attempt"
-                if status in {"scored", "passed", "failed", "needs_remediation"}
-                else "start_quiz_attempt"
-            )
-            default_label = (
-                "重新学习并答题"
-                if module.base_module_key == "business_skills"
-                else "重新答题"
-            )
-            start_label = (
-                "学习并答题"
-                if module.base_module_key == "business_skills"
-                else "开始答题"
-            )
-            if module.locked or target_path is None:
-                return {
-                    "action_key": action_key,
-                    "label": start_label,
-                    "target_path": target_path,
-                    "disabled": True,
-                    "disabled_reason": module.block_reason or "该答题训练暂不可用。",
-                }
-            return {
-                "action_key": action_key,
-                "label": default_label
-                if action_key == "retry_quiz_attempt"
-                else start_label,
-                "target_path": target_path,
-                "disabled": False,
-                "disabled_reason": None,
-            }
-        if module.kind == "ai_coach":
-            target_path = (
-                "/sales-trainer/business-skills/coach"
-                if module.base_module_key == "business_skills"
-                else None
-            )
-            action_key = (
-                "start_ai_coach" if status == "not_started" else "continue_ai_coach"
-            )
-            if module.locked or target_path is None:
-                return {
-                    "action_key": action_key,
-                    "label": "进入 AI 教练",
-                    "target_path": target_path,
-                    "disabled": True,
-                    "disabled_reason": module.block_reason or "AI Coach 暂不可用。",
-                }
-            return {
-                "action_key": action_key,
-                "label": "继续 AI 教练"
-                if status in {"in_progress", "failed", "needs_remediation"}
-                else "进入 AI 教练",
-                "target_path": target_path,
-                "disabled": False,
-                "disabled_reason": None,
-            }
-        if module.kind == "realtime_roleplay" and module.locked:
-            return {
-                "action_key": "start_realtime_roleplay",
-                "label": "开始实时对练",
-                "target_path": None,
-                "disabled": True,
-                "disabled_reason": module.block_reason or "实时对练暂不可用。",
-            }
-        if module.kind == "realtime_roleplay":
-            return {
-                "action_key": "start_realtime_roleplay",
-                "label": "再次对练"
-                if status in {"scored", "passed", "failed"}
-                else "开始实时对练",
-                "target_path": None,
-                "disabled": False,
-                "disabled_reason": None,
-            }
-        return None
 
     async def _retraining_requests(
         self,
@@ -1587,476 +1416,6 @@ class TrainingJourneyService:
             return tuple(option.target_unit_id for option in module.duration_options)
         return (module.target_unit_id,) if module.target_unit_id else ()
 
-    @staticmethod
-    def _overall_progress(modules: list[dict[str, Any]]) -> dict[str, int]:
-        completed = [
-            module
-            for module in modules
-            if module["status"] in {"passed", "failed", "scored"}
-        ]
-        return {
-            "total_modules": len(modules),
-            "completed_modules": len(completed),
-            "passed_modules": sum(1 for module in modules if module["passed"] is True),
-            "failed_modules": sum(1 for module in modules if module["passed"] is False),
-            "needs_remediation_modules": sum(
-                1
-                for module in modules
-                if module["status"] in {"failed", "needs_remediation"}
-            ),
-        }
-
-    @staticmethod
-    def _journey_stage(
-        modules: list[dict[str, Any]],
-        path_enabled: bool,
-    ) -> TrainingStage:
-        if not path_enabled:
-            return "disabled"
-        required = [module for module in modules if module["required"]]
-        stage_modules = required or modules
-        if any(module["status"] == "error_terminal" for module in stage_modules):
-            return "error_terminal"
-        if any(module["passed"] is False for module in stage_modules):
-            return "needs_remediation"
-        if required and all(
-            module["completion_satisfied"] is True for module in required
-        ):
-            return "passed"
-        if any(module["latest_outcome"] is not None for module in stage_modules):
-            return "in_progress"
-        return "not_started"
-
-    @staticmethod
-    def _journey_diagnostics(
-        path_enabled: bool,
-        modules: list[JourneyModule],
-    ) -> list[dict[str, Any]]:
-        diagnostics: list[dict[str, Any]] = []
-        if not path_enabled:
-            diagnostics.append(
-                TrainingJourneyService._diagnostic(
-                    "[NEWCOMER_PATH_CONFIG_MISSING]",
-                    "active path revision 当前未启用。",
-                    terminal=True,
-                )
-            )
-        if not modules:
-            diagnostics.append(
-                TrainingJourneyService._diagnostic(
-                    "[NEWCOMER_PATH_CONFIG_MISSING]",
-                    "active path revision 没有可投影模块。",
-                    terminal=True,
-                )
-            )
-        return diagnostics
-
-    @staticmethod
-    def _journeys_with_module_scope(
-        journeys: list[dict[str, Any]],
-        module_key: str | None,
-    ) -> list[dict[str, Any]]:
-        if not module_key:
-            return journeys
-        scoped_journeys: list[dict[str, Any]] = []
-        for journey in journeys:
-            scoped = dict(journey)
-            scoped["modules"] = [
-                module
-                for module in journey.get("modules") or []
-                if module.get("module_key") == module_key
-            ]
-            scoped_journeys.append(scoped)
-        return scoped_journeys
-
-    @staticmethod
-    def _analytics_summary(
-        journeys: list[dict[str, Any]],
-        total: int,
-    ) -> dict[str, Any]:
-        passed = [
-            journey for journey in journeys if journey["training_stage"] == "passed"
-        ]
-        risk = [
-            journey
-            for journey in journeys
-            if journey["training_stage"] in {"needs_remediation", "error_terminal"}
-        ]
-        return {
-            "learner_count": total,
-            "loaded_learner_count": len(journeys),
-            "passed_learner_count": len(passed),
-            "risk_learner_count": len(risk),
-            "pass_rate": _rate(len(passed), len(journeys)),
-        }
-
-    @staticmethod
-    def _analytics_funnel(journeys: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        order = [
-            "not_started",
-            "in_progress",
-            "processing",
-            "needs_remediation",
-            "passed",
-            "error_terminal",
-        ]
-        counts = {stage: 0 for stage in order}
-        for journey in journeys:
-            stage = str(journey.get("training_stage") or "not_started")
-            counts[stage] = counts.get(stage, 0) + 1
-        return [
-            {
-                "stage": stage,
-                "learner_count": counts.get(stage, 0),
-                "rate": _rate(counts.get(stage, 0), len(journeys)),
-            }
-            for stage in order
-            if counts.get(stage, 0) or stage in {"not_started", "passed"}
-        ]
-
-    @staticmethod
-    def _analytics_modules(journeys: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        buckets: dict[str, dict[str, Any]] = {}
-        for journey in journeys:
-            for module in journey.get("modules") or []:
-                module_key = str(module.get("module_key") or "unknown")
-                kind = str(module.get("kind") or module.get("module_type") or "unknown")
-                key = f"{module_key}:{kind}"
-                bucket = buckets.setdefault(
-                    key,
-                    {
-                        "module_key": module_key,
-                        "title": module.get("title") or key,
-                        "kind": module.get("kind"),
-                        "learner_count": 0,
-                        "passed_count": 0,
-                        "failed_count": 0,
-                        "status_counts": {},
-                        "score_sum": 0.0,
-                        "score_count": 0,
-                    },
-                )
-                bucket["learner_count"] += 1
-                status = str(module.get("status") or "not_started")
-                bucket["status_counts"][status] = (
-                    bucket["status_counts"].get(status, 0) + 1
-                )
-                if module.get("passed") is True:
-                    bucket["passed_count"] += 1
-                if module.get("passed") is False:
-                    bucket["failed_count"] += 1
-                score = TrainingJourneyService._float_or_none(module.get("score"))
-                if score is not None:
-                    bucket["score_sum"] += score
-                    bucket["score_count"] += 1
-        return [
-            {
-                "module_key": bucket["module_key"],
-                "title": bucket["title"],
-                "kind": bucket["kind"],
-                "learner_count": bucket["learner_count"],
-                "passed_count": bucket["passed_count"],
-                "failed_count": bucket["failed_count"],
-                "status_counts": bucket["status_counts"],
-                "pass_rate": _rate(bucket["passed_count"], bucket["learner_count"]),
-                "average_score": (
-                    round(bucket["score_sum"] / bucket["score_count"], 2)
-                    if bucket["score_count"]
-                    else None
-                ),
-            }
-            for bucket in sorted(
-                buckets.values(),
-                key=lambda item: (
-                    -int(item["learner_count"]),
-                    str(item["module_key"]),
-                    str(item["kind"]),
-                ),
-            )
-        ]
-
-    @staticmethod
-    def _analytics_learning_topics(
-        journeys: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        buckets: dict[str, dict[str, Any]] = {}
-        for journey in journeys:
-            for topic in journey.get("learning_topics") or []:
-                key = str(topic.get("topic_key") or "unknown")
-                bucket = buckets.setdefault(
-                    key,
-                    {
-                        "topic_key": key,
-                        "source_module_key": topic.get("source_module_key"),
-                        "title": topic.get("title") or key,
-                        "learner_count": 0,
-                        "completed_count": 0,
-                        "needs_remediation_count": 0,
-                        "status_counts": {},
-                        "unit_score_sum": 0.0,
-                        "unit_score_count": 0,
-                    },
-                )
-                bucket["learner_count"] += 1
-                status = str(topic.get("status") or "not_started")
-                bucket["status_counts"][status] = (
-                    bucket["status_counts"].get(status, 0) + 1
-                )
-                if status == "passed":
-                    bucket["completed_count"] += 1
-                if status == "needs_remediation":
-                    bucket["needs_remediation_count"] += 1
-                for unit in topic.get("units") or []:
-                    if not isinstance(unit, dict):
-                        continue
-                    score = TrainingJourneyService._float_or_none(unit.get("score"))
-                    if score is not None:
-                        bucket["unit_score_sum"] += score
-                        bucket["unit_score_count"] += 1
-        return [
-            {
-                "topic_key": bucket["topic_key"],
-                "source_module_key": bucket["source_module_key"],
-                "title": bucket["title"],
-                "learner_count": bucket["learner_count"],
-                "completed_count": bucket["completed_count"],
-                "needs_remediation_count": bucket["needs_remediation_count"],
-                "status_counts": bucket["status_counts"],
-                "completion_rate": _rate(
-                    bucket["completed_count"],
-                    bucket["learner_count"],
-                ),
-                "average_unit_score": (
-                    round(bucket["unit_score_sum"] / bucket["unit_score_count"], 2)
-                    if bucket["unit_score_count"]
-                    else None
-                ),
-                "blocking_required_path": False,
-            }
-            for bucket in sorted(
-                buckets.values(),
-                key=lambda item: (-int(item["learner_count"]), str(item["topic_key"])),
-            )
-        ]
-
-    @staticmethod
-    def _analytics_weakness_heatmap(
-        journeys: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        buckets: dict[str, dict[str, Any]] = {}
-        for journey in journeys:
-            for module in journey.get("modules") or []:
-                module_key = str(module.get("module_key") or "unknown")
-                kind = str(module.get("kind") or module.get("module_type") or "unknown")
-                heatmap_key = f"{module_key}:{kind}"
-                bucket = buckets.setdefault(
-                    heatmap_key,
-                    {
-                        "heatmap_key": heatmap_key,
-                        "module_key": module_key,
-                        "title": module.get("title") or module_key,
-                        "kind": kind,
-                        "module_type": module.get("module_type"),
-                        "learner_count": 0,
-                        "risk_count": 0,
-                        "passed_count": 0,
-                        "status_counts": {},
-                        "score_sum": 0.0,
-                        "score_count": 0,
-                    },
-                )
-                bucket["learner_count"] += 1
-                status = str(module.get("status") or "not_started")
-                bucket["status_counts"][status] = (
-                    bucket["status_counts"].get(status, 0) + 1
-                )
-                if module.get("passed") is True:
-                    bucket["passed_count"] += 1
-                if module.get("passed") is False or status in RISK_MODULE_STATUSES:
-                    bucket["risk_count"] += 1
-                score = TrainingJourneyService._float_or_none(module.get("score"))
-                if score is not None:
-                    bucket["score_sum"] += score
-                    bucket["score_count"] += 1
-        return [
-            {
-                "heatmap_key": bucket["heatmap_key"],
-                "module_key": bucket["module_key"],
-                "title": bucket["title"],
-                "kind": bucket["kind"],
-                "module_type": bucket["module_type"],
-                "learner_count": bucket["learner_count"],
-                "risk_count": bucket["risk_count"],
-                "passed_count": bucket["passed_count"],
-                "status_counts": bucket["status_counts"],
-                "risk_rate": _rate(bucket["risk_count"], bucket["learner_count"]),
-                "pass_rate": _rate(bucket["passed_count"], bucket["learner_count"]),
-                "average_score": (
-                    round(bucket["score_sum"] / bucket["score_count"], 2)
-                    if bucket["score_count"]
-                    else None
-                ),
-            }
-            for bucket in sorted(
-                buckets.values(),
-                key=lambda item: (
-                    -int(item["risk_count"]),
-                    -float(_rate(item["risk_count"], item["learner_count"]) or 0.0),
-                    str(item["kind"]),
-                    str(item["module_key"]),
-                ),
-            )
-        ]
-
-    @staticmethod
-    def _analytics_trend(journeys: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        buckets: dict[str, dict[str, Any]] = {}
-        for journey in journeys:
-            learner_id = str(journey.get("learner_id") or "")
-            for module in journey.get("modules") or []:
-                for outcome in module.get("outcome_history") or []:
-                    date_key = TrainingJourneyService._trend_date_key(
-                        outcome.get("completed_at") or outcome.get("submitted_at")
-                    )
-                    if date_key is None:
-                        continue
-                    bucket = buckets.setdefault(
-                        date_key,
-                        {
-                            "date": date_key,
-                            "outcome_count": 0,
-                            "passed_outcome_count": 0,
-                            "risk_outcome_count": 0,
-                            "learner_ids": set(),
-                            "score_sum": 0.0,
-                            "score_count": 0,
-                        },
-                    )
-                    bucket["outcome_count"] += 1
-                    if learner_id:
-                        bucket["learner_ids"].add(learner_id)
-                    passed = outcome.get("passed")
-                    status = str(outcome.get("status") or "")
-                    if passed is True:
-                        bucket["passed_outcome_count"] += 1
-                    if passed is False or status in RISK_MODULE_STATUSES:
-                        bucket["risk_outcome_count"] += 1
-                    score = TrainingJourneyService._float_or_none(outcome.get("score"))
-                    if score is not None:
-                        bucket["score_sum"] += score
-                        bucket["score_count"] += 1
-        return [
-            {
-                "date": bucket["date"],
-                "outcome_count": bucket["outcome_count"],
-                "passed_outcome_count": bucket["passed_outcome_count"],
-                "risk_outcome_count": bucket["risk_outcome_count"],
-                "active_learner_count": len(bucket["learner_ids"]),
-                "pass_rate": _rate(
-                    bucket["passed_outcome_count"],
-                    bucket["outcome_count"],
-                ),
-                "average_score": (
-                    round(bucket["score_sum"] / bucket["score_count"], 2)
-                    if bucket["score_count"]
-                    else None
-                ),
-            }
-            for bucket in sorted(buckets.values(), key=lambda item: str(item["date"]))
-        ]
-
-    @staticmethod
-    def _trend_date_key(value: Any) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, datetime):
-            return value.date().isoformat()
-        if isinstance(value, str):
-            normalized = value.strip()
-            if not normalized:
-                return None
-            try:
-                return (
-                    datetime.fromisoformat(normalized.replace("Z", "+00:00"))
-                    .date()
-                    .isoformat()
-                )
-            except ValueError:
-                return normalized[:10] if len(normalized) >= 10 else normalized
-        isoformat = getattr(value, "isoformat", None)
-        if callable(isoformat):
-            return str(isoformat())[:10]
-        return None
-
-    @staticmethod
-    def _analytics_group_counts(
-        journeys: list[dict[str, Any]],
-        *,
-        key_fn: Any,
-        label_fn: Any,
-        source_fn: Any | None = None,
-    ) -> list[dict[str, Any]]:
-        buckets: dict[str, dict[str, Any]] = {}
-        for journey in journeys:
-            key = key_fn(journey)
-            bucket = buckets.setdefault(
-                key,
-                {
-                    "key": key,
-                    "label": label_fn(journey),
-                    "learner_count": 0,
-                    "passed_count": 0,
-                    "source": source_fn(journey) if source_fn is not None else None,
-                },
-            )
-            bucket["learner_count"] += 1
-            if journey.get("training_stage") == "passed":
-                bucket["passed_count"] += 1
-        for bucket in buckets.values():
-            bucket["pass_rate"] = _rate(bucket["passed_count"], bucket["learner_count"])
-        return sorted(buckets.values(), key=lambda item: str(item["key"]))
-
-    @staticmethod
-    def _analytics_risk_learners(
-        journeys: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        risks = []
-        for journey in journeys:
-            risk_modules = [
-                module
-                for module in journey.get("modules") or []
-                if module.get("passed") is False
-                or module.get("status") in RISK_MODULE_STATUSES
-            ]
-            if not risk_modules:
-                continue
-            risk_reasons = [
-                TrainingJourneyService._analytics_risk_reason(module)
-                for module in risk_modules
-            ]
-            risks.append(
-                {
-                    "learner_id": journey["learner_id"],
-                    "learner_name": journey.get("learner_name"),
-                    "department": journey.get("department"),
-                    "training_stage": journey.get("training_stage"),
-                    "risk_reasons": risk_reasons,
-                    "risk_module_count": len(risk_modules),
-                    "risk_module_keys": [
-                        str(module.get("module_key")) for module in risk_modules
-                    ],
-                }
-            )
-        return risks[:50]
-
-    @staticmethod
-    def _analytics_risk_reason(module: dict[str, Any]) -> str:
-        module_key = str(module.get("module_key") or "unknown")
-        if module.get("passed") is False:
-            return f"{module_key}:not_passed"
-        status = str(module.get("status") or "unknown")
-        return f"{module_key}:status:{status}"
-
     async def _analytics_additive_observation(
         self,
         *,
@@ -2149,7 +1508,7 @@ class TrainingJourneyService:
         *,
         journeys: list[dict[str, Any]],
         module_key: str | None,
-    ) -> list[PracticeSession]:
+    ) -> list[JourneyRoleplaySessionProjection]:
         if module_key and module_key != ROLEPLAY_OBSERVATION_MODULE_KEY:
             return []
         learner_ids = {
@@ -2164,13 +1523,9 @@ class TrainingJourneyService:
             for journey in journeys
             if journey.get("path_revision_id")
         }
-        result = await self._db.execute(
-            select(PracticeSession).where(
-                PracticeSession.user_id.in_(learner_ids),
-                PracticeSession.voice_mode == "stepfun_realtime",
-            )
+        sessions = await self._read_repository.roleplay_sessions(
+            learner_ids=frozenset(learner_ids)
         )
-        sessions = list(result.scalars().all())
         return [
             session
             for session in sessions
@@ -2216,7 +1571,7 @@ class TrainingJourneyService:
 
     @staticmethod
     def _practice_session_matches_observation_scope(
-        session: PracticeSession,
+        session: JourneyRoleplaySessionProjection,
         *,
         path_revision_ids: set[str],
         module_key: str | None,
@@ -2237,11 +1592,11 @@ class TrainingJourneyService:
         return True
 
     @staticmethod
-    def _voice_external_binding(snapshot: Any) -> dict[str, Any]:
-        if not isinstance(snapshot, dict):
+    def _voice_external_binding(snapshot: Any) -> Mapping[str, object]:
+        if not isinstance(snapshot, Mapping):
             return {}
         binding = snapshot.get("external_binding")
-        return binding if isinstance(binding, dict) else {}
+        return binding if isinstance(binding, Mapping) else {}
 
     @staticmethod
     def _roleplay_observation_status_key(value: Any) -> str:
@@ -2281,7 +1636,10 @@ class TrainingJourneyService:
         return value.astimezone(UTC)
 
     @staticmethod
-    def _role_capabilities(viewer: User, learner: User) -> list[dict[str, Any]]:
+    def _role_capabilities(
+        viewer: JourneyViewer,
+        learner: JourneyLearnerProjection,
+    ) -> list[dict[str, Any]]:
         is_self = str(viewer.user_id) == str(learner.user_id)
         return [
             {
@@ -2298,14 +1656,14 @@ class TrainingJourneyService:
             },
             {
                 "capability_key": "view_records",
-                "allowed": can_view_sales_trainer_records(viewer),
+                "allowed": can_view_sales_trainer_records(cast(Any, viewer)),
                 "scope": "global"
-                if can_view_sales_trainer_global_records(viewer)
+                if can_view_sales_trainer_global_records(cast(Any, viewer))
                 else "department"
-                if can_view_sales_trainer_records(viewer)
+                if can_view_sales_trainer_records(cast(Any, viewer))
                 else "none",
                 "reason_code": None
-                if can_view_sales_trainer_records(viewer)
+                if can_view_sales_trainer_records(cast(Any, viewer))
                 else "[ROLE_REQUIRED]",
             },
         ]
@@ -2313,7 +1671,7 @@ class TrainingJourneyService:
     async def _learner_level(
         self,
         *,
-        learner: User,
+        learner: JourneyLearnerProjection,
         training_stage: str,
         overall: dict[str, Any],
     ) -> dict[str, Any]:
@@ -2322,9 +1680,9 @@ class TrainingJourneyService:
         )
         policy = resolution.value
         if policy.get("enabled") is False or resolution.source == "database_disabled":
-            return self._learner_level_payload(
-                policy=self._default_learner_level_policy(),
-                level=self._default_learner_level_policy()["default_level"],
+            return self._projection._learner_level_payload(
+                policy=self._projection._default_learner_level_policy(),
+                level=self._projection._default_learner_level_policy()["default_level"],
                 source="training_projection",
                 config_revision_id=None,
                 fallback_applied=True,
@@ -2333,7 +1691,7 @@ class TrainingJourneyService:
                 management_entry="/admin/business-rules/sales-trainer-learner-level",
             )
 
-        matched_level = self._match_learner_level(
+        matched_level = self._projection._match_learner_level(
             policy=policy,
             learner=learner,
             training_stage=training_stage,
@@ -2343,7 +1701,7 @@ class TrainingJourneyService:
             "org_rule" if resolution.source == "database" else "training_projection"
         )
         fallback_applied = resolution.fallback_reason is not None
-        return self._learner_level_payload(
+        return self._projection._learner_level_payload(
             policy=policy,
             level=matched_level,
             source=source,
@@ -2359,7 +1717,7 @@ class TrainingJourneyService:
     async def _role_level(
         self,
         *,
-        learner: User,
+        learner: JourneyLearnerProjection,
         training_stage: str,
         overall: dict[str, Any],
     ) -> dict[str, Any]:
@@ -2368,8 +1726,8 @@ class TrainingJourneyService:
         )
         policy = resolution.value
         if policy.get("enabled") is False or resolution.source == "database_disabled":
-            default_policy = self._default_role_level_policy()
-            return self._learner_level_payload(
+            default_policy = self._projection._default_role_level_policy()
+            return self._projection._learner_level_payload(
                 policy=default_policy,
                 level=default_policy["default_level"],
                 source="training_projection",
@@ -2380,7 +1738,7 @@ class TrainingJourneyService:
                 management_entry="/admin/business-rules/sales-trainer-role-level",
             )
 
-        matched_level = self._match_learner_level(
+        matched_level = self._projection._match_learner_level(
             policy=policy,
             learner=learner,
             training_stage=training_stage,
@@ -2390,7 +1748,7 @@ class TrainingJourneyService:
             "org_rule" if resolution.source == "database" else "training_projection"
         )
         fallback_applied = resolution.fallback_reason is not None
-        return self._learner_level_payload(
+        return self._projection._learner_level_payload(
             policy=policy,
             level=matched_level,
             source=source,
@@ -2402,209 +1760,6 @@ class TrainingJourneyService:
             policy_key=SALES_TRAINER_ROLE_LEVEL_POLICY_KEY,
             management_entry="/admin/business-rules/sales-trainer-role-level",
         )
-
-    @staticmethod
-    def _default_learner_level_policy() -> dict[str, Any]:
-        return {
-            "version": "sales_trainer_learner_level_policy_v1",
-            "default_level": {
-                "key": "unassigned",
-                "label": "未分层",
-                "rank": 0,
-                "description": "未发布学员等级规则时的安全默认分层。",
-            },
-            "levels": [
-                {
-                    "key": "unassigned",
-                    "label": "未分层",
-                    "rank": 0,
-                    "description": "未发布学员等级规则时的安全默认分层。",
-                }
-            ],
-            "rules": [],
-        }
-
-    @staticmethod
-    def _default_role_level_policy() -> dict[str, Any]:
-        return {
-            "version": "sales_trainer_role_level_policy_v1",
-            "default_level": {
-                "key": "learner",
-                "label": "普通学员",
-                "rank": 0,
-                "description": "未发布组织角色等级规则时的安全默认角色等级。",
-            },
-            "levels": [
-                {
-                    "key": "learner",
-                    "label": "普通学员",
-                    "rank": 0,
-                    "description": "未发布组织角色等级规则时的安全默认角色等级。",
-                }
-            ],
-            "rules": [
-                {
-                    "key": "default_user_role",
-                    "level_key": "learner",
-                    "priority": 1,
-                    "enabled": True,
-                    "conditions": {"role_in": ["user"]},
-                }
-            ],
-        }
-
-    @staticmethod
-    def _learner_level_payload(
-        *,
-        policy: dict[str, Any],
-        level: dict[str, Any],
-        source: str,
-        config_revision_id: str | None,
-        fallback_applied: bool,
-        fallback_reason: str | None,
-        policy_key: str,
-        management_entry: str,
-    ) -> dict[str, Any]:
-        return {
-            "level_key": str(level.get("key") or "unassigned"),
-            "label": str(level.get("label") or "未分层"),
-            "source": source,
-            "rank": int(level.get("rank") or 0),
-            "effective_from": None,
-            "effective_to": None,
-            "config_revision_id": config_revision_id,
-            "description": level.get("description"),
-            "fallback_applied": fallback_applied,
-            "fallback_reason": fallback_reason,
-            "policy_key": policy_key,
-            "policy_version": policy.get("version"),
-            "management_entry": management_entry,
-        }
-
-    @staticmethod
-    def _match_learner_level(
-        *,
-        policy: dict[str, Any],
-        learner: User,
-        training_stage: str,
-        overall: dict[str, Any],
-    ) -> dict[str, Any]:
-        levels = {
-            str(level.get("key")): level
-            for level in policy.get("levels", [])
-            if isinstance(level, dict) and level.get("key")
-        }
-        default_level = policy.get("default_level")
-        if not isinstance(default_level, dict):
-            default_level = {"key": "unassigned", "label": "未分层", "rank": 0}
-
-        for rule in policy.get("rules", []):
-            if not isinstance(rule, dict) or rule.get("enabled") is False:
-                continue
-            conditions = rule.get("conditions")
-            if not isinstance(conditions, dict):
-                continue
-            if TrainingJourneyService._learner_level_conditions_match(
-                conditions=conditions,
-                learner=learner,
-                training_stage=training_stage,
-                overall=overall,
-            ):
-                level_key = str(rule.get("level_key") or "")
-                return levels.get(level_key, default_level)
-        return default_level
-
-    @staticmethod
-    def _learner_level_conditions_match(
-        *,
-        conditions: dict[str, Any],
-        learner: User,
-        training_stage: str,
-        overall: dict[str, Any],
-    ) -> bool:
-        stage_values = conditions.get("training_stage_in")
-        if isinstance(stage_values, list) and training_stage not in {
-            str(item) for item in stage_values
-        }:
-            return False
-
-        department_values = conditions.get("department_in")
-        if isinstance(department_values, list) and str(
-            learner.department or ""
-        ) not in {str(item) for item in department_values}:
-            return False
-
-        role_values = conditions.get("role_in")
-        if isinstance(role_values, list) and str(learner.role or "") not in {
-            str(item) for item in role_values
-        }:
-            return False
-
-        total_modules = int(overall.get("total_modules") or 0)
-        completed_modules = int(overall.get("completed_modules") or 0)
-        passed_modules = int(overall.get("passed_modules") or 0)
-        failed_modules = int(overall.get("failed_modules") or 0)
-        pass_rate = (passed_modules / total_modules * 100) if total_modules else 0.0
-
-        min_pass_rate = conditions.get("min_pass_rate")
-        if isinstance(min_pass_rate, (int, float)) and pass_rate < float(min_pass_rate):
-            return False
-
-        max_pass_rate = conditions.get("max_pass_rate")
-        if isinstance(max_pass_rate, (int, float)) and pass_rate > float(max_pass_rate):
-            return False
-
-        min_completed_modules = conditions.get("min_completed_modules")
-        if (
-            isinstance(min_completed_modules, int)
-            and completed_modules < min_completed_modules
-        ):
-            return False
-
-        min_passed_modules = conditions.get("min_passed_modules")
-        if isinstance(min_passed_modules, int) and passed_modules < min_passed_modules:
-            return False
-
-        max_failed_modules = conditions.get("max_failed_modules")
-        if isinstance(max_failed_modules, int) and failed_modules > max_failed_modules:
-            return False
-
-        return True
-
-    @staticmethod
-    def _diagnostic(
-        code: str,
-        message: str,
-        *,
-        severity: str = "error",
-        terminal: bool,
-    ) -> dict[str, Any]:
-        return {
-            "code": code,
-            "message": message,
-            "severity": severity,
-            "terminal": terminal,
-        }
-
-    @staticmethod
-    def _float_or_none(value: Any) -> float | None:
-        return float(value) if value is not None else None
-
-
-def _team_visible_learner_role_filter() -> Any:
-    learner_filter = User.role == "user"
-    if os.getenv("ENVIRONMENT", "development").strip().lower() != "development":
-        return learner_filter
-    return or_(
-        learner_filter,
-        and_(
-            User.role == "admin",
-            or_(
-                User.email == DEV_LOGIN_EMAIL,
-                User.wechat_user_id == DEV_LOGIN_WECHAT_USER_ID,
-            ),
-        ),
-    )
 
 
 def _journey_matches_filters(
@@ -2650,20 +1805,6 @@ def _normalise_filter_value(value: str | None) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
-
-
-def _module_practice_path(module: JourneyModule) -> str | None:
-    target_unit_id = module.target_unit_id or next(iter(module.target_unit_ids), None)
-    if module.kind == "audio_submission" and target_unit_id:
-        return f"/sales-trainer/audio/{target_unit_id}"
-    if module.kind == "quiz_attempt":
-        if module.base_module_key == "business_skills":
-            if target_unit_id:
-                return f"/sales-trainer/business-skills?unitId={target_unit_id}"
-            return "/sales-trainer/business-skills"
-        if target_unit_id:
-            return f"/sales-trainer/quiz/{target_unit_id}"
-    return None
 
 
 def _learning_topic_practice_path(topic_key: str) -> str | None:
@@ -2847,9 +1988,3 @@ def _retraining_target_module_payload(module: dict[str, Any]) -> dict[str, Any]:
         "disabled": bool(next_action.get("disabled")) if next_action else True,
         "disabled_reason": next_action.get("disabled_reason") if next_action else None,
     }
-
-
-def _rate(numerator: int, denominator: int) -> float | None:
-    if denominator == 0:
-        return None
-    return round(numerator / denominator * 100, 2)

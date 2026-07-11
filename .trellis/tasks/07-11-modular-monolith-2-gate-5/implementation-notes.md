@@ -43,3 +43,15 @@
 - Model-focused cross-domain matrix was `189 passed`; full Ruff passed; full mypy passed for 671 source
   files; architecture guard passed. CodeGraph conservatively selected 512 tests because the compatibility
   registry has system-wide fan-in, so the full unit+contract run was used rather than a narrow claim.
+- Task 3 introduced a frozen Journey read port plus a SQLAlchemy adapter that is the only owner of
+  `User`/`PracticeSession` queries. Learner lists preserve the development-only admin exception, enforce
+  active/role/department scope, return deterministic order, and recursively freeze roleplay snapshots.
+- `TrainingJourneyService` no longer imports foreign ORM entities and dropped from 2,855 to about 2,000
+  lines. `TrainingJourneyProjection` now owns stage/completion/next-action, journey progress/diagnostics,
+  learner-level matching/defaults and all pure analytics rules; the service retains async reads, permission
+  checks, transaction-facing orchestration and observation table access.
+- Task 3 Red/Green evidence: repository contracts first failed on nondeterministic roleplay ordering, then
+  passed after the adapter added an explicit session-id order. Journey characterization plus repository and
+  locality contracts passed `25/25`; the CodeGraph-selected Journey/phase2/readiness/API/seed matrix passed
+  `112/112`; Ruff, focused mypy and the architecture dependency guard passed. The two remaining Gate 5 Red
+  assertions are intentionally isolated to Task 4 Readiness extraction.

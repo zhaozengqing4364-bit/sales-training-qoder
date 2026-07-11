@@ -227,17 +227,21 @@ assert len(models.Base.metadata.tables) == 52
         assert completed.returncode == 0, completed.stderr
 
 
-def test_journey_and_readiness_application_modules_do_not_import_foreign_orm() -> None:
+def test_journey_application_module_does_not_import_foreign_orm() -> None:
     journey_imports = _imported_names(
         BACKEND_SRC / "sales_trainer" / "services" / "training_journey_service.py",
         "common.db.models",
     )
+
+    assert not ({"User", "PracticeSession"} & journey_imports)
+
+
+def test_readiness_application_module_does_not_import_foreign_orm() -> None:
     readiness_imports = _imported_names(
         BACKEND_SRC / "sales_trainer" / "services" / "readiness_dossier_service.py",
         "common.db.models",
     )
 
-    assert not ({"User", "PracticeSession"} & journey_imports)
     assert "User" not in readiness_imports
 
 
@@ -251,6 +255,9 @@ def test_journey_read_port_and_projection_modules_exist() -> None:
     assert (
         BACKEND_SRC / "sales_trainer" / "services" / "training_journey_projection.py"
     ).is_file()
+
+
+def test_readiness_projection_module_exists() -> None:
     assert (
         BACKEND_SRC / "sales_trainer" / "services" / "readiness_dossier_projection.py"
     ).is_file()
