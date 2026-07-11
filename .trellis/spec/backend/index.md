@@ -40,6 +40,7 @@ Before writing backend code, read the guides relevant to your change:
 | [Sales Trainer Learning Topic Governance](./sales-trainer-learning-topic-governance.md) | Newcomer learning topics as future-only asset revisions, separate from required path gates | Ready |
 | [Prompt Template Governance](./prompt-template-governance.md) | Prompt defaults, scenario bindings, system-template lock, governance repair | Ready |
 | [Realtime Roleplay V1 Runtime Contract](./realtime-roleplay-v1.md) | Fixed IT-leader realtime roleplay contract, state card, knowledge guard, scoring projection | Ready |
+| [Realtime Session Engine](./realtime-session-engine.md) | Gate 2 Presentation Engine state, rollout/rollback, snapshots, diagnostics, evidence, and Golden differential | Ready |
 | [Error Handling](./error-handling.md) | `Result[T]`, API responses, middleware fallbacks | Ready |
 | [Quality Guidelines](./quality-guidelines.md) | pytest, ruff, mypy, forbidden patterns | Ready |
 | [Platform Contract Truth](./platform-contract-truth.md) | Contributor registry isolation, effective route inventory, runtime-generated OpenAPI parity | Ready |
