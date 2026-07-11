@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from collections.abc import Mapping
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
@@ -18,14 +20,30 @@ from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeSharedHandler
 from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstreamMixin
 from sales_bot.websocket.stepfun_runtime_types import RealtimeResponseState
-from training_runtime import PresentationScenarioPlugin, TrainingRuntimeDescriptor
+from training_runtime import (
+    PresentationScenarioPlugin,
+    StepFunSessionConfig,
+    TrainingRuntimeDescriptor,
+    build_stepfun_session_update_payload,
+)
 from training_runtime.realtime import (
     GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
     GroundingPhase,
+    ProviderBackpressureResult,
+    ProviderCommand,
+    ProviderErrorCategory,
+    ProviderErrorReason,
+    ProviderEvent,
+    ProviderEventKind,
+    ProviderHealthResult,
+    ProviderSendResult,
+    RealtimeProviderCapabilities,
+    RealtimeProviderSessionConfig,
     RealtimeSessionEngine,
     RealtimeSessionState,
     TurnPhase,
 )
+from training_runtime.realtime.stepfun_codec import StepFunEventCodec
 from training_runtime.stepfun_transport import (
     StepFunBackpressureResult,
     StepFunBackpressureStatus,
@@ -721,6 +739,98 @@ class GoldenStepFunTransport:
         return StepFunBackpressureResult(status=StepFunBackpressureStatus.ALLOW)
 
 
+class GoldenCanonicalProvider:
+    def __init__(self, upstream_events: list[dict[str, Any]]) -> None:
+        self._upstream_events = upstream_events
+        self._queue: asyncio.Queue[ProviderEvent] = asyncio.Queue()
+        self._codec = StepFunEventCodec()
+        self._stop_after_batch: Any = None
+        self.received_events: list[ProviderEvent] = []
+        self.close_calls = 0
+
+    @property
+    def capabilities(self) -> RealtimeProviderCapabilities:
+        return RealtimeProviderCapabilities(supported=frozenset())
+
+    async def connect(self, config: RealtimeProviderSessionConfig) -> None:
+        self._upstream_events.append(
+            build_stepfun_session_update_payload(
+                StepFunSessionConfig(
+                    voice=config.voice,
+                    temperature=config.temperature,
+                    input_audio_format=config.input_audio_format,
+                    output_audio_format=config.output_audio_format,
+                    modalities=tuple(config.modalities),
+                    turn_detection=(
+                        dict(config.turn_detection)
+                        if config.turn_detection is not None
+                        else None
+                    ),
+                    input_transcription_enabled=config.input_transcription_enabled,
+                    input_transcription_language=config.input_transcription_language,
+                    input_transcription_model=config.input_transcription_model,
+                    instructions=config.instructions,
+                    tools=[_plain_golden_provider_value(tool) for tool in config.tools],
+                )
+            )
+        )
+
+    async def send(self, command: ProviderCommand) -> ProviderSendResult:
+        self._upstream_events.append(deepcopy(self._codec.encode_command(command)))
+        return ProviderSendResult(accepted=True)
+
+    async def receive(self, *, connection_epoch: int) -> ProviderEvent:
+        event = await self._queue.get()
+        self.received_events.append(event)
+        if self._queue.empty() and self._stop_after_batch is not None:
+            self._stop_after_batch()
+        return event
+
+    async def deliver(
+        self,
+        handler: LegacyPresentationStepFunRealtimeHandler,
+        events: list[ProviderEvent],
+    ) -> None:
+        for event in events:
+            await self._queue.put(event)
+        handler.running = True
+        self._stop_after_batch = lambda: setattr(handler, "running", False)
+        await handler._receive_upstream_events()
+        self._stop_after_batch = None
+        handler.running = True
+
+    async def check_health(
+        self,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> ProviderHealthResult:
+        del timeout_seconds
+        return ProviderHealthResult(healthy=True)
+
+    def decide_backpressure(
+        self,
+        command: ProviderCommand,
+        *,
+        pending_bytes: int,
+    ) -> ProviderBackpressureResult:
+        del command, pending_bytes
+        return ProviderBackpressureResult(accepted=True)
+
+    async def close(self) -> None:
+        self.close_calls += 1
+
+
+def _plain_golden_provider_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _plain_golden_provider_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, tuple | list):
+        return [_plain_golden_provider_value(item) for item in value]
+    return value
+
+
 def _normalize_golden_value(value: Any) -> Any:
     if isinstance(value, dict):
         normalized: dict[str, Any] = {}
@@ -748,7 +858,8 @@ def _configure_golden_handler(
     websocket: GoldenWebSocket,
     upstream_events: list[dict[str, Any]],
     mutate_transcript_event: bool,
-) -> None:
+    provider_enabled: bool,
+) -> GoldenCanonicalProvider | None:
     handler.websocket = websocket
     handler.session_id = "session-golden"
     handler.user_id = "user-golden"
@@ -756,6 +867,9 @@ def _configure_golden_handler(
     handler._connection_epoch = 1
     handler._instruction_contract_hash = "sha256:golden-policy"
     handler._stepfun_transport = GoldenStepFunTransport(upstream_events)
+    provider = GoldenCanonicalProvider(upstream_events) if provider_enabled else None
+    if provider is not None:
+        handler._provider_factory = lambda **_kwargs: provider
     handler._ensure_upstream_keepalive_task = Mock()
     handler._maybe_start_kb_lock_warmup = AsyncMock()
     handler._record_roleplay_instruction_hash_metric = AsyncMock()
@@ -775,6 +889,30 @@ def _configure_golden_handler(
     handler._apply_roleplay_output_guard = AsyncMock(
         side_effect=lambda text, **_kwargs: text
     )
+    handler._golden_tool_calls = []
+
+    async def execute_golden_tool(
+        call_id: str,
+        function_name: str,
+        raw_arguments: str,
+        trigger_followup_response: bool,
+    ) -> bool:
+        handler._golden_tool_calls.append(
+            (call_id, function_name, raw_arguments, trigger_followup_response)
+        )
+        await handler._send_upstream(
+            {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": '{"count":1}',
+                },
+            }
+        )
+        return True
+
+    handler._execute_function_call = execute_golden_tool
 
     async def apply_lifecycle_action(action: str) -> object:
         assert action == "start"
@@ -801,6 +939,20 @@ def _configure_golden_handler(
 
         handler._presentation_event_emitter.send_transcript = send_mutated_transcript
 
+    return provider
+
+
+async def _deliver_golden_provider_events(
+    handler: LegacyPresentationStepFunRealtimeHandler,
+    provider: GoldenCanonicalProvider | None,
+    events: list[ProviderEvent],
+) -> None:
+    if provider is not None:
+        await provider.deliver(handler, events)
+        return
+    for event in events:
+        await handler._handle_provider_event(event)
+
 
 async def _drive_real_golden_conversation(
     *,
@@ -808,6 +960,7 @@ async def _drive_real_golden_conversation(
     initial_surface: Any,
     reconnect_factory: Any,
     mutate_transcript_event: bool = False,
+    provider_enabled: bool = False,
 ) -> dict[str, Any]:
     downstream_events: list[dict[str, Any]] = []
     upstream_events: list[dict[str, Any]] = []
@@ -826,11 +979,12 @@ async def _drive_real_golden_conversation(
         return True
 
     first_websocket = GoldenWebSocket()
-    _configure_golden_handler(
+    initial_provider = _configure_golden_handler(
         initial_handler,
         websocket=first_websocket,
         upstream_events=upstream_events,
         mutate_transcript_event=mutate_transcript_event,
+        provider_enabled=provider_enabled,
     )
 
     with (
@@ -856,36 +1010,265 @@ async def _drive_real_golden_conversation(
         await initial_handler._handle_client_text(
             json.dumps({"type": "text", "data": {"text": "讲解第一页"}})
         )
-        await initial_handler._handle_upstream_response_created(
-            {"type": "response.created", "response": {"id": "response-1"}}
-        )
         assert initial_handler._active_response is not None
-        initial_handler._active_response.text_parts.append("第一轮回应")
-        await initial_handler._handle_upstream_response_done(
-            {"type": "response.done", "response": {"id": "response-1"}}
+        first_response = initial_handler._active_response
+        await _deliver_golden_provider_events(
+            initial_handler,
+            initial_provider,
+            [
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_CREATED,
+                    provider_event_type="response.created",
+                    connection_epoch=1,
+                    request_id=first_response.request_id,
+                    response_id="response-1",
+                    stream_id=first_response.stream_id,
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_TEXT_DELTA,
+                    provider_event_type="response.text.delta",
+                    connection_epoch=1,
+                    request_id=first_response.request_id,
+                    response_id="response-stale",
+                    stream_id=first_response.stream_id,
+                    data={"text": "不得越界"},
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.THINKING_DELTA,
+                    provider_event_type="response.thinking.delta",
+                    connection_epoch=1,
+                    request_id=first_response.request_id,
+                    response_id="response-1",
+                    stream_id=first_response.stream_id,
+                    data={"text": "梳理产品价值"},
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_TEXT_DELTA,
+                    provider_event_type="response.text.delta",
+                    connection_epoch=1,
+                    request_id=first_response.request_id,
+                    response_id="response-1",
+                    stream_id=first_response.stream_id,
+                    data={"text": "第一轮回应"},
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_AUDIO_DELTA,
+                    provider_event_type="response.audio.delta",
+                    connection_epoch=1,
+                    request_id=first_response.request_id,
+                    response_id="response-1",
+                    stream_id=first_response.stream_id,
+                    data={"audio": "Z29sZGVuLWF1ZGlv"},
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_TEXT_DELTA,
+                    provider_event_type="response.text.delta",
+                    connection_epoch=0,
+                    request_id=first_response.request_id,
+                    response_id="response-1",
+                    stream_id=first_response.stream_id,
+                    data={"text": "旧 epoch"},
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_DONE,
+                    provider_event_type="response.done",
+                    connection_epoch=1,
+                    request_id=first_response.request_id,
+                    response_id="response-1",
+                    stream_id=first_response.stream_id,
+                    data={},
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.UNKNOWN,
+                    provider_event_type="unknown",
+                    connection_epoch=1,
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.ERROR,
+                    provider_event_type="error",
+                    connection_epoch=1,
+                    error_category=ProviderErrorCategory.PROTOCOL,
+                    error_reason=ProviderErrorReason.INVALID_EVENT,
+                ),
+            ],
         )
 
         frame = bytes([initial_handler.BINARY_AUDIO_CHUNK]) + b"golden-audio"
         await initial_handler._handle_binary_frame(frame)
         await initial_handler._handle_binary_frame(frame)
         await initial_handler._commit_and_respond()
-        transcription_event = {
-            "type": "conversation.item.input_audio_transcription.completed",
-            "transcript": "补充客户收益",
-        }
-        await initial_handler._handle_upstream_transcription_completed(
-            transcription_event
-        )
-        await initial_handler._handle_upstream_transcription_completed(
-            transcription_event
-        )
-        await initial_handler._handle_upstream_response_created(
-            {"type": "response.created", "response": {"id": "response-2"}}
+        transcription_events = [
+            ProviderEvent(
+                kind=ProviderEventKind.SPEECH_STOPPED,
+                provider_event_type="input_audio_buffer.speech_stopped",
+                connection_epoch=1,
+                event_id="speech-stop-1",
+                turn_id="turn-2",
+                timestamp_ms=1000,
+            ),
+            ProviderEvent(
+                kind=ProviderEventKind.SPEECH_STARTED,
+                provider_event_type="input_audio_buffer.speech_started",
+                connection_epoch=1,
+                event_id="speech-start-2",
+                turn_id="turn-2",
+                timestamp_ms=1300,
+            ),
+            ProviderEvent(
+                kind=ProviderEventKind.TRANSCRIPTION_DELTA,
+                provider_event_type="conversation.item.input_audio_transcription.delta",
+                connection_epoch=1,
+                event_id="asr-delta-2",
+                turn_id="turn-2",
+                data={"text": "补充"},
+            ),
+            ProviderEvent(
+                kind=ProviderEventKind.TRANSCRIPTION_FINAL,
+                provider_event_type="conversation.item.input_audio_transcription.completed",
+                connection_epoch=1,
+                event_id="asr-final-2",
+                turn_id="turn-2",
+                duration_ms=1200,
+                data={"text": "补充客户收益"},
+            ),
+            ProviderEvent(
+                kind=ProviderEventKind.TRANSCRIPTION_FINAL,
+                provider_event_type="conversation.item.input_audio_transcription.completed",
+                connection_epoch=1,
+                event_id="asr-final-2-duplicate",
+                turn_id="turn-2",
+                duration_ms=1200,
+                data={"text": "补充客户收益"},
+            ),
+        ]
+        await _deliver_golden_provider_events(
+            initial_handler,
+            initial_provider,
+            transcription_events,
         )
         assert initial_handler._active_response is not None
-        initial_handler._active_response.text_parts.append("第二轮回应")
-        await initial_handler._handle_upstream_response_done(
-            {"type": "response.done", "response": {"id": "response-2"}}
+        second_response = initial_handler._active_response
+        await _deliver_golden_provider_events(
+            initial_handler,
+            initial_provider,
+            [
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_CREATED,
+                    provider_event_type="response.created",
+                    connection_epoch=1,
+                    request_id=second_response.request_id,
+                    response_id="response-2",
+                    stream_id=second_response.stream_id,
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.THINKING_DONE,
+                    provider_event_type="response.thinking.done",
+                    connection_epoch=1,
+                    request_id=second_response.request_id,
+                    response_id="response-2",
+                    stream_id=second_response.stream_id,
+                    data={"text": "完成思考"},
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_TEXT_DELTA,
+                    provider_event_type="response.text.delta",
+                    connection_epoch=1,
+                    request_id=second_response.request_id,
+                    response_id="response-2",
+                    stream_id=second_response.stream_id,
+                    data={"text": "第二轮回应"},
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.CONVERSATION_ITEM,
+                    provider_event_type="conversation.item.created",
+                    connection_epoch=1,
+                    request_id=second_response.request_id,
+                    response_id="response-2",
+                    stream_id=second_response.stream_id,
+                    call_id="call-current",
+                    data={
+                        "item_type": "function_call",
+                        "name": "search_internal_knowledge",
+                    },
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
+                    provider_event_type="response.function_call_arguments.done",
+                    connection_epoch=1,
+                    request_id=second_response.request_id,
+                    response_id="response-2",
+                    stream_id=second_response.stream_id,
+                    call_id="call-stale",
+                    data={
+                        "name": "search_internal_knowledge",
+                        "arguments": '{"query":"旧调用"}',
+                    },
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.CONVERSATION_ITEM,
+                    provider_event_type="conversation.item.created",
+                    connection_epoch=1,
+                    request_id=second_response.request_id - 1,
+                    response_id="response-2",
+                    stream_id=second_response.stream_id,
+                    call_id="call-stale-item",
+                    data={
+                        "item_type": "function_call",
+                        "name": "search_internal_knowledge",
+                    },
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_DONE,
+                    provider_event_type="response.done",
+                    connection_epoch=1,
+                    request_id=second_response.request_id,
+                    response_id="response-2",
+                    stream_id=second_response.stream_id,
+                    data={
+                        "function_outputs": (
+                            {
+                                "call_id": "call-current",
+                                "name": "search_internal_knowledge",
+                                "arguments": '{"query":"产品价值"}',
+                            },
+                        )
+                    },
+                ),
+            ],
+        )
+        assert initial_handler._active_response is not None
+        followup_response = initial_handler._active_response
+        await _deliver_golden_provider_events(
+            initial_handler,
+            initial_provider,
+            [
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_CREATED,
+                    provider_event_type="response.created",
+                    connection_epoch=1,
+                    request_id=followup_response.request_id,
+                    response_id="response-3",
+                    stream_id=followup_response.stream_id,
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_TEXT_DELTA,
+                    provider_event_type="response.text.delta",
+                    connection_epoch=1,
+                    request_id=followup_response.request_id,
+                    response_id="response-3",
+                    stream_id=followup_response.stream_id,
+                    data={"text": "工具跟进回应"},
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.RESPONSE_DONE,
+                    provider_event_type="response.done",
+                    connection_epoch=1,
+                    request_id=followup_response.request_id,
+                    response_id="response-3",
+                    stream_id=followup_response.stream_id,
+                    data={},
+                ),
+            ],
         )
 
         snapshot = initial_handler._create_state_snapshot()
@@ -896,11 +1279,12 @@ async def _drive_real_golden_conversation(
 
         reconnect_handler, reconnect_surface = reconnect_factory()
         reconnect_websocket = GoldenWebSocket()
-        _configure_golden_handler(
+        reconnect_provider = _configure_golden_handler(
             reconnect_handler,
             websocket=reconnect_websocket,
             upstream_events=upstream_events,
             mutate_transcript_event=False,
+            provider_enabled=provider_enabled,
         )
         await reconnect_handler.manager.connect(
             reconnect_websocket,
@@ -909,6 +1293,22 @@ async def _drive_real_golden_conversation(
         )
         await reconnect_handler._restore_session_state(snapshot)
         await reconnect_handler._connect_upstream()
+        await _deliver_golden_provider_events(
+            reconnect_handler,
+            reconnect_provider,
+            [
+                ProviderEvent(
+                    kind=ProviderEventKind.SESSION_READY,
+                    provider_event_type="session.updated",
+                    connection_epoch=2,
+                ),
+                ProviderEvent(
+                    kind=ProviderEventKind.UNKNOWN,
+                    provider_event_type="unknown",
+                    connection_epoch=2,
+                ),
+            ],
+        )
         await reconnect_handler._send_status(reconnect_handler.ai_state)
         reconnect_snapshot = reconnect_handler._create_state_snapshot()
         runtime_engine = reconnect_handler._runtime_engine
@@ -940,6 +1340,13 @@ async def _drive_real_golden_conversation(
         ),
         "closed": reconnect_websocket.closed,
         "initial_surface": type(initial_surface).__name__,
+        "provider_received_kinds": [
+            event.kind.value
+            for provider in (initial_provider, reconnect_provider)
+            if provider is not None
+            for event in provider.received_events
+        ],
+        "tool_calls": list(initial_handler._golden_tool_calls),
     }
 
 
@@ -1016,41 +1423,60 @@ async def test_golden_differential_preserves_external_single_writer_contract(
         PresentationRealtimeEngineHandler,
     )
 
-    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "false")
-    legacy = LegacyPresentationStepFunRealtimeHandler()
-    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
-    facade = PresentationRealtimeEngineHandler(
-        runtime_engine_factory=RealtimeSessionEngine,
-    )
-    engine_adapter = facade.runtime_adapter
-    assert isinstance(legacy, LegacyPresentationStepFunRealtimeHandler)
-    assert isinstance(engine_adapter, LegacyPresentationStepFunRealtimeHandler)
+    results: dict[tuple[bool, bool], dict[str, Any]] = {}
+    for engine_enabled in (False, True):
+        for provider_enabled in (False, True):
+            with monkeypatch.context() as scoped:
+                scoped.setenv(
+                    "REALTIME_PROVIDER_PORT_ENABLED",
+                    "true" if provider_enabled else "false",
+                )
+                if engine_enabled:
+                    surface = PresentationRealtimeEngineHandler(
+                        runtime_engine_factory=RealtimeSessionEngine,
+                    )
+                    adapter = surface.runtime_adapter
+                else:
+                    adapter = LegacyPresentationStepFunRealtimeHandler()
+                    surface = adapter
 
-    def legacy_reconnect_factory() -> tuple[Any, Any]:
-        with monkeypatch.context() as scoped:
-            scoped.setenv("REALTIME_PROVIDER_PORT_ENABLED", "false")
-            adapter = LegacyPresentationStepFunRealtimeHandler()
-        return adapter, adapter
+            def reconnect_factory(
+                *,
+                engine_enabled: bool = engine_enabled,
+                provider_enabled: bool = provider_enabled,
+            ) -> tuple[Any, Any]:
+                with monkeypatch.context() as reconnect_scope:
+                    reconnect_scope.setenv(
+                        "REALTIME_PROVIDER_PORT_ENABLED",
+                        "true" if provider_enabled else "false",
+                    )
+                    if engine_enabled:
+                        reconnect_surface = PresentationRealtimeEngineHandler(
+                            runtime_engine_factory=RealtimeSessionEngine,
+                        )
+                        return (
+                            reconnect_surface.runtime_adapter,
+                            reconnect_surface,
+                        )
+                    reconnect_adapter = LegacyPresentationStepFunRealtimeHandler()
+                    return reconnect_adapter, reconnect_adapter
 
-    def engine_reconnect_factory() -> tuple[Any, Any]:
-        reconnect_facade = PresentationRealtimeEngineHandler(
-            runtime_engine_factory=RealtimeSessionEngine,
-        )
-        return reconnect_facade.runtime_adapter, reconnect_facade
+            results[(engine_enabled, provider_enabled)] = (
+                await _drive_real_golden_conversation(
+                    initial_handler=adapter,
+                    initial_surface=surface,
+                    reconnect_factory=reconnect_factory,
+                    provider_enabled=provider_enabled,
+                )
+            )
 
-    legacy_result = await _drive_real_golden_conversation(
-        initial_handler=legacy,
-        initial_surface=legacy,
-        reconnect_factory=legacy_reconnect_factory,
-    )
-    engine_result = await _drive_real_golden_conversation(
-        initial_handler=engine_adapter,
-        initial_surface=facade,
-        reconnect_factory=engine_reconnect_factory,
-    )
+    baseline = results[(False, False)]
+    for combination, result in results.items():
+        _assert_golden_differential(baseline, result)
+        if combination[0]:
+            _assert_golden_engine_terminal_state(result)
 
-    _assert_golden_differential(legacy_result, engine_result)
-    _assert_golden_engine_terminal_state(engine_result)
+    engine_result = results[(True, True)]
     downstream_types = {event["type"] for event in engine_result["downstream_events"]}
     upstream_types = {event["type"] for event in engine_result["upstream_events"]}
     assert downstream_types >= {
@@ -1072,12 +1498,31 @@ async def test_golden_differential_preserves_external_single_writer_contract(
         for write in engine_result["persistence_writes"]
     }
     assert len(persistence_keys) == len(engine_result["persistence_writes"])
-    assert len(persistence_keys) == 4
+    assert len(persistence_keys) == 5
+    assert len(engine_result["tool_calls"]) == 1
+    for provider_enabled in (False, True):
+        provider_kinds = results[(True, provider_enabled)]["provider_received_kinds"]
+        if provider_enabled:
+            assert {
+                "transcription_delta",
+                "transcription_final",
+                "response_audio_delta",
+                "thinking_delta",
+                "thinking_done",
+                "response_done",
+                "conversation_item",
+                "function_arguments_done",
+                "unknown",
+                "error",
+                "session_ready",
+            }.issubset(provider_kinds)
+        else:
+            assert provider_kinds == []
 
     snapshot_mutation = deepcopy(engine_result)
     snapshot_mutation["initial_snapshot"].turn_count = 999
     with pytest.raises(AssertionError):
-        _assert_golden_differential(legacy_result, snapshot_mutation)
+        _assert_golden_differential(baseline, snapshot_mutation)
 
     epoch_mutation = deepcopy(engine_result)
     epoch_mutation["engine_snapshot"]["connection"]["epoch"] = 1

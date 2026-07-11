@@ -62,6 +62,13 @@ from training_runtime.stepfun_transport import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _select_legacy_transport_unless_test_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "false")
+
+
 def test_stepfun_transport_builds_session_update_payload_with_transcription_and_tools():
     payload = build_stepfun_session_update_payload(
         StepFunSessionConfig(
@@ -145,6 +152,18 @@ class RecordingRealtimeProvider:
 
     async def close(self) -> None:
         self.close_calls += 1
+
+
+class BlockingCloseRealtimeProvider(RecordingRealtimeProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.close_started = asyncio.Event()
+        self.allow_close = asyncio.Event()
+
+    async def close(self) -> None:
+        self.close_calls += 1
+        self.close_started.set()
+        await self.allow_close.wait()
 
 
 @pytest.mark.asyncio
@@ -318,6 +337,162 @@ async def test_provider_capability_mismatch_fails_before_any_legacy_socket_conne
 
 
 @pytest.mark.asyncio
+async def test_selected_provider_path_never_falls_back_after_connect_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+
+    class FailingConnectProvider(RecordingRealtimeProvider):
+        async def connect(self, config: RealtimeProviderSessionConfig) -> None:
+            self.connect_calls.append(config)
+            raise RuntimeError("provider connect failed")
+
+    provider = FailingConnectProvider()
+    legacy_transport = SimpleNamespace(
+        connect=AsyncMock(side_effect=AssertionError("legacy connect fallback")),
+        send_json=AsyncMock(side_effect=AssertionError("legacy send fallback")),
+        check_health=AsyncMock(side_effect=AssertionError("legacy health fallback")),
+        decide_backpressure=MagicMock(
+            side_effect=AssertionError("legacy backpressure fallback")
+        ),
+        close=AsyncMock(side_effect=AssertionError("legacy close fallback")),
+    )
+    handler = StepFunRealtimeHandler(
+        stepfun_transport=legacy_transport,
+        provider_factory=lambda **_kwargs: provider,
+    )
+    handler._effective_policy = {"turn_detection": "server_vad"}
+    handler._build_stepfun_tools_from_policy = MagicMock(return_value=[])
+    handler._enforce_stepfun_tool_guardrails = MagicMock(side_effect=lambda tools: tools)
+    handler._stop_upstream_keepalive_task = AsyncMock()
+
+    with pytest.raises(RuntimeError, match="provider connect failed"):
+        await handler._connect_upstream()
+
+    assert handler._using_provider_port() is True
+    assert await handler._send_upstream({"type": "response.create"}) is False
+    with pytest.raises(RuntimeError, match="realtime_provider_not_constructed"):
+        marker = object()
+        handler._realtime_provider = None
+        await handler._send_upstream_keepalive_ping(marker)
+    assert handler._should_drop_upstream_for_backpressure(
+        {"type": "input_audio_buffer.append", "audio": "AAE="}
+    ) is True
+    handler._realtime_provider = provider
+    await handler._close_upstream()
+
+    assert provider.close_calls == 1
+    legacy_transport.connect.assert_not_awaited()
+    legacy_transport.send_json.assert_not_awaited()
+    legacy_transport.check_health.assert_not_awaited()
+    legacy_transport.decide_backpressure.assert_not_called()
+    legacy_transport.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handler_close_preserves_repeated_cancellation_and_resets_local_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+    provider = BlockingCloseRealtimeProvider()
+    legacy_transport = SimpleNamespace(
+        close=AsyncMock(side_effect=AssertionError("legacy close fallback"))
+    )
+    handler = StepFunRealtimeHandler(
+        stepfun_transport=legacy_transport,
+        provider_factory=lambda **_kwargs: provider,
+    )
+    handler._realtime_provider = provider
+    handler.upstream_ws = provider
+    handler._upstream_connected_at = 11.0
+    handler._upstream_last_activity_at = 12.0
+    handler._stop_upstream_keepalive_task = AsyncMock()
+
+    close_task = asyncio.create_task(handler._close_upstream())
+    await provider.close_started.wait()
+    close_task.cancel()
+    close_task.cancel()
+    await asyncio.sleep(0)
+    provider.allow_close.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await close_task
+
+    assert provider.close_calls == 1
+    assert handler.upstream_ws is None
+    assert handler._upstream_connected_at == 0.0
+    assert handler._upstream_last_activity_at == 0.0
+    legacy_transport.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handle_connection_finishes_cleanup_before_propagating_repeated_cancel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import common.services.session_runtime_lifecycle_hooks as lifecycle_hooks
+
+    receive_started = asyncio.Event()
+    close_started = asyncio.Event()
+    allow_close = asyncio.Event()
+
+    class BlockingWebSocket:
+        headers: dict[str, str] = {}
+
+        async def receive(self) -> dict[str, object]:
+            receive_started.set()
+            await asyncio.Event().wait()
+            raise AssertionError("unreachable")
+
+    async def blocking_close() -> None:
+        close_started.set()
+        await allow_close.wait()
+
+    async def block_upstream_receive() -> None:
+        await asyncio.Event().wait()
+
+    manager = SimpleNamespace(
+        connect=AsyncMock(),
+        disconnect=AsyncMock(),
+    )
+    handler = StepFunRealtimeHandler()
+    handler.manager = manager
+    handler.state_service = SimpleNamespace(get_state=AsyncMock(return_value=Result.ok(None)))
+    handler._stepfun_api_key = "test-api-key"
+    handler._load_effective_policy = AsyncMock()
+    handler._initialize_curriculum_stage_runtime = AsyncMock()
+    handler._sync_session_state = AsyncMock()
+    handler._connect_upstream = AsyncMock()
+    handler._receive_upstream_events = AsyncMock(side_effect=block_upstream_receive)
+    handler._send_status = AsyncMock()
+    handler._cancel_pending_response_after_commit = AsyncMock()
+    handler._close_upstream = AsyncMock(side_effect=blocking_close)
+    handler._save_session_state = AsyncMock()
+    monkeypatch.setattr(stepfun_module, "verify_token", lambda _token: {"user_id": "user-1"})
+    monkeypatch.setattr(lifecycle_hooks, "mark_session_runtime_started", AsyncMock())
+
+    lifecycle_task = asyncio.create_task(
+        handler.handle_connection(
+            cast(Any, BlockingWebSocket()),
+            "session-cancel",
+            "token",
+        )
+    )
+    await receive_started.wait()
+    lifecycle_task.cancel()
+    await close_started.wait()
+    lifecycle_task.cancel()
+    await asyncio.sleep(0)
+    allow_close.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await lifecycle_task
+
+    handler._close_upstream.assert_awaited_once_with()
+    handler._save_session_state.assert_awaited_once_with()
+    manager.disconnect.assert_awaited_once_with(handler.scenario, "session-cancel")
+
+
+@pytest.mark.asyncio
 async def test_provider_event_is_consumed_through_canonical_compatibility_facade(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -325,6 +500,12 @@ async def test_provider_event_is_consumed_through_canonical_compatibility_facade
     provider = RecordingRealtimeProvider()
     handler = StepFunRealtimeHandler(provider_factory=lambda **_kwargs: provider)
     handler._connection_epoch = 7
+    handler.current_request_id = 7
+    handler._active_response = RealtimeResponseState(
+        request_id=7,
+        stream_id="stream-7",
+        response_id="response-7",
+    )
     handler._realtime_provider = provider
     handler.upstream_ws = provider
     handler.running = True
@@ -340,7 +521,9 @@ async def test_provider_event_is_consumed_through_canonical_compatibility_facade
             kind=ProviderEventKind.RESPONSE_DONE,
             provider_event_type="response.done",
             connection_epoch=7,
+            request_id=7,
             response_id="response-7",
+            stream_id="stream-7",
             data={
                 "function_outputs": (
                     {
@@ -358,7 +541,9 @@ async def test_provider_event_is_consumed_through_canonical_compatibility_facade
     assert captured == [
         {
             "type": "response.done",
+            "request_id": 7,
             "response_id": "response-7",
+            "stream_id": "stream-7",
             "response": {
                 "id": "response-7",
                 "output": [
@@ -394,6 +579,118 @@ async def test_stale_provider_event_epoch_is_ignored_before_legacy_side_effects(
             data={"text": "must-not-cross"},
         )
     )
+
+    handler._handle_upstream_event.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "event",
+    [
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_TEXT_DELTA,
+            provider_event_type="response.text.delta",
+            connection_epoch=8,
+            request_id=6,
+            response_id="response-current",
+            stream_id="stream-current",
+            data={"text": "stale text"},
+        ),
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_AUDIO_DELTA,
+            provider_event_type="response.audio.delta",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-stale",
+            stream_id="stream-current",
+            data={"audio": "AAE="},
+        ),
+        ProviderEvent(
+            kind=ProviderEventKind.THINKING_DONE,
+            provider_event_type="response.thinking.done",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-current",
+            stream_id="stream-stale",
+            data={"text": "stale thinking"},
+        ),
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_DONE,
+            provider_event_type="response.done",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-stale",
+            stream_id="stream-current",
+            data={},
+        ),
+        ProviderEvent(
+            kind=ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
+            provider_event_type="response.function_call_arguments.done",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-current",
+            stream_id="stream-current",
+            call_id="call-stale",
+            data={"name": "search_internal_knowledge", "arguments": "{}"},
+        ),
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_DONE,
+            provider_event_type="response.done",
+            connection_epoch=8,
+            request_id=5,
+            response_id="response-current",
+            stream_id="stream-current",
+            data={
+                "function_outputs": (
+                    {
+                        "call_id": "call-stale",
+                        "name": "search_internal_knowledge",
+                        "arguments": "{}",
+                    },
+                )
+            },
+        ),
+        ProviderEvent(
+            kind=ProviderEventKind.CONVERSATION_ITEM,
+            provider_event_type="conversation.item.created",
+            connection_epoch=8,
+            request_id=4,
+            response_id="response-current",
+            stream_id="stream-current",
+            call_id="call-stale",
+            data={"item_type": "function_call", "name": "search_internal_knowledge"},
+        ),
+    ],
+    ids=[
+        "text-request",
+        "audio-response",
+        "thinking-stream",
+        "done-response",
+        "args-call",
+        "done-tool-call",
+        "tool-request",
+    ],
+)
+async def test_stale_provider_authority_is_rejected_before_any_side_effect(
+    event: ProviderEvent,
+) -> None:
+    handler = StepFunRealtimeHandler()
+    handler._connection_epoch = 8
+    handler.current_request_id = 5
+    handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+        response_id="response-current",
+    )
+    handler._function_call_states = {
+        "call-current": FunctionCallState(
+            call_id="call-current",
+            name="search_internal_knowledge",
+        )
+    }
+    handler._handle_upstream_event = AsyncMock()  # type: ignore[method-assign]
+
+    await handler._handle_provider_event(event)
 
     handler._handle_upstream_event.assert_not_awaited()
 

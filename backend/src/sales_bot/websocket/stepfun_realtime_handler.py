@@ -1041,6 +1041,7 @@ class StepFunRealtimeSharedHandler(
 
         self.running = True
 
+        cancellation: asyncio.CancelledError | None = None
         try:
             await self._load_effective_policy()
             existing_runtime_state = (
@@ -1085,7 +1086,8 @@ class StepFunRealtimeSharedHandler(
         except WebSocketDisconnect:
             self._record_disconnect_reason("client_disconnect")
             logger.info(f"StepFun WS disconnected: session={session_id}")
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as error:
+            cancellation = error
             logger.info(f"StepFun WS cancelled: session={session_id}")
         except RealtimeProviderError as exc:
             self._record_disconnect_reason("stepfun_upstream_rejected")
@@ -1142,24 +1144,83 @@ class StepFunRealtimeSharedHandler(
                 connection_epoch=self._connection_epoch,
             )
             self.running = False
-            await self._cancel_pending_response_after_commit()
-            warmup_task = self._kb_lock_warmup_task
-            self._kb_lock_warmup_task = None
+            cleanup_task = asyncio.create_task(
+                self._finalize_connection_cleanup(session_id)
+            )
+            cleanup_error: BaseException | None = None
+            while True:
+                try:
+                    await asyncio.shield(cleanup_task)
+                    break
+                except asyncio.CancelledError as error:
+                    if cleanup_task.done():
+                        cleanup_error = error
+                        break
+                    if cancellation is None:
+                        cancellation = error
+                except BaseException as error:  # noqa: BLE001
+                    cleanup_error = error
+                    break
+            if cancellation is not None:
+                if cleanup_error is not None:
+                    logger.error(
+                        "practice_ws_session_cleanup_error_after_cancel",
+                        session_id=session_id,
+                        error_type=type(cleanup_error).__name__,
+                        error=str(cleanup_error),
+                    )
+                raise cancellation
+            if cleanup_error is not None:
+                raise cleanup_error
+
+    async def _finalize_connection_cleanup(self, session_id: str) -> None:
+        """Attempt every lifecycle cleanup step and surface the first failure."""
+        cleanup_error: BaseException | None = None
+
+        async def run_cleanup(cleanup: Callable[[], Any]) -> None:
+            nonlocal cleanup_error
+            try:
+                await cleanup()
+            except asyncio.CancelledError:
+                raise
+            except BaseException as error:  # noqa: BLE001
+                if cleanup_error is None:
+                    cleanup_error = error
+
+        await run_cleanup(self._cancel_pending_response_after_commit)
+
+        warmup_task = self._kb_lock_warmup_task
+        self._kb_lock_warmup_task = None
+
+        async def stop_warmup() -> None:
             if warmup_task and not warmup_task.done():
                 warmup_task.cancel()
                 try:
                     await warmup_task
                 except asyncio.CancelledError:
                     pass
-            if self._upstream_task:
-                self._upstream_task.cancel()
+
+        await run_cleanup(stop_warmup)
+
+        upstream_task = self._upstream_task
+        self._upstream_task = None
+
+        async def stop_upstream_receive() -> None:
+            if upstream_task:
+                upstream_task.cancel()
                 try:
-                    await self._upstream_task
+                    await upstream_task
                 except (asyncio.CancelledError, ConnectionClosed):
                     pass
-            await self._close_upstream()
-            await self._save_session_state()
-            await self.manager.disconnect(self.scenario, session_id)
+
+        await run_cleanup(stop_upstream_receive)
+        await run_cleanup(self._close_upstream)
+        await run_cleanup(self._save_session_state)
+        await run_cleanup(
+            lambda: self.manager.disconnect(self.scenario, session_id)
+        )
+        if cleanup_error is not None:
+            raise cleanup_error
 
     async def _sync_session_state(self) -> None:
         if not self.session_id:
@@ -1289,23 +1350,37 @@ class StepFunRealtimeSharedHandler(
 
     async def _close_upstream(self) -> None:
         """Close upstream connection safely."""
-        await self._stop_upstream_keepalive_task()
-        if self._using_provider_port():
-            provider = self._realtime_provider
-            if provider is not None:
-                await provider.close()
-        else:
+        async def close_selected_upstream() -> None:
+            await self._stop_upstream_keepalive_task()
+            if self._using_provider_port():
+                provider = self._realtime_provider
+                if provider is not None:
+                    await provider.close()
+                return
             await self._stepfun_transport.close(self.upstream_ws)
-        self.upstream_ws = None
-        self._upstream_connected_at = 0.0
-        self._upstream_last_activity_at = 0.0
+
+        cleanup_task = asyncio.create_task(close_selected_upstream())
+        cancellation: asyncio.CancelledError | None = None
+        try:
+            while True:
+                try:
+                    await asyncio.shield(cleanup_task)
+                    break
+                except asyncio.CancelledError as error:
+                    if cancellation is None:
+                        cancellation = error
+                    if cleanup_task.done():
+                        break
+        finally:
+            self.upstream_ws = None
+            self._upstream_connected_at = 0.0
+            self._upstream_last_activity_at = 0.0
+        if cancellation is not None:
+            raise cancellation
 
     def _using_provider_port(self) -> bool:
-        return (
-            self._provider_port_enabled
-            and self._realtime_provider is not None
-            and self.upstream_ws is self._realtime_provider
-        )
+        """Return the constructor-frozen rollout choice, not connection health."""
+        return self._provider_port_enabled
 
     def _get_or_create_realtime_provider(self) -> RealtimeProviderPort:
         if self._realtime_provider is None:

@@ -206,6 +206,21 @@ logger = get_logger(__name__)
 ROLEPLAY_INSTRUCTION_HASH_METRICS_KEY = "roleplay_instruction_hash"
 ROLEPLAY_INSTRUCTION_HASH_SAMPLE_LIMIT = 10
 
+_PROVIDER_RESPONSE_AUTHORITY_EVENT_KINDS = frozenset(
+    {
+        ProviderEventKind.RESPONSE_CREATED,
+        ProviderEventKind.RESPONSE_TEXT_DELTA,
+        ProviderEventKind.RESPONSE_TRANSCRIPT_DELTA,
+        ProviderEventKind.RESPONSE_TRANSCRIPT_FINAL,
+        ProviderEventKind.RESPONSE_AUDIO_DELTA,
+        ProviderEventKind.THINKING_DELTA,
+        ProviderEventKind.THINKING_DONE,
+        ProviderEventKind.FUNCTION_ARGUMENTS_DELTA,
+        ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
+        ProviderEventKind.RESPONSE_DONE,
+    }
+)
+
 
 def _handler_symbol(name: str, fallback: Any) -> Any:
     """Read monkeypatch-compatible symbols from the public handler module."""
@@ -1194,14 +1209,67 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
     async def _handle_provider_event(self, event: ProviderEvent) -> None:
         """Project one canonical Provider event into the legacy delivery adapter."""
 
-        if event.connection_epoch != self._connection_epoch:
+        if not self._provider_event_has_active_authority(event):
             logger.warning(
                 "stale_realtime_provider_event_ignored",
                 session_id=self.session_id,
                 current_connection_epoch=self._connection_epoch,
+                event_kind=event.kind.value,
             )
             return
         await self._handle_upstream_event(_legacy_event_from_provider_event(event))
+
+    def _provider_event_has_active_authority(self, event: ProviderEvent) -> bool:
+        """Validate canonical event IDs before any persistence/audio/tool side effect."""
+        if event.connection_epoch != self._connection_epoch:
+            return False
+
+        is_function_item = (
+            event.kind is ProviderEventKind.CONVERSATION_ITEM
+            and event.call_id is not None
+            and event.data.get("item_type") == "function_call"
+        )
+        if (
+            event.kind not in _PROVIDER_RESPONSE_AUTHORITY_EVENT_KINDS
+            and not is_function_item
+        ):
+            return True
+
+        active_response = self._active_response
+        if active_response is None:
+            return False
+        if (
+            event.request_id is not None
+            and event.request_id != active_response.request_id
+        ):
+            return False
+        if (
+            event.response_id is not None
+            and active_response.response_id is not None
+            and event.response_id != active_response.response_id
+        ):
+            return False
+        if event.stream_id is not None and event.stream_id != active_response.stream_id:
+            return False
+
+        if event.kind in {
+            ProviderEventKind.FUNCTION_ARGUMENTS_DELTA,
+            ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
+        }:
+            known_calls = self._function_call_states
+            if known_calls and event.call_id not in known_calls:
+                return False
+        if event.kind is ProviderEventKind.RESPONSE_DONE:
+            function_outputs = event.data.get("function_outputs")
+            known_calls = self._function_call_states
+            if known_calls and isinstance(function_outputs, tuple):
+                for output in function_outputs:
+                    if (
+                        isinstance(output, FrozenJsonMapping)
+                        and output.get("call_id") not in known_calls
+                    ):
+                        return False
+        return True
 
     async def _handle_upstream_event(self, event: dict[str, Any]) -> None:
         """Map selected StepFun events to existing frontend contract."""
