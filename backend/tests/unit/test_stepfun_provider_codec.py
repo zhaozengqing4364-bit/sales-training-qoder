@@ -1837,3 +1837,113 @@ def test_codec_command_encode_should_reject_nested_non_finite_number() -> None:
 
     with pytest.raises(ValueError, match="finite"):
         StepFunEventCodec().encode_command(unsafe_command)
+
+
+@pytest.mark.parametrize("operation", ["send", "receive", "health"])
+@pytest.mark.asyncio
+async def test_adapter_terminal_retirement_should_block_concurrent_reconnect(
+    operation: str,
+) -> None:
+    retiring_connection = FakeConnection()
+    reconnect_connection = FakeConnection()
+    transport = BlockingCloseTransport((retiring_connection, reconnect_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    if operation == "send":
+        transport.send_result = StepFunSendResult(
+            status=StepFunSendStatus.FAILED,
+            error_type="ConnectionClosedError",
+        )
+        terminal_operation = asyncio.create_task(
+            provider.send(
+                ProviderCommand(
+                    kind=ProviderCommandKind.APPEND_AUDIO,
+                    data={"audio": "AAE="},
+                )
+            )
+        )
+    elif operation == "receive":
+        terminal_operation = asyncio.create_task(provider.receive(connection_epoch=1))
+    else:
+        transport.health_result = StepFunHealthResult(
+            status=StepFunHealthStatus.UNHEALTHY,
+            error_type="ConnectionClosedError",
+        )
+        terminal_operation = asyncio.create_task(provider.check_health())
+
+    await transport.close_started.wait()
+    public_close = asyncio.create_task(provider.close())
+    await asyncio.sleep(0)
+    public_close_done_before_release = public_close.done()
+    transport.send_result = StepFunSendResult(status=StepFunSendStatus.SENT)
+    reconnect_error: RealtimeProviderError | None = None
+    try:
+        await provider.connect(_session_config())
+    except RealtimeProviderError as error:
+        reconnect_error = error
+    transport.release_close.set()
+    await public_close
+
+    if operation == "receive":
+        with pytest.raises(RealtimeProviderError):
+            await terminal_operation
+    else:
+        await terminal_operation
+
+    assert reconnect_error is not None
+    assert reconnect_error.reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert public_close_done_before_release is False
+    assert len(transport.connect_calls) == 1
+    assert transport.close_calls == 1
+    assert retiring_connection.close_count == 1
+    await provider.connect(_session_config())
+    assert len(transport.connect_calls) == 2
+    assert reconnect_connection.close_count == 0
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_terminal_retirement_failure_should_retry_before_reconnect() -> (
+    None
+):
+    retiring_connection = FakeConnection()
+    reconnect_connection = FakeConnection()
+    transport = RetryableCloseTransport((retiring_connection, reconnect_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    transport.send_result = StepFunSendResult(
+        status=StepFunSendStatus.FAILED,
+        error_type="ConnectionClosedError",
+    )
+
+    result = await provider.send(
+        ProviderCommand(
+            kind=ProviderCommandKind.APPEND_AUDIO,
+            data={"audio": "AAE="},
+        )
+    )
+
+    assert result.accepted is False
+    assert retiring_connection.close_count == 0
+    transport.send_result = StepFunSendResult(status=StepFunSendStatus.SENT)
+    with pytest.raises(RealtimeProviderError) as reconnect_blocked:
+        await provider.connect(_session_config())
+    assert reconnect_blocked.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert len(transport.connect_calls) == 1
+
+    transport.fail_close = False
+    await provider.close()
+    assert retiring_connection.close_count == 1
+    assert transport.close_calls == 2
+    await provider.connect(_session_config())
+    assert len(transport.connect_calls) == 2
+    assert reconnect_connection.close_count == 0

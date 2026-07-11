@@ -263,31 +263,16 @@ class StepFunRealtimeProvider:
             self._connecting = False
             connection = self._connection
             pending_connection = self._pending_connection
-            retry_connections = self._close_retry_connections
             self._connection = None
             self._pending_connection = None
             self._pending_generation = None
-            self._close_retry_connections = ()
-            connections = _unique_connections(
-                *retry_connections,
+            cleanup_task = self._schedule_close_cleanup_locked(
                 connection,
                 pending_connection,
             )
-            cleanup_task = self._close_cleanup_task
-            if cleanup_task is None and connections:
-                cleanup_task = asyncio.create_task(
-                    _close_owned_connections(self._transport, connections)
-                )
-                self._close_cleanup_task = cleanup_task
         if cleanup_task is None:
             return
-        try:
-            result = await asyncio.shield(cleanup_task)
-        except asyncio.CancelledError:
-            result = await cleanup_task
-            await self._finalize_close_cleanup(cleanup_task, result)
-            raise
-        await self._finalize_close_cleanup(cleanup_task, result)
+        result = await self._await_close_cleanup(cleanup_task)
         failed_connections, cleanup_base_error = result
         if cleanup_base_error is not None:
             raise cleanup_base_error
@@ -334,6 +319,38 @@ class StepFunRealtimeProvider:
                 *self._close_retry_connections,
                 *failed_connections,
             )
+
+    def _schedule_close_cleanup_locked(
+        self,
+        *connections: object | None,
+    ) -> asyncio.Task[_CloseCleanupResult] | None:
+        owned_connections = _unique_connections(
+            *self._close_retry_connections,
+            *connections,
+        )
+        self._close_retry_connections = ()
+        cleanup_task = self._close_cleanup_task
+        if cleanup_task is None and owned_connections:
+            cleanup_task = asyncio.create_task(
+                _close_owned_connections(self._transport, owned_connections)
+            )
+            self._close_cleanup_task = cleanup_task
+        elif cleanup_task is not None and owned_connections:
+            self._close_retry_connections = owned_connections
+        return cleanup_task
+
+    async def _await_close_cleanup(
+        self,
+        cleanup_task: asyncio.Task[_CloseCleanupResult],
+    ) -> _CloseCleanupResult:
+        try:
+            result = await asyncio.shield(cleanup_task)
+        except asyncio.CancelledError:
+            result = await cleanup_task
+            await self._finalize_close_cleanup(cleanup_task, result)
+            raise
+        await self._finalize_close_cleanup(cleanup_task, result)
+        return result
 
     async def _claim_pending_connection(
         self,
@@ -404,7 +421,14 @@ class StepFunRealtimeProvider:
                 return False
             self._connection = None
             self._lifecycle_generation += 1
-        await _close_failed_connection(self._transport, connection)
+            cleanup_task = self._schedule_close_cleanup_locked(connection)
+        if cleanup_task is None:
+            return True
+        _failed_connections, cleanup_base_error = await self._await_close_cleanup(
+            cleanup_task
+        )
+        if cleanup_base_error is not None:
+            raise cleanup_base_error
         return True
 
     def __repr__(self) -> str:
@@ -538,16 +562,6 @@ async def _close_owned_connections(
             cleanup_base_error = error
             break
     return _unique_connections(*failed), cleanup_base_error
-
-
-async def _close_failed_connection(
-    transport: StepFunTransport,
-    connection: object,
-) -> None:
-    try:
-        await transport.close(connection)
-    except Exception:
-        pass
 
 
 __all__ = ["StepFunRealtimeProvider"]
