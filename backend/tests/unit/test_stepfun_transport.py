@@ -50,6 +50,14 @@ class SendRaisesOSErrorWebSocket:
         raise OSError("upstream closed")
 
 
+class SendRaisesSecretOSErrorWebSocket:
+    async def send_json(self, payload: dict[str, object]) -> None:
+        del payload
+        raise OSError(
+            "wss://provider.example/realtime?api_key=secret-query raw-body-secret"
+        )
+
+
 class PongWebSocket:
     async def ping(self) -> object:
         return None
@@ -196,6 +204,45 @@ async def test_should_return_failed_send_result_when_websocket_send_errors() -> 
 
     assert result.status == StepFunSendStatus.FAILED
     assert result.error_type == "OSError"
+
+
+@pytest.mark.asyncio
+async def test_send_failure_log_should_use_closed_fields_without_raw_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[tuple[str, dict[str, object]]] = []
+
+    class CapturingLogger:
+        def error(self, event: str, **fields: object) -> None:
+            captured.append((event, fields))
+
+        def debug(self, event: str, **fields: object) -> None:
+            del event, fields
+
+    monkeypatch.setattr(stepfun_transport_module, "logger", CapturingLogger())
+
+    result = await StepFunTransport().send_json(
+        SendRaisesSecretOSErrorWebSocket(),
+        {"type": "input_audio_buffer.append"},
+    )
+
+    assert result.status is StepFunSendStatus.FAILED
+    assert captured == [
+        (
+            "stepfun_upstream_send_failed",
+            {
+                "event_type": "input_audio_buffer.append",
+                "upstream_type": "SendRaisesSecretOSErrorWebSocket",
+                "error_category": "disconnected",
+                "error_reason": "connection_closed",
+                "error_type": "OSError",
+            },
+        )
+    ]
+    rendered = repr(captured)
+    assert "secret-query" not in rendered
+    assert "raw-body-secret" not in rendered
+    assert "provider.example" not in rendered
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,12 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
+from websockets.exceptions import (
+    ConnectionClosed,
+    ConnectionClosedError,
+    ConnectionClosedOK,
+)
+from websockets.frames import Close
 
 from training_runtime.realtime.provider import (
     ProviderBackpressureResult,
@@ -748,7 +754,43 @@ async def test_adapter_should_map_connect_status_without_leaking_raw_message(
     assert captured.value.retryable is retryable
     assert raw_message not in str(captured.value)
     assert raw_message not in repr(captured.value)
+    assert captured.value.__cause__ is None
     assert "api-secret" not in repr(provider)
+
+
+@pytest.mark.parametrize(
+    ("exception_type", "close_code"),
+    [(ConnectionClosedOK, 1000), (ConnectionClosedError, 1011)],
+)
+@pytest.mark.asyncio
+async def test_adapter_receive_should_sanitize_real_websocket_close_exceptions(
+    exception_type: type[ConnectionClosed],
+    close_code: int,
+) -> None:
+    secret = "wss://provider.example/realtime?token=secret-query raw-body"
+    closed = exception_type(Close(close_code, secret), None)
+
+    class ClosedConnection(FakeConnection):
+        async def recv(self) -> str | bytes:
+            raise closed
+
+    transport = FakeTransport(connection=ClosedConnection())
+    provider = StepFunRealtimeProvider(
+        api_key="api-secret",
+        url="wss://provider.example/realtime?region=cn",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    with pytest.raises(RealtimeProviderError) as captured:
+        await provider.receive(connection_epoch=2)
+
+    assert captured.value.category is ProviderErrorCategory.DISCONNECTED
+    assert captured.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert captured.value.retryable is True
+    assert captured.value.__cause__ is None
+    assert secret not in str(captured.value)
+    assert secret not in repr(captured.value)
 
 
 @pytest.mark.asyncio

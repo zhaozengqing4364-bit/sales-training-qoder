@@ -244,6 +244,9 @@ class StepFunTransport:
                         "stepfun_upstream_send_unsupported",
                         event_type=event_type,
                         upstream_type=type(upstream_ws).__name__,
+                        error_category="disconnected",
+                        error_reason="connection_closed",
+                        error_type="AttributeError",
                     )
                     return StepFunSendResult(
                         status=StepFunSendStatus.FAILED,
@@ -259,8 +262,9 @@ class StepFunTransport:
                 "stepfun_upstream_send_failed",
                 event_type=event_type,
                 upstream_type=type(upstream_ws).__name__,
+                error_category="disconnected",
+                error_reason="connection_closed",
                 error_type=type(exc).__name__,
-                error=str(exc),
             )
             return StepFunSendResult(
                 status=StepFunSendStatus.FAILED,

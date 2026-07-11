@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import cast
 
+from websockets.exceptions import ConnectionClosed
+
 from training_runtime.stepfun_transport import (
     STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES,
     StepFunBackpressurePolicy,
@@ -93,13 +95,13 @@ class StepFunRealtimeProvider:
                 model=config.model,
             )
         except StepFunUpstreamConnectError as exc:
-            raise _connect_error(exc.status_code) from exc
-        except (RuntimeError, ValueError, OSError) as exc:
+            raise _connect_error(exc.status_code) from None
+        except (RuntimeError, ValueError, OSError):
             raise RealtimeProviderError(
                 category=ProviderErrorCategory.UNAVAILABLE,
                 reason=ProviderErrorReason.UPSTREAM_UNAVAILABLE,
                 retryable=True,
-            ) from exc
+            ) from None
 
         payload = build_stepfun_session_update_payload(_session_config(config))
         send_result = await self._transport.send_json(connection, payload)
@@ -147,12 +149,12 @@ class StepFunRealtimeProvider:
             )
         try:
             raw = await cast(Callable[[], Awaitable[object]], recv)()
-        except (RuntimeError, ValueError, OSError) as exc:
+        except (ConnectionClosed, RuntimeError, ValueError, OSError):
             raise RealtimeProviderError(
                 category=ProviderErrorCategory.DISCONNECTED,
                 reason=ProviderErrorReason.CONNECTION_CLOSED,
                 retryable=True,
-            ) from exc
+            ) from None
         if type(raw) not in {str, bytes}:
             return self._codec.decode_event("", connection_epoch=connection_epoch)
         return self._codec.decode_event(
