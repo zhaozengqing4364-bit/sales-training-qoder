@@ -2387,3 +2387,135 @@ async def test_adapter_repeated_cancel_before_pending_register_should_retain_soc
     await provider.connect(_session_config())
     assert len(transport.connect_calls) == 2
     assert reconnect_connection.close_count == 0
+
+
+_KNOWN_PROVIDER_CREDENTIALS = (
+    "sk-live-secret",
+    "prefix-sk-live-secret-suffix",
+    "provider.example",
+    "query-secret",
+)
+
+
+def _assert_sensitive_identifier_rejected(
+    event: ProviderEvent,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    assert event.kind is ProviderEventKind.ERROR
+    assert event.error_category is ProviderErrorCategory.PROTOCOL
+    assert event.error_reason is ProviderErrorReason.INVALID_EVENT
+    assert event.response_id is None
+    assert event.stream_id is None
+    assert event.call_id is None
+    assert event.event_id is None
+    assert event.turn_id is None
+    assert event.data == {}
+    assert getattr(event, "__cause__", None) is None
+    rendered = f"{event!r} {event!s} {caplog.text}"
+    for sensitive in (
+        "sk-live-secret",
+        "provider.example",
+        "query-secret",
+    ):
+        assert sensitive not in rendered
+
+
+@pytest.mark.parametrize(
+    "identifier_field",
+    ["response_id", "stream_id", "call_id", "event_id", "turn_id"],
+)
+@pytest.mark.parametrize("polluted", _KNOWN_PROVIDER_CREDENTIALS)
+@pytest.mark.asyncio
+async def test_adapter_receive_should_reject_known_secret_in_top_level_identifier(
+    identifier_field: str,
+    polluted: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    connection = FakeConnection(
+        events=(json.dumps({"type": "session.created", identifier_field: polluted}),)
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="sk-live-secret",
+        url="wss://provider.example/realtime?token=query-secret",
+        transport=FakeTransport(connection=connection),  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    event = await provider.receive(connection_epoch=3)
+
+    _assert_sensitive_identifier_rejected(event, caplog)
+
+
+@pytest.mark.parametrize("polluted", _KNOWN_PROVIDER_CREDENTIALS)
+@pytest.mark.asyncio
+async def test_adapter_receive_should_reject_known_secret_in_nested_call_id(
+    polluted: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    connection = FakeConnection(
+        events=(
+            json.dumps(
+                {
+                    "type": "response.done",
+                    "response_id": "response-safe",
+                    "response": {
+                        "output": [
+                            {
+                                "type": "function_call",
+                                "call_id": polluted,
+                                "name": "safe_name",
+                                "arguments": "{}",
+                            }
+                        ]
+                    },
+                }
+            ),
+        )
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="sk-live-secret",
+        url="wss://provider.example/realtime?token=query-secret",
+        transport=FakeTransport(connection=connection),  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    event = await provider.receive(connection_epoch=3)
+
+    _assert_sensitive_identifier_rejected(event, caplog)
+
+
+@pytest.mark.asyncio
+async def test_adapter_receive_should_preserve_legal_opaque_ids_but_redact_repr(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    opaque = "opaque-token-123"
+    connection = FakeConnection(
+        events=(
+            json.dumps(
+                {
+                    "type": "session.created",
+                    "response_id": opaque,
+                    "stream_id": opaque,
+                    "call_id": opaque,
+                    "event_id": opaque,
+                    "turn_id": opaque,
+                }
+            ),
+        )
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="sk-live-secret",
+        url="wss://provider.example/realtime?token=query-secret",
+        transport=FakeTransport(connection=connection),  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+
+    event = await provider.receive(connection_epoch=3)
+
+    assert event.kind is ProviderEventKind.SESSION_READY
+    assert event.response_id == opaque
+    assert event.stream_id == opaque
+    assert event.call_id == opaque
+    assert event.event_id == opaque
+    assert event.turn_id == opaque
+    assert opaque not in f"{event!r} {event!s} {caplog.text}"

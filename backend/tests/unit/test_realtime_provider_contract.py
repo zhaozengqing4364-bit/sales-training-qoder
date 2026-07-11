@@ -661,6 +661,26 @@ def test_event_should_reject_unsafe_identifier_metadata(field_name: str) -> None
         ProviderEvent(**kwargs)  # type: ignore[arg-type]
 
 
+def test_event_repr_should_redact_all_opaque_identifier_values() -> None:
+    opaque = "opaque-token-123"
+    event = ProviderEvent(
+        kind=ProviderEventKind.SESSION_READY,
+        provider_event_type="session.created",
+        connection_epoch=1,
+        request_id=42,
+        response_id=opaque,
+        stream_id=opaque,
+        call_id=opaque,
+        event_id=opaque,
+        turn_id=opaque,
+    )
+
+    rendered = f"{event!r} {event!s}"
+    assert opaque not in rendered
+    assert "request_id=42" not in rendered
+    assert "identifier_fields" in rendered
+
+
 def test_error_contract_should_be_closed_and_safe() -> None:
     error = RealtimeProviderError(
         category=ProviderErrorCategory.UNAVAILABLE,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from typing import TypeAlias, TypeVar, cast
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from training_runtime.stepfun_transport import (
     STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES,
@@ -26,6 +27,7 @@ from .provider import (
     ProviderErrorCategory,
     ProviderErrorReason,
     ProviderEvent,
+    ProviderEventKind,
     ProviderHealthResult,
     ProviderSendResult,
     RealtimeProviderCapabilities,
@@ -40,6 +42,15 @@ _CloseCleanupResult: TypeAlias = tuple[
     BaseException | None,
 ]
 _T = TypeVar("_T")
+_SENSITIVE_QUERY_KEY_PARTS = (
+    "api_key",
+    "auth",
+    "credential",
+    "key",
+    "secret",
+    "sig",
+    "token",
+)
 
 _STEPFUN_CAPABILITIES = RealtimeProviderCapabilities(
     supported=frozenset(ProviderCapability),
@@ -63,6 +74,7 @@ class StepFunRealtimeProvider:
         "_lifecycle_lock",
         "_pending_connection",
         "_pending_generation",
+        "_sensitive_identifier_fragments",
         "_transport",
         "_url",
     )
@@ -91,6 +103,10 @@ class StepFunRealtimeProvider:
         self._lifecycle_lock = asyncio.Lock()
         self._pending_connection: object | None = None
         self._pending_generation: int | None = None
+        self._sensitive_identifier_fragments = _sensitive_identifier_fragments(
+            api_key,
+            url,
+        )
         self._backpressure_policy = StepFunBackpressurePolicy(
             high_watermark_bytes=STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES
         )
@@ -235,6 +251,11 @@ class StepFunRealtimeProvider:
         except Exception:
             await self._invalidate_current_connection(connection, generation)
             raise _disconnected_error() from None
+        if _event_contains_sensitive_identifier(
+            event,
+            self._sensitive_identifier_fragments,
+        ):
+            event = _sensitive_identifier_error(connection_epoch)
         if not await self._connection_is_current(connection, generation):
             raise _disconnected_error()
         return event
@@ -630,6 +651,78 @@ def _unique_connections(*connections: object | None) -> tuple[object, ...]:
             continue
         unique.append(connection)
     return tuple(unique)
+
+
+def _sensitive_identifier_fragments(api_key: str, url: str) -> tuple[str, ...]:
+    values = [api_key, url]
+    try:
+        parsed = urlsplit(url)
+        values.extend(
+            candidate
+            for candidate in (
+                urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", "")),
+                parsed.netloc,
+                parsed.hostname,
+                parsed.username,
+                parsed.password,
+            )
+            if candidate
+        )
+        values.extend(
+            value
+            for key, value in parse_qsl(parsed.query)
+            if value and any(part in key.lower() for part in _SENSITIVE_QUERY_KEY_PARTS)
+        )
+    except ValueError:
+        pass
+    return tuple(dict.fromkeys(value for value in values if value))
+
+
+def _event_contains_sensitive_identifier(
+    event: ProviderEvent,
+    sensitive_fragments: tuple[str, ...],
+) -> bool:
+    identifiers = (
+        event.response_id,
+        event.stream_id,
+        event.call_id,
+        event.event_id,
+        event.turn_id,
+        *_nested_identifier_values(event.data),
+    )
+    return any(
+        fragment in identifier
+        for identifier in identifiers
+        if identifier is not None
+        for fragment in sensitive_fragments
+    )
+
+
+def _nested_identifier_values(
+    value: Mapping[str, JsonValue],
+) -> tuple[str, ...]:
+    identifiers: list[str] = []
+    pending: list[object] = [value]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, Mapping):
+            for key, item in current.items():
+                if (key == "id" or key.endswith("_id")) and type(item) is str:
+                    identifiers.append(item)
+                pending.append(item)
+        elif type(current) is tuple:
+            pending.extend(current)
+    return tuple(identifiers)
+
+
+def _sensitive_identifier_error(connection_epoch: int) -> ProviderEvent:
+    return ProviderEvent(
+        kind=ProviderEventKind.ERROR,
+        provider_event_type="invalid",
+        connection_epoch=connection_epoch,
+        error_category=ProviderErrorCategory.PROTOCOL,
+        error_reason=ProviderErrorReason.INVALID_EVENT,
+    )
 
 
 async def _close_owned_connections(

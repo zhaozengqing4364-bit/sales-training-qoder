@@ -894,14 +894,24 @@ class ProviderEvent(_ImmutableValue):
             raise ValueError("provider_event_error_fields_forbidden")
 
     def __repr__(self) -> str:
+        identifier_fields = tuple(
+            field_name
+            for field_name in (
+                "request_id",
+                "response_id",
+                "stream_id",
+                "call_id",
+                "event_id",
+                "turn_id",
+            )
+            if getattr(self, field_name) is not None
+        )
         return (
             "ProviderEvent("
             f"kind={self.kind.value!r}, "
             f"provider_event_type={self.provider_event_type!r}, "
             f"connection_epoch={self.connection_epoch!r}, "
-            f"request_id={self.request_id!r}, response_id={self.response_id!r}, "
-            f"stream_id={self.stream_id!r}, call_id={self.call_id!r}, "
-            f"event_id={self.event_id!r}, turn_id={self.turn_id!r}, "
+            f"identifier_fields={identifier_fields!r}, "
             f"timestamp_ms={self.timestamp_ms!r}, duration_ms={self.duration_ms!r}, "
             f"data_fields={tuple(self.data)!r}, "
             f"error_category={self.error_category!r}, "
