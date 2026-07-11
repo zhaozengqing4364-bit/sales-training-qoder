@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from starlette.websockets import WebSocketState
 
 from common.websocket.session_state_service import SessionStateSnapshot
 from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
@@ -22,6 +24,12 @@ from training_runtime.realtime import (
     GroundingPhase,
     RealtimeSessionEngine,
     TurnPhase,
+)
+from training_runtime.stepfun_transport import (
+    StepFunBackpressureResult,
+    StepFunBackpressureStatus,
+    StepFunSendResult,
+    StepFunSendStatus,
 )
 
 
@@ -458,92 +466,255 @@ async def test_normalized_transcript_records_deduped_engine_evidence() -> None:
     assert engine.state.evidence.records["transcript:1:user"].turn_number == 1
 
 
-class GoldenConversationAdapter(FakeRuntimeAdapter):
-    def __init__(self, *, runtime_engine: RealtimeSessionEngine | None) -> None:
-        if runtime_engine is None:
-            self.runtime_engine = None
-            self.scenario = "presentation"
-            self.session_status = "preparing"
-            self.ai_state = "idle"
-            self.websocket = None
-            self.session_id = None
-            self.user_id = None
-            self.handle_connection = AsyncMock()
-            self.send_message = AsyncMock(return_value="sent")
-            self.close = AsyncMock(return_value=None)
-            self.sync_lifecycle_transition = AsyncMock()
-        else:
-            super().__init__(runtime_engine=runtime_engine)
-            self.close = AsyncMock(return_value=None)
-        self.external_events: list[dict[str, object]] = []
-        self.persistence_keys: set[str] = set()
-        self.write_count = 0
+class GoldenWebSocket:
+    def __init__(self) -> None:
+        self.client_state = WebSocketState.CONNECTED
+        self.events: list[dict[str, Any]] = []
+        self.closed: tuple[int, str] | None = None
 
-    def emit(self, event_type: str, **stable: object) -> None:
-        self.external_events.append({"type": event_type, **stable})
+    async def accept(self) -> None:
+        self.client_state = WebSocketState.CONNECTED
 
-    def persist_once(self, key: str) -> None:
-        if key not in self.persistence_keys:
-            self.persistence_keys.add(key)
-            self.write_count += 1
+    async def send_json(self, payload: dict[str, Any]) -> None:
+        self.events.append(deepcopy(payload))
+
+    async def close(self, *, code: int, reason: str) -> None:
+        self.closed = (code, reason)
+        self.client_state = WebSocketState.DISCONNECTED
 
 
-async def _drive_golden_conversation(adapter: GoldenConversationAdapter) -> None:
-    engine = adapter.runtime_engine
-    adapter.emit("connected", session_id="session-golden")
-    adapter.emit("status", session_status="in_progress", ai_state="listening")
-    if engine is not None:
-        engine.begin_connection("session-golden")
-        engine.mark_connected()
-        engine.begin_turn(request_id=1, stream_id="stream-stable")
-        engine.begin_grounding(
-            decision_id="presentation:golden:1",
-            policy_hash="sha256:frozen-policy",
+class GoldenStepFunTransport:
+    def __init__(self, events: list[dict[str, Any]]) -> None:
+        self.events = events
+        self.upstream = SimpleNamespace()
+
+    async def connect(self, **_kwargs: Any) -> object:
+        return self.upstream
+
+    async def send_json(
+        self,
+        _upstream: object,
+        payload: dict[str, Any],
+    ) -> StepFunSendResult:
+        self.events.append(deepcopy(payload))
+        return StepFunSendResult(status=StepFunSendStatus.SENT)
+
+    async def close(self, _upstream: object) -> None:
+        return None
+
+    def decide_backpressure(
+        self,
+        _payload: dict[str, Any],
+        **_kwargs: Any,
+    ) -> StepFunBackpressureResult:
+        return StepFunBackpressureResult(status=StepFunBackpressureStatus.ALLOW)
+
+
+def _normalize_golden_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        normalized: dict[str, Any] = {}
+        for key, item in value.items():
+            if key in {
+                "timestamp",
+                "trace_id",
+                "last_activity",
+                "realtime_engine",
+            }:
+                continue
+            if key == "stream_id" and item:
+                normalized[key] = "<stream-id>"
+            else:
+                normalized[key] = _normalize_golden_value(item)
+        return normalized
+    if isinstance(value, list):
+        return [_normalize_golden_value(item) for item in value]
+    return value
+
+
+def _configure_golden_handler(
+    handler: LegacyPresentationStepFunRealtimeHandler,
+    *,
+    websocket: GoldenWebSocket,
+    upstream_events: list[dict[str, Any]],
+    mutate_transcript_event: bool,
+) -> None:
+    handler.websocket = websocket
+    handler.session_id = "session-golden"
+    handler.user_id = "user-golden"
+    handler.running = True
+    handler._stepfun_transport = GoldenStepFunTransport(upstream_events)
+    handler._ensure_upstream_keepalive_task = Mock()
+    handler._maybe_start_kb_lock_warmup = AsyncMock()
+    handler._record_roleplay_instruction_hash_metric = AsyncMock()
+    handler._analyze_and_emit_sales_stage = AsyncMock(return_value=None)
+    handler._run_realtime_feedback = AsyncMock(return_value=None)
+    handler._update_roleplay_disclosure_state = AsyncMock()
+    handler._prepare_grounding_context = AsyncMock()
+    handler._load_page_requirements = AsyncMock(
+        return_value={
+            "total_pages": 2,
+            "page_content": "第一页：产品价值",
+            "required_points": ["说明客户收益"],
+            "forbidden_words": [],
+        }
+    )
+    handler._initialize_page_feedback = AsyncMock()
+    handler._evaluate_presentation_feedback = AsyncMock(return_value=False)
+    handler._apply_roleplay_output_guard = AsyncMock(
+        side_effect=lambda text, **_kwargs: text
+    )
+
+    async def apply_lifecycle_action(action: str) -> object:
+        assert action == "start"
+        handler.session_status = "in_progress"
+        handler.ai_state = "listening"
+        return SimpleNamespace(to_status="in_progress", ai_state="listening")
+
+    handler._apply_lifecycle_action = apply_lifecycle_action
+
+    if mutate_transcript_event:
+        original_send_transcript = handler._presentation_event_emitter.send_transcript
+
+        async def send_mutated_transcript(
+            *,
+            text: str,
+            is_final: bool,
+            websocket: Any = None,
+        ) -> bool:
+            return await original_send_transcript(
+                text=f"{text}（变更）",
+                is_final=is_final,
+                websocket=websocket,
+            )
+
+        handler._presentation_event_emitter.send_transcript = send_mutated_transcript
+
+
+async def _drive_real_golden_conversation(
+    *,
+    initial_handler: LegacyPresentationStepFunRealtimeHandler,
+    initial_surface: Any,
+    reconnect_factory: Any,
+    mutate_transcript_event: bool = False,
+) -> dict[str, Any]:
+    downstream_events: list[dict[str, Any]] = []
+    upstream_events: list[dict[str, Any]] = []
+    persistence_writes: list[dict[str, Any]] = []
+
+    async def save_message(**kwargs: Any) -> bool:
+        persistence_writes.append(
+            {
+                "session_id": kwargs["session_id"],
+                "turn_number": kwargs["turn_number"],
+                "role": kwargs["role"],
+                "content": kwargs["content"],
+                "analysis_payload": deepcopy(kwargs["analysis_payload"]),
+            }
         )
-        engine.resolve_grounding(
-            outcome="ready",
-            mode="grounded",
-            diagnostics={
-                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
-                "status": "ready",
-                "reason_code": "presentation_feedback_ready",
-                "source": "presentation",
-                "mode": "grounded",
-            },
+        return True
+
+    first_websocket = GoldenWebSocket()
+    _configure_golden_handler(
+        initial_handler,
+        websocket=first_websocket,
+        upstream_events=upstream_events,
+        mutate_transcript_event=mutate_transcript_event,
+    )
+
+    with patch(
+        "presentation_coach.websocket.presentation_stepfun_realtime_handler.save_stepfun_message",
+        new=save_message,
+    ):
+        await initial_handler.manager.connect(
+            first_websocket,
+            initial_handler.scenario,
+            "session-golden",
         )
-        engine.record_evidence(
-            evidence_key="audio:1:4:stable",
-            evidence_type="audio",
-            turn_number=1,
-            payload=b"audio",
+        await initial_handler._connect_upstream()
+        await initial_handler._handle_client_text(
+            json.dumps({"type": "control", "data": {"action": "start"}})
         )
-    adapter.emit("asr_transcript", text="讲解第一页", is_final=True)
-    adapter.persist_once("transcript:1:user")
-    adapter.persist_once("transcript:1:user")
-    if engine is not None:
-        engine.record_evidence(
-            evidence_key="transcript:1:user",
-            evidence_type="transcript",
-            turn_number=1,
-            payload="讲解第一页".encode(),
+        await initial_handler._handle_client_text(
+            json.dumps({"type": "text", "data": {"text": "讲解第一页"}})
         )
-        engine.record_evidence(
-            evidence_key="transcript:1:user",
-            evidence_type="transcript",
-            turn_number=1,
-            payload="讲解第一页".encode(),
+        await initial_handler._handle_upstream_response_created(
+            {"type": "response.created", "response": {"id": "response-1"}}
         )
-        engine.mark_response_started(response_id="response-stable")
-        engine.mark_streaming()
-        engine.complete_turn(request_id=1)
-    adapter.emit("tts_audio", request_id=1, is_final=True)
-    if engine is not None:
-        engine.begin_close(reason="network_reset")
-        engine.mark_disconnected(reason="network_reset")
-        engine.begin_connection("session-golden")
-        engine.mark_connected()
-    adapter.emit("connected", session_id="session-golden")
-    adapter.emit("status", session_status="in_progress", ai_state="listening")
+        assert initial_handler._active_response is not None
+        initial_handler._active_response.text_parts.append("第一轮回应")
+        await initial_handler._handle_upstream_response_done(
+            {"type": "response.done", "response": {"id": "response-1"}}
+        )
+
+        frame = bytes([initial_handler.BINARY_AUDIO_CHUNK]) + b"golden-audio"
+        await initial_handler._handle_binary_frame(frame)
+        initial_handler._pending_response_after_commit = True
+        transcription_event = {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "补充客户收益",
+        }
+        await initial_handler._handle_upstream_transcription_completed(
+            transcription_event
+        )
+        await initial_handler._handle_upstream_transcription_completed(
+            transcription_event
+        )
+        await initial_handler._handle_upstream_response_created(
+            {"type": "response.created", "response": {"id": "response-2"}}
+        )
+        assert initial_handler._active_response is not None
+        initial_handler._active_response.text_parts.append("第二轮回应")
+        await initial_handler._handle_upstream_response_done(
+            {"type": "response.done", "response": {"id": "response-2"}}
+        )
+
+        snapshot = initial_handler._create_state_snapshot()
+        await initial_handler.manager.disconnect(
+            initial_handler.scenario,
+            "session-golden",
+        )
+
+        reconnect_handler, reconnect_surface = reconnect_factory()
+        reconnect_websocket = GoldenWebSocket()
+        _configure_golden_handler(
+            reconnect_handler,
+            websocket=reconnect_websocket,
+            upstream_events=upstream_events,
+            mutate_transcript_event=False,
+        )
+        await reconnect_handler.manager.connect(
+            reconnect_websocket,
+            reconnect_handler.scenario,
+            "session-golden",
+        )
+        await reconnect_handler._restore_session_state(snapshot)
+        await reconnect_handler._connect_upstream()
+        await reconnect_handler._send_status(reconnect_handler.ai_state)
+        await reconnect_surface.close(code=1001, reason="golden_complete")
+        await reconnect_handler.manager.disconnect(
+            reconnect_handler.scenario,
+            "session-golden",
+        )
+
+    downstream_events.extend(first_websocket.events)
+    downstream_events.extend(reconnect_websocket.events)
+    return {
+        "downstream_events": _normalize_golden_value(downstream_events),
+        "upstream_events": _normalize_golden_value(upstream_events),
+        "persistence_writes": _normalize_golden_value(persistence_writes),
+        "closed": reconnect_websocket.closed,
+        "initial_surface": type(initial_surface).__name__,
+    }
+
+
+def _assert_golden_differential(
+    legacy_result: dict[str, Any],
+    engine_result: dict[str, Any],
+) -> None:
+    assert engine_result["downstream_events"] == legacy_result["downstream_events"]
+    assert engine_result["upstream_events"] == legacy_result["upstream_events"]
+    assert engine_result["persistence_writes"] == legacy_result["persistence_writes"]
+    assert engine_result["closed"] == legacy_result["closed"]
 
 
 @pytest.mark.asyncio
@@ -567,29 +738,97 @@ async def test_golden_differential_preserves_external_single_writer_contract() -
     ).select_runtime_handler(descriptor)
     assert selection.handler_factory_name == "PresentationRealtimeEngineHandler"
 
-    legacy = GoldenConversationAdapter(runtime_engine=None)
     from presentation_coach.websocket.presentation_realtime_engine_handler import (
         PresentationRealtimeEngineHandler,
     )
 
+    legacy = LegacyPresentationStepFunRealtimeHandler()
     facade = PresentationRealtimeEngineHandler(
         runtime_engine_factory=RealtimeSessionEngine,
-        runtime_adapter_factory=GoldenConversationAdapter
     )
     engine_adapter = facade.runtime_adapter
-    assert isinstance(engine_adapter, GoldenConversationAdapter)
+    assert isinstance(legacy, LegacyPresentationStepFunRealtimeHandler)
+    assert isinstance(engine_adapter, LegacyPresentationStepFunRealtimeHandler)
 
-    await _drive_golden_conversation(legacy)
-    await _drive_golden_conversation(engine_adapter)
+    def legacy_reconnect_factory() -> tuple[Any, Any]:
+        adapter = LegacyPresentationStepFunRealtimeHandler()
+        return adapter, adapter
 
-    assert engine_adapter.external_events == legacy.external_events
-    assert engine_adapter.persistence_keys == legacy.persistence_keys
-    assert engine_adapter.write_count == legacy.write_count == 1
-    assert await facade.close() == await legacy.close()
-    assert facade.engine.state.connection.epoch == 2
-    assert facade.engine.state.turn.phase is TurnPhase.COMPLETED
-    assert facade.engine.state.grounding.phase is GroundingPhase.READY
-    assert set(facade.engine.state.evidence.records) == {
-        "audio:1:4:stable",
-        "transcript:1:user",
+    def engine_reconnect_factory() -> tuple[Any, Any]:
+        reconnect_facade = PresentationRealtimeEngineHandler(
+            runtime_engine_factory=RealtimeSessionEngine,
+        )
+        return reconnect_facade.runtime_adapter, reconnect_facade
+
+    legacy_result = await _drive_real_golden_conversation(
+        initial_handler=legacy,
+        initial_surface=legacy,
+        reconnect_factory=legacy_reconnect_factory,
+    )
+    engine_result = await _drive_real_golden_conversation(
+        initial_handler=engine_adapter,
+        initial_surface=facade,
+        reconnect_factory=engine_reconnect_factory,
+    )
+
+    _assert_golden_differential(legacy_result, engine_result)
+    downstream_types = {
+        event["type"] for event in engine_result["downstream_events"]
     }
+    upstream_types = {event["type"] for event in engine_result["upstream_events"]}
+    assert downstream_types >= {
+        "connected",
+        "status",
+        "slide_update",
+        "asr_transcript",
+        "tts_audio",
+        "reconnected",
+    }
+    assert upstream_types >= {
+        "session.update",
+        "conversation.item.create",
+        "input_audio_buffer.append",
+        "response.create",
+    }
+    persistence_keys = {
+        (write["turn_number"], write["role"], write["content"])
+        for write in engine_result["persistence_writes"]
+    }
+    assert len(persistence_keys) == len(engine_result["persistence_writes"])
+    assert len(persistence_keys) == 4
+
+
+@pytest.mark.asyncio
+async def test_golden_differential_detects_real_handler_event_mutation() -> None:
+    from presentation_coach.websocket.presentation_realtime_engine_handler import (
+        PresentationRealtimeEngineHandler,
+    )
+
+    def legacy_reconnect_factory() -> tuple[Any, Any]:
+        adapter = LegacyPresentationStepFunRealtimeHandler()
+        return adapter, adapter
+
+    def engine_reconnect_factory() -> tuple[Any, Any]:
+        reconnect_facade = PresentationRealtimeEngineHandler(
+            runtime_engine_factory=RealtimeSessionEngine,
+        )
+        return reconnect_facade.runtime_adapter, reconnect_facade
+
+    legacy = LegacyPresentationStepFunRealtimeHandler()
+    facade = PresentationRealtimeEngineHandler(
+        runtime_engine_factory=RealtimeSessionEngine,
+    )
+    legacy_result = await _drive_real_golden_conversation(
+        initial_handler=legacy,
+        initial_surface=legacy,
+        reconnect_factory=legacy_reconnect_factory,
+    )
+    mutated_engine_result = await _drive_real_golden_conversation(
+        initial_handler=facade.runtime_adapter,
+        initial_surface=facade,
+        reconnect_factory=engine_reconnect_factory,
+        mutate_transcript_event=True,
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_golden_differential(legacy_result, mutated_engine_result)
