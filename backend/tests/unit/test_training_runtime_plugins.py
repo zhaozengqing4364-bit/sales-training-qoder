@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from dataclasses import FrozenInstanceError, fields
 
 import pytest
 
@@ -8,6 +9,7 @@ from common.config import Settings
 from training_runtime import (
     LEGACY_SALES_HANDLER_MODULES,
     PresentationScenarioPlugin,
+    RuntimeHandlerFactoryKey,
     SalesScenarioPlugin,
     TrainingRuntimeDescriptor,
     build_default_scenario_plugin_registry,
@@ -210,7 +212,7 @@ def test_presentation_stepfun_defaults_to_engine_facade() -> None:
         "presentation_coach.websocket.presentation_realtime_engine_handler"
     )
     assert selection.handler_factory_name == "PresentationRealtimeEngineHandler"
-    assert callable(selection.handler_factory_kwargs["runtime_engine_factory"])
+    assert selection.factory_key is RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE
 
 
 def test_presentation_stepfun_flag_false_atomically_selects_legacy_adapter() -> None:
@@ -227,7 +229,7 @@ def test_presentation_stepfun_flag_false_atomically_selects_legacy_adapter() -> 
         "presentation_coach.websocket.presentation_stepfun_realtime_handler"
     )
     assert selection.handler_factory_name == "LegacyPresentationStepFunRealtimeHandler"
-    assert selection.handler_factory_kwargs == {}
+    assert selection.factory_key is None
 
 
 def test_presentation_rollout_resolver_is_read_once_per_atomic_selection() -> None:
@@ -250,7 +252,27 @@ def test_presentation_rollout_resolver_is_read_once_per_atomic_selection() -> No
 
     assert calls == 1
     assert selection.handler_factory_name == "PresentationRealtimeEngineHandler"
-    assert callable(selection.handler_factory_kwargs["runtime_engine_factory"])
+    assert selection.factory_key is RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE
+
+
+def test_runtime_handler_selection_is_immutable_hashable_and_declarative() -> None:
+    descriptor = TrainingRuntimeDescriptor(
+        session_id="presentation-declarative",
+        scenario_type="presentation",
+        voice_mode="stepfun_realtime",
+    )
+    selection = PresentationScenarioPlugin(
+        rollout_resolver=lambda: True
+    ).select_runtime_handler(descriptor)
+
+    assert isinstance(hash(selection), int)
+    assert not hasattr(selection, "handler_factory_kwargs")
+    for definition in fields(selection):
+        value = getattr(selection, definition.name)
+        assert not isinstance(value, dict)
+        assert not callable(value)
+    with pytest.raises(FrozenInstanceError):
+        selection.factory_key = None  # type: ignore[misc]
 
 
 def test_presentation_rollout_does_not_change_legacy_voice_mode() -> None:

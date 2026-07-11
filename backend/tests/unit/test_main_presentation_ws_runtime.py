@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import main
+import websocket_routes
 from common.auth.service import JWTError
 from common.services.runtime_gate import RuntimeAdmissionDecision
 from training_runtime.plugins import ScenarioRuntimeHandlerSelection
@@ -314,6 +315,20 @@ async def test_presentation_ws_runtime_selection_uses_plugin_seam() -> None:
         trace_id=None,
     )
     session_manager.unregister_session.assert_awaited_once_with(session_id)
+
+
+def test_presentation_ws_rejects_unknown_runtime_handler_factory_key() -> None:
+    selection = ScenarioRuntimeHandlerSelection(
+        scenario_type="presentation",
+        runtime_mode="stepfun_realtime",
+        websocket_route="/ws/presentation/{session_id}",
+        handler_factory_path="presentation_coach.websocket.presentation_handler",
+        handler_factory_name="PresentationWebSocketHandler",
+        factory_key="untrusted_factory",  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ValueError, match="unknown_runtime_handler_factory_key"):
+        websocket_routes._instantiate_runtime_handler(selection)
 
 
 @pytest.mark.asyncio

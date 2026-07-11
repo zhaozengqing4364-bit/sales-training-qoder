@@ -4,6 +4,7 @@ from .models import TrainingRuntimeDescriptor, TrainingRuntimeSubject
 from .plugins import (
     LEGACY_SALES_HANDLER_MODULES,
     PresentationScenarioPlugin,
+    RuntimeHandlerFactoryKey,
     SalesScenarioPlugin,
     ScenarioPluginDiagnostics,
     ScenarioPluginEntrypoint,
@@ -24,6 +25,7 @@ from .stepfun_transport import (
 
 __all__ = [
     "PresentationScenarioPlugin",
+    "RuntimeHandlerFactoryKey",
     "LEGACY_SALES_HANDLER_MODULES",
     "SalesScenarioPlugin",
     "ScenarioPluginDiagnostics",

@@ -5,14 +5,23 @@ from __future__ import annotations
 import importlib.util
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Protocol
 
 from common.config import settings
 from common.runtime_descriptor import TrainingRuntimeDescriptor
 
-from .realtime import ENGINE_STATE_VERSION, RealtimeSessionEngine
+from .realtime import ENGINE_STATE_VERSION
 
 PluginAction = str
+
+
+class RuntimeHandlerFactoryKey(StrEnum):
+    """Closed application-root factory choices for declarative handler selection."""
+
+    PRESENTATION_REALTIME_ENGINE = "presentation_realtime_engine"
+
+
 LEGACY_SALES_HANDLER_MODULES = (
     # Explicit allowlist of removed Sales websocket modules that must stay absent.
     "sales_bot.websocket.base_sales_handler",
@@ -43,7 +52,7 @@ class ScenarioRuntimeHandlerSelection:
     websocket_route: str
     handler_factory_path: str
     handler_factory_name: str
-    handler_factory_kwargs: dict[str, object] = field(default_factory=dict)
+    factory_key: RuntimeHandlerFactoryKey | None = None
 
 
 @dataclass(frozen=True)
@@ -277,15 +286,15 @@ class PresentationScenarioPlugin:
             handler_factory_path, handler_factory_name = (
                 self._stepfun_handler_selection(realtime_engine_enabled)
             )
-            handler_factory_kwargs: dict[str, object] = (
-                {"runtime_engine_factory": RealtimeSessionEngine}
+            factory_key = (
+                RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE
                 if realtime_engine_enabled
-                else {}
+                else None
             )
         else:
             handler_factory_path = "presentation_coach.websocket.presentation_handler"
             handler_factory_name = "PresentationWebSocketHandler"
-            handler_factory_kwargs = {}
+            factory_key = None
 
         return ScenarioRuntimeHandlerSelection(
             scenario_type=self.scenario_type,
@@ -293,7 +302,7 @@ class PresentationScenarioPlugin:
             websocket_route="/ws/presentation/{session_id}",
             handler_factory_path=handler_factory_path,
             handler_factory_name=handler_factory_name,
-            handler_factory_kwargs=handler_factory_kwargs,
+            factory_key=factory_key,
         )
 
     def build_evidence(
