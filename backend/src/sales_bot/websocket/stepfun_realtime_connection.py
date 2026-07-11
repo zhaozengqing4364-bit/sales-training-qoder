@@ -242,12 +242,23 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
         self._function_call_authorities.clear()
         self._executed_call_ids.clear()
 
-    async def _clear_upstream_generation(self) -> None:
+    async def _clear_upstream_generation(self, *, reconnect: bool = True) -> None:
         """Abort any active upstream response and clear buffered audio input."""
         if self.upstream_ws is None:
             return
-        await self._send_upstream({"type": "response.cancel"})
-        await self._send_upstream({"type": "input_audio_buffer.clear"})
+        self._upstream_rollover_in_progress = True
+        try:
+            await self._send_upstream({"type": "response.cancel"})
+            await self._send_upstream({"type": "input_audio_buffer.clear"})
+            await self._close_upstream()
+            self._connection_epoch = max(
+                1,
+                self._normalize_connection_epoch(self._connection_epoch) + 1,
+            )
+            if reconnect:
+                await self._connect_upstream()
+        finally:
+            self._upstream_rollover_in_progress = False
 
     def _log_grounding_debug(self, event: str, **fields: Any) -> None:
         if not self._grounding_debug_log:

@@ -840,6 +840,28 @@ class FakeTransport:
             raise self.close_exception
 
 
+class ControlledCreateTransport(FakeTransport):
+    def __init__(self, *, connection: FakeConnection) -> None:
+        super().__init__(connection=connection)
+        self.create_started = asyncio.Event()
+        self.release_create = asyncio.Event()
+        self.create_result = StepFunSendResult(status=StepFunSendStatus.SENT)
+
+    async def send_json(
+        self,
+        _connection: object,
+        payload: dict[str, object],
+    ) -> StepFunSendResult:
+        self.sent.append(payload)
+        if payload.get("type") == "session.update":
+            return StepFunSendResult(status=StepFunSendStatus.SENT)
+        if payload.get("type") == "response.create":
+            self.create_started.set()
+            await self.release_create.wait()
+            return self.create_result
+        return StepFunSendResult(status=StepFunSendStatus.SENT)
+
+
 @pytest.mark.asyncio
 async def test_adapter_should_connect_and_send_one_existing_session_update_payload() -> (
     None
@@ -1047,6 +1069,108 @@ async def test_adapter_cancel_command_clears_response_and_call_correlation() -> 
     assert late.request_id is None
     assert late.response_id is None
     assert late.stream_id is None
+
+
+@pytest.mark.parametrize("send_outcome", ["sent", "failed", "cancelled"])
+@pytest.mark.asyncio
+async def test_adapter_created_before_create_send_result_waits_for_transaction_outcome(
+    send_outcome: str,
+) -> None:
+    connection = FakeConnection(
+        events=(
+            '{"type":"response.created","response":{"id":"response-race"}}',
+        )
+    )
+    transport = ControlledCreateTransport(connection=connection)
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    sending = asyncio.create_task(
+        provider.send(
+            ProviderCommand(
+                kind=ProviderCommandKind.CREATE_RESPONSE,
+                data={
+                    "modalities": ("audio", "text"),
+                    "request_id": 7,
+                    "stream_id": "stream-race",
+                },
+            )
+        )
+    )
+    await transport.create_started.wait()
+    receiving = asyncio.create_task(provider.receive(connection_epoch=3))
+    await asyncio.sleep(0)
+
+    assert receiving.done() is False
+
+    if send_outcome == "cancelled":
+        sending.cancel("cancel-create-send")
+        with pytest.raises(asyncio.CancelledError):
+            await sending
+    else:
+        if send_outcome == "failed":
+            transport.create_result = StepFunSendResult(
+                status=StepFunSendStatus.FAILED,
+                error_type="ConnectionClosed",
+            )
+        transport.release_create.set()
+        result = await sending
+        assert result.accepted is (send_outcome == "sent")
+
+    if send_outcome == "sent":
+        event = await receiving
+        assert event.request_id == 7
+        assert event.response_id == "response-race"
+        assert event.stream_id == "stream-race"
+    else:
+        with pytest.raises(RealtimeProviderError) as captured:
+            await receiving
+        assert captured.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+
+
+@pytest.mark.asyncio
+async def test_adapter_mismatched_created_before_send_result_still_waits_for_transaction() -> (
+    None
+):
+    connection = FakeConnection(
+        events=(
+            '{"type":"response.created","request_id":99,"response":{"id":"response-other"}}',
+        )
+    )
+    transport = ControlledCreateTransport(connection=connection)
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    sending = asyncio.create_task(
+        provider.send(
+            ProviderCommand(
+                kind=ProviderCommandKind.CREATE_RESPONSE,
+                data={
+                    "modalities": ("audio", "text"),
+                    "request_id": 7,
+                    "stream_id": "stream-race",
+                },
+            )
+        )
+    )
+    await transport.create_started.wait()
+    receiving = asyncio.create_task(provider.receive(connection_epoch=3))
+    await asyncio.sleep(0)
+
+    assert receiving.done() is False
+
+    transport.release_create.set()
+    assert (await sending).accepted is True
+    event = await receiving
+    assert event.request_id == 99
+    assert event.response_id == "response-other"
+    assert event.stream_id is None
 
 
 @pytest.mark.parametrize(
@@ -1528,6 +1652,68 @@ class SequencedTransport(FakeTransport):
     async def connect(self, *, api_key: str, url: str, model: str) -> FakeConnection:
         self.connect_calls.append({"api_key": api_key, "url": url, "model": model})
         return self.connections.popleft()
+
+
+@pytest.mark.asyncio
+async def test_adapter_cancel_requires_new_generation_before_next_response_claim() -> None:
+    old_connection = FakeConnection(
+        events=(
+            '{"type":"response.created","response":{"id":"response-old"}}',
+        )
+    )
+    new_connection = FakeConnection(
+        events=(
+            '{"type":"response.created","response":{"id":"response-new"}}',
+        )
+    )
+    transport = SequencedTransport((old_connection, new_connection))
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    old_create = ProviderCommand(
+        kind=ProviderCommandKind.CREATE_RESPONSE,
+        data={
+            "modalities": ("audio", "text"),
+            "request_id": 1,
+            "stream_id": "stream-old",
+        },
+    )
+    new_create = ProviderCommand(
+        kind=ProviderCommandKind.CREATE_RESPONSE,
+        data={
+            "modalities": ("audio", "text"),
+            "request_id": 2,
+            "stream_id": "stream-new",
+        },
+    )
+    assert (await provider.send(old_create)).accepted is True
+    assert (
+        await provider.send(
+            ProviderCommand(
+                kind=ProviderCommandKind.CANCEL_RESPONSE,
+                data={},
+            )
+        )
+    ).accepted is True
+
+    same_generation = await provider.send(new_create)
+    late_old = await provider.receive(connection_epoch=4)
+
+    assert same_generation.accepted is False
+    assert late_old.response_id == "response-old"
+    assert late_old.request_id is None
+    assert late_old.stream_id is None
+
+    await provider.close()
+    await provider.connect(_session_config())
+    assert (await provider.send(new_create)).accepted is True
+    created = await provider.receive(connection_epoch=5)
+    assert created.request_id == 2
+    assert created.response_id == "response-new"
+    assert created.stream_id == "stream-new"
 
 
 class LinearizedConnectTransport(SequencedTransport):

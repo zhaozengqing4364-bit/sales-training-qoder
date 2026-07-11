@@ -7,13 +7,14 @@
 - Review 2 修复 commit：`cff26400 fix(realtime): verify raw differential and tool authority`
 - Review 3 修复 commit：`d9797c88 fix(realtime): close response authority and golden oracle`
 - Review 4 修复 commit：`c060c927 fix(realtime): guard raw events before side effects`
-- Review 5 修复 commit：本提交 `fix(realtime): correlate provider response authority`
+- Review 5 修复 commit：`c9db7f19 fix(realtime): correlate provider response authority`
+- Review 6 修复 commit：本提交 `fix(realtime): serialize provider response correlation`
 - 风险等级：P1（共享 Sales/Presentation realtime 生产 Provider 路径默认切换；保留 server-only
   Legacy 回滚）。
 - 严格只完成 Task 3：未实现 Grounding Module/单 cache（Task 4+），未调用真实收费 Provider，未改
   schema、REST、前端或 readiness。
 - 用户并行修改
-  `docs/superpowers/plans/2026-07-10-readiness-decision-integrity.md` 未读取、未修改、未暂存、未提交。
+  `docs/superpowers/plans/2026-07-10-readiness-decision-integrity.md` 未修改、未暂存、未提交。
 
 ## 本次完成
 
@@ -48,6 +49,21 @@
   Handler 不维护第二份 Port correlation map；既有 `_function_call_authorities` 只消费 Adapter 已补全的业务
   authority。Legacy rollback 仅在真实 raw receive seam 为 created/function item/后续 sparse call 补本地
   authority，直接调用 raw handler 的不可信事件仍 fail closed。
+- Review 6 将 CREATE_RESPONSE authority 提前为 generation-scoped provisional send transaction：transport
+  I/O 前在 lifecycle lock 内登记 authority 与 completion future，I/O 全程不持锁；抢先到达的任意
+  `response.created` 在锁外等待该 send 事务。SENT 后同一临界区原子提交 pending authority 并唤醒 receive；
+  failed、cancelled、stale、close/invalidate 则先解析 future 为失败并清 provisional，receive 只得到安全
+  disconnected error，不再泄漏无 authority created。
+- accepted `response.cancel` 现在设置 generation barrier，同一物理连接拒绝后续 CREATE_RESPONSE。shared
+  handler 的 interruption/cancel 路径保留 cancel + input buffer clear wire 兼容行为，随后强制
+  `close -> connection epoch + 1 -> reconnect`；pause/end 只 close 不 reconnect。旧 generation 即使从未 bind，
+  late old created 也只能无本地 authority 地被丢弃/安全处理；真实 new create 只在新物理连接、新 epoch
+  重新认领。receive loop 对主动 rollover 的 close/error 不再启动第二条自动恢复链。
+- Legacy trusted raw receive seam 将顶层 `response_id` 的 `response.created` 规范化为统一
+  `response.id` 后再做 authority 绑定和 shared preflight；顶层/嵌套冲突 fail closed。无 active response 且
+  KB lock 开启时，顶层变体与嵌套变体保持同一安全 cancel + connection rollover 语义，避免 Provider
+  barrier 生效后连接永久不可创建。版本化 Golden raw fixture 已包含顶层 created，并新增
+  create-before-SENT、cancel/reconnect、late-old/new-epoch 交错用例。
 - `response.done` 不再注册从未见过的 call；合法 tool 必须先经过受信 `conversation.item.created` 绑定。
   done 中未知/stale call 只过滤 tool side effect，当前 response 仍会 flush、持久化、结束 turn 并回到
   listening。
@@ -164,6 +180,24 @@ Review 5 Red/Green：
 4. close 组合 Red：outer cancellation 后 cleanup task 抛普通错误时，普通错误越过首次 cancellation；Green
    后首次 `CancelledError("first-cancel")` 优先传播，本地 socket/timing 状态仍在 finally 复位。
 
+Review 6 Red/Green：
+
+1. 首轮 Review 6 Red 共 `7 failed`：其中 provisional send 的 SENT/failed/cancelled 三种确定性 race 均因
+   created 抢先于 CREATE_RESPONSE transport 结果而立即返回无 authority；其余四项分别来自 cancel barrier、
+   handler rollover、Legacy top-level 与 Golden。Green 后再补 mismatched-created 抢先用例，隔离 Red 为
+   `1 failed`；最终四种 created-before-result 都先等待 completion，SENT 原子补全，failed/cancelled 返回安全
+   connection-closed，mismatched created 也不会越过未决 send transaction。
+2. cancel barrier Red：old create accepted、cancel accepted 后，同连接 new create 仍可成为 pending，late old
+   created 会被错误绑定给 new authority；Green 后 cancel generation 永久拒绝新 create，必须 close/connect
+   后才解除 barrier。单元与 Golden 都覆盖 old 从未 bind、late old 无 authority、真实 new 在新 epoch 正常。
+3. handler rollover Red：既有 clear 只发 cancel/clear，没有物理连接 rollover，connection epoch 保持不变；
+   Green 后 interruption 路径完成 close/reconnect 与 epoch `4 -> 5`，pause/end 完成 close-only，既有
+   cancel/clear wire 顺序不变。
+4. Legacy top-level Red：trusted raw 顶层 `response_id` created 不能绑定 active response，Golden differential
+   也因 raw/canonical 变体语义不一致失败；Green 后统一规范化，active bind 与无 active KB-lock cancel parity
+   均通过。随后将 no-active safety cancel 加固为同一 close/reconnect barrier，两个 Legacy/Port parity 用例
+   隔离 Red `2 failed`、Green `2 passed`，并锁定 epoch rollover。
+
 ## 最终验证
 
 Brief 全量 pytest（14 个 unit/integration 文件）：
@@ -172,16 +206,16 @@ Brief 全量 pytest（14 个 unit/integration 文件）：
 324 passed, 1 warning in 13.74s
 ```
 
-Review 5 的 Task 1/2 Provider 合同 + Task 3 全集（18 个文件）：
+Review 6 的 Task 1/2 Provider 合同 + Task 3 全集（18 个文件）：
 
 ```text
-608 passed, 1 warning in 14.81s
+799 passed, 1 warning in 13.69s
 ```
 
-CodeGraph affected 全集（20 个 contract/e2e/integration/unit 文件）：
+Review 6 CodeGraph affected 全集（21 个 contract/e2e/integration/unit 文件）：
 
 ```text
-797 passed, 1 warning in 43.34s
+850 passed, 1 warning in 43.60s
 ```
 
 Review 5 CodeGraph affected 55 个文件重新收集 `1136 items`，使用 repo 标准
@@ -227,6 +261,15 @@ git diff --check: exit 0
   correlation seam。
 - Review 5 `_close_upstream --depth 3`：23 affected symbols；覆盖 cleanup error × cancellation 组合。
 - Review 5 changed-source affected：55 个 test files / 1136 collected items，exit 0。
+- Review 6 `_begin_response_send --depth 5`：19 affected symbols；覆盖 provisional created races、
+  failed/cancelled/stale send、terminal retirement 与 Golden interleaving。
+- Review 6 `_clear_upstream_generation --depth 5`：42 affected symbols；覆盖 create/interrupt/lifecycle、
+  response follow-up、Sales/Presentation 与 reconnect integration。
+- Review 6 `_correlate_trusted_legacy_raw_event --depth 5`：14 affected symbols；覆盖 raw receive seam、
+  top-level created authority、Golden raw/canonical drivers 与 mutation tests。
+- Review 6 `_handle_upstream_response_created --depth 5`：41 affected symbols；覆盖 no-active KB-lock
+  safety rollover、shared preflight、Sales/Presentation response consumers 与 transcript/tool side-effect tests。
+- Review 6 changed-source affected：21 个 test files / `850 passed`，exit 0。
 - architecture guard 证明未新增未治理 edge；Presentation subtree静态 `training_runtime` import 搜索为空。
 
 ## 假设、兼容性与回滚

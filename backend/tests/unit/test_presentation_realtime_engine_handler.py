@@ -28,6 +28,7 @@ from training_runtime.realtime import (
     GroundingPhase,
     ProviderBackpressureResult,
     ProviderCommand,
+    ProviderCommandKind,
     ProviderEvent,
     ProviderHealthResult,
     ProviderSendResult,
@@ -827,6 +828,112 @@ class GoldenCanonicalProvider:
     async def close(self) -> None:
         self.close_calls += 1
         await self._provider.close()
+
+
+class GoldenInterleavingTransport(GoldenStepFunTransport):
+    def __init__(self) -> None:
+        super().__init__([])
+        self.create_started = asyncio.Event()
+        self.release_create = asyncio.Event()
+        self.block_create = True
+        self.connections: list[GoldenRawUpstream] = []
+
+    async def connect(self, **_kwargs: Any) -> object:
+        self.upstream = GoldenRawUpstream()
+        self.connections.append(self.upstream)
+        return self.upstream
+
+    async def send_json(
+        self,
+        upstream: object,
+        payload: dict[str, Any],
+    ) -> StepFunSendResult:
+        self.events.append(deepcopy(payload))
+        if payload.get("type") == "response.create" and self.block_create:
+            self.create_started.set()
+            await self.release_create.wait()
+            self.block_create = False
+        return StepFunSendResult(status=StepFunSendStatus.SENT)
+
+
+def _golden_provider_config() -> RealtimeProviderSessionConfig:
+    return RealtimeProviderSessionConfig(
+        model="stepaudio-2.5-realtime",
+        voice="qingchunshaonv",
+        temperature=0.4,
+        input_audio_format="pcm16",
+        output_audio_format="pcm16",
+        modalities=("text", "audio"),
+        turn_detection=None,
+        input_transcription_enabled=True,
+        input_transcription_language="zh",
+        input_transcription_model="step-asr",
+        instructions="golden",
+        tools=(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_golden_provider_serializes_create_cancel_and_top_level_created() -> None:
+    transport = GoldenInterleavingTransport()
+    provider = StepFunRealtimeProvider(
+        api_key="golden-key",
+        url="wss://golden.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    old_create = ProviderCommand(
+        kind=ProviderCommandKind.CREATE_RESPONSE,
+        data={
+            "modalities": ("text", "audio"),
+            "request_id": 1,
+            "stream_id": "stream-old",
+        },
+    )
+    new_create = ProviderCommand(
+        kind=ProviderCommandKind.CREATE_RESPONSE,
+        data={
+            "modalities": ("text", "audio"),
+            "request_id": 2,
+            "stream_id": "stream-new",
+        },
+    )
+    await provider.connect(_golden_provider_config())
+    sending = asyncio.create_task(provider.send(old_create))
+    await transport.create_started.wait()
+    await transport.upstream._queue.put(
+        json.dumps({"type": "response.created", "response_id": "response-old"})
+    )
+    receiving = asyncio.create_task(provider.receive(connection_epoch=1))
+    await asyncio.sleep(0)
+    assert receiving.done() is False
+    transport.release_create.set()
+    assert (await sending).accepted is True
+    created_old = await receiving
+    assert created_old.request_id == 1
+    assert created_old.response_id == "response-old"
+
+    assert (
+        await provider.send(
+            ProviderCommand(kind=ProviderCommandKind.CANCEL_RESPONSE, data={})
+        )
+    ).accepted is True
+    assert (await provider.send(new_create)).accepted is False
+    await transport.upstream._queue.put(
+        json.dumps({"type": "response.created", "response_id": "response-old"})
+    )
+    late_old = await provider.receive(connection_epoch=1)
+    assert late_old.request_id is None
+
+    await provider.close()
+    await provider.connect(_golden_provider_config())
+    assert len(transport.connections) == 2
+    assert (await provider.send(new_create)).accepted is True
+    await transport.upstream._queue.put(
+        json.dumps({"type": "response.created", "response_id": "response-new"})
+    )
+    created_new = await provider.receive(connection_epoch=2)
+    assert created_new.request_id == 2
+    assert created_new.response_id == "response-new"
 
 
 def _normalize_golden_value(value: Any) -> Any:

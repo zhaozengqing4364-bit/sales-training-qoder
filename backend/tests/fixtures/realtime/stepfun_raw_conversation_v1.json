@@ -3,7 +3,7 @@
   "provider": "stepfun",
   "batches": {
     "first_response": [
-      {"type": "response.created", "response": {"id": "response-1"}},
+      {"type": "response.created", "response_id": "response-1"},
       {"type": "response.thinking.delta", "response_id": "response-1", "delta": "梳理产品价值"},
       {"type": "response.text.delta", "response_id": "response-1", "delta": "第一轮回应"},
       {"type": "response.audio.delta", "response_id": "response-1", "delta": "Z29sZGVuLWF1ZGlv"},

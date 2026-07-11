@@ -327,6 +327,31 @@ async def test_provider_response_create_injects_local_authority_without_legacy_p
     ]
 
 
+@pytest.mark.asyncio
+async def test_cancelled_generation_rolls_connection_epoch_before_new_create(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+    handler = StepFunRealtimeHandler()
+    handler.upstream_ws = object()
+    handler._connection_epoch = 4
+    handler._send_upstream = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handler._close_upstream = AsyncMock()  # type: ignore[method-assign]
+    handler._connect_upstream = AsyncMock()  # type: ignore[method-assign]
+
+    await handler._clear_upstream_generation()
+
+    handler._send_upstream.assert_has_awaits(
+        [
+            call({"type": "response.cancel"}),
+            call({"type": "input_audio_buffer.clear"}),
+        ]
+    )
+    handler._close_upstream.assert_awaited_once_with()
+    handler._connect_upstream.assert_awaited_once_with()
+    assert handler._connection_epoch == 5
+
+
 def test_provider_port_false_constructs_only_legacy_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1234,6 +1259,56 @@ async def test_response_created_requires_exact_active_request_and_stream_authori
 
 
 @pytest.mark.asyncio
+async def test_trusted_legacy_top_level_created_binds_and_preserves_kb_cancel_parity() -> (
+    None
+):
+    bound = StepFunRealtimeHandler()
+    bound._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-current",
+    )
+    correlated = bound._correlate_trusted_legacy_raw_event(
+        {
+            "type": "response.created",
+            "response_id": "response-top-level",
+        }
+    )
+
+    await bound._handle_upstream_event(correlated)
+
+    assert bound._active_response.response_id == "response-top-level"
+    assert correlated["response"] == {"id": "response-top-level"}
+
+    unexpected = StepFunRealtimeHandler()
+    unexpected.upstream_ws = object()
+    unexpected._connection_epoch = 4
+    unexpected._effective_policy = {
+        "tool_policy": {"require_kb_grounding": True},
+    }
+    unexpected._send_upstream = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    unexpected._close_upstream = AsyncMock()  # type: ignore[method-assign]
+    unexpected._connect_upstream = AsyncMock()  # type: ignore[method-assign]
+    normalized = unexpected._correlate_trusted_legacy_raw_event(
+        {
+            "type": "response.created",
+            "response_id": "response-unexpected",
+        }
+    )
+
+    await unexpected._handle_upstream_event(normalized)
+
+    unexpected._send_upstream.assert_has_awaits(
+        [
+            call({"type": "response.cancel"}),
+            call({"type": "input_audio_buffer.clear"}),
+        ]
+    )
+    unexpected._close_upstream.assert_awaited_once_with()
+    unexpected._connect_upstream.assert_awaited_once_with()
+    assert unexpected._connection_epoch == 5
+
+
+@pytest.mark.asyncio
 async def test_no_active_response_event_matrix_has_narrow_cleanup_and_cancel_paths() -> None:
     sparse_done_handler = StepFunRealtimeHandler()
     sparse_done_handler._connection_epoch = 8
@@ -1255,11 +1330,14 @@ async def test_no_active_response_event_matrix_has_narrow_cleanup_and_cancel_pat
     sparse_done_handler._execute_function_call.assert_not_awaited()
 
     unexpected_created_handler = StepFunRealtimeHandler()
+    unexpected_created_handler.upstream_ws = object()
     unexpected_created_handler._connection_epoch = 8
     unexpected_created_handler._is_kb_lock_required_for_current_policy = MagicMock(
         return_value=True
     )
     unexpected_created_handler._send_upstream = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    unexpected_created_handler._close_upstream = AsyncMock()  # type: ignore[method-assign]
+    unexpected_created_handler._connect_upstream = AsyncMock()  # type: ignore[method-assign]
 
     await unexpected_created_handler._handle_provider_event(
         ProviderEvent(
@@ -1271,9 +1349,15 @@ async def test_no_active_response_event_matrix_has_narrow_cleanup_and_cancel_pat
     )
 
     assert unexpected_created_handler._active_response is None
-    unexpected_created_handler._send_upstream.assert_awaited_once_with(
-        {"type": "response.cancel"}
+    unexpected_created_handler._send_upstream.assert_has_awaits(
+        [
+            call({"type": "response.cancel"}),
+            call({"type": "input_audio_buffer.clear"}),
+        ]
     )
+    unexpected_created_handler._close_upstream.assert_awaited_once_with()
+    unexpected_created_handler._connect_upstream.assert_awaited_once_with()
+    assert unexpected_created_handler._connection_epoch == 9
 
     rejected_handler = StepFunRealtimeHandler()
     rejected_handler._handle_thinking_event = AsyncMock()
@@ -2393,6 +2477,8 @@ async def test_handle_interrupt_clears_turn_runtime_state_before_notifying_clien
     handler.manager.send_json = AsyncMock()
     handler._cancel_pending_response_after_commit = AsyncMock()
     handler._send_upstream = AsyncMock()
+    handler._close_upstream = AsyncMock()
+    handler._connect_upstream = AsyncMock()
     handler._send_status = AsyncMock()
     handler._active_response = RealtimeResponseState(
         request_id=7,
@@ -2433,6 +2519,8 @@ async def test_handle_interrupt_clears_turn_runtime_state_before_notifying_clien
             call({"type": "input_audio_buffer.clear"}),
         ]
     )
+    handler._close_upstream.assert_awaited_once_with()
+    handler._connect_upstream.assert_awaited_once_with()
     handler._send_status.assert_awaited_once_with("listening")
 
 
@@ -2444,6 +2532,7 @@ async def test_sync_lifecycle_transition_clears_turn_runtime_state_when_paused()
     handler.upstream_ws = object()
     handler._cancel_pending_response_after_commit = AsyncMock()
     handler._send_upstream = AsyncMock()
+    handler._close_upstream = AsyncMock()
     handler._active_response = RealtimeResponseState(
         request_id=11,
         stream_id="stream-pause-reset",
@@ -2492,6 +2581,7 @@ async def test_sync_lifecycle_transition_clears_turn_runtime_state_when_paused()
             call({"type": "input_audio_buffer.clear"}),
         ]
     )
+    handler._close_upstream.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio
@@ -3127,6 +3217,8 @@ async def test_create_response_resolves_interruption_without_payload_shape_chang
     handler.upstream_ws = object()
     handler._send_status = AsyncMock()
     handler._send_upstream = AsyncMock()
+    handler._close_upstream = AsyncMock()
+    handler._connect_upstream = AsyncMock()
     handler._turn_coordinator.start_turn("turn-overlap")
     handler._turn_coordinator.on_user_audio_start()
     handler._turn_coordinator.on_model_response_start()
@@ -3141,6 +3233,8 @@ async def test_create_response_resolves_interruption_without_payload_shape_chang
             call({"type": "response.create", "response": {"modalities": ["audio", "text"]}}),
         ]
     )
+    handler._close_upstream.assert_awaited_once_with()
+    handler._connect_upstream.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio
@@ -3926,16 +4020,28 @@ async def test_handle_final_user_transcript_creates_response_after_suppressed_ti
 @pytest.mark.asyncio
 async def test_handle_upstream_response_created_cancels_unexpected_response_when_kb_lock_required():
     handler = StepFunRealtimeHandler()
+    handler.upstream_ws = object()
+    handler._connection_epoch = 2
     handler._effective_policy = {
         "tool_policy": {"require_kb_grounding": True},
     }
     handler._send_upstream = AsyncMock()
+    handler._close_upstream = AsyncMock()
+    handler._connect_upstream = AsyncMock()
 
     await handler._handle_upstream_response_created(
         {"type": "response.created", "response": {"id": "resp-auto-1"}}
     )
 
-    handler._send_upstream.assert_awaited_once_with({"type": "response.cancel"})
+    handler._send_upstream.assert_has_awaits(
+        [
+            call({"type": "response.cancel"}),
+            call({"type": "input_audio_buffer.clear"}),
+        ]
+    )
+    handler._close_upstream.assert_awaited_once_with()
+    handler._connect_upstream.assert_awaited_once_with()
+    assert handler._connection_epoch == 3
 
 
 @pytest.mark.asyncio

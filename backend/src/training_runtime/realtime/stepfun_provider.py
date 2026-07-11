@@ -61,6 +61,12 @@ class _ResponseAuthority:
     response_id: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _ResponseSendTransaction:
+    authority: _ResponseAuthority
+    completion: asyncio.Future[bool]
+
+
 _CORRELATABLE_RESPONSE_EVENT_KINDS = frozenset(
     {
         ProviderEventKind.RESPONSE_CREATED,
@@ -87,6 +93,7 @@ class StepFunRealtimeProvider:
         "_call_authorities",
         "_connection",
         "_connecting",
+        "_create_requires_reconnect",
         "_current_response_id",
         "_lifecycle_generation",
         "_lifecycle_lock",
@@ -94,6 +101,7 @@ class StepFunRealtimeProvider:
         "_pending_generation",
         "_pending_response_authority",
         "_response_authorities",
+        "_response_send_transaction",
         "_sensitive_identifier_fragments",
         "_sensitive_query_values",
         "_transport",
@@ -121,6 +129,7 @@ class StepFunRealtimeProvider:
         self._call_authorities: dict[str, _ResponseAuthority] = {}
         self._connection: object | None = None
         self._connecting = False
+        self._create_requires_reconnect = False
         self._current_response_id: str | None = None
         self._lifecycle_generation = 0
         self._lifecycle_lock = asyncio.Lock()
@@ -128,6 +137,7 @@ class StepFunRealtimeProvider:
         self._pending_generation: int | None = None
         self._pending_response_authority: _ResponseAuthority | None = None
         self._response_authorities: dict[str, _ResponseAuthority] = {}
+        self._response_send_transaction: _ResponseSendTransaction | None = None
         self._sensitive_query_values = _sensitive_query_values(url)
         self._sensitive_identifier_fragments = _sensitive_identifier_fragments(
             api_key,
@@ -235,6 +245,15 @@ class StepFunRealtimeProvider:
             return _disconnected_send_result()
         connection, generation = current
         payload = self._codec.encode_command(command)
+        transaction: _ResponseSendTransaction | None = None
+        if command.kind is ProviderCommandKind.CREATE_RESPONSE:
+            allowed, transaction = await self._begin_response_send(
+                connection,
+                generation,
+                command,
+            )
+            if not allowed:
+                return _disconnected_send_result()
         try:
             result = await self._transport.send_json(connection, payload)
             if result.status is StepFunSendStatus.SENT:
@@ -242,12 +261,17 @@ class StepFunRealtimeProvider:
                     connection,
                     generation,
                     command,
+                    transaction=transaction,
                 ):
                     return ProviderSendResult(accepted=True)
                 return _disconnected_send_result()
         except asyncio.CancelledError as cancellation:
             retirement_task = asyncio.create_task(
-                self._invalidate_current_connection(connection, generation)
+                self._fail_send_and_invalidate(
+                    connection,
+                    generation,
+                    transaction,
+                )
             )
             try:
                 await _wait_task_preserving_cancellation(
@@ -261,6 +285,7 @@ class StepFunRealtimeProvider:
             raise
         except Exception:
             pass
+        await self._fail_response_send(connection, generation, transaction)
         await self._invalidate_current_connection(connection, generation)
         return _disconnected_send_result()
 
@@ -574,27 +599,109 @@ class StepFunRealtimeProvider:
         connection: object,
         generation: int,
         command: ProviderCommand,
+        *,
+        transaction: _ResponseSendTransaction | None,
     ) -> bool:
         async with self._lifecycle_lock:
             if (
                 self._connection is not connection
                 or self._lifecycle_generation != generation
             ):
+                self._resolve_response_send_transaction_locked(
+                    transaction,
+                    accepted=False,
+                )
                 return False
             if command.kind is ProviderCommandKind.CANCEL_RESPONSE:
-                self._clear_correlations_locked()
+                self._clear_correlations_locked(clear_barrier=False)
+                self._create_requires_reconnect = True
                 return True
             if command.kind is not ProviderCommandKind.CREATE_RESPONSE:
                 return True
+            if transaction is None:
+                return True
+            if self._response_send_transaction is not transaction:
+                self._resolve_response_send_transaction_locked(
+                    transaction,
+                    accepted=False,
+                )
+                return False
+            self._response_send_transaction = None
+            self._pending_response_authority = transaction.authority
+            self._resolve_response_send_transaction_locked(
+                transaction,
+                accepted=True,
+            )
+            return True
+
+    async def _begin_response_send(
+        self,
+        connection: object,
+        generation: int,
+        command: ProviderCommand,
+    ) -> tuple[bool, _ResponseSendTransaction | None]:
+        async with self._lifecycle_lock:
+            if (
+                self._connection is not connection
+                or self._lifecycle_generation != generation
+                or self._create_requires_reconnect
+                or self._response_send_transaction is not None
+                or self._pending_response_authority is not None
+                or self._current_response_id is not None
+            ):
+                return False, None
             request_id = command.data.get("request_id")
             stream_id = command.data.get("stream_id")
-            if type(request_id) is int and type(stream_id) is str:
-                self._pending_response_authority = _ResponseAuthority(
+            if type(request_id) is not int or type(stream_id) is not str:
+                return True, None
+            transaction = _ResponseSendTransaction(
+                authority=_ResponseAuthority(
                     generation=generation,
                     request_id=request_id,
                     stream_id=stream_id,
-                )
-            return True
+                ),
+                completion=asyncio.get_running_loop().create_future(),
+            )
+            self._response_send_transaction = transaction
+            return True, transaction
+
+    async def _fail_response_send(
+        self,
+        connection: object,
+        generation: int,
+        transaction: _ResponseSendTransaction | None,
+    ) -> None:
+        if transaction is None:
+            return
+        async with self._lifecycle_lock:
+            if (
+                self._connection is connection
+                and self._lifecycle_generation == generation
+                and self._response_send_transaction is transaction
+            ):
+                self._response_send_transaction = None
+            self._resolve_response_send_transaction_locked(
+                transaction,
+                accepted=False,
+            )
+
+    async def _fail_send_and_invalidate(
+        self,
+        connection: object,
+        generation: int,
+        transaction: _ResponseSendTransaction | None,
+    ) -> None:
+        await self._fail_response_send(connection, generation, transaction)
+        await self._invalidate_current_connection(connection, generation)
+
+    @staticmethod
+    def _resolve_response_send_transaction_locked(
+        transaction: _ResponseSendTransaction | None,
+        *,
+        accepted: bool,
+    ) -> None:
+        if transaction is not None and not transaction.completion.done():
+            transaction.completion.set_result(accepted)
 
     async def _correlate_received_event(
         self,
@@ -602,13 +709,30 @@ class StepFunRealtimeProvider:
         generation: int,
         event: ProviderEvent,
     ) -> ProviderEvent | None:
-        async with self._lifecycle_lock:
-            if (
-                self._connection is not connection
-                or self._lifecycle_generation != generation
-            ):
+        while True:
+            wait_for_send: asyncio.Future[bool] | None = None
+            async with self._lifecycle_lock:
+                if (
+                    self._connection is not connection
+                    or self._lifecycle_generation != generation
+                ):
+                    return None
+                transaction = self._response_send_transaction
+                if (
+                    event.kind is ProviderEventKind.RESPONSE_CREATED
+                    and transaction is not None
+                    and transaction.authority.generation == generation
+                ):
+                    wait_for_send = transaction.completion
+                else:
+                    return self._correlate_event_locked(
+                        event,
+                        generation=generation,
+                    )
+            if wait_for_send is None:
                 return None
-            return self._correlate_event_locked(event, generation=generation)
+            if not await asyncio.shield(wait_for_send):
+                return None
 
     def _correlate_event_locked(
         self,
@@ -758,11 +882,19 @@ class StepFunRealtimeProvider:
             if item != authority
         }
 
-    def _clear_correlations_locked(self) -> None:
+    def _clear_correlations_locked(self, *, clear_barrier: bool = True) -> None:
+        transaction = self._response_send_transaction
+        self._response_send_transaction = None
+        self._resolve_response_send_transaction_locked(
+            transaction,
+            accepted=False,
+        )
         self._pending_response_authority = None
         self._response_authorities.clear()
         self._current_response_id = None
         self._call_authorities.clear()
+        if clear_barrier:
+            self._create_requires_reconnect = False
 
     async def _invalidate_current_connection(
         self,

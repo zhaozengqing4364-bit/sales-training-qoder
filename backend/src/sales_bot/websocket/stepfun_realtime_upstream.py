@@ -1142,7 +1142,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             self._reset_turn_runtime_state()
             if self.upstream_ws is not None:
                 try:
-                    await self._clear_upstream_generation()
+                    await self._clear_upstream_generation(reconnect=False)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
                         "Failed to sync StepFun upstream after REST lifecycle change",
@@ -1176,6 +1176,9 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             except asyncio.CancelledError:
                 raise
             except RealtimeProviderError as error:
+                if self._upstream_rollover_in_progress:
+                    await asyncio.sleep(0)
+                    continue
                 reason_text = error.reason.value
                 ws_lifetime_ms = self._compute_upstream_ws_lifetime_ms()
                 await self._record_upstream_disconnect_diagnostics(
@@ -1203,6 +1206,9 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 )
                 self.running = False
             except ConnectionClosed as e:
+                if self._upstream_rollover_in_progress:
+                    await asyncio.sleep(0)
+                    continue
                 code = getattr(e, "code", None)
                 reason_text = str(getattr(e, "reason", "") or "").strip()
                 ws_lifetime_ms = self._compute_upstream_ws_lifetime_ms()
@@ -1257,6 +1263,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         event: dict[str, Any],
     ) -> dict[str, Any]:
         """Attach local authority only at the authenticated legacy receive seam."""
+        event = self._normalize_legacy_response_created(event)
         event_type = str(event.get("type") or "")
         active = self._active_response
 
@@ -1304,6 +1311,25 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             ),
             stream_id=active.stream_id,
         )
+
+    @staticmethod
+    def _normalize_legacy_response_created(
+        event: dict[str, Any],
+    ) -> dict[str, Any]:
+        if event.get("type") != "response.created":
+            return event
+        response_id = event.get("response_id")
+        if not isinstance(response_id, str) or not response_id.strip():
+            return event
+        response = event.get("response")
+        if isinstance(response, dict) and response.get("id") is not None:
+            return event
+        normalized = dict(event)
+        normalized["response"] = {
+            **(response if isinstance(response, dict) else {}),
+            "id": response_id,
+        }
+        return normalized
 
     @staticmethod
     def _legacy_event_with_authority(
@@ -1513,6 +1539,12 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             if nested_response_id is not None and (
                 not isinstance(nested_response_id, str)
                 or not nested_response_id.strip()
+            ):
+                return False
+            if (
+                response_id is not None
+                and nested_response_id is not None
+                and response_id != nested_response_id
             ):
                 return False
         return True
@@ -2806,7 +2838,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                     "unexpected_upstream_response_created_cancelled",
                     response_id=str(response_id),
                 )
-                await self._send_upstream({"type": "response.cancel"})
+                await self._clear_upstream_generation()
             return
         if self._active_response and response_id:
             self._active_response.response_id = response_id
