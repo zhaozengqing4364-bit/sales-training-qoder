@@ -395,3 +395,38 @@ async def test_evaluation_scenario_registry_is_frozen_extensible_and_fail_closed
     )
     assert unknown.is_success is False
     assert unknown.fallback == "[EVALUATION_SCENARIO_NOT_CONFIGURED]"
+
+
+def test_presentation_realtime_retains_only_named_sales_handler_seam() -> None:
+    from sales_bot.websocket.components.stepfun_event_payloads import (
+        build_heartbeat_event as compatibility_heartbeat,
+    )
+    from sales_bot.websocket.components.stepfun_helpers import (
+        extract_response_text as compatibility_extract_response_text,
+    )
+    from sales_bot.websocket.components.stepfun_message_helpers import (
+        save_stepfun_message as compatibility_save_message,
+    )
+    from training_runtime.realtime.events import build_heartbeat_event
+    from training_runtime.realtime.message_persistence import save_stepfun_message
+    from training_runtime.realtime.text_payloads import extract_response_text
+
+    path = (
+        SRC_ROOT
+        / "presentation_coach"
+        / "websocket"
+        / "presentation_stepfun_realtime_handler.py"
+    )
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    sales_imports = {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module
+        and node.module.startswith("sales_bot")
+    }
+
+    assert sales_imports == {"sales_bot.websocket.stepfun_realtime_handler"}
+    assert compatibility_heartbeat is build_heartbeat_event
+    assert compatibility_extract_response_text is extract_response_text
+    assert compatibility_save_message is save_stepfun_message

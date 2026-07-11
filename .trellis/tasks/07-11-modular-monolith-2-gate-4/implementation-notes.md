@@ -82,3 +82,16 @@
   trigger and Presentation integration matrix is 17 passed; architecture/route/OpenAPI generator
   matrix is 27 passed. Ruff passed, mypy passed for 32 focused source files, and the five Gate 4 reverse
   edges are now all absent.
+- Task 6 Red found three concrete Presentation imports for Sales-owned event, text and message helper
+  modules in addition to the explicitly retained shared-handler seam. `training_runtime.realtime` now
+  owns those scenario-neutral implementations; Sales paths are forwarding compatibility exports and
+  identity tests prove there is one function authority. Presentation retains only the named
+  `StepFunRealtimeSharedHandler` import until Gate 6 removes the compatibility inheritance.
+- Task 6 regression diagnosis: moving the message module exposed an accidental compatibility export,
+  `normalize_score_snapshot`, consumed by the split Sales mixin modules. It is now an explicit named
+  forwarding export rather than an incidental module global. The same import-collection failures passed
+  immediately after that single repair.
+- Task 6 verification: full Engine/Provider/codec/Sales/Presentation/Golden selection is 736 passed;
+  focused persistence/Sales matrix is 219 passed; Presentation ownership/Golden matrix is 80 passed;
+  architecture plus runtime plugin matrix is 45 passed. Ruff passed and mypy passed for 15 focused
+  source files; no wire payload, snapshot, persistence or report writer changed.

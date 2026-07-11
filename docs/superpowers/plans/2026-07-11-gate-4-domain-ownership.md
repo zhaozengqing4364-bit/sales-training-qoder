@@ -355,25 +355,25 @@ architecture guard, Trellis, CodeGraph.
 - Presentation has no direct dependency on Sales message, prompt, Roleplay or report implementation;
   the remaining shared-handler inheritance is named Gate 6 compatibility only.
 
-- [ ] **Step 1: Write ownership and differential Red tests**
+- [x] **Step 1: Write ownership and differential Red tests**
 
   Assert Presentation protected imports are reduced to the explicitly retained Gate 6 handler seam and
   full wire/snapshot/persistence outputs remain equal.
 
-- [ ] **Step 2: Move only scenario-neutral helpers**
+- [x] **Step 2: Move only scenario-neutral helpers**
 
   Preserve function names and payload normalization. Do not move Sales stage, fuzzy detection, realtime
   scoring or objection rules.
 
-- [ ] **Step 3: Inject Roleplay/Evaluation capabilities**
+- [x] **Step 3: Inject Roleplay/Evaluation capabilities**
 
   Both scenarios consume neutral contracts; fake/new scenario composition requires no Sales modification.
 
-- [ ] **Step 4: Run realtime regression and static checks**
+- [x] **Step 4: Run realtime regression and static checks**
 
   Run Golden, reconnect, provider/grounding, report single-writer and architecture tests; run Ruff/mypy.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   Commit as `refactor(realtime): move shared domain capabilities behind ports`.
 

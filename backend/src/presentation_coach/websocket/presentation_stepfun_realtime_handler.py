@@ -36,20 +36,20 @@ from presentation_coach.services.prompt_role_resolver import (
 )
 from presentation_coach.websocket.components import PresentationEventEmitter
 from prompt_templates.service import PromptTemplateService
-from sales_bot.websocket.components.stepfun_event_payloads import build_heartbeat_event
-from sales_bot.websocket.components.stepfun_helpers import (
-    extract_response_text,
-    extract_text_payload,
+from sales_bot.websocket.stepfun_realtime_handler import (
+    TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS,
+    StepFunRealtimeSharedHandler,
 )
-from sales_bot.websocket.components.stepfun_message_helpers import (
+from training_runtime.realtime.events import build_heartbeat_event
+from training_runtime.realtime.message_persistence import (
     extract_analysis_patch_fields,
     normalize_message_persistence_payload,
     patch_existing_message_analysis,
     save_stepfun_message,
 )
-from sales_bot.websocket.stepfun_realtime_handler import (
-    TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS,
-    StepFunRealtimeSharedHandler,
+from training_runtime.realtime.text_payloads import (
+    extract_response_text,
+    extract_text_payload,
 )
 
 logger = get_logger(__name__)

@@ -9,6 +9,12 @@ from sales_bot.websocket.components.stepfun_knowledge_helpers import (
     MAX_KNOWLEDGE_RETRIEVAL_LEDGER_ENTRIES,
     normalize_knowledge_retrieval_ledger_event,
 )
+from training_runtime.realtime.text_payloads import (
+    extract_response_text,
+    extract_text_payload,
+)
+
+__all__ = ["extract_response_text", "extract_text_payload"]
 
 
 def format_stage_name(stage_id: str | None) -> str:
@@ -23,49 +29,6 @@ def format_stage_name(stage_id: str | None) -> str:
     if not isinstance(stage_id, str):
         return ""
     return mapping.get(stage_id, stage_id)
-
-
-def extract_text_payload(data: dict[str, Any]) -> str:
-    """Extract text payload with legacy fallback support."""
-    text = data.get("text")
-    if isinstance(text, str) and text.strip():
-        return text
-
-    legacy_text = data.get("content")
-    if isinstance(legacy_text, str) and legacy_text.strip():
-        return legacy_text
-
-    return ""
-
-
-def extract_response_text(response_done_event: dict[str, Any]) -> str:
-    """Extract assistant text from `response.done` payload."""
-    response = response_done_event.get("response")
-    if not isinstance(response, dict):
-        return ""
-
-    output = response.get("output", [])
-    if not isinstance(output, list):
-        return ""
-
-    text_parts: list[str] = []
-    for item in output:
-        if not isinstance(item, dict):
-            continue
-        if item.get("type") != "message":
-            continue
-        content = item.get("content", [])
-        if not isinstance(content, list):
-            continue
-        for part in content:
-            if not isinstance(part, dict):
-                continue
-            if "text" in part and isinstance(part["text"], str):
-                text_parts.append(part["text"])
-            elif "transcript" in part and isinstance(part["transcript"], str):
-                text_parts.append(part["transcript"])
-
-    return "".join(text_parts).strip()
 
 
 def ensure_knowledge_runtime_metrics(policy: dict[str, Any]) -> dict[str, Any]:

@@ -35,10 +35,12 @@ stable_edges:
   - [evaluation, roleplay]
   - [presentation_coach, common]
   - [presentation_coach, evaluation]
+  - [presentation_coach, training_runtime]
   - [prompt_templates, common]
   - [sales_bot, common]
   - [sales_bot, evaluation]
   - [sales_bot, roleplay]
+  - [sales_bot, training_runtime]
   - [sales_trainer, common]
   - [sales_trainer, prompt_templates]
   - [supervisor, common]
@@ -113,7 +115,6 @@ temporary_edges:
       - prompt_templates
       - sales_trainer
       - support
-      - training_runtime
     owner: realtime-platform
     reason: >-
       Sales realtime still composes provider, roleplay, scoring, and runtime
