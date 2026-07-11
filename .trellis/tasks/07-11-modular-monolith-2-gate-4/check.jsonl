@@ -1,0 +1,14 @@
+{"file":".trellis/spec/backend/index.md","reason":"Review backend non-negotiables and scenario isolation."}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Verify file ownership and composition placement."}
+{"file":".trellis/spec/backend/business-rule-configs.md","reason":"Verify configuration governance lifecycle/fallback/audit parity."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Verify failures do not leak or fabricate successful results."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Verify traceability and redaction."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Run required tests, lint, mypy and coverage gates."}
+{"file":".trellis/spec/backend/architecture-fitness.md","reason":"Verify actual imports, exception retirement and SCC monotonicity."}
+{"file":".trellis/spec/backend/realtime-roleplay-v1.md","reason":"Verify historical Roleplay runtime behavior parity."}
+{"file":".trellis/spec/backend/realtime-session-engine.md","reason":"Verify Evidence, snapshots, reconnect and single-writer invariants."}
+{"file":".trellis/spec/backend/realtime-provider-grounding.md","reason":"Verify Gate 3 Provider/Grounding invariants remain unchanged."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Detect duplicate authorities and compatibility logic."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify end-to-end DTO and transaction flow."}
+{"file":".trellis/spec/guides/design-artifact-audit-guide.md","reason":"Audit artifact truth and downstream assumptions."}
+{"file":".trellis/tasks/07-11-modular-monolith-2-gate-4/research/current-ownership-and-seams.md","reason":"Compare implementation with the CodeGraph-backed baseline and selected approach."}

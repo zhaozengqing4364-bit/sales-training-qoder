@@ -1,0 +1,14 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend non-negotiables and guideline routing."}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Domain package placement, composition root and scenario isolation rules."}
+{"file":".trellis/spec/backend/business-rule-configs.md","reason":"Versioned configuration validation, fallback, audit and rollback contract."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Fail-closed and user-safe Result/error boundary conventions."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Structured diagnostics, trace and sensitive-data rules."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"TDD, static checks, canonical gate and changed-coverage requirements."}
+{"file":".trellis/spec/backend/architecture-fitness.md","reason":"Cross-package edge, SCC and exception lifecycle executable contract."}
+{"file":".trellis/spec/backend/realtime-roleplay-v1.md","reason":"Existing Roleplay runtime semantics that ownership migration must preserve."}
+{"file":".trellis/spec/backend/realtime-session-engine.md","reason":"Gate 2 Engine, Evidence, rollout and Golden differential compatibility."}
+{"file":".trellis/spec/backend/realtime-provider-grounding.md","reason":"Gate 3 authority, diagnostics, cache and provider compatibility constraints."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Search-first rules before extracting shared helpers and constants."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Trace DTO, persistence, transaction and scenario composition data flow."}
+{"file":".trellis/spec/guides/design-artifact-audit-guide.md","reason":"Seven-dimension plan and implementation consistency audit."}
+{"file":".trellis/tasks/07-11-modular-monolith-2-gate-4/research/current-ownership-and-seams.md","reason":"CodeGraph-backed current ownership, reverse-edge and selected seam evidence."}
