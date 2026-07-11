@@ -2000,3 +2000,128 @@ async def test_adapter_initial_send_cleanup_failure_should_block_until_close_ret
     assert len(transport.connect_calls) == 2
     assert reconnect_connection.close_count == 0
     assert "connected=True" in repr(provider)
+
+
+class BacklogDrainTransport(SequencedTransport):
+    def __init__(
+        self,
+        connections: tuple[FakeConnection, ...],
+        *,
+        stale_connection: FakeConnection,
+        fail_current_close: bool,
+    ) -> None:
+        super().__init__(connections)
+        self.stale_connection = stale_connection
+        self.current_connection = connections[0]
+        self.fail_current_close = fail_current_close
+        self.stale_close_started = asyncio.Event()
+        self.release_stale_close = asyncio.Event()
+
+    async def close(self, connection: FakeConnection) -> None:
+        self.close_calls += 1
+        if connection is self.stale_connection:
+            self.stale_close_started.set()
+            await self.release_stale_close.wait()
+        elif connection is self.current_connection and self.fail_current_close:
+            raise Exception("wss://provider.example?token=secret-token raw-body")
+        await connection.close()
+
+
+async def _provider_with_stale_cleanup_and_current_connection(
+    *,
+    fail_current_close: bool,
+) -> tuple[
+    StepFunRealtimeProvider,
+    BacklogDrainTransport,
+    FakeConnection,
+    FakeConnection,
+    FakeConnection,
+]:
+    stale_connection = FakeConnection()
+    current_connection = FakeConnection()
+    reconnect_connection = FakeConnection()
+    transport = BacklogDrainTransport(
+        (current_connection, reconnect_connection),
+        stale_connection=stale_connection,
+        fail_current_close=fail_current_close,
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+    await provider.connect(_session_config())
+    async with provider._lifecycle_lock:
+        cleanup_task = provider._schedule_close_cleanup_locked(stale_connection)
+    assert cleanup_task is not None
+    await transport.stale_close_started.wait()
+    return (
+        provider,
+        transport,
+        stale_connection,
+        current_connection,
+        reconnect_connection,
+    )
+
+
+@pytest.mark.asyncio
+async def test_adapter_public_close_should_drain_connection_joining_active_cleanup() -> (
+    None
+):
+    (
+        provider,
+        transport,
+        stale_connection,
+        current_connection,
+        reconnect_connection,
+    ) = await _provider_with_stale_cleanup_and_current_connection(
+        fail_current_close=False
+    )
+
+    closing = asyncio.create_task(provider.close())
+    await asyncio.sleep(0)
+    assert closing.done() is False
+    transport.release_stale_close.set()
+    await closing
+
+    assert transport.close_calls == 2
+    assert stale_connection.close_count == 1
+    assert current_connection.close_count == 1
+    await provider.connect(_session_config())
+    assert reconnect_connection.close_count == 0
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_public_close_drain_failure_should_remain_retryable() -> None:
+    (
+        provider,
+        transport,
+        stale_connection,
+        current_connection,
+        reconnect_connection,
+    ) = await _provider_with_stale_cleanup_and_current_connection(
+        fail_current_close=True
+    )
+
+    closing = asyncio.create_task(provider.close())
+    await asyncio.sleep(0)
+    transport.release_stale_close.set()
+    with pytest.raises(RealtimeProviderError) as captured:
+        await closing
+
+    assert captured.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert captured.value.__cause__ is None
+    assert "secret-token" not in repr(captured.value)
+    assert transport.close_calls == 2
+    assert stale_connection.close_count == 1
+    assert current_connection.close_count == 0
+    with pytest.raises(RealtimeProviderError):
+        await provider.connect(_session_config())
+
+    transport.fail_current_close = False
+    await provider.close()
+    assert transport.close_calls == 3
+    assert current_connection.close_count == 1
+    await provider.connect(_session_config())
+    assert reconnect_connection.close_count == 0

@@ -259,25 +259,16 @@ class StepFunRealtimeProvider:
 
     async def close(self) -> None:
         async with self._lifecycle_lock:
-            self._lifecycle_generation += 1
-            self._connecting = False
-            connection = self._connection
-            pending_connection = self._pending_connection
-            self._connection = None
-            self._pending_connection = None
-            self._pending_generation = None
-            cleanup_task = self._schedule_close_cleanup_locked(
-                connection,
-                pending_connection,
-            )
-        if cleanup_task is None:
-            return
-        result = await self._await_close_cleanup(cleanup_task)
-        failed_connections, cleanup_base_error = result
-        if cleanup_base_error is not None:
-            raise cleanup_base_error
-        if failed_connections:
-            raise _disconnected_error() from None
+            cleanup_task = self._schedule_public_close_locked()
+        while cleanup_task is not None:
+            result = await self._await_close_cleanup(cleanup_task)
+            failed_connections, cleanup_base_error = result
+            if cleanup_base_error is not None:
+                raise cleanup_base_error
+            if failed_connections:
+                raise _disconnected_error() from None
+            async with self._lifecycle_lock:
+                cleanup_task = self._schedule_public_close_locked()
 
     async def _begin_connect_attempt(self) -> int:
         async with self._lifecycle_lock:
@@ -338,6 +329,21 @@ class StepFunRealtimeProvider:
         elif cleanup_task is not None and owned_connections:
             self._close_retry_connections = owned_connections
         return cleanup_task
+
+    def _schedule_public_close_locked(
+        self,
+    ) -> asyncio.Task[_CloseCleanupResult] | None:
+        self._lifecycle_generation += 1
+        self._connecting = False
+        connection = self._connection
+        pending_connection = self._pending_connection
+        self._connection = None
+        self._pending_connection = None
+        self._pending_generation = None
+        return self._schedule_close_cleanup_locked(
+            connection,
+            pending_connection,
+        )
 
     async def _await_close_cleanup(
         self,
