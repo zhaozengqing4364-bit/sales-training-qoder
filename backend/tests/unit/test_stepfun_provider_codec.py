@@ -1615,3 +1615,96 @@ async def test_adapter_connect_cleanup_base_exception_should_release_reservation
     transport.close_exception = None
     await provider.connect(_session_config())
     assert "connected=True" in repr(provider)
+
+
+class BlockedInitialSessionUpdateTransport(SequencedTransport):
+    def __init__(self, connections: tuple[FakeConnection, ...]) -> None:
+        super().__init__(connections)
+        self.first_connection = connections[0]
+        self.initial_send_started = asyncio.Event()
+        self.release_initial_send = asyncio.Event()
+        self.completed_session_updates: list[FakeConnection] = []
+
+    async def send_json(
+        self,
+        connection: object,
+        payload: dict[str, object],
+    ) -> StepFunSendResult:
+        assert isinstance(connection, FakeConnection)
+        self.sent.append(payload)
+        if (
+            payload.get("type") == "session.update"
+            and connection is self.first_connection
+        ):
+            self.initial_send_started.set()
+            await self.release_initial_send.wait()
+        if payload.get("type") == "session.update":
+            self.completed_session_updates.append(connection)
+        return StepFunSendResult(status=StepFunSendStatus.SENT)
+
+
+@pytest.mark.asyncio
+async def test_adapter_close_should_detach_and_close_blocked_pending_connection() -> (
+    None
+):
+    pending_connection = FakeConnection()
+    current_connection = FakeConnection()
+    transport = BlockedInitialSessionUpdateTransport(
+        (pending_connection, current_connection)
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    stale_connect = asyncio.create_task(provider.connect(_session_config()))
+    await transport.initial_send_started.wait()
+    await provider.close()
+    pending_close_count_at_close_return = pending_connection.close_count
+    await provider.connect(_session_config())
+
+    transport.release_initial_send.set()
+    with pytest.raises(RealtimeProviderError) as captured:
+        await stale_connect
+
+    assert pending_close_count_at_close_return == 1
+    assert pending_connection.close_count == 1
+    assert captured.value.reason is ProviderErrorReason.CONNECTION_CLOSED
+    assert transport.completed_session_updates == [
+        current_connection,
+        pending_connection,
+    ]
+    assert current_connection.close_count == 0
+    assert "connected=True" in repr(provider)
+
+
+@pytest.mark.asyncio
+async def test_adapter_pending_connect_cancellation_after_close_should_not_double_close() -> (
+    None
+):
+    pending_connection = FakeConnection()
+    current_connection = FakeConnection()
+    transport = BlockedInitialSessionUpdateTransport(
+        (pending_connection, current_connection)
+    )
+    provider = StepFunRealtimeProvider(
+        api_key="key",
+        url="wss://provider.example/realtime",
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    stale_connect = asyncio.create_task(provider.connect(_session_config()))
+    await transport.initial_send_started.wait()
+    await provider.close()
+    pending_close_count_at_close_return = pending_connection.close_count
+    await provider.connect(_session_config())
+
+    stale_connect.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await stale_connect
+
+    assert pending_close_count_at_close_return == 1
+    assert pending_connection.close_count == 1
+    assert current_connection.close_count == 0
+    assert "connected=True" in repr(provider)

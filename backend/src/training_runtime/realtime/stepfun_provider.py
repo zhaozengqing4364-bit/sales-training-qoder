@@ -53,6 +53,8 @@ class StepFunRealtimeProvider:
         "_connecting",
         "_lifecycle_generation",
         "_lifecycle_lock",
+        "_pending_connection",
+        "_pending_generation",
         "_transport",
         "_url",
     )
@@ -77,6 +79,8 @@ class StepFunRealtimeProvider:
         self._connecting = False
         self._lifecycle_generation = 0
         self._lifecycle_lock = asyncio.Lock()
+        self._pending_connection: object | None = None
+        self._pending_generation: int | None = None
         self._backpressure_policy = StepFunBackpressurePolicy(
             high_watermark_bytes=STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES
         )
@@ -89,6 +93,7 @@ class StepFunRealtimeProvider:
         validate_provider_capabilities(capabilities=self.capabilities, config=config)
         generation = await self._begin_connect_attempt()
         connection: object | None = None
+        pending_registered = False
         published = False
         try:
             try:
@@ -102,7 +107,11 @@ class StepFunRealtimeProvider:
             except Exception:
                 raise _unavailable_error() from None
 
-            if not await self._connect_attempt_is_current(generation):
+            pending_registered = await self._register_pending_connection(
+                generation,
+                connection,
+            )
+            if not pending_registered:
                 raise _disconnected_error()
 
             payload = build_stepfun_session_update_payload(_session_config(config))
@@ -119,7 +128,14 @@ class StepFunRealtimeProvider:
             cleanup_error: BaseException | None = None
             try:
                 if connection is not None:
-                    await self._transport.close(connection)
+                    should_close = not pending_registered
+                    if pending_registered:
+                        should_close = await self._claim_pending_connection(
+                            generation,
+                            connection,
+                        )
+                    if should_close:
+                        await self._transport.close(connection)
             except Exception:
                 pass
             except BaseException as error:
@@ -237,12 +253,20 @@ class StepFunRealtimeProvider:
             self._lifecycle_generation += 1
             self._connecting = False
             connection = self._connection
+            pending_connection = self._pending_connection
             self._connection = None
-        if connection is None:
+            self._pending_connection = None
+            self._pending_generation = None
+        connections = _unique_connections(connection, pending_connection)
+        if not connections:
             return
-        try:
-            await self._transport.close(connection)
-        except Exception:
+        close_failed = False
+        for owned_connection in connections:
+            try:
+                await self._transport.close(owned_connection)
+            except Exception:
+                close_failed = True
+        if close_failed:
             raise _disconnected_error() from None
 
     async def _begin_connect_attempt(self) -> int:
@@ -257,11 +281,7 @@ class StepFunRealtimeProvider:
             self._connecting = True
             return self._lifecycle_generation
 
-    async def _connect_attempt_is_current(self, generation: int) -> bool:
-        async with self._lifecycle_lock:
-            return self._connecting and self._lifecycle_generation == generation
-
-    async def _publish_connection(
+    async def _register_pending_connection(
         self,
         generation: int,
         connection: object,
@@ -269,6 +289,40 @@ class StepFunRealtimeProvider:
         async with self._lifecycle_lock:
             if not self._connecting or self._lifecycle_generation != generation:
                 return False
+            self._pending_connection = connection
+            self._pending_generation = generation
+            return True
+
+    async def _claim_pending_connection(
+        self,
+        generation: int,
+        connection: object,
+    ) -> bool:
+        async with self._lifecycle_lock:
+            if (
+                self._pending_connection is not connection
+                or self._pending_generation != generation
+            ):
+                return False
+            self._pending_connection = None
+            self._pending_generation = None
+            return True
+
+    async def _publish_connection(
+        self,
+        generation: int,
+        connection: object,
+    ) -> bool:
+        async with self._lifecycle_lock:
+            if (
+                not self._connecting
+                or self._lifecycle_generation != generation
+                or self._pending_connection is not connection
+                or self._pending_generation != generation
+            ):
+                return False
+            self._pending_connection = None
+            self._pending_generation = None
             self._connection = connection
             self._connecting = False
             return True
@@ -415,6 +469,15 @@ def _disconnected_health_result() -> ProviderHealthResult:
         error_category=ProviderErrorCategory.DISCONNECTED,
         error_reason=ProviderErrorReason.CONNECTION_CLOSED,
     )
+
+
+def _unique_connections(*connections: object | None) -> tuple[object, ...]:
+    unique: list[object] = []
+    for connection in connections:
+        if connection is None or any(connection is item for item in unique):
+            continue
+        unique.append(connection)
+    return tuple(unique)
 
 
 async def _close_failed_connection(
