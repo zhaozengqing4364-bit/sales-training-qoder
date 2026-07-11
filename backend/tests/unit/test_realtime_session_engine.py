@@ -274,6 +274,89 @@ def test_should_restore_version_one_payload_with_optional_fields_absent() -> Non
     assert restored == RealtimeSessionState(scenario_type="presentation")
 
 
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"connection": {"healthy": "false"}}, "connection_healthy_must_be_boolean"),
+        (
+            {"connection": {"reconnecting": 0}},
+            "connection_reconnecting_must_be_boolean",
+        ),
+        ({"connection": {"epoch": True}}, "connection_epoch_must_be_integer"),
+        ({"connection": {"epoch": 1.5}}, "connection_epoch_must_be_integer"),
+        ({"turn": {"request_id": True}}, "turn_request_id_must_be_integer"),
+        ({"turn": {"request_id": 2.5}}, "turn_request_id_must_be_integer"),
+        (
+            {
+                "evidence": {
+                    "records": {
+                        "transcript:1:user": {
+                            "evidence_key": "transcript:1:user",
+                            "evidence_type": "transcript",
+                            "turn_number": 1.5,
+                            "payload_digest": "sha256:stable",
+                        }
+                    }
+                }
+            },
+            "evidence_turn_number_must_be_integer",
+        ),
+    ],
+)
+def test_should_reject_scalar_type_coercion_when_restoring_engine_snapshot(
+    payload: dict[str, object],
+    message: str,
+) -> None:
+    snapshot = {
+        "version": ENGINE_STATE_VERSION,
+        "scenario_type": "presentation",
+        **payload,
+    }
+
+    with pytest.raises(ValueError, match=message):
+        RealtimeSessionState.from_dict(snapshot)
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"scenario_type": 123}, "scenario_type_must_be_string"),
+        (
+            {"connection": {"session_id": 123}},
+            "connection_session_id_must_be_string",
+        ),
+        ({"turn": {"response_id": 123}}, "turn_response_id_must_be_string"),
+        (
+            {
+                "evidence": {
+                    "records": {
+                        "transcript:1:user": {
+                            "evidence_key": "transcript:1:user",
+                            "evidence_type": 123,
+                            "turn_number": 1,
+                            "payload_digest": "sha256:stable",
+                        }
+                    }
+                }
+            },
+            "evidence_type_must_be_string",
+        ),
+    ],
+)
+def test_should_reject_string_field_coercion_when_restoring_engine_snapshot(
+    payload: dict[str, object],
+    message: str,
+) -> None:
+    snapshot = {
+        "version": ENGINE_STATE_VERSION,
+        "scenario_type": "presentation",
+        **payload,
+    }
+
+    with pytest.raises(ValueError, match=message):
+        RealtimeSessionState.from_dict(snapshot)
+
+
 def test_should_accept_versioned_grounding_diagnostics_allowlist() -> None:
     diagnostics: dict[str, object] = {
         "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,

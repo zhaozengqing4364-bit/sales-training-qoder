@@ -147,7 +147,11 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
 - Gate 2 adds only `runtime_state.realtime_engine`; all legacy snapshot keys retain their
   meaning. Pre-Gate snapshots without this key are derived into a valid Engine state.
 - Restore accepts only the current Engine version and matching scenario. Restore into a
-  non-pristine Engine fails.
+  non-pristine Engine fails. An existing Engine payload keeps its persisted `scenario_type`
+  through the adapter boundary so a mismatch cannot be normalized away.
+- Snapshot string, boolean, and integer fields use exact JSON scalar types. Restore rejects
+  coercible wrong types, including strings/floats/booleans in integer slots, instead of
+  reinterpreting them as a different state.
 - Engine evidence is record/dedupe metadata only. It does not create a second message, score,
   report, or audit writer.
 - Shared binary input returns an explicit acceptance disposition. It is `True` only after a
@@ -210,6 +214,7 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
 | Selection contains dict/callable/class | Contract failure; keep selection declarative/frozen |
 | Hook scenario differs from Engine scenario | Fail with `scenario_hook_mismatch` |
 | Unsupported Engine version or scenario on restore | Fail closed; do not partially restore |
+| Snapshot scalar field has a coercible wrong type | `ValueError`; do not reinterpret the persisted state |
 | Restore after Engine state has progressed | Fail with `engine_restore_requires_pristine_state` |
 | Connection transition is out of order | `RealtimeStateTransitionError`; state unchanged |
 | Reconnect snapshot epoch is `n` | Restored connection epoch is `n + 1` |

@@ -199,7 +199,6 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
                     "completion_reason": "snapshot_restored",
                 }
 
-        payload["scenario_type"] = "presentation"
         raw_connection = payload.get("connection")
         connection = (
             copy.deepcopy(dict(raw_connection))

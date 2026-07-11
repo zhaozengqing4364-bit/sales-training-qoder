@@ -139,8 +139,12 @@ class GroundingPhase(StrEnum):
     DEGRADED = "degraded"
 
 
-def _require_non_empty(value: str | None, field_name: str) -> None:
-    if value is not None and not value.strip():
+def _require_non_empty(value: object, field_name: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name}_must_be_string")
+    if not value.strip():
         raise ValueError(f"{field_name}_must_be_non_empty")
 
 
@@ -156,6 +160,25 @@ def _validate_engine_state_version(value: object) -> int:
     if value != ENGINE_STATE_VERSION:
         raise ValueError("unsupported_engine_state_version")
     return value
+
+
+def _require_boolean(value: object, field_name: str) -> None:
+    if type(value) is not bool:
+        raise ValueError(f"{field_name}_must_be_boolean")
+
+
+def _require_non_negative_integer(
+    value: object,
+    field_name: str,
+    *,
+    optional: bool = False,
+) -> None:
+    if optional and value is None:
+        return
+    if type(value) is not int:
+        raise ValueError(f"{field_name}_must_be_integer")
+    if value < 0:
+        raise ValueError(f"{field_name}_must_be_non_negative")
 
 
 def _is_finite_number(value: object) -> bool:
@@ -177,8 +200,9 @@ class ConnectionState:
         self.phase = ConnectionPhase(self.phase)
         _require_non_empty(self.session_id, "connection_session_id")
         _require_non_empty(self.reason, "connection_reason")
-        if self.epoch < 0:
-            raise ValueError("connection_epoch_must_be_non_negative")
+        _require_boolean(self.healthy, "connection_healthy")
+        _require_boolean(self.reconnecting, "connection_reconnecting")
+        _require_non_negative_integer(self.epoch, "connection_epoch")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -195,9 +219,9 @@ class ConnectionState:
         return cls(
             phase=ConnectionPhase(payload.get("phase", ConnectionPhase.DISCONNECTED)),
             session_id=payload.get("session_id"),
-            healthy=bool(payload.get("healthy", False)),
-            reconnecting=bool(payload.get("reconnecting", False)),
-            epoch=int(payload.get("epoch", 0)),
+            healthy=payload.get("healthy", False),
+            reconnecting=payload.get("reconnecting", False),
+            epoch=payload.get("epoch", 0),
             reason=payload.get("reason"),
         )
 
@@ -214,8 +238,11 @@ class TurnState:
 
     def __post_init__(self) -> None:
         self.phase = TurnPhase(self.phase)
-        if self.request_id is not None and self.request_id < 0:
-            raise ValueError("turn_request_id_must_be_non_negative")
+        _require_non_negative_integer(
+            self.request_id,
+            "turn_request_id",
+            optional=True,
+        )
         _require_non_empty(self.response_id, "turn_response_id")
         _require_non_empty(self.stream_id, "turn_stream_id")
         _require_non_empty(self.interruption_reason, "turn_interruption_reason")
@@ -238,7 +265,7 @@ class TurnState:
         raw_request_id = payload.get("request_id")
         return cls(
             phase=TurnPhase(payload.get("phase", TurnPhase.IDLE)),
-            request_id=int(raw_request_id) if raw_request_id is not None else None,
+            request_id=raw_request_id,
             response_id=payload.get("response_id"),
             stream_id=payload.get("stream_id"),
             interruption_reason=payload.get("interruption_reason"),
@@ -360,8 +387,7 @@ class EvidenceRecord:
         _require_non_empty(self.evidence_key, "evidence_key")
         _require_non_empty(self.evidence_type, "evidence_type")
         _require_non_empty(self.payload_digest, "evidence_payload_digest")
-        if self.turn_number < 0:
-            raise ValueError("evidence_turn_number_must_be_non_negative")
+        _require_non_negative_integer(self.turn_number, "evidence_turn_number")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -374,10 +400,10 @@ class EvidenceRecord:
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> EvidenceRecord:
         return cls(
-            evidence_key=str(payload.get("evidence_key", "")),
-            evidence_type=str(payload.get("evidence_type", "")),
-            turn_number=int(payload.get("turn_number", 0)),
-            payload_digest=str(payload.get("payload_digest", "")),
+            evidence_key=payload.get("evidence_key", ""),
+            evidence_type=payload.get("evidence_type", ""),
+            turn_number=payload.get("turn_number", 0),
+            payload_digest=payload.get("payload_digest", ""),
         )
 
 
@@ -495,7 +521,7 @@ class RealtimeSessionState:
             payload.get("version", ENGINE_STATE_VERSION)
         )
         return cls(
-            scenario_type=str(payload.get("scenario_type", "")),
+            scenario_type=payload.get("scenario_type", ""),
             version=version,
             connection=ConnectionState.from_dict(
                 _mapping(payload.get("connection", {}), "connection")

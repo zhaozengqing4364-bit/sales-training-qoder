@@ -23,6 +23,7 @@ from training_runtime.realtime import (
     GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
     GroundingPhase,
     RealtimeSessionEngine,
+    RealtimeSessionState,
     TurnPhase,
 )
 from training_runtime.stepfun_transport import (
@@ -234,6 +235,41 @@ async def test_pre_gate_snapshot_derives_engine_state_and_matches_legacy_epoch()
     assert engine.state.connection.session_id == "session-pre-gate"
     assert engine.state.turn.request_id == 7
     assert engine.state.turn.phase is TurnPhase.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_adapter_rejects_mismatched_persisted_engine_scenario() -> None:
+    engine = RealtimeSessionEngine(
+        scenario_type="presentation",
+        hooks=SimpleNamespace(
+            scenario_type="presentation",
+            on_transition=lambda _transition: None,
+        ),
+    )
+    adapter = LegacyPresentationStepFunRealtimeHandler(runtime_engine=engine)
+    adapter._cancel_pending_response_after_commit = AsyncMock()
+    adapter._send_reconnection_success = AsyncMock()
+    mismatched_snapshot = SessionStateSnapshot(
+        session_id="session-scenario-mismatch",
+        scenario="presentation",
+        turn_count=0,
+        session_status="in_progress",
+        ai_state="listening",
+        runtime_state={
+            "reconnect_state": {"connection_epoch": 1},
+            "realtime_engine": RealtimeSessionState(scenario_type="sales").to_dict(),
+        },
+        user_id="user-1",
+    )
+
+    with pytest.raises(ValueError, match="engine_snapshot_scenario_mismatch"):
+        await adapter._restore_session_state(mismatched_snapshot)
+
+    assert (
+        engine.snapshot()
+        == RealtimeSessionState(scenario_type="presentation").to_dict()
+    )
+    adapter._send_reconnection_success.assert_not_awaited()
 
 
 @pytest.mark.asyncio
