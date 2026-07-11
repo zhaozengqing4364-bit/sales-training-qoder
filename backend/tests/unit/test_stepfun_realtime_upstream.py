@@ -12,8 +12,17 @@ from prompt_templates.compiled_contract import (
     build_turn_instruction_hash,
     compose_turn_instruction_text,
 )
-from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstreamMixin
+from sales_bot.websocket.stepfun_realtime_upstream import (
+    StepFunRealtimeUpstreamMixin,
+    _legacy_event_from_provider_event,
+)
 from sales_bot.websocket.stepfun_runtime_types import RealtimeResponseState
+from training_runtime.realtime import (
+    ProviderErrorCategory,
+    ProviderErrorReason,
+    ProviderEvent,
+    ProviderEventKind,
+)
 from training_runtime.stepfun_transport import StepFunSendResult, StepFunSendStatus
 
 
@@ -25,6 +34,82 @@ class FakeTransport:
     async def send_json(self, upstream_ws: Any, payload: dict[str, Any]) -> StepFunSendResult:
         self.calls.append((upstream_ws, payload))
         return self.result
+
+
+@pytest.mark.parametrize(
+    ("event", "expected"),
+    [
+        (
+            ProviderEvent(
+                kind=ProviderEventKind.TRANSCRIPTION_FINAL,
+                provider_event_type=(
+                    "conversation.item.input_audio_transcription.completed"
+                ),
+                connection_epoch=3,
+                event_id="event-3",
+                turn_id="turn-3",
+                duration_ms=250.0,
+                data={"text": "客户语音"},
+            ),
+            {
+                "type": "conversation.item.input_audio_transcription.completed",
+                "event_id": "event-3",
+                "turn_id": "turn-3",
+                "duration_ms": 250.0,
+                "transcript": "客户语音",
+            },
+        ),
+        (
+            ProviderEvent(
+                kind=ProviderEventKind.RESPONSE_AUDIO_DELTA,
+                provider_event_type="response.audio.delta",
+                connection_epoch=3,
+                response_id="response-3",
+                data={"audio": "AAE="},
+            ),
+            {
+                "type": "response.audio.delta",
+                "response_id": "response-3",
+                "delta": "AAE=",
+            },
+        ),
+        (
+            ProviderEvent(
+                kind=ProviderEventKind.THINKING_DELTA,
+                provider_event_type="response.thinking.delta",
+                connection_epoch=3,
+                response_id="response-3",
+                data={"text": "reasoning"},
+            ),
+            {
+                "type": "response.thinking.delta",
+                "response_id": "response-3",
+                "delta": "reasoning",
+            },
+        ),
+        (
+            ProviderEvent(
+                kind=ProviderEventKind.ERROR,
+                provider_event_type="error",
+                connection_epoch=3,
+                error_category=ProviderErrorCategory.UNAVAILABLE,
+                error_reason=ProviderErrorReason.ASR_UNAVAILABLE,
+            ),
+            {
+                "type": "error",
+                "error": {
+                    "code": "asr_unavailable",
+                    "message": "asr_unavailable",
+                },
+            },
+        ),
+    ],
+)
+def test_canonical_provider_event_projects_only_legacy_compatibility_fields(
+    event: ProviderEvent,
+    expected: dict[str, object],
+) -> None:
+    assert _legacy_event_from_provider_event(event) == expected
 
 
 class FakeManager:

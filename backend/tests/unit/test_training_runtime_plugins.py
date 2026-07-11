@@ -319,6 +319,57 @@ def test_presentation_realtime_engine_setting_defaults_true_and_supports_false(
     assert Settings().PRESENTATION_REALTIME_ENGINE_ENABLED is False
 
 
+@pytest.mark.parametrize("value", ["true", " 1 ", "YES", "on"])
+def test_provider_port_setting_accepts_normalized_truthy_values(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", value)
+
+    assert Settings().REALTIME_PROVIDER_PORT_ENABLED is True
+
+
+@pytest.mark.parametrize("value", ["false", " 0 ", "NO", "off"])
+def test_provider_port_setting_accepts_normalized_falsy_values(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", value)
+
+    assert Settings().REALTIME_PROVIDER_PORT_ENABLED is False
+
+
+def test_provider_port_setting_defaults_true_and_unknown_fails_safe_without_raw_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import common.config as config_module
+
+    warnings: list[tuple[str, dict[str, object]]] = []
+
+    class CapturingLogger:
+        def warning(self, event: str, **fields: object) -> None:
+            warnings.append((event, fields))
+
+    monkeypatch.setattr(config_module, "logger", CapturingLogger(), raising=False)
+    monkeypatch.delenv("REALTIME_PROVIDER_PORT_ENABLED", raising=False)
+    assert Settings().REALTIME_PROVIDER_PORT_ENABLED is True
+
+    secret_value = "unexpected-secret-flag-value"
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", secret_value)
+
+    assert Settings().REALTIME_PROVIDER_PORT_ENABLED is False
+    assert warnings == [
+        (
+            "invalid_server_rollout_flag",
+            {
+                "flag_name": "REALTIME_PROVIDER_PORT_ENABLED",
+                "fallback": False,
+            },
+        )
+    ]
+    assert secret_value not in repr(warnings)
+
+
 def test_should_reject_unknown_scenario_type() -> None:
     with pytest.raises(KeyError, match="Unsupported training scenario plugin"):
         get_scenario_plugin("roleplay")

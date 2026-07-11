@@ -82,6 +82,7 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         self,
         *,
         stepfun_transport: Any | None = None,
+        provider_factory: Any | None = None,
         db_session_factory: Any | None = None,
         knowledge_service_factory: Any | None = None,
         runtime_engine: Any | None = None,
@@ -95,6 +96,8 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             super_kwargs["db_session_factory"] = db_session_factory
         if knowledge_service_factory is not None:
             super_kwargs["knowledge_service_factory"] = knowledge_service_factory
+        if provider_factory is not None:
+            super_kwargs["provider_factory"] = provider_factory
         super().__init__(**super_kwargs)
         self._runtime_engine = runtime_engine
         self._accepted_audio_evidence: _AcceptedAudioEvidenceAccumulator | None = None

@@ -139,6 +139,8 @@ class PresentationRealtimeEngineHandler:
             for key in (
                 "session_status",
                 "ai_state",
+                "provider_port_enabled",
+                "selected_provider_path",
                 "current_request_id",
                 "live_session_summary",
                 "claim_truth",

@@ -371,6 +371,8 @@ class StepFunRealtimeFeedbackMixin(StepFunRealtimeStateBase):
         return {
             "session_status": self.session_status,
             "ai_state": self.ai_state,
+            "provider_port_enabled": bool(self._provider_port_enabled),
+            "selected_provider_path": self._selected_provider_path,
             "current_request_id": int(self.current_request_id or 0),
             "live_session_summary": copy.deepcopy(live_session_summary)
             if isinstance(live_session_summary, dict)

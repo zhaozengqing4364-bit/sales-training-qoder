@@ -39,6 +39,19 @@ from sales_bot.websocket.stepfun_tool_execution import (
 )
 from sales_bot.websocket.voice_runtime_profile import VoiceRuntimeProfile
 from training_runtime import StepFunSessionConfig, build_stepfun_session_update_payload
+from training_runtime.realtime import (
+    ProviderBackpressureResult,
+    ProviderCommand,
+    ProviderCommandKind,
+    ProviderEvent,
+    ProviderEventKind,
+    ProviderHealthResult,
+    ProviderSendResult,
+    RealtimeProviderCapabilities,
+    RealtimeProviderError,
+    RealtimeProviderSessionConfig,
+    validate_provider_capabilities,
+)
 from training_runtime.stepfun_transport import (
     StepFunBackpressureResult,
     StepFunBackpressureStatus,
@@ -88,8 +101,308 @@ def test_policy_mixin_must_not_own_stepfun_upstream_connection():
     assert "_connect_upstream" not in StepFunRealtimePolicyMixin.__dict__
 
 
+class RecordingRealtimeProvider:
+    def __init__(self) -> None:
+        self.connect_calls: list[RealtimeProviderSessionConfig] = []
+        self.commands: list[ProviderCommand] = []
+        self.events: asyncio.Queue[ProviderEvent] = asyncio.Queue()
+        self.health_calls: list[float | None] = []
+        self.backpressure_calls: list[tuple[ProviderCommand, int]] = []
+        self.close_calls = 0
+
+    @property
+    def capabilities(self) -> RealtimeProviderCapabilities:
+        return RealtimeProviderCapabilities(supported=frozenset())
+
+    async def connect(self, config: RealtimeProviderSessionConfig) -> None:
+        self.connect_calls.append(config)
+
+    async def send(self, command: ProviderCommand) -> ProviderSendResult:
+        self.commands.append(command)
+        return ProviderSendResult(accepted=True)
+
+    async def receive(self, *, connection_epoch: int) -> ProviderEvent:
+        event = await self.events.get()
+        assert event.connection_epoch == connection_epoch
+        return event
+
+    async def check_health(
+        self,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> ProviderHealthResult:
+        self.health_calls.append(timeout_seconds)
+        return ProviderHealthResult(healthy=True)
+
+    def decide_backpressure(
+        self,
+        command: ProviderCommand,
+        *,
+        pending_bytes: int,
+    ) -> ProviderBackpressureResult:
+        self.backpressure_calls.append((command, pending_bytes))
+        return ProviderBackpressureResult(accepted=True)
+
+    async def close(self) -> None:
+        self.close_calls += 1
+
+
 @pytest.mark.asyncio
-async def test_connect_upstream_delegates_connection_to_shared_stepfun_transport():
+async def test_provider_port_default_selection_is_frozen_and_does_not_shadow_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("REALTIME_PROVIDER_PORT_ENABLED", raising=False)
+    provider = RecordingRealtimeProvider()
+    provider_factory_calls: list[dict[str, object]] = []
+    legacy_transport = SimpleNamespace(
+        connect=AsyncMock(side_effect=AssertionError("legacy transport shadowed")),
+        send_json=AsyncMock(side_effect=AssertionError("legacy transport shadowed")),
+        close=AsyncMock(side_effect=AssertionError("legacy transport shadowed")),
+    )
+
+    def provider_factory(**kwargs: object) -> RecordingRealtimeProvider:
+        provider_factory_calls.append(kwargs)
+        return provider
+
+    handler = StepFunRealtimeHandler(
+        stepfun_transport=legacy_transport,
+        provider_factory=provider_factory,
+    )
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "false")
+    handler._stepfun_api_key = "test-api-key"
+    handler._stepfun_url = "wss://stepfun.example/realtime"
+    handler._effective_policy = {"turn_detection": "server_vad"}
+    handler._build_stepfun_tools_from_policy = MagicMock(return_value=[])
+    handler._enforce_stepfun_tool_guardrails = MagicMock(side_effect=lambda tools: tools)
+    handler._ensure_upstream_keepalive_task = MagicMock()
+    handler._maybe_start_kb_lock_warmup = AsyncMock()
+
+    await handler._connect_upstream()
+    accepted = await handler._send_upstream(
+        {"type": "input_audio_buffer.append", "audio": "AAE="}
+    )
+    await handler._send_upstream_keepalive_ping(handler.upstream_ws)
+    dropped = handler._should_drop_upstream_for_backpressure(
+        {"type": "input_audio_buffer.append", "audio": "AAE="}
+    )
+    await handler._close_upstream()
+    await handler._connect_upstream()
+
+    assert handler._provider_port_enabled is True
+    assert handler._selected_provider_path == "provider_port"
+    assert len(provider_factory_calls) == 1
+    assert provider_factory_calls[0]["api_key"] == "test-api-key"
+    assert provider_factory_calls[0]["url"] == "wss://stepfun.example/realtime"
+    assert provider_factory_calls[0]["transport"] is legacy_transport
+    assert len(provider.connect_calls) == 2
+    assert provider.connect_calls[0].model == handler._active_voice_runtime_profile().model_name
+    assert provider.connect_calls[0].turn_detection == {"type": "server_vad"}
+    assert [command.kind for command in provider.commands] == [
+        ProviderCommandKind.APPEND_AUDIO
+    ]
+    assert accepted is True
+    assert dropped is False
+    assert provider.backpressure_calls[0][0].kind is ProviderCommandKind.APPEND_AUDIO
+    assert provider.health_calls == [handler._upstream_keepalive_pong_timeout_seconds]
+    assert provider.close_calls == 1
+    legacy_transport.connect.assert_not_awaited()
+    legacy_transport.send_json.assert_not_awaited()
+    legacy_transport.close.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_kind"),
+    [
+        (
+            {"type": "input_audio_buffer.append", "audio": "AAE="},
+            ProviderCommandKind.APPEND_AUDIO,
+        ),
+        ({"type": "input_audio_buffer.commit"}, ProviderCommandKind.COMMIT_AUDIO),
+        ({"type": "input_audio_buffer.clear"}, ProviderCommandKind.CLEAR_AUDIO),
+        (
+            {
+                "type": "response.create",
+                "response": {"modalities": ["text", "audio"], "instructions": "go"},
+            },
+            ProviderCommandKind.CREATE_RESPONSE,
+        ),
+        (
+            {"type": "response.cancel", "response_id": "response-1"},
+            ProviderCommandKind.CANCEL_RESPONSE,
+        ),
+        (
+            {
+                "type": "conversation.item.create",
+                "item": {
+                    "id": "item-1",
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "hello"}],
+                },
+            },
+            ProviderCommandKind.CREATE_CONVERSATION_ITEM,
+        ),
+        (
+            {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "function_call_output",
+                    "call_id": "call-1",
+                    "output": '{"count":1}',
+                },
+            },
+            ProviderCommandKind.TOOL_OUTPUT,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_provider_send_facade_constructs_every_canonical_command(
+    monkeypatch: pytest.MonkeyPatch,
+    payload: dict[str, object],
+    expected_kind: ProviderCommandKind,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+    provider = RecordingRealtimeProvider()
+    handler = StepFunRealtimeHandler(provider_factory=lambda **_kwargs: provider)
+    handler._realtime_provider = provider
+    handler.upstream_ws = provider
+
+    assert await handler._send_upstream(payload) is True
+    assert [command.kind for command in provider.commands] == [expected_kind]
+
+
+def test_provider_port_false_constructs_only_legacy_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "false")
+    provider_factory = MagicMock(side_effect=AssertionError("provider shadowed"))
+
+    handler = StepFunRealtimeHandler(provider_factory=provider_factory)
+
+    assert handler._provider_port_enabled is False
+    assert handler._selected_provider_path == "legacy_stepfun_transport"
+    assert handler._realtime_provider is None
+    provider_factory.assert_not_called()
+
+    diagnostics = handler.get_runtime_diagnostics()
+    assert diagnostics["provider_port_enabled"] is False
+    assert diagnostics["selected_provider_path"] == "legacy_stepfun_transport"
+    assert "STEPFUN_API_KEY" not in repr(diagnostics)
+    assert "STEPFUN_REALTIME_URL" not in repr(diagnostics)
+
+
+@pytest.mark.asyncio
+async def test_provider_capability_mismatch_fails_before_any_legacy_socket_connect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+    legacy_transport = SimpleNamespace(connect=AsyncMock())
+
+    class CapabilityRejectingProvider(RecordingRealtimeProvider):
+        async def connect(self, config: RealtimeProviderSessionConfig) -> None:
+            validate_provider_capabilities(capabilities=self.capabilities, config=config)
+
+    handler = StepFunRealtimeHandler(
+        stepfun_transport=legacy_transport,
+        provider_factory=lambda **_kwargs: CapabilityRejectingProvider(),
+    )
+    handler._effective_policy = {"turn_detection": "server_vad"}
+    handler._build_stepfun_tools_from_policy = MagicMock(return_value=[])
+    handler._enforce_stepfun_tool_guardrails = MagicMock(side_effect=lambda tools: tools)
+
+    with pytest.raises(RealtimeProviderError):
+        await handler._connect_upstream()
+
+    legacy_transport.connect.assert_not_awaited()
+    assert handler.upstream_ws is None
+
+
+@pytest.mark.asyncio
+async def test_provider_event_is_consumed_through_canonical_compatibility_facade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+    provider = RecordingRealtimeProvider()
+    handler = StepFunRealtimeHandler(provider_factory=lambda **_kwargs: provider)
+    handler._connection_epoch = 7
+    handler._realtime_provider = provider
+    handler.upstream_ws = provider
+    handler.running = True
+    captured: list[dict[str, object]] = []
+
+    async def capture(event: dict[str, object]) -> None:
+        captured.append(event)
+        handler.running = False
+
+    handler._handle_upstream_event = capture  # type: ignore[method-assign]
+    await provider.events.put(
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_DONE,
+            provider_event_type="response.done",
+            connection_epoch=7,
+            response_id="response-7",
+            data={
+                "function_outputs": (
+                    {
+                        "call_id": "call-7",
+                        "name": "search_internal_knowledge",
+                        "arguments": '{"query":"产品"}',
+                    },
+                )
+            },
+        )
+    )
+
+    await handler._receive_upstream_events()
+
+    assert captured == [
+        {
+            "type": "response.done",
+            "response_id": "response-7",
+            "response": {
+                "id": "response-7",
+                "output": [
+                    {
+                        "type": "function_call",
+                        "call_id": "call-7",
+                        "name": "search_internal_knowledge",
+                        "arguments": '{"query":"产品"}',
+                    }
+                ],
+            },
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_stale_provider_event_epoch_is_ignored_before_legacy_side_effects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
+    handler = StepFunRealtimeHandler(
+        provider_factory=lambda **_kwargs: RecordingRealtimeProvider()
+    )
+    handler._connection_epoch = 8
+    handler._handle_upstream_event = AsyncMock()  # type: ignore[method-assign]
+
+    await handler._handle_provider_event(
+        ProviderEvent(
+            kind=ProviderEventKind.RESPONSE_TEXT_DELTA,
+            provider_event_type="response.text.delta",
+            connection_epoch=7,
+            response_id="response-stale",
+            data={"text": "must-not-cross"},
+        )
+    )
+
+    handler._handle_upstream_event.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connect_upstream_delegates_connection_to_shared_stepfun_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "false")
     upstream_ws = object()
     transport = SimpleNamespace(
         connect=AsyncMock(return_value=upstream_ws),

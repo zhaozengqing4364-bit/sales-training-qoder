@@ -37,6 +37,7 @@ from agent.context import AgentContext
 from agent.models import Agent, Persona
 from common.ai.embedding_service import get_embedding_service
 from common.auth.service import JWTError, resolve_websocket_token, verify_token
+from common.config import Settings
 from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession
 from common.db.session import AsyncSessionLocal
@@ -162,8 +163,16 @@ from training_runtime.stepfun_transport import StepFunBackpressurePolicy
 from training_runtime.stepfun_transport import StepFunBackpressureStatus
 from training_runtime.stepfun_transport import StepFunHealthStatus
 from training_runtime.stepfun_transport import StepFunUpstreamConnectError
+from training_runtime.realtime import (
+    RealtimeProviderError,
+    RealtimeProviderPort,
+    RealtimeProviderSessionConfig,
+)
+from training_runtime.realtime.stepfun_provider import StepFunRealtimeProvider
 
 logger = get_logger(__name__)
+
+RealtimeProviderFactory = Callable[..., RealtimeProviderPort]
 
 PENDING_RESPONSE_FALLBACK_SECONDS = 0.8
 TRANSCRIPTION_WAIT_GRACE_SECONDS = 2.4
@@ -264,6 +273,7 @@ class StepFunRealtimeSharedHandler(
         self,
         *,
         stepfun_transport: StepFunTransport | None = None,
+        provider_factory: RealtimeProviderFactory | None = None,
         db_session_factory: Callable[[], Any] | None = None,
         knowledge_service_factory: Callable[[AsyncSession], Any] | None = None,
         transcript_capture_sink: Callable[[dict[str, Any]], Any] | None = None,
@@ -272,6 +282,14 @@ class StepFunRealtimeSharedHandler(
     ) -> None:
         super().__init__(scenario)
         self.upstream_ws = None
+        self._provider_port_enabled = Settings().REALTIME_PROVIDER_PORT_ENABLED
+        self._selected_provider_path = (
+            "provider_port"
+            if self._provider_port_enabled
+            else "legacy_stepfun_transport"
+        )
+        self._provider_factory = provider_factory or StepFunRealtimeProvider
+        self._realtime_provider: RealtimeProviderPort | None = None
         self._stepfun_transport = stepfun_transport or StepFunTransport(
             local_provider_enabled=should_use_phase4_local_provider,
             local_provider_factory=lambda: Phase4LocalStepFunProvider.from_env(
@@ -744,24 +762,49 @@ class StepFunRealtimeSharedHandler(
         return self._audio_flow.pending_input_audio_bytes()
 
     def _should_drop_upstream_for_backpressure(self, payload: dict[str, Any]) -> bool:
-        result = self._stepfun_transport.decide_backpressure(
+        if self._using_provider_port():
+            provider = self._realtime_provider
+            if provider is None:
+                return True
+            command = self._provider_command_from_legacy_payload(payload)
+            provider_result = provider.decide_backpressure(
+                command,
+                pending_bytes=self._current_audio_backpressure_pending_bytes(),
+            )
+            return not provider_result.accepted
+        transport_result = self._stepfun_transport.decide_backpressure(
             payload,
             pending_bytes=self._current_audio_backpressure_pending_bytes(),
             policy=StepFunBackpressurePolicy(
                 high_watermark_bytes=DEFAULT_AUDIO_BACKPRESSURE_HIGH_WATERMARK_BYTES,
             ),
         )
-        return result.status == StepFunBackpressureStatus.DROP
+        return transport_result.status == StepFunBackpressureStatus.DROP
 
     async def _send_upstream_keepalive_ping(self, upstream_ws: Any) -> None:
-        result = await self._stepfun_transport.check_health(
+        if self._using_provider_port():
+            provider = self._realtime_provider
+            if provider is None:
+                raise RuntimeError("realtime_provider_not_constructed")
+            provider_result = await provider.check_health(
+                timeout_seconds=self._upstream_keepalive_pong_timeout_seconds,
+            )
+            if provider_result.healthy:
+                self._mark_upstream_activity()
+                return
+            raise RuntimeError(
+                provider_result.error_reason.value
+                if provider_result.error_reason is not None
+                else "unhealthy"
+            )
+        transport_result = await self._stepfun_transport.check_health(
             upstream_ws,
             timeout_seconds=self._upstream_keepalive_pong_timeout_seconds,
         )
-        if result.status == StepFunHealthStatus.HEALTHY:
+        if transport_result.status == StepFunHealthStatus.HEALTHY:
             self._mark_upstream_activity()
             return
-        raise RuntimeError(result.error_type or "unhealthy")
+        raise RuntimeError(transport_result.error_type or "unhealthy")
 
     def _create_state_snapshot(self) -> SessionStateSnapshot:
         """Persist only reconnect-safe runtime fields for StepFun sales sessions."""
@@ -1044,6 +1087,19 @@ class StepFunRealtimeSharedHandler(
             logger.info(f"StepFun WS disconnected: session={session_id}")
         except asyncio.CancelledError:
             logger.info(f"StepFun WS cancelled: session={session_id}")
+        except RealtimeProviderError as exc:
+            self._record_disconnect_reason("stepfun_upstream_rejected")
+            logger.error(
+                "realtime_provider_connect_rejected",
+                session_id=session_id,
+                error_category=exc.category.value,
+                error_reason=exc.reason.value,
+                retryable=exc.retryable,
+            )
+            await self._send_error(
+                "[STEPFUN_UPSTREAM_REJECTED]",
+                self._provider_error_user_message(exc),
+            )
         except StepFunUpstreamConnectError as exc:
             self._record_disconnect_reason("stepfun_upstream_rejected")
             logger.error(
@@ -1126,6 +1182,40 @@ class StepFunRealtimeSharedHandler(
         """Connect to StepFun realtime WebSocket and initialize session."""
         profile = self._active_voice_runtime_profile()
         logger.info(f"Connecting StepFun realtime: model={profile.model_name}")
+        if self._provider_port_enabled:
+            provider = self._get_or_create_realtime_provider()
+            transport_config = self._build_stepfun_session_config()
+            await provider.connect(
+                RealtimeProviderSessionConfig(
+                    model=profile.model_name,
+                    voice=transport_config.voice,
+                    temperature=transport_config.temperature,
+                    input_audio_format=transport_config.input_audio_format,
+                    output_audio_format=transport_config.output_audio_format,
+                    modalities=transport_config.modalities,
+                    turn_detection=transport_config.turn_detection,
+                    input_transcription_enabled=(
+                        transport_config.input_transcription_enabled
+                    ),
+                    input_transcription_language=(
+                        transport_config.input_transcription_language
+                    ),
+                    input_transcription_model=(
+                        transport_config.input_transcription_model
+                    ),
+                    instructions=transport_config.instructions,
+                    tools=tuple(transport_config.tools),
+                )
+            )
+            self.upstream_ws = provider
+            now = asyncio.get_running_loop().time()
+            self._upstream_connected_at = now
+            self._upstream_last_activity_at = now
+            self._last_upstream_event_type = ""
+            self._ensure_upstream_keepalive_task()
+            logger.info("Realtime Provider session configured")
+            await self._maybe_start_kb_lock_warmup()
+            return
         self.upstream_ws = await self._stepfun_transport.connect(
             api_key=self._stepfun_api_key,
             url=self._stepfun_url,
@@ -1200,10 +1290,47 @@ class StepFunRealtimeSharedHandler(
     async def _close_upstream(self) -> None:
         """Close upstream connection safely."""
         await self._stop_upstream_keepalive_task()
-        await self._stepfun_transport.close(self.upstream_ws)
+        if self._using_provider_port():
+            provider = self._realtime_provider
+            if provider is not None:
+                await provider.close()
+        else:
+            await self._stepfun_transport.close(self.upstream_ws)
         self.upstream_ws = None
         self._upstream_connected_at = 0.0
         self._upstream_last_activity_at = 0.0
+
+    def _using_provider_port(self) -> bool:
+        return (
+            self._provider_port_enabled
+            and self._realtime_provider is not None
+            and self.upstream_ws is self._realtime_provider
+        )
+
+    def _get_or_create_realtime_provider(self) -> RealtimeProviderPort:
+        if self._realtime_provider is None:
+            self._realtime_provider = self._provider_factory(
+                api_key=self._stepfun_api_key,
+                url=self._stepfun_url,
+                transport=self._stepfun_transport,
+            )
+        return self._realtime_provider
+
+    @staticmethod
+    def _provider_error_user_message(error: RealtimeProviderError) -> str:
+        messages = {
+            "invalid_credentials": (
+                "StepFun API 密钥无效或未授权（HTTP 401），"
+                "请检查 backend/.env 中的 STEPFUN_API_KEY。"
+            ),
+            "quota_exhausted": (
+                "StepFun 账户余额不足或需充值（HTTP 402），"
+                "请到 StepFun 控制台核对计费与额度。"
+            ),
+            "forbidden": "StepFun API 访问被拒绝（HTTP 403）。",
+            "rate_limited": "StepFun 请求过于频繁（HTTP 429），请稍后再试。",
+        }
+        return messages.get(error.reason.value, "StepFun 实时语音上游拒绝连接。")
 
     async def _maybe_start_kb_lock_warmup(self) -> None:
         if not self._kb_lock_warmup_enabled:

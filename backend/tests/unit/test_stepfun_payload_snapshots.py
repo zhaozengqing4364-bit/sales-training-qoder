@@ -69,7 +69,11 @@ if "chromadb" not in sys.modules:
 
 import sales_bot.websocket.stepfun_realtime_handler as stepfun_handler_module
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
-from training_runtime.stepfun_transport import StepFunTransport
+from training_runtime.stepfun_transport import (
+    StepFunSendResult,
+    StepFunSendStatus,
+    StepFunTransport,
+)
 
 
 class CaptureManager:
@@ -222,11 +226,18 @@ async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only
         raising=False,
     )
 
+    async def capture_send(
+        _transport: StepFunTransport,
+        _upstream: object,
+        payload: dict,
+    ) -> StepFunSendResult:
+        sent_upstream.append(copy.deepcopy(payload))
+        return StepFunSendResult(status=StepFunSendStatus.SENT)
+
+    monkeypatch.setattr(StepFunTransport, "send_json", capture_send)
+
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-stepfun-snapshot"
-    handler._send_upstream = AsyncMock(
-        side_effect=lambda payload: sent_upstream.append(copy.deepcopy(payload))
-    )
     handler._ensure_upstream_keepalive_task = MagicMock()
     handler._maybe_start_kb_lock_warmup = AsyncMock()
 
@@ -450,11 +461,18 @@ async def test_stepfun_session_update_injects_curriculum_dossier_from_frozen_ref
         AsyncMock(return_value=object()),
         raising=False,
     )
+
+    async def capture_send(
+        _transport: StepFunTransport,
+        _upstream: object,
+        payload: dict,
+    ) -> StepFunSendResult:
+        sent_upstream.append(copy.deepcopy(payload))
+        return StepFunSendResult(status=StepFunSendStatus.SENT)
+
+    monkeypatch.setattr(StepFunTransport, "send_json", capture_send)
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-stepfun-dossier"
-    handler._send_upstream = AsyncMock(
-        side_effect=lambda payload: sent_upstream.append(copy.deepcopy(payload))
-    )
     handler._ensure_upstream_keepalive_task = MagicMock()
     handler._maybe_start_kb_lock_warmup = AsyncMock()
 

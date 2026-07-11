@@ -8,8 +8,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from common.monitoring.logger import get_logger
+
 load_dotenv()
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
+
+logger = get_logger(__name__)
 
 DEFAULT_LLM_PROVIDER = "openai"
 DEFAULT_LLM_BASE_URL = "https://api.deepseek.com/v1"
@@ -40,6 +44,25 @@ def _env_bool(name: str, default: bool) -> bool:
     return os.getenv(name, fallback).lower() == "true"
 
 
+def _env_server_rollout_bool(name: str, default: bool) -> bool:
+    """Read a normalized server rollout flag with an explicit safe fallback."""
+
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    logger.warning(
+        "invalid_server_rollout_flag",
+        flag_name=name,
+        fallback=False,
+    )
+    return False
+
+
 class Settings:
     """Application settings"""
 
@@ -50,6 +73,10 @@ class Settings:
         )
         self.PRESENTATION_REALTIME_ENGINE_ENABLED = _env_bool(
             "PRESENTATION_REALTIME_ENGINE_ENABLED",
+            True,
+        )
+        self.REALTIME_PROVIDER_PORT_ENABLED = _env_server_rollout_bool(
+            "REALTIME_PROVIDER_PORT_ENABLED",
             True,
         )
         self.SITUATION_PACK_DUAL_READ = _env_bool(

@@ -19,7 +19,14 @@
 
 ## Deviations
 
-- None.
+- Task 3 freezes Provider selection during shared-handler construction, but creates the selected
+  Provider object lazily at the first upstream connect. This preserves the existing behavior that
+  a handler can be constructed before `STEPFUN_API_KEY` admission reports a user-safe missing-key
+  error; the factory is still invoked at most once and reconnect reuses the same Provider object.
+- Task 3 also touches the shared diagnostics producer and Presentation façade allowlist so the
+  required sanitized `provider_port_enabled` / `selected_provider_path` selection is observable.
+  These two mechanical files were not listed in the brief's initial file inventory but are the
+  existing single diagnostics path; no second diagnostics writer was added.
 
 ## Evidence
 

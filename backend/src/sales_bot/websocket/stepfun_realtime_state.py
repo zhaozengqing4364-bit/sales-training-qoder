@@ -24,6 +24,10 @@ if TYPE_CHECKING:
         FunctionCallState,
         RealtimeResponseState,
     )
+    from training_runtime.realtime import (
+        ProviderCommand,
+        RealtimeProviderPort,
+    )
 
 
 class StepFunRealtimeStateBase(BaseWebSocketHandler):
@@ -33,6 +37,9 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
     BINARY_AUDIO_INTERRUPT = 0x02
 
     upstream_ws: Any | None
+    _provider_port_enabled: bool
+    _selected_provider_path: str
+    _realtime_provider: RealtimeProviderPort | None
     _upstream_task: asyncio.Task[Any] | None
     _effective_policy: dict[str, Any]
     _roleplay_disclosure_state: dict[str, Any]
@@ -152,6 +159,17 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
     _transcript_normalization_service: TranscriptNormalizationService
     _unavailable_voice_ids: set[str]
     _selected_stepfun_voice: str | None
+
+    def _using_provider_port(self) -> bool:
+        """Return whether the selected Port currently owns the upstream session."""
+        return False
+
+    @staticmethod
+    def _provider_command_from_legacy_payload(
+        payload: dict[str, Any],
+    ) -> ProviderCommand:
+        """Translate the compatibility send façade into one canonical command."""
+        raise NotImplementedError
 
     @abstractmethod
     async def _create_response(self, *, count_turn: bool = False) -> bool:

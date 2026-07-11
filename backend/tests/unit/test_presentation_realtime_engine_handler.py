@@ -52,6 +52,8 @@ class FakeRuntimeAdapter:
         return {
             "session_status": self.session_status,
             "ai_state": self.ai_state,
+            "provider_port_enabled": True,
+            "selected_provider_path": "provider_port",
             "current_request_id": 3,
             "live_session_summary": {
                 "focus_type": "objection_handling_gap",
@@ -98,6 +100,70 @@ def test_facade_composes_one_adapter_without_sales_handler_inheritance() -> None
     assert handler.runtime_adapter.runtime_engine is handler.engine
     assert handler.engine.state.scenario_type == "presentation"
     assert "__getattr__" not in type(handler).__dict__
+
+
+@pytest.mark.parametrize("engine_enabled", [True, False])
+@pytest.mark.parametrize("provider_enabled", [True, False])
+def test_presentation_engine_and_provider_rollouts_select_exactly_one_2x2_path(
+    monkeypatch: pytest.MonkeyPatch,
+    engine_enabled: bool,
+    provider_enabled: bool,
+) -> None:
+    from presentation_coach.websocket.presentation_realtime_engine_handler import (
+        PresentationRealtimeEngineHandler,
+    )
+
+    monkeypatch.setenv(
+        "REALTIME_PROVIDER_PORT_ENABLED",
+        "true" if provider_enabled else "false",
+    )
+    descriptor = TrainingRuntimeDescriptor(
+        session_id="presentation-provider-matrix",
+        scenario_type="presentation",
+        voice_mode="stepfun_realtime",
+    )
+    selection = PresentationScenarioPlugin(
+        rollout_resolver=lambda: engine_enabled
+    ).select_runtime_handler(descriptor)
+    provider_instances: list[object] = []
+
+    def provider_factory(**_kwargs: object) -> object:
+        provider = object()
+        provider_instances.append(provider)
+        return provider
+
+    if engine_enabled:
+        runtime = PresentationRealtimeEngineHandler(
+            runtime_engine_factory=RealtimeSessionEngine,
+            runtime_adapter_factory=lambda *, runtime_engine: (
+                LegacyPresentationStepFunRealtimeHandler(
+                    runtime_engine=runtime_engine,
+                    provider_factory=provider_factory,
+                )
+            ),
+        )
+        adapter = runtime.runtime_adapter
+        assert selection.handler_factory_name == "PresentationRealtimeEngineHandler"
+    else:
+        adapter = LegacyPresentationStepFunRealtimeHandler(
+            provider_factory=provider_factory,
+        )
+        assert (
+            selection.handler_factory_name
+            == "LegacyPresentationStepFunRealtimeHandler"
+        )
+
+    assert adapter._provider_port_enabled is provider_enabled
+    assert adapter._selected_provider_path == (
+        "provider_port" if provider_enabled else "legacy_stepfun_transport"
+    )
+    if provider_enabled:
+        assert adapter._get_or_create_realtime_provider() is provider_instances[0]
+        assert adapter._get_or_create_realtime_provider() is provider_instances[0]
+        assert len(provider_instances) == 1
+    else:
+        assert adapter._realtime_provider is None
+        assert provider_instances == []
 
 
 @pytest.mark.asyncio
@@ -157,6 +223,8 @@ def test_facade_runtime_diagnostics_are_versioned_and_sanitized() -> None:
     assert diagnostics["rollout_enabled"] is True
     assert diagnostics["rollback_runtime"] == "legacy_presentation_stepfun"
     assert diagnostics["engine_state_version"] == 1
+    assert diagnostics["provider_port_enabled"] is True
+    assert diagnostics["selected_provider_path"] == "provider_port"
     assert diagnostics["engine_state"]["scenario_type"] == "presentation"
     assert diagnostics["live_session_summary"] == {
         "focus_type": "objection_handling_gap",
@@ -176,6 +244,8 @@ def test_facade_runtime_diagnostics_are_versioned_and_sanitized() -> None:
     assert diagnostics["adapter"] == {
         "session_status": "preparing",
         "ai_state": "idle",
+        "provider_port_enabled": True,
+        "selected_provider_path": "provider_port",
         "current_request_id": 3,
         "live_session_summary": {
             "focus_type": "objection_handling_gap",
@@ -920,7 +990,9 @@ def _assert_golden_engine_terminal_state(result: dict[str, Any]) -> None:
 
 
 @pytest.mark.asyncio
-async def test_golden_differential_preserves_external_single_writer_contract() -> None:
+async def test_golden_differential_preserves_external_single_writer_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     fixture_path = (
         Path(__file__).parents[1]
         / "fixtures/realtime/golden_conversation_contract_v1.json"
@@ -944,7 +1016,9 @@ async def test_golden_differential_preserves_external_single_writer_contract() -
         PresentationRealtimeEngineHandler,
     )
 
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "false")
     legacy = LegacyPresentationStepFunRealtimeHandler()
+    monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "true")
     facade = PresentationRealtimeEngineHandler(
         runtime_engine_factory=RealtimeSessionEngine,
     )
@@ -953,7 +1027,9 @@ async def test_golden_differential_preserves_external_single_writer_contract() -
     assert isinstance(engine_adapter, LegacyPresentationStepFunRealtimeHandler)
 
     def legacy_reconnect_factory() -> tuple[Any, Any]:
-        adapter = LegacyPresentationStepFunRealtimeHandler()
+        with monkeypatch.context() as scoped:
+            scoped.setenv("REALTIME_PROVIDER_PORT_ENABLED", "false")
+            adapter = LegacyPresentationStepFunRealtimeHandler()
         return adapter, adapter
 
     def engine_reconnect_factory() -> tuple[Any, Any]:

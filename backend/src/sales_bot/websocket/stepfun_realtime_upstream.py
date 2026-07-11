@@ -191,6 +191,16 @@ from sales_bot.websocket.stepfun_runtime_types import (
 )
 from sales_bot.websocket.stepfun_tool_execution import ToolExecutionContext
 from training_runtime.stepfun_transport import StepFunSendStatus
+from training_runtime.realtime import (
+    FrozenJsonMapping,
+    JsonValue,
+    ProviderCommand,
+    ProviderCommandKind,
+    ProviderErrorReason,
+    ProviderEvent,
+    ProviderEventKind,
+    RealtimeProviderError,
+)
 
 logger = get_logger(__name__)
 ROLEPLAY_INSTRUCTION_HASH_METRICS_KEY = "roleplay_instruction_hash"
@@ -204,6 +214,12 @@ def _handler_symbol(name: str, fallback: Any) -> Any:
 
 
 class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
+    @staticmethod
+    def _provider_command_from_legacy_payload(
+        payload: dict[str, Any],
+    ) -> ProviderCommand:
+        return _provider_command_from_legacy_payload(payload)
+
     async def _after_input_audio_committed_before_response(self) -> None:
         """Allow scenario adapters to finalize locally committed audio metadata."""
 
@@ -1082,12 +1098,49 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 await asyncio.sleep(0.05)
                 continue
             try:
+                if self._using_provider_port():
+                    provider = self._realtime_provider
+                    if provider is None:
+                        raise RuntimeError("realtime_provider_not_constructed")
+                    provider_event = await provider.receive(
+                        connection_epoch=self._connection_epoch
+                    )
+                    self._mark_upstream_activity()
+                    await self._handle_provider_event(provider_event)
+                    continue
                 raw = await self.upstream_ws.recv()
                 self._mark_upstream_activity()
                 event = json.loads(raw)
                 await self._handle_upstream_event(event)
             except asyncio.CancelledError:
                 raise
+            except RealtimeProviderError as error:
+                reason_text = error.reason.value
+                ws_lifetime_ms = self._compute_upstream_ws_lifetime_ms()
+                await self._record_upstream_disconnect_diagnostics(
+                    close_code=None,
+                    close_reason=reason_text,
+                )
+                recovered = await self._recover_upstream_after_disconnect(
+                    close_code=None,
+                    close_reason=reason_text,
+                    ws_lifetime_ms=ws_lifetime_ms,
+                )
+                logger.info(
+                    "realtime_provider_receive_closed",
+                    session_id=self.session_id,
+                    error_category=error.category.value,
+                    error_reason=error.reason.value,
+                    ws_lifetime_ms=ws_lifetime_ms,
+                    recovered=recovered,
+                )
+                if recovered:
+                    continue
+                await self._send_error(
+                    "[STEPFUN_UPSTREAM_CLOSED]",
+                    _provider_error_delivery_message(error.reason),
+                )
+                self.running = False
             except ConnectionClosed as e:
                 code = getattr(e, "code", None)
                 reason_text = str(getattr(e, "reason", "") or "").strip()
@@ -1137,6 +1190,18 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                     "[STEPFUN_UPSTREAM_ERROR]", "Realtime 上游连接异常"
                 )
                 self.running = False
+
+    async def _handle_provider_event(self, event: ProviderEvent) -> None:
+        """Project one canonical Provider event into the legacy delivery adapter."""
+
+        if event.connection_epoch != self._connection_epoch:
+            logger.warning(
+                "stale_realtime_provider_event_ignored",
+                session_id=self.session_id,
+                current_connection_epoch=self._connection_epoch,
+            )
+            return
+        await self._handle_upstream_event(_legacy_event_from_provider_event(event))
 
     async def _handle_upstream_event(self, event: dict[str, Any]) -> None:
         """Map selected StepFun events to existing frontend contract."""
@@ -2787,6 +2852,31 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         if self.upstream_ws is None:
             return False
         event_type = str(payload.get("type") or "")
+        if self._using_provider_port():
+            provider = self._realtime_provider
+            if provider is None:
+                return False
+            command = self._provider_command_from_legacy_payload(payload)
+            result = await provider.send(command)
+            if result.accepted:
+                self._mark_upstream_activity()
+                return True
+            logger.error(
+                "realtime_provider_send_rejected",
+                session_id=self.session_id,
+                command_kind=command.kind.value,
+                error_category=(
+                    result.error_category.value
+                    if result.error_category is not None
+                    else None
+                ),
+                error_reason=(
+                    result.error_reason.value
+                    if result.error_reason is not None
+                    else None
+                ),
+            )
+            return False
         result = await self._stepfun_transport.send_json(self.upstream_ws, payload)
         if result.status == StepFunSendStatus.SENT:
             self._mark_upstream_activity()
@@ -2802,3 +2892,166 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 f"StepFun session.update failed ({result.error_type or 'unknown'})"
             )
         return False
+
+
+def _provider_command_from_legacy_payload(payload: dict[str, Any]) -> ProviderCommand:
+    event_type = payload.get("type")
+    if event_type == "input_audio_buffer.append":
+        return ProviderCommand(
+            kind=ProviderCommandKind.APPEND_AUDIO,
+            data={"audio": payload.get("audio")},
+        )
+    if event_type == "input_audio_buffer.commit":
+        return ProviderCommand(kind=ProviderCommandKind.COMMIT_AUDIO, data={})
+    if event_type == "input_audio_buffer.clear":
+        return ProviderCommand(kind=ProviderCommandKind.CLEAR_AUDIO, data={})
+    if event_type == "response.create":
+        response = payload.get("response")
+        if not isinstance(response, dict):
+            response = {}
+        data: dict[str, Any] = {
+            "modalities": response.get("modalities", ["text", "audio"]),
+        }
+        if "instructions" in response:
+            data["instructions"] = response["instructions"]
+        return ProviderCommand(kind=ProviderCommandKind.CREATE_RESPONSE, data=data)
+    if event_type == "response.cancel":
+        data = {}
+        if "response_id" in payload:
+            data["response_id"] = payload["response_id"]
+        return ProviderCommand(kind=ProviderCommandKind.CANCEL_RESPONSE, data=data)
+    if event_type == "conversation.item.create":
+        item = payload.get("item")
+        if not isinstance(item, dict):
+            item = {}
+        if item.get("type") == "function_call_output":
+            return ProviderCommand(
+                kind=ProviderCommandKind.TOOL_OUTPUT,
+                data={
+                    "call_id": item.get("call_id"),
+                    "output": item.get("output"),
+                },
+            )
+        data = {
+            "role": item.get("role"),
+            "content": item.get("content"),
+        }
+        if "id" in item:
+            data["item_id"] = item["id"]
+        return ProviderCommand(
+            kind=ProviderCommandKind.CREATE_CONVERSATION_ITEM,
+            data=data,
+        )
+    raise ValueError("unsupported_provider_command_type")
+
+
+def _legacy_event_from_provider_event(event: ProviderEvent) -> dict[str, Any]:
+    payload: dict[str, Any] = {"type": event.provider_event_type}
+    for key, value in (
+        ("request_id", event.request_id),
+        ("response_id", event.response_id),
+        ("stream_id", event.stream_id),
+        ("call_id", event.call_id),
+        ("event_id", event.event_id),
+        ("turn_id", event.turn_id),
+        ("timestamp_ms", event.timestamp_ms),
+        ("duration_ms", event.duration_ms),
+    ):
+        if value is not None:
+            payload[key] = value
+    data = {key: _plain_provider_value(value) for key, value in event.data.items()}
+
+    if event.kind is ProviderEventKind.UNKNOWN:
+        return {"type": "unknown"}
+    if event.kind is ProviderEventKind.ERROR:
+        reason = event.error_reason or ProviderErrorReason.UNKNOWN
+        return {
+            "type": "error",
+            "error": {
+                "code": reason.value,
+                "message": _provider_error_delivery_message(reason),
+            },
+        }
+    if event.kind is ProviderEventKind.CONVERSATION_ITEM:
+        item = {
+            "type": data.get("item_type"),
+            **{
+                key: data[key]
+                for key in ("role", "name", "arguments", "transcript", "content")
+                if key in data
+            },
+        }
+        if event.call_id is not None:
+            item["call_id"] = event.call_id
+        payload["item"] = item
+    elif event.kind in {
+        ProviderEventKind.TRANSCRIPTION_DELTA,
+        ProviderEventKind.RESPONSE_TEXT_DELTA,
+        ProviderEventKind.RESPONSE_TRANSCRIPT_DELTA,
+        ProviderEventKind.THINKING_DELTA,
+    }:
+        payload["delta"] = data.get("text", "")
+    elif event.kind in {
+        ProviderEventKind.TRANSCRIPTION_FINAL,
+        ProviderEventKind.RESPONSE_TRANSCRIPT_FINAL,
+    }:
+        if "text" in data:
+            payload["transcript"] = data["text"]
+    elif event.kind is ProviderEventKind.THINKING_DONE:
+        if "text" in data:
+            payload["thinking"] = data["text"]
+    elif event.kind is ProviderEventKind.RESPONSE_AUDIO_DELTA:
+        payload["delta"] = data.get("audio", "")
+    elif event.kind in {
+        ProviderEventKind.FUNCTION_ARGUMENTS_DELTA,
+        ProviderEventKind.FUNCTION_ARGUMENTS_DONE,
+    }:
+        arguments_key = (
+            "arguments"
+            if event.kind is ProviderEventKind.FUNCTION_ARGUMENTS_DONE
+            else "delta"
+        )
+        payload[arguments_key] = data.get("arguments", "")
+        if "name" in data:
+            payload["name"] = data["name"]
+    elif event.kind is ProviderEventKind.RESPONSE_CREATED:
+        payload["response"] = {"id": event.response_id} if event.response_id else {}
+    elif event.kind is ProviderEventKind.RESPONSE_DONE:
+        output = []
+        function_outputs = data.get("function_outputs")
+        if isinstance(function_outputs, list):
+            for item in function_outputs:
+                if not isinstance(item, dict):
+                    continue
+                output.append({"type": "function_call", **item})
+        response: dict[str, Any] = {"output": output}
+        if event.response_id is not None:
+            response["id"] = event.response_id
+        payload["response"] = response
+    return payload
+
+
+def _plain_provider_value(value: JsonValue) -> Any:
+    if isinstance(value, FrozenJsonMapping):
+        return {key: _plain_provider_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_plain_provider_value(item) for item in value]
+    return value
+
+
+def _provider_error_delivery_message(reason: ProviderErrorReason) -> str:
+    messages = {
+        ProviderErrorReason.INVALID_CREDENTIALS: "StepFun API 密钥无效或未授权。",
+        ProviderErrorReason.FORBIDDEN: "StepFun API 访问被拒绝。",
+        ProviderErrorReason.QUOTA_EXHAUSTED: "StepFun 账户余额不足或额度已用尽。",
+        ProviderErrorReason.RATE_LIMITED: "StepFun 请求过于频繁，请稍后再试。",
+        ProviderErrorReason.ASR_UNAVAILABLE: "asr_unavailable",
+        ProviderErrorReason.VOICE_UNAVAILABLE: "voice_unavailable",
+        ProviderErrorReason.IDLE_TIMEOUT: "too long without operation",
+        ProviderErrorReason.UPSTREAM_UNAVAILABLE: "Realtime 服务暂不可用",
+        ProviderErrorReason.INVALID_EVENT: "Realtime 服务返回无效事件",
+        ProviderErrorReason.CONNECTION_CLOSED: "Realtime 上游连接已关闭",
+        ProviderErrorReason.BACKPRESSURE_LIMIT: "Realtime 上游负载过高",
+        ProviderErrorReason.UNKNOWN: "Realtime 服务返回错误",
+    }
+    return messages[reason]
