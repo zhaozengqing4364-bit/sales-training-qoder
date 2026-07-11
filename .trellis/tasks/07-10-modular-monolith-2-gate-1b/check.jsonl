@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/architecture-fitness.md","reason":"复核门禁唯一性、CI 可复现性和例外生命周期"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"复核 backend 自动发现、branch coverage、ruff/mypy"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核完整 Vitest、coverage、timeout 和回归证据"}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"复核录音状态机并发 transition 与 hook 测试"}
+{"file":".trellis/spec/guides/design-artifact-audit-guide.md","reason":"复核设计、ADR、路线图、policy 与实现一致性"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 selector 到 runner/coverage/artifact 的跨层数据流"}
+{"file":".trellis/tasks/07-10-modular-monolith-2-gate-1b/research/impact-selection-and-state-machine-coverage.md","reason":"复核选择和状态机验收缺口是否关闭"}
+{"file":".trellis/tasks/07-10-modular-monolith-2-gate-1b/research/runner-and-coverage-baseline.md","reason":"复核测试数量、耗时、mypy 与 coverage 基线"}

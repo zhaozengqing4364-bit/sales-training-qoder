@@ -17,7 +17,7 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 | 0B | Completed（2026-07-10） | 15 项逐项分类并清零；后端 unit + contract `2617 passed`；ForbiddenWord 事务/DTO 合同闭环 |
 | 0C | Completed（2026-07-10） | 17 项失败按时区/fixture/旧语义清零；209 files / 1327 passed / 6 skipped；5:54.32 自然 exit 0 |
 | 1A | Completed（2026-07-10） | 49 条边全部受 policy 治理；12 包 SCC 只许缩小；guard 已进入主门禁 |
-| 1B | Ready | Gate 0B/0C 全绿；下一步接入全量自动发现、影响测试选择和变更覆盖，并纳入持久化进度→路径解锁 branch coverage |
+| 1B | Completed（2026-07-11） | 唯一 release gate 从头自然 exit 0；backend 2665 passed；Vitest 209 files / 1329 passed；全部本地 Playwright、598 个 selected backend 测试和 82% changed coverage 通过 |
 | 2–6 | Not started | 按顺序实施 Realtime、Provider、领域所有权、Locality 和兼容层退役 |
 
 Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进度，不把已批准的目标
@@ -103,6 +103,23 @@ Architecture guard 与 19 个单测已进入主门禁。
 `docs/superpowers/plans/2026-07-10-gate-1a-architecture-fitness.md`。
 
 ### Gate 1B：自动测试选择
+
+状态：**Completed（2026-07-11）**。实现已接入唯一
+`scripts/critical-quality-gate.sh`：unit+contract 与 Vitest 自动发现，慢速测试由 policy +
+CodeGraph additive selector 决定；backend 覆盖率在 selected integration/E2E 后 append，随后执行
+80% changed executable line 与关键 branch baseline。CI 使用完整 Git history、稳定 base/head/mode、
+90 分钟 job 上限和 1200 秒 suite watchdog，并上传 selector/coverage artifacts。
+
+聚焦证据：selector + coverage guard `48 passed`；`mypy src` 对 625 个源文件全绿；真实 DB
+跨 session 解锁与 latest-attempt-wins `2 passed`；权限 pending 双击先红后绿；本 Gate 前端页面、
+FSM、权限和兼容入口聚焦回归最终 `48 passed`。
+
+完整门禁证据：backend unit+contract branch coverage `2665 passed, 1 skipped`；Vitest 209 files /
+`1329 passed, 6 skipped`，430.31 秒自然退出；generic/smoke/newcomer/presentation/sales Playwright
+分别为 3/9/11/2/1 passed（newcomer 仅 1 个真实收费 Provider 条件 skip）；selected backend
+integration/E2E `598 passed, 21 skipped`；changed executable lines 41/50（82%），关键 branch
+无缺失、无 floor 回退，最终输出 `Critical quality gate passed`。独立 Trellis check 修复 1 项跨
+runner fixture fallback 后剩余阻塞 finding=0。
 
 - backend unit + contract 和全量 Vitest 自动发现；
 - integration/E2E 使用 changed paths + CodeGraph affected 选择；

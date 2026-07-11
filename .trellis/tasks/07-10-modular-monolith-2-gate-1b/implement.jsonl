@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/architecture-fitness.md","reason":"唯一架构门禁、CI 纯仓库权威与例外生命周期合同"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"backend pytest、coverage、ruff、mypy 与测试分层规范"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"runner/guard 失败必须显式、可定位且不能吞异常"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"完整 Vitest、局部 timeout、coverage 与回归测试规范"}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"录音状态机 hook 的 transition、rerender 与测试边界"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"权限请求与录音 transition 的单一状态权威"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Git diff、runner、coverage、CI artifact 跨层数据流复核"}
+{"file":".trellis/tasks/07-10-modular-monolith-2-gate-1b/research/impact-selection-and-state-machine-coverage.md","reason":"选择算法和关键状态机缺口的代码证据"}
+{"file":".trellis/tasks/07-10-modular-monolith-2-gate-1b/research/runner-and-coverage-baseline.md","reason":"自动发现、mypy、coverage 和 CI 时间预算基线"}

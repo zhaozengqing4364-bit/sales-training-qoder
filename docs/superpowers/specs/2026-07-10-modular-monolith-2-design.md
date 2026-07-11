@@ -1,15 +1,19 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 0C、Gate 1A 已完成）
+状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 0C、Gate 1A、Gate 1B 已完成）
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 
 实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
 和 Realtime 测试合同；聚焦回归为 `53 passed, 1 warning`。Gate 1A 已将当前 49 条
 跨包边、12 包 SCC 和临时例外纳入 CI。Gate 0B 已逐项清零后端 15 个失败，最终
 unit + contract 为 `2617 passed, 1 skipped, 74 warnings`。Gate 0C 已把前端全量恢复为
-209 files、1327 passed、6 skipped，并在 5:54.32 自然 exit 0。Gate 1B 及 Gate 2–6
-仍按路线图推进，本文件的目标架构尚未整体落地。
+209 files、1327 passed、6 skipped，并在 5:54.32 自然 exit 0。Gate 1B 已将 selector、
+changed coverage、全量 mypy、持久化路径解锁和录音 transition 接入唯一 release gate；最终
+从头验收为 backend unit+contract `2665 passed, 1 skipped`、Vitest 209 files / `1329 passed,
+6 skipped`、generic/smoke/newcomer/presentation/sales Playwright 全绿、selected backend
+integration/E2E `598 passed, 21 skipped`、changed coverage 82%，并自然输出
+`Critical quality gate passed`。Gate 2–6 仍按路线图推进，本文件的目标架构尚未整体落地。
 
 ## 1. 背景
 
@@ -64,7 +68,7 @@ strangler 切片把现有物理目录逐步深化为真正的 Module。
 因此，Gate 0 必须先恢复测试事实，不能直接把当时的全量测试加入发布门禁。截至
 2026-07-10，Gate 0A 已恢复平台合同真相，Gate 0B 已使后端 unit + contract 达到
 `2617 passed, 1 skipped`；Gate 0C 也已达到 209 files 全绿、1327 passed、6 skipped，
-并在 5:54.32 自然退出。Gate 1B 可以基于这些事实接入自动发现和变更覆盖。
+并在 5:54.32 自然退出。Gate 1B 随后已基于这些事实完成自动发现和变更覆盖接线。
 
 ## 3. 设计目标
 
@@ -239,6 +243,16 @@ Evidence 不足继续返回 non-evaluable，而不是制造低分或完整报告
   Newcomer 本地 Provider E2E；
 - 定时层：真实 Provider、全量 integration/E2E、恢复演练；
 - 变更覆盖：关键模块 changed-line 和 branch coverage，不以单一全局百分比代替风险。
+
+Gate 1B 将该分层实现为三层真相：unit+contract 与 Vitest 不允许 selector 缩小；integration、
+backend E2E 和 Playwright 由 critical baseline、direct change、path policy 与健康 CodeGraph
+affected 做加法选择；不可信输入、未知生产路径和横切变更扩大到 family/full fallback。
+CodeGraph 在 CI 缺失时只记录 degraded evidence，非法或空的生产影响结果则 fail closed。
+
+backend coverage 先由全量 unit+contract 建立，再由 selected integration/E2E 使用 branch
+coverage append 合并，避免“集成测试已经覆盖但 changed-line 报告看不见”的假红；frontend
+coverage 明确 include 全部生产 `src`。changed executable lines 门槛为 80%，并为路径进度、
+会话生命周期、Journey projection、录音 FSM 等关键文件冻结不可回退的 branch baseline。
 
 ### 8.2 Golden Conversation Contract
 

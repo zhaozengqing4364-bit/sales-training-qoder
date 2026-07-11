@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。本文描述目标边界和
-迁移约束，不把尚未完成的物理迁移写成当前事实。
+Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–1B 已完成，Gate 2–6
+仍待实施。本文描述目标边界和迁移约束，不把尚未完成的物理迁移写成当前事实。
 
 ## 背景
 
@@ -89,6 +89,26 @@ CI 依赖外部索引状态。
 1 skipped`；Gate 0C 已使全量 Vitest 达到 209 files、1327 passed、6 个既有 skipped，
 并在 5:54.32 自然 exit 0。该决策的“先恢复事实”前置已满足，Gate 1B 负责把完整自动
 发现、影响选择和变更覆盖接入唯一主门禁。
+
+Gate 1B 实现决定：unit+contract 与 Vitest 每次均按目录/配置自动发现，selector 只控制慢速
+integration/backend E2E/Playwright。选择结果是有 schema 的 artifact，来源为 critical baseline、
+直接测试改动、仓库 path policy 和健康 CodeGraph 加法；不可信 base、非法/空图结果、未知生产
+路径、删除/重命名及横切配置变化必须扩大到 family/full fallback。CI 缺 CodeGraph 不得缩小
+policy 选择。
+
+changed coverage 使用 unit+contract 与 selected integration/E2E 合并后的 backend branch
+artifact，以及 include 全生产 `src` 的 frontend Istanbul artifact。新增 executable line 门槛为
+80%，关键状态机 branch ratio 不得低于 adoption floor。selection/coverage 两份 policy 的临时
+anchor 具有相同 owner、退役条件和 2026-08-10 到期日，并由 guard 检查一致性；到期未退役
+直接失败。
+
+Gate 1B 完成证据（2026-07-10 UTC）：唯一 `critical-quality-gate.sh` 从 clean start 自然
+exit 0；backend unit+contract branch coverage 为 `2665 passed, 1 skipped`，完整 Vitest 为
+209 files / `1329 passed, 6 skipped`，全部本地 Playwright 关键族通过，selected backend
+integration/E2E 为 `598 passed, 21 skipped`。changed executable lines 为 41/50（82%），
+所有关键状态机 changed branch source line 已覆盖且 branch floor 无回退。独立 Trellis check
+发现并修复跨 runner Presentation fixture fallback 后，selector/coverage guard 为 `48 passed`，
+剩余阻塞 finding=0。
 
 ### 8. 使用可验证变更包衡量进度
 

@@ -37,6 +37,7 @@ Route tests may live next to pages: `app/(user)/practice/[sessionId]/page.test.t
 - Alias: `@` → `./src`
 - `globals: true`
 - Excludes: `tests/e2e/**` (Playwright only)
+- Coverage include: `src/**/*.{ts,tsx}`；测试、声明和 story 文件显式排除
 
 ### Coverage thresholds
 
@@ -46,6 +47,11 @@ From `vitest.config.ts` (minimum):
 - branches: **25%**
 
 Run: `npm run test:coverage`
+
+主门禁运行完整 Vitest 自动发现，selector 不得缩小 Vitest。只有已测得在 coverage instrumentation
+下稳定超过默认 10 秒的单个页面工作流测试，才允许在该 `it/test` 上声明局部 20 秒 timeout；
+禁止全局提高 timeout 掩盖挂住。Istanbul 多行 statement 的 start..end 全部计入 executable
+changed lines，新增 executable line 总体门槛为 80%。
 
 ---
 
@@ -188,6 +194,68 @@ cd web && npm run e2e      # playwright, tests/e2e/
 ```
 
 Keep E2E out of Vitest (`vitest.config.ts` exclude).
+
+## Scenario: Reproducible Binary Fixtures For Cross-Runner E2E
+
+### 1. Scope / Trigger
+
+- Trigger: Playwright 需要 PPTX、音频或其他被根 `.gitignore` 忽略的二进制输入。
+- Scope: `web/tests/e2e/**` 及其在 `backend/tests/e2e/fixtures/**` 等目录中的共享 fixture。
+
+### 2. Signatures
+
+```ts
+const encoded = fs.readFileSync(fixturePath, "utf8").replace(/\s+/g, "");
+const filename = path.basename(fixturePath, ".base64");
+const buffer = Buffer.from(encoded, "base64");
+```
+
+### 3. Contracts
+
+- fixture 必须由 Git 跟踪；被忽略的原始二进制不能依赖开发机残留。
+- Base64 wrapper 保留原始业务扩展名：上传名去掉 `.base64` 后仍为 `.pptx`，MIME 不变。
+- 有效 fixture 必须可由真实 parser 打开并具备测试所需页数/内容；损坏 fixture 必须固定字节且稳定
+  触发 fail-closed 边界。
+- 跨 runner fixture 路径必须进入 quality selection global fallback policy。
+
+### 4. Validation & Error Matrix
+
+| Condition | Required assertion |
+|---|---|
+| fixture 文件缺失或 Base64 非法 | 测试 setup 失败，不下载、不自动生成临时替代品 |
+| 有效 PPTX | 上传 ready、页数/内容匹配，并完成真实 WS/evidence 链 |
+| 损坏 PPTX 在 validator 拒绝 | 结构化 4xx + trace_id；上传前后 asset ID 集合不变 |
+| parser 接受但解析失败 | 只允许合同定义的 failed asset；不得伪造 page/report evidence |
+| 只改共享 fixture | selector 必须选择全部相关 runner，而不是只跑 fixture 所在目录的 family |
+
+### 5. Good / Base / Bad Cases
+
+- Good: 小型、版本化 `.base64` fixture 在内存解码，真实上传/解析/WS 链通过。
+- Base: 损坏 fixture 被输入 validator 拒绝，数据库无新 asset，报告无成功证据。
+- Bad: 文档声称存在 `.pptx`，实际文件被 `*.pptx` ignore，只在某台开发机偶然通过。
+
+### 6. Tests Required
+
+- 严格 Base64 解码、ZIP 完整性和真实 parser 页数验证。
+- Playwright 同时覆盖正常 Presentation 全链和损坏输入 no-fabrication。
+- Selector repo-policy 单测证明共享 fixture 变更为 full fallback，并包含消费它的 Presentation spec。
+- 目标 TypeScript、ESLint 与完整关键门禁通过。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// 文件被根 .gitignore 忽略，CI checkout 中并不存在。
+buffer: fs.readFileSync("tests/e2e/fixtures/demo.pptx")
+```
+
+#### Correct
+
+```ts
+const encoded = fs.readFileSync("demo.pptx.base64", "utf8");
+buffer: Buffer.from(encoded.replace(/\s+/g, ""), "base64");
+```
 
 ---
 
