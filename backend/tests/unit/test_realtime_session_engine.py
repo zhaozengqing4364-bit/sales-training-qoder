@@ -37,6 +37,76 @@ REQUIRED_GOLDEN_CONTRACT_IDS = {
     "roleplay.observation_record_only",
     "rollout.single_writer_rollback",
 }
+GROUNDING_DIAGNOSTIC_STRING_VOCABULARY = {
+    "status": {
+        "ready",
+        "blocked",
+        "degraded",
+        "skipped",
+        "failed",
+        "unavailable",
+        "healthy",
+    },
+    "reason_code": {
+        "not_applicable",
+        "policy_missing",
+        "policy_blocked",
+        "kb_lock_blocked",
+        "retrieval_ready",
+        "retrieval_timeout",
+        "retrieval_error",
+        "retrieval_no_hit",
+        "provider_unavailable",
+        "snapshot_restored",
+        "presentation_feedback_ready",
+    },
+    "source": {
+        "runtime",
+        "snapshot",
+        "policy",
+        "knowledge",
+        "provider",
+        "cache",
+        "presentation",
+        "sales",
+        "unknown",
+    },
+    "mode": {
+        "grounded",
+        "blocked",
+        "degraded",
+        "skipped",
+        "unrestricted",
+        "kb_lock",
+        "not_applicable",
+    },
+    "error_type": {
+        "timeout",
+        "connection",
+        "validation",
+        "provider",
+        "retrieval",
+        "configuration",
+        "unknown",
+        "none",
+    },
+    "fallback_reason": {
+        "none",
+        "timeout",
+        "no_hit",
+        "unavailable",
+        "policy_blocked",
+        "provider_error",
+        "not_applicable",
+    },
+}
+GROUNDING_DIAGNOSTIC_INJECTION_VALUES = {
+    "sk-proj-abc123",
+    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature",
+    "a3f1b7c9d2e4f608a3f1b7c9d2e4f608a3f1b7c9d2e4f608a3f1b7c9d2e4f608",
+    "P4ssword:Secret",
+    "customerconfirmedbudget",
+}
 FIXTURE_PATH = (
     Path(__file__).parents[1]
     / "fixtures"
@@ -83,7 +153,7 @@ def test_should_round_trip_state_without_sharing_mutable_data() -> None:
     state.connection.session_id = "session-1"
     state.connection.epoch = 3
     state.grounding.diagnostics["schema_version"] = GROUNDING_DIAGNOSTICS_SCHEMA_VERSION
-    state.grounding.diagnostics["source"] = "frozen_policy"
+    state.grounding.diagnostics["source"] = "policy"
     assert state.evidence.record(
         evidence_key="transcript:1:user",
         evidence_type="transcript",
@@ -101,7 +171,7 @@ def test_should_round_trip_state_without_sharing_mutable_data() -> None:
     assert state.connection.epoch == 3
     assert state.grounding.diagnostics == {
         "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
-        "source": "frozen_policy",
+        "source": "policy",
     }
 
 
@@ -145,11 +215,11 @@ def test_should_accept_versioned_grounding_diagnostics_allowlist() -> None:
     diagnostics: dict[str, object] = {
         "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
         "status": "ready",
-        "reason_code": "kb_hit",
-        "source": "frozen_policy",
+        "reason_code": "retrieval_ready",
+        "source": "policy",
         "mode": "grounded",
         "error_type": "none",
-        "fallback_reason": "not_required",
+        "fallback_reason": "not_applicable",
         "latency_ms": 3.5,
         "result_count": 4,
         "kb_count": 2,
@@ -207,15 +277,62 @@ def test_should_reject_unknown_grounding_diagnostic_fields_deterministically(
         )
 
 
-def test_should_not_apply_substring_blacklist_to_allowlisted_values() -> None:
+@pytest.mark.parametrize(
+    ("field_name", "allowed_value"),
+    [
+        (field_name, allowed_value)
+        for field_name, allowed_values in GROUNDING_DIAGNOSTIC_STRING_VOCABULARY.items()
+        for allowed_value in sorted(allowed_values)
+    ],
+)
+def test_should_accept_closed_grounding_diagnostic_vocabulary(
+    field_name: str,
+    allowed_value: str,
+) -> None:
     diagnostics = {
         "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
-        "status": "draw_count",
-        "reason_code": "crawl_status",
-        "source": "tokenizer_version",
+        field_name: allowed_value,
     }
 
     assert GroundingState(diagnostics=diagnostics).diagnostics == diagnostics
+
+
+@pytest.mark.parametrize(
+    ("field_name", "injection_value"),
+    [
+        (field_name, injection_value)
+        for field_name in GROUNDING_DIAGNOSTIC_STRING_VOCABULARY
+        for injection_value in sorted(GROUNDING_DIAGNOSTIC_INJECTION_VALUES)
+    ],
+)
+def test_should_reject_secret_or_transcript_injection_in_string_fields(
+    field_name: str,
+    injection_value: str,
+) -> None:
+    with pytest.raises(
+        ValueError, match=f"grounding_diagnostic_vocabulary_invalid:{field_name}"
+    ):
+        GroundingState(
+            diagnostics={
+                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+                field_name: injection_value,
+            }
+        )
+
+
+@pytest.mark.parametrize("field_name", GROUNDING_DIAGNOSTIC_STRING_VOCABULARY)
+def test_should_reject_unknown_machine_identifier_in_string_fields(
+    field_name: str,
+) -> None:
+    with pytest.raises(
+        ValueError, match=f"grounding_diagnostic_vocabulary_invalid:{field_name}"
+    ):
+        GroundingState(
+            diagnostics={
+                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+                field_name: "future_contract_value",
+            }
+        )
 
 
 def test_should_require_schema_version_for_non_empty_diagnostics() -> None:
@@ -355,6 +472,30 @@ def test_should_reject_unsafe_diagnostics_before_mutating_grounding_state() -> N
             diagnostics={
                 "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
                 "authorization": "unsafe",
+            },
+        )
+
+    assert engine.state.grounding.phase is GroundingPhase.PREPARING
+    assert engine.state.grounding.mode is None
+    assert [transition.event_name for transition in hooks.transitions] == [
+        "grounding.preparing"
+    ]
+
+
+def test_should_reject_invalid_vocabulary_before_mutating_grounding_state() -> None:
+    hooks = RecordingHooks()
+    engine = RealtimeSessionEngine(scenario_type="presentation", hooks=hooks)
+    engine.begin_grounding(decision_id="g-1", policy_hash="sha256:policy")
+
+    with pytest.raises(
+        ValueError, match="grounding_diagnostic_vocabulary_invalid:status"
+    ):
+        engine.resolve_grounding(
+            outcome="ready",
+            mode="grounded",
+            diagnostics={
+                "schema_version": GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
+                "status": "sk-proj-abc123",
             },
         )
 

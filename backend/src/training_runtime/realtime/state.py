@@ -11,14 +11,74 @@ from typing import Any, cast
 ENGINE_STATE_VERSION = 1
 GROUNDING_DIAGNOSTICS_SCHEMA_VERSION = 1
 GroundingDiagnosticValue = str | int | float | bool
-_GROUNDING_DIAGNOSTIC_IDENTIFIER_FIELDS = (
-    "status",
-    "reason_code",
-    "source",
-    "mode",
-    "error_type",
-    "fallback_reason",
-)
+_GROUNDING_DIAGNOSTIC_STRING_VOCABULARY = {
+    "status": frozenset(
+        {"ready", "blocked", "degraded", "skipped", "failed", "unavailable", "healthy"}
+    ),
+    "reason_code": frozenset(
+        {
+            "not_applicable",
+            "policy_missing",
+            "policy_blocked",
+            "kb_lock_blocked",
+            "retrieval_ready",
+            "retrieval_timeout",
+            "retrieval_error",
+            "retrieval_no_hit",
+            "provider_unavailable",
+            "snapshot_restored",
+            "presentation_feedback_ready",
+        }
+    ),
+    "source": frozenset(
+        {
+            "runtime",
+            "snapshot",
+            "policy",
+            "knowledge",
+            "provider",
+            "cache",
+            "presentation",
+            "sales",
+            "unknown",
+        }
+    ),
+    "mode": frozenset(
+        {
+            "grounded",
+            "blocked",
+            "degraded",
+            "skipped",
+            "unrestricted",
+            "kb_lock",
+            "not_applicable",
+        }
+    ),
+    "error_type": frozenset(
+        {
+            "timeout",
+            "connection",
+            "validation",
+            "provider",
+            "retrieval",
+            "configuration",
+            "unknown",
+            "none",
+        }
+    ),
+    "fallback_reason": frozenset(
+        {
+            "none",
+            "timeout",
+            "no_hit",
+            "unavailable",
+            "policy_blocked",
+            "provider_error",
+            "not_applicable",
+        }
+    ),
+}
+_GROUNDING_DIAGNOSTIC_IDENTIFIER_FIELDS = tuple(_GROUNDING_DIAGNOSTIC_STRING_VOCABULARY)
 _GROUNDING_DIAGNOSTIC_NON_NEGATIVE_NUMBER_FIELDS = (
     "latency_ms",
     "result_count",
@@ -234,6 +294,10 @@ class GroundingState:
             ):
                 raise ValueError(
                     f"grounding_diagnostic_identifier_invalid:{field_name}"
+                )
+            if value not in _GROUNDING_DIAGNOSTIC_STRING_VOCABULARY[field_name]:
+                raise ValueError(
+                    f"grounding_diagnostic_vocabulary_invalid:{field_name}"
                 )
             validated[field_name] = value
         for field_name in _GROUNDING_DIAGNOSTIC_NON_NEGATIVE_NUMBER_FIELDS:
