@@ -7,6 +7,7 @@ import pytest
 
 import training_runtime.stepfun_transport as stepfun_transport_module
 from training_runtime.stepfun_transport import (
+    STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES,
     StepFunBackpressurePolicy,
     StepFunBackpressureStatus,
     StepFunHealthStatus,
@@ -17,6 +18,10 @@ from training_runtime.stepfun_transport import (
     build_stepfun_session_update_payload,
     resolve_stepfun_upstream_status_message,
 )
+
+
+def test_stepfun_default_backpressure_watermark_matches_legacy_runtime() -> None:
+    assert STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES == 512 * 1024
 
 
 class CloseRaisesRuntimeErrorWebSocket:

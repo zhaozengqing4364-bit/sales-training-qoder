@@ -31,6 +31,7 @@ from training_runtime.realtime.provider import (
     RealtimeProviderSessionConfig,
     validate_provider_capabilities,
 )
+from training_runtime.realtime.stepfun_provider import StepFunRealtimeProvider
 
 FIXTURE_PATH = (
     Path(__file__).parents[1] / "fixtures" / "realtime" / "provider_contract_v1.json"
@@ -1016,3 +1017,15 @@ def test_port_protocol_should_support_fake_and_fail_closed_on_capability_mismatc
         assert captured.value.reason is ProviderErrorReason.INVALID_EVENT
 
     asyncio.run(connect_without_required_capability())
+
+
+def test_stepfun_adapter_should_share_the_neutral_port_contract() -> None:
+    provider = StepFunRealtimeProvider(
+        api_key="contract-key",
+        url="wss://provider.example/realtime",
+    )
+
+    assert isinstance(provider, RealtimeProviderPort)
+    assert provider.capabilities.supported == frozenset(ProviderCapability)
+    assert provider.capabilities.input_audio_formats is None
+    assert provider.capabilities.output_audio_formats is None

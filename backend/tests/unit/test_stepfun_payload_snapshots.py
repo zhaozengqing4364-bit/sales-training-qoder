@@ -21,6 +21,8 @@ from curriculum_practice.models import CaseItem, RoleProfile
 from sales_bot.websocket.components.stepfun_function_call_helpers import (
     build_function_call_output_event,
 )
+from training_runtime.realtime.provider import ProviderCommand, ProviderCommandKind
+from training_runtime.realtime.stepfun_codec import StepFunEventCodec
 
 if "websockets" not in sys.modules:
     websockets_stub = types.ModuleType("websockets")
@@ -557,6 +559,52 @@ def test_q02_function_call_tool_result_payload_snapshot():
             ),
         },
     }
+
+
+def test_provider_codec_preserves_response_create_payload_snapshot() -> None:
+    encoded = StepFunEventCodec().encode_command(
+        ProviderCommand(
+            kind=ProviderCommandKind.CREATE_RESPONSE,
+            data={
+                "modalities": ("audio", "text"),
+                "instructions": "基础指令\n\n【当前轮内部知识依据】\n证据片段",
+            },
+        )
+    )
+
+    assert encoded == {
+        "type": "response.create",
+        "response": {
+            "modalities": ["audio", "text"],
+            "instructions": "基础指令\n\n【当前轮内部知识依据】\n证据片段",
+        },
+    }
+
+
+def test_provider_codec_preserves_function_output_payload_snapshot() -> None:
+    output = json.dumps(
+        {
+            "query": "产品定价",
+            "count": 1,
+            "results": [{"knowledge_base_id": "kb-1", "snippet": "证据"}],
+        },
+        ensure_ascii=False,
+    )
+    encoded = StepFunEventCodec().encode_command(
+        ProviderCommand(
+            kind=ProviderCommandKind.TOOL_OUTPUT,
+            data={"call_id": "call-001", "output": output},
+        )
+    )
+
+    assert encoded == build_function_call_output_event(
+        call_id="call-001",
+        output_payload={
+            "query": "产品定价",
+            "count": 1,
+            "results": [{"knowledge_base_id": "kb-1", "snippet": "证据"}],
+        },
+    )
 
 
 @pytest.mark.asyncio

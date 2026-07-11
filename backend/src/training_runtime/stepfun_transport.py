@@ -19,6 +19,7 @@ from common.monitoring.logger import get_logger
 logger = get_logger(__name__)
 
 STEPFUN_DEFAULT_SESSION_MODALITIES = ("text", "audio")
+STEPFUN_DEFAULT_BACKPRESSURE_HIGH_WATERMARK_BYTES = 512 * 1024
 STEPFUN_SENSITIVE_QUERY_KEYS = frozenset(
     {
         "access_token",
