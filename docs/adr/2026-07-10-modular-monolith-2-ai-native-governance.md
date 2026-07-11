@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–1B 已完成，Gate 2–6
+Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–2 已完成，Gate 3–6
 仍待实施。本文描述目标边界和迁移约束，不把尚未完成的物理迁移写成当前事实。
 
 ## 背景
@@ -109,6 +109,28 @@ integration/E2E 为 `598 passed, 21 skipped`。changed executable lines 为 41/5
 所有关键状态机 changed branch source line 已覆盖且 branch floor 无回退。独立 Trellis check
 发现并修复跨 runner Presentation fixture fallback 后，selector/coverage guard 为 `48 passed`，
 剩余阻塞 finding=0。
+
+Gate 2 完成事实（2026-07-11 UTC）：Presentation 的 `stepfun_realtime` 生产入口默认选择
+`PresentationRealtimeEngineHandler`，由 app root 用 immutable closed factory key 组合
+`RealtimeSessionEngine` 和命名兼容 Adapter；`PRESENTATION_REALTIME_ENGINE_ENABLED=false`
+在构造前原子回滚到 `LegacyPresentationStepFunRealtimeHandler`，每个 session 只构造一个
+handler。Engine 显式拥有 versioned Connection/Turn/Grounding/Evidence 状态，兼容 Adapter
+仍是 message、score、report 和 reconnect persistence 的唯一 writer；snapshot 仅 additive
+新增 `runtime_state.realtime_engine` 并兼容 pre-Gate 恢复。Presentation 从第一次 base 初始化
+即禁用 Sales capability construction，Sales 默认行为不变。真实 Golden differential 覆盖
+connect/start/text/audio/transcript/response.done/reconnect/close、完整 legacy snapshot 投影、
+epoch/grounding/evidence terminal state 和 mutation sensitivity。
+
+Gate 2 唯一 canonical gate 从 clean start 重跑并自然 exit 0：backend unit+contract
+`2846 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright generic/smoke/
+newcomer/presentation/sales 分别为 `3/9/11/2/1 passed`（newcomer 保留 1 个既有真实收费
+Provider 条件 skip）；selected backend integration/E2E `598 passed, 21 skipped`；changed
+executable lines 723/799（90.49%），critical branch 无 changed missing line、无 adoption floor
+回退，最终输出 `Critical quality gate passed`。
+
+该完成事实不包含 Gate 3。兼容 Adapter 仍复用 `sales_bot` StepFun mixins，实际
+`presentation_coach -> sales_bot` dependency policy 临时边仍保留；
+`RealtimeProviderPort`、provider event codec 和 Grounding 单一状态/缓存权威仍待 Gate 3。
 
 ### 8. 使用可验证变更包衡量进度
 

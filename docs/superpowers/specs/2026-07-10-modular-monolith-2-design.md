@@ -1,7 +1,7 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 0C、Gate 1A、Gate 1B 已完成）
+状态：已批准，分 Gate 实施中（Gate 0A、Gate 0B、Gate 0C、Gate 1A、Gate 1B、Gate 2 已完成）
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 
 实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
@@ -13,7 +13,13 @@ changed coverage、全量 mypy、持久化路径解锁和录音 transition 接�
 从头验收为 backend unit+contract `2665 passed, 1 skipped`、Vitest 209 files / `1329 passed,
 6 skipped`、generic/smoke/newcomer/presentation/sales Playwright 全绿、selected backend
 integration/E2E `598 passed, 21 skipped`、changed coverage 82%，并自然输出
-`Critical quality gate passed`。Gate 2–6 仍按路线图推进，本文件的目标架构尚未整体落地。
+`Critical quality gate passed`。Gate 2 已于 2026-07-11 完成 Presentation tracer bullet：默认
+Engine façade、单 flag Legacy 回滚、显式 versioned state、additive/pre-Gate snapshot、单 writer、
+零 Presentation Sales capability construction 和真实 Golden differential 已进入生产路径。
+本 Gate canonical gate 从头自然 exit 0：backend `2846 passed, 1 skipped`、Vitest 209 files /
+`1329 passed, 6 skipped`、Playwright generic/smoke/newcomer/presentation/sales 为
+`3/9/11/2/1 passed`、selected backend `598 passed, 21 skipped`、changed coverage
+723/799（90.49%）。Gate 3–6 仍按路线图推进，本文件的目标架构尚未整体落地。
 
 ## 1. 背景
 
@@ -163,6 +169,13 @@ flowchart TB
 WebSocket Adapter 只负责：鉴权、协议解析、调用 Engine、把 Engine 输出写回客户端。
 StepFun 是 `RealtimeProviderPort` 的第一个 Adapter，而不是 Engine 的内部主语。
 
+Gate 2 当前实现只兑现了该目标的 Presentation tracer bullet：
+`training_runtime.realtime` 已拥有 versioned Connection/Turn/Grounding/Evidence state 和
+invariant-checked transitions；Presentation 通过组合 façade 接入，兼容 Adapter 保留现有
+StepFun wire/persistence 单 writer。当前 `GroundingState` 记录一次决策结果，但 Tool/Grounding
+缓存尚未收敛为单一权威；`RealtimeProviderPort` 和 provider event codec 也尚未落地。
+因此上段完整 WebSocket/Provider/Grounding 描述仍是 Gate 3+ 目标，不是 Gate 2 当前事实。
+
 ### 6.2 Scenario 组合
 
 Sales、Presentation、Examiner 不共享巨型父类状态。每个场景声明自己需要的能力：
@@ -173,8 +186,11 @@ Presentation = Engine + StepFun/Legacy Adapter + Presentation Hooks + Evidence
 Examiner = Engine/Exam Runtime Port + Exam Scorer + Completion Writer
 ```
 
-先用 Presentation 作为 tracer bullet：它当前通过 Sales Shared Handler 构造后关闭
-销售能力，迁移收益和行为对比最清晰。
+Presentation tracer bullet 已在 Gate 2 落地：façade 不再继承 Sales handler，兼容 Adapter
+从第一次 base 初始化即声明 `scenario="presentation"` 且不构造 SalesStage、FuzzyDetection、
+RealtimeScoring。兼容 Adapter 仍临时复用 `sales_bot` StepFun mixins，所以实际
+`presentation_coach -> sales_bot` 依赖和 architecture policy 临时例外尚未退役；Gate 3
+完成 Provider/Grounding 中立化后再删除该边，不能以 façade 已组合化代替边退役事实。
 
 ### 6.3 Roleplay Contract bounded context
 

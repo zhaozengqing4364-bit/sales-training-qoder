@@ -250,7 +250,7 @@
 
 | 端点 | 场景 | Handler | 消息协议 |
 |------|------|---------|----------|
-| `/ws/presentation` | PPT 演练 | `PresentationWebSocketHandler` / `PresentationStepFunRealtimeHandler` | JSON 消息 |
+| `/ws/presentation` | PPT 演练 | `PresentationWebSocketHandler` / `PresentationRealtimeEngineHandler`；flag 关闭时回滚到 `LegacyPresentationStepFunRealtimeHandler` | JSON 消息 |
 | `/ws/sales/{session_id}` | 销售对练 | `StepFunRealtimeHandler` / `Phase4LocalProviderHandler` | StepFun Realtime 协议 |
 | `/ws/curriculum/examiner/{session_id}` | 课程考核 | `ExaminerWebSocketHandler` | JSON 消息 |
 
@@ -305,7 +305,52 @@ preparing → in_progress → paused → in_progress → completed
 - 下行音频流通过同一 WebSocket 返回给前端
 - 支持函数调用（知识检索、评分等）和工具链编排
 
-### 4.2 TTS 降级链
+### 4.2 Realtime Session Engine（Gate 2 当前事实）
+
+Presentation 的 `stepfun_realtime` 生产入口已采用组合式 tracer bullet：
+
+```text
+PresentationScenarioPlugin
+  ├─ PRESENTATION_REALTIME_ENGINE_ENABLED=true（默认）
+  │    → immutable RuntimeHandlerFactoryKey
+  │    → app-root static factory map
+  │    → PresentationRealtimeEngineHandler
+  │         ├─ RealtimeSessionEngine
+  │         └─ LegacyPresentationStepFunRealtimeHandler（兼容 Adapter）
+  └─ false
+       → LegacyPresentationStepFunRealtimeHandler（单一路径回滚）
+```
+
+- Engine 显式维护 versioned `ConnectionState`、`TurnState`、`GroundingState` 和
+  `EvidenceState`，并拒绝非法转换、旧 request、active-turn 重入和 evidence 冲突；
+- reconnect snapshot 只新增 `runtime_state.realtime_engine`，缺少该 key 的 Gate 2 前
+  snapshot 会从既有字段派生恢复，connection epoch 按持久值单调 +1；
+- `response.done` 在 flush 后、tool follow-up 创建前完成捕获的 Engine turn；音频 Evidence
+  使用 transcript turn resolver，同轮 replay 去重且不把原始音频暴露到诊断；
+- façade 在顶层保留既有 adapter diagnostics 字段，同时 additive 暴露 Engine version/state、
+  selected runtime 和 rollback path；
+- 现有 StepFun Adapter 仍是 message/score/report/session persistence 的唯一 writer，Engine
+  Evidence 只记录 digest/dedupe 元数据；
+- Sales 构造默认仍为 `scenario="sales"`、Sales 能力启用；Presentation 兼容 Adapter 从首次
+  base 初始化即为 `scenario="presentation"` 且不构造 SalesStage/FuzzyDetection/RealtimeScoring。
+
+Gate 2 没有完成 Provider/Grounding 中立化。Presentation façade 已不继承 Sales handler，
+但兼容 Adapter 仍临时复用 `sales_bot` StepFun mixins，因此
+`presentation_coach -> sales_bot` 实际依赖和 architecture policy 临时例外仍存在。Gate 3
+负责 `RealtimeProviderPort`、provider event codec 和 Grounding 单一状态/缓存权威，当前不得
+宣称这些边界已完成。
+
+Gate 2 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
+`2846 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
+generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 仅保留 1 个既有
+真实收费 Provider 条件 skip）；selected backend integration/E2E `598 passed, 21 skipped`；
+changed executable lines 723/799（90.49%），critical branch 无 changed missing line、无
+adoption floor 回退，最终输出 `Critical quality gate passed`。
+
+可执行合同：`.trellis/spec/backend/realtime-session-engine.md`。实施计划：
+`docs/superpowers/plans/2026-07-11-gate-2-realtime-session-engine.md`。
+
+### 4.3 TTS 降级链
 
 ```
 阿里云流式 TTS (主) → Edge-TTS (备用) → 浏览器 TTS (最终降级)
@@ -315,13 +360,13 @@ preparing → in_progress → paused → in_progress → completed
 
 TTS 提供商选择在运行时通过 `TTSProvider` 动态解析，支持从 DB 运行时配置读取（`config_manager`）和从环境变量降级。
 
-### 4.3 ASR
+### 4.4 ASR
 
 - **阿里云 ASR**：基于 DashScope 的实时语音识别，支持流式
 - **本地 ASR**：开发/测试环境使用的本地替代方案
 - 自动降级：主服务失败时切换备用
 
-### 4.4 语音运行时配置
+### 4.5 语音运行时配置
 
 语音运行时策略通过 `voice_runtime_policy.py` 和 `voice_instruction_compiler.py` 配置：
 
@@ -1009,6 +1054,7 @@ Next.js (端口 3445)
 | `2026-05-11-architecture-boundary-domain-contract` | 领域边界与契约锁定（PRD #23） |
 | `2026-05-11-curriculum-practice-boundary-contract` | 课程考核模块边界契约 |
 | `2026-05-12-case-item-role-profile-pilot-contract` | 案例/角色/画像试点契约 |
+| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2 Realtime Engine tracer bullet 已实施，Gate 3–6 待完成 |
 
 详见 `docs/adr/`。
 
