@@ -15,6 +15,7 @@ from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeSharedHandler
 from sales_bot.websocket.stepfun_realtime_policy import StepFunRealtimePolicyMixin
 from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstreamMixin
+from sales_bot.websocket.stepfun_runtime_types import RealtimeResponseState
 from training_runtime import PresentationScenarioPlugin, TrainingRuntimeDescriptor
 from training_runtime.realtime import (
     GROUNDING_DIAGNOSTICS_SCHEMA_VERSION,
@@ -339,7 +340,7 @@ async def test_adapter_records_binary_audio_as_length_and_digest_metadata_only()
         ),
     )
     adapter = LegacyPresentationStepFunRealtimeHandler(runtime_engine=engine)
-    adapter.turn_count = 1
+    adapter.turn_count = 0
     frame = bytes([adapter.BINARY_AUDIO_CHUNK]) + b"sensitive-audio"
 
     with patch.object(
@@ -357,7 +358,7 @@ async def test_adapter_records_binary_audio_as_length_and_digest_metadata_only()
 
 
 @pytest.mark.asyncio
-async def test_response_done_completes_captured_request_not_tool_followup() -> None:
+async def test_adapter_scopes_identical_audio_evidence_to_resolved_user_turn() -> None:
     engine = RealtimeSessionEngine(
         scenario_type="presentation",
         hooks=SimpleNamespace(
@@ -365,31 +366,62 @@ async def test_response_done_completes_captured_request_not_tool_followup() -> N
             on_transition=lambda _transition: None,
         ),
     )
+    adapter = LegacyPresentationStepFunRealtimeHandler(runtime_engine=engine)
+    frame = bytes([adapter.BINARY_AUDIO_CHUNK]) + b"same-audio"
+
+    with patch.object(
+        StepFunRealtimePolicyMixin,
+        "_handle_binary_frame",
+        new=AsyncMock(),
+    ):
+        adapter.turn_count = 0
+        await adapter._handle_binary_frame(frame)
+        await adapter._handle_binary_frame(frame)
+        adapter.turn_count = 1
+        await adapter._handle_binary_frame(frame)
+
+    assert len(engine.state.evidence.records) == 2
+    assert {
+        record.turn_number for record in engine.state.evidence.records.values()
+    } == {1, 2}
+
+
+@pytest.mark.asyncio
+async def test_response_done_completes_engine_turn_before_real_tool_followup() -> None:
+    transitions: list[str] = []
+    engine = RealtimeSessionEngine(
+        scenario_type="presentation",
+        hooks=SimpleNamespace(
+            scenario_type="presentation",
+            on_transition=lambda transition: transitions.append(
+                transition.event_name
+            ),
+        ),
+    )
     engine.begin_turn(request_id=1, stream_id="stream-1")
     engine.mark_response_started(response_id="response-1")
     adapter = LegacyPresentationStepFunRealtimeHandler(runtime_engine=engine)
     adapter.current_request_id = 1
-    adapter._active_response = SimpleNamespace(request_id=1, response_id="response-1")
+    adapter._active_response = RealtimeResponseState(
+        request_id=1,
+        stream_id="stream-1",
+        response_id="response-1",
+    )
+    adapter._pending_tool_followup_response = True
+    adapter._send_status = AsyncMock()
+    adapter._send_upstream = AsyncMock()
+    adapter._record_roleplay_instruction_hash_metric = AsyncMock()
 
-    async def create_followup(_self: object, _event: dict[str, Any]) -> None:
-        adapter.current_request_id = 2
-        adapter._active_response = SimpleNamespace(
-            request_id=2,
-            response_id=None,
-            stream_id="stream-2",
-        )
+    await adapter._handle_upstream_response_done(
+        {"type": "response.done", "response": {"id": "response-1"}}
+    )
 
-    with patch.object(
-        StepFunRealtimeUpstreamMixin,
-        "_handle_upstream_response_done",
-        new=create_followup,
-    ):
-        await adapter._handle_upstream_response_done(
-            {"type": "response.done", "response": {"id": "response-1"}}
-        )
-
-    assert engine.state.turn.request_id == 1
-    assert engine.state.turn.phase is TurnPhase.COMPLETED
+    assert adapter.current_request_id == 2
+    assert adapter._active_response is not None
+    assert adapter._active_response.request_id == 2
+    assert engine.state.turn.request_id == 2
+    assert engine.state.turn.phase is TurnPhase.RECEIVING
+    assert transitions[-2:] == ["turn.completed", "turn.receiving"]
 
 
 @pytest.mark.asyncio

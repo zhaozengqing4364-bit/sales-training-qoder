@@ -273,14 +273,14 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
         ):
             self._runtime_engine.mark_streaming()
 
-    async def _handle_upstream_response_done(self, event: dict[str, Any]) -> None:
-        expected_request_id = (
-            self._active_response.request_id
-            if self._active_response is not None
-            else None
-        )
-        await super()._handle_upstream_response_done(event)
-        if self._runtime_engine is None or expected_request_id is None:
+    async def _after_response_flushed_before_followup(
+        self,
+        *,
+        expected_request_id: int,
+        event: dict[str, Any],
+    ) -> None:
+        del event
+        if self._runtime_engine is None:
             return
         engine_turn = self._runtime_engine.state.turn
         if (
@@ -299,7 +299,7 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             return
         audio = data[1:]
         digest = sha256(audio).hexdigest()
-        turn_number = max(1, self.turn_count)
+        turn_number = self._resolve_user_turn_number_for_transcript()
         self._runtime_engine.record_evidence(
             evidence_key=f"audio:{turn_number}:{len(audio)}:{digest}",
             evidence_type="audio",

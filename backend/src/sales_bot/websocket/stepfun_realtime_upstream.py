@@ -2325,9 +2325,27 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             self._active_response.text_parts.append(delta)
             await self._apply_roleplay_stream_guard()
 
+    async def _after_response_flushed_before_followup(
+        self,
+        *,
+        expected_request_id: int,
+        event: dict[str, Any],
+    ) -> None:
+        """Scenario hook after the completed response is flushed, before follow-up."""
+
     async def _handle_upstream_response_done(self, event: dict) -> None:
         """Finalize response and execute potential tool follow-ups."""
+        expected_request_id = (
+            self._active_response.request_id
+            if self._active_response is not None
+            else None
+        )
         had_active_response = await self._flush_active_response(event)
+        if had_active_response and expected_request_id is not None:
+            await self._after_response_flushed_before_followup(
+                expected_request_id=expected_request_id,
+                event=event,
+            )
         handled_from_done = False
         if had_active_response:
             handled_from_done = await self._handle_function_calls_from_response_done(
