@@ -32,6 +32,17 @@ from common.effectiveness.scoring_rulesets import (
 )
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+from evaluation.adapters.sql_session_evidence import SqlSessionEvidencePort
+from evaluation.composition import (
+    get_configured_session_evidence_port,
+    get_evaluation_scenario_registry,
+)
+from evaluation.ports.evidence import SessionEvidencePort
+from evaluation.ports.scenario import (
+    EvaluationScenarioInput,
+    EvaluationScenarioRegistry,
+    EvaluationScenarioResult,
+)
 from evaluation.schemas import (
     ComprehensiveReportResponse,
     parse_llm_response,
@@ -39,9 +50,6 @@ from evaluation.schemas import (
 from evaluation.services.staged_evaluation import (
     StagedEvaluationService,
     StageEvaluationResult,
-)
-from presentation_coach.services.presentation_report_service import (
-    PresentationReportService,
 )
 from prompt_templates.service import PromptTemplateService
 
@@ -128,6 +136,9 @@ class ComprehensiveReportService:
         staged_eval_service: StagedEvaluationService,
         prompt_service: PromptTemplateService,
         llm_service: LLMService,
+        *,
+        evidence_port: SessionEvidencePort | None = None,
+        scenario_registry: EvaluationScenarioRegistry | None = None,
     ):
         """Initialize service.
 
@@ -141,6 +152,14 @@ class ComprehensiveReportService:
         self.staged_eval = staged_eval_service
         self.prompt_service = prompt_service
         self.llm = llm_service
+        self.evidence_port = (
+            evidence_port
+            or get_configured_session_evidence_port(db_session)
+            or SqlSessionEvidencePort(db_session)
+        )
+        self.scenario_registry = (
+            scenario_registry or get_evaluation_scenario_registry()
+        )
 
     async def generate_report(
         self,
@@ -161,22 +180,24 @@ class ComprehensiveReportService:
                 session_id=session_id,
                 requested_scenario_type=scenario_type,
             )
-            if resolved_scenario_type == "presentation":
-                presentation_service = PresentationReportService(self.db)
-                presentation_result = await presentation_service.build_report(
-                    session_id
+            if resolved_scenario_type != "sales":
+                evidence = await self.evidence_port.load(session_id)
+                if self.scenario_registry is None:
+                    return Result.fail("[EVALUATION_SCENARIO_NOT_CONFIGURED]")
+                scenario_result = await self.scenario_registry.evaluate(
+                    resolved_scenario_type,
+                    db=self.db,
+                    scenario_input=EvaluationScenarioInput(evidence=evidence),
                 )
-                if (
-                    not presentation_result.is_success
-                    or presentation_result.value is None
-                ):
+                if not scenario_result.is_success or scenario_result.value is None:
                     return Result.fail(
-                        presentation_result.fallback or "[PRESENTATION_REPORT_FAILED]"
+                        scenario_result.fallback or "[EVALUATION_SCENARIO_FAILED]"
                     )
-                store_result = await self._store_report(presentation_result.value)
+                report = self._from_scenario_result(scenario_result.value)
+                store_result = await self._store_report(report)
                 if not store_result.is_success:
                     return Result.fail(store_result.fallback or "[DATABASE_ERROR]")
-                return Result.ok(presentation_result.value)
+                return Result.ok(report)
 
             # Get all stage evaluations
             stage_results = await self.staged_eval.get_stage_results(session_id)
@@ -254,34 +275,10 @@ class ComprehensiveReportService:
         requested_scenario_type: str,
     ) -> str:
         normalized_requested = str(requested_scenario_type or "sales").strip().lower()
-        if normalized_requested == "presentation":
-            return "presentation"
-
-        from common.db.models import PracticeSession, Scenario
-
-        result = await self.db.execute(
-            select(PracticeSession.presentation_id, Scenario.scenario_type)
-            .outerjoin(Scenario, Scenario.scenario_id == PracticeSession.scenario_id)
-            .where(PracticeSession.session_id == session_id)
-        )
-        row: Any = result.first()
-        if inspect.isawaitable(row):
-            row = await row
-        if row is None or _is_test_mock_object(row):
-            return normalized_requested or "sales"
-        try:
-            if hasattr(row, "_mapping"):
-                mapping = row._mapping
-                presentation_id = mapping.get("presentation_id")
-                scenario_type = str(mapping.get("scenario_type") or "").strip().lower()
-            else:
-                presentation_id = row[0]
-                scenario_type = str(row[1] or "").strip().lower()
-        except Exception:
-            return normalized_requested or "sales"
-        if presentation_id or scenario_type == "presentation":
-            return "presentation"
-        return normalized_requested or "sales"
+        if normalized_requested != "sales":
+            return normalized_requested
+        evidence = await self.evidence_port.load(session_id)
+        return str(evidence.scenario_type or normalized_requested or "sales").lower()
 
     async def _resolve_scoring_ruleset_view(
         self,
@@ -305,67 +302,38 @@ class ComprehensiveReportService:
             return ScoringRulesetService.build_default_view(normalized)
 
     async def _get_conversation_data(self, session_id: str) -> str:
-        """Get conversation transcript for a session.
+        """Return transcript through the injected immutable evidence capability."""
 
-        Tries two sources in order:
-1. Database conversation_messages table (primary persisted runtime path)
-2. In-memory context_manager (legacy compatibility fallback)
+        evidence = await self.evidence_port.load(session_id)
+        return evidence.transcript
 
-        Args:
-            session_id: Session ID
-
-        Returns:
-            Formatted conversation string or empty string
-        """
-        # 1. Try database conversation_messages first (persisted runtime path)
-        try:
-            from common.conversation.models import ConversationMessage
-
-            result = await self.db.execute(
-                select(ConversationMessage)
-                .where(ConversationMessage.session_id == session_id)
-                .order_by(
-                    ConversationMessage.turn_number, ConversationMessage.timestamp
+    @staticmethod
+    def _from_scenario_result(result: EvaluationScenarioResult) -> ComprehensiveReport:
+        return ComprehensiveReport(
+            session_id=result.session_id,
+            generated_at=result.generated_at,
+            overall_score=result.overall_score,
+            dimension_scores=[
+                DimensionScore(
+                    name=item.name,
+                    score=item.score,
+                    weight=item.weight,
+                    description=item.description,
+                    dimension_id=item.dimension_id,
                 )
-            )
-            messages = list(result.scalars().all())
-
-            if messages:
-                lines = []
-                for msg in messages:
-                    role_label = "用户" if msg.role == "user" else "AI"
-                    lines.append(f"{role_label}: {msg.content}")
-                lines_str = "\n".join(lines)
-                if lines_str.strip():
-                    return lines_str
-        except (RuntimeError, ValueError, OSError, ImportError) as e:
-            from common.monitoring.logger import get_logger
-
-            get_logger(__name__).debug(f"DB conversation query failed: {e}")
-
-        # 2. Fallback to in-memory context_manager (legacy compatibility path)
-        try:
-            import uuid as uuid_mod
-
-            from sales_bot.services.context_manager import context_manager
-
-            context_result = await context_manager.get_context(
-                uuid_mod.UUID(session_id)
-            )
-            if not context_result.is_success:
-                return ""
-
-            context = context_result.value
-            if context is None:
-                return ""
-            lines = []
-            for turn in context.turns:
-                lines.append(f"用户: {turn.user_text}")
-                lines.append(f"AI: {turn.bot_response}")
-                lines.append("")
-            return "\n".join(lines)
-        except (RuntimeError, ValueError, OSError, ImportError):
-            return ""
+                for item in result.dimension_scores
+            ],
+            stage_summaries=[dict(item) for item in result.stage_summaries],
+            key_strengths=list(result.key_strengths),
+            key_improvements=list(result.key_improvements),
+            detailed_feedback=result.detailed_feedback,
+            recommendations=list(result.recommendations),
+            ruleset_id=result.ruleset_id,
+            ruleset_version=result.ruleset_version,
+            score_basis=result.score_basis,
+            ruleset_source=result.ruleset_source,
+            scoring_metadata=result.scoring_metadata,
+        )
 
     async def get_report(
         self,

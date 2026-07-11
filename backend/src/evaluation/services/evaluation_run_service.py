@@ -9,9 +9,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from admin.config_bundles.lifecycle import ConfigBundleLifecycleService
 from common.business_rules.defaults import SALES_COMBINATION_RULES_KEY
 from common.db.models import EvaluationRun, EvaluationRunStatus, PracticeSession
+from evaluation.adapters.config_binding import resolve_active_config_binding
 
 CURRICULUM_LINEAGE_KEYS = (
     "practice_template",
@@ -102,14 +102,15 @@ class EvaluationRunService:
                 "config_version_id": config_version_id,
             }
 
-        active_version = await ConfigBundleLifecycleService(
-            self.db
-        ).resolve_active_version(SALES_COMBINATION_RULES_KEY)
+        active_version = await resolve_active_config_binding(
+            self.db,
+            bundle_key=SALES_COMBINATION_RULES_KEY,
+        )
         if active_version is None:
             return {"config_bundle_id": None, "config_version_id": None}
         return {
-            "config_bundle_id": str(active_version.bundle_id),
-            "config_version_id": str(active_version.version_id),
+            "config_bundle_id": active_version.bundle_id,
+            "config_version_id": active_version.version_id,
         }
 
     async def mark_running(self, run_id: str) -> EvaluationRun:

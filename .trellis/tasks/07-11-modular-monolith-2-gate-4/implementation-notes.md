@@ -64,3 +64,21 @@
   is 26 passed. Ruff passed for touched files and mypy passed for 14 focused source files. The HTTP
   contract covers list, versions, validate, preview, draft, publish, rollback, disable, not-found,
   invalid schema, RBAC, trace-bearing audit rows and Situation Pack projection.
+- Task 5 Red failed with `ModuleNotFoundError: evaluation.ports`. Evaluation now owns immutable Session
+  Evidence and Scenario port contracts, a duplicate/late-registration rejecting frozen registry, the
+  persisted SQL evidence projection and its own ConfigVersion binding read adapter. Presentation maps
+  its deterministic review to `EvaluationScenarioResult`; the application root registers the concrete
+  adapter and the Sales-only in-memory evidence fallback. Evaluation imports none of Admin, Curriculum,
+  Presentation or Sales, and missing transcript/unknown scenario fail closed as non-evaluable failures.
+- Task 5 debugging evidence: the first unit run exposed that SQLAlchemy results are synchronous after
+  `await session.execute`, while the suite's `AsyncMock` returns awaitable `scalars()`/`all()` methods.
+  The evidence adapter now normalizes only that test/adapter boundary and the original five failures all
+  passed on the next run. No report algorithm or assertion was weakened.
+- Task 5 route truth deviation: repository contract tests and the effective route inventory prove the
+  public scoring path is `/api/v1/evaluation/admin/scoring-rulesets`, not the plan's assumed
+  `/api/v1/admin/scoring-rulesets`. The Admin router is now mounted directly by the application root at
+  the existing path, so `evaluation -> admin` disappears without an OpenAPI or client-path change.
+- Task 5 verification: full Evaluation/Presentation/scoring/app/Gate 4 matrix is 76 passed; report
+  trigger and Presentation integration matrix is 17 passed; architecture/route/OpenAPI generator
+  matrix is 27 passed. Ruff passed, mypy passed for 32 focused source files, and the five Gate 4 reverse
+  edges are now all absent.

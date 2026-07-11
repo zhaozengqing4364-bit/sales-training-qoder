@@ -21,6 +21,7 @@ from admin.api.model_configs import router as model_configs_router
 from admin.api.presentation_ai import router as presentation_ai_router
 from admin.api.rag_profiles import router as rag_profiles_router
 from admin.api.release_verification import router as release_verification_router
+from admin.api.scoring_rulesets import router as admin_scoring_rulesets_router
 from admin.api.settings import router as admin_settings_router
 from admin.api.system_logs import router as admin_system_logs_router
 from admin.api.training_records import router as admin_training_records_router
@@ -326,4 +327,9 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(scenario_prompts_router, tags=["scenario-prompts"])
 
     app.include_router(evaluation_router, prefix="/api/v1", tags=["evaluation"])
+    app.include_router(
+        admin_scoring_rulesets_router,
+        prefix="/api/v1/evaluation",
+        tags=["admin-scoring-rulesets"],
+    )
     app.include_router(supervisor_router, prefix="/api/v1", tags=["supervisor"])

@@ -30,11 +30,14 @@ stable_edges:
   - [curriculum_practice, evaluation]
   - [curriculum_practice, roleplay]
   - [evaluation, common]
+  - [evaluation, configuration_governance]
   - [evaluation, prompt_templates]
   - [evaluation, roleplay]
   - [presentation_coach, common]
+  - [presentation_coach, evaluation]
   - [prompt_templates, common]
   - [sales_bot, common]
+  - [sales_bot, evaluation]
   - [sales_bot, roleplay]
   - [sales_trainer, common]
   - [sales_trainer, prompt_templates]
@@ -91,18 +94,8 @@ temporary_edges:
       Roleplay Contract, Configuration Governance, and asset ports are neutral.
     expires_on: 2026-10-31
 
-  - source: evaluation
-    targets: [admin, presentation_coach, sales_bot]
-    owner: evaluation
-    reason: >-
-      Report composition still imports scenario and governance implementations.
-    retire_when: >-
-      Evaluation consumes only evidence, roleplay, and scenario evaluation
-      ports.
-    expires_on: 2026-10-31
-
   - source: presentation_coach
-    targets: [agent, evaluation, prompt_templates, sales_bot, support]
+    targets: [agent, prompt_templates, sales_bot, support]
     owner: presentation-coach
     reason: >-
       The Presentation facade is composition-based and Gate 3 neutralized
@@ -117,7 +110,6 @@ temporary_edges:
     targets:
       - agent
       - curriculum_practice
-      - evaluation
       - prompt_templates
       - sales_trainer
       - support

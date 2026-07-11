@@ -185,6 +185,9 @@ async def _request_validation_exception_handler(
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     _validate_production_readiness_config()
+    from scenario_composition import configure_evaluation_scenarios
+
+    configure_evaluation_scenarios()
     app = FastAPI(
         title=APP_TITLE,
         description=APP_DESCRIPTION,

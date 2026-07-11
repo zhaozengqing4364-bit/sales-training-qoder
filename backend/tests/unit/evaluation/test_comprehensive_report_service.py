@@ -214,17 +214,28 @@ class TestComprehensiveReportService:
         self,
         service,
         mock_staged_eval_service,
-        monkeypatch: pytest.MonkeyPatch,
     ):
+        from evaluation.ports.evidence import SessionEvidence
+        from evaluation.ports.scenario import (
+            EvaluationDimensionResult,
+            EvaluationScenarioInput,
+            EvaluationScenarioRegistry,
+            EvaluationScenarioResult,
+        )
+
         session_id = str(uuid4())
         mock_staged_eval_service.get_stage_results.return_value = []
 
-        fake_report = ComprehensiveReport(
+        fake_report = EvaluationScenarioResult(
             session_id=session_id,
             generated_at=datetime.now(UTC),
             overall_score=86.0,
             dimension_scores=[
-                DimensionScore(name="流畅连贯性", score=88.0, weight=0.2),
+                EvaluationDimensionResult(
+                    name="流畅连贯性",
+                    score=88.0,
+                    weight=0.2,
+                ),
             ],
             key_strengths=["表达流畅"],
             key_improvements=["增加互动"],
@@ -238,22 +249,28 @@ class TestComprehensiveReportService:
                     "average_score": 86.0,
                     "key_points": ["表达流畅"],
                     "summary": "第一页讲解稳定",
-                }
+                },
             ],
         )
 
-        class FakePresentationReportService:
-            def __init__(self, db_session):
-                self.db_session = db_session
-
-            async def build_report(self, report_session_id: str):
-                assert report_session_id == session_id
+        class FakePresentationScenario:
+            async def evaluate(self, scenario_input: EvaluationScenarioInput):
+                assert scenario_input.evidence.session_id == session_id
                 return Result.ok(fake_report)
 
-        monkeypatch.setattr(
-            "evaluation.services.comprehensive_report.PresentationReportService",
-            FakePresentationReportService,
-        )
+        class FakeEvidencePort:
+            async def load(self, evidence_session_id: str) -> SessionEvidence:
+                return SessionEvidence(
+                    session_id=evidence_session_id,
+                    scenario_type="presentation",
+                    transcript="用户: presentation evidence",
+                )
+
+        registry = EvaluationScenarioRegistry()
+        registry.register("presentation", lambda _db: FakePresentationScenario())
+        registry.freeze()
+        service.scenario_registry = registry
+        service.evidence_port = FakeEvidencePort()
 
         result = await service.generate_report(session_id, scenario_type="presentation")
 

@@ -24,6 +24,10 @@ from common.effectiveness.scoring_rulesets import (
 )
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+from evaluation.ports.scenario import (
+    EvaluationDimensionResult,
+    EvaluationScenarioResult,
+)
 
 logger = get_logger(__name__)
 
@@ -111,12 +115,7 @@ class PresentationReportService:
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
 
-    async def build_report(self, session_id: str) -> Result[Any]:
-        from evaluation.services.comprehensive_report import (
-            ComprehensiveReport,
-            DimensionScore,
-        )
-
+    async def build_report(self, session_id: str) -> Result[EvaluationScenarioResult]:
         try:
             review_result = await self.build_presentation_review(session_id)
             if not review_result.is_success or review_result.value is None:
@@ -136,7 +135,7 @@ class PresentationReportService:
             if not isinstance(scoring_metadata, dict):
                 scoring_metadata = None
             dimension_scores = [
-                DimensionScore(
+                EvaluationDimensionResult(
                     name=item["name"],
                     score=item["score"],
                     weight=item["weight"],
@@ -163,7 +162,7 @@ class PresentationReportService:
             )
             await self.db.flush()
 
-            report = ComprehensiveReport(
+            report = EvaluationScenarioResult(
                 session_id=session_id,
                 generated_at=datetime.now(UTC),
                 overall_score=review["overall_score"],

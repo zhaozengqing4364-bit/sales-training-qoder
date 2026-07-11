@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 from scripts.architecture_dependency_guard import collect_edges
 
@@ -185,8 +186,7 @@ def test_gate4_report_wire_projection_is_byte_stable() -> None:
 def test_gate4_reverse_dependency_inventory_cannot_expand_during_migration() -> None:
     remaining = _actual_edges() & GATE4_REVERSE_EDGES
 
-    assert remaining <= GATE4_REVERSE_EDGES
-    assert remaining
+    assert remaining == set()
 
 
 def test_roleplay_neutral_primitives_are_compatibility_authority() -> None:
@@ -326,3 +326,72 @@ def test_configuration_governance_is_neutral_and_selects_one_authority(
     assert Settings().CONFIGURATION_GOVERNANCE_ENABLED is True
     monkeypatch.setenv("CONFIGURATION_GOVERNANCE_ENABLED", "invalid")
     assert Settings().CONFIGURATION_GOVERNANCE_ENABLED is False
+
+
+@pytest.mark.asyncio
+async def test_evaluation_scenario_registry_is_frozen_extensible_and_fail_closed() -> None:
+    from common.error_handling.result import Result
+    from evaluation.ports.evidence import SessionEvidence
+    from evaluation.ports.scenario import (
+        EvaluationScenarioInput,
+        EvaluationScenarioRegistry,
+        EvaluationScenarioResult,
+    )
+
+    class FakeScenario:
+        async def evaluate(
+            self,
+            scenario_input: EvaluationScenarioInput,
+        ) -> Result[EvaluationScenarioResult]:
+            return Result.ok(
+                EvaluationScenarioResult(
+                    session_id=scenario_input.evidence.session_id,
+                    generated_at=datetime(2026, 7, 11, tzinfo=UTC),
+                    overall_score=91.0,
+                    detailed_feedback="fake scenario",
+                )
+            )
+
+    registry = EvaluationScenarioRegistry()
+    registry.register("future-scenario", lambda _db: FakeScenario())
+    with pytest.raises(ValueError, match="already registered"):
+        registry.register("future-scenario", lambda _db: FakeScenario())
+    registry.freeze()
+    with pytest.raises(RuntimeError, match="frozen"):
+        registry.register("late-scenario", lambda _db: FakeScenario())
+
+    evidence = SessionEvidence(
+        session_id="future-session",
+        scenario_type="future-scenario",
+        transcript="用户: hello\nAI: world",
+    )
+    result = await registry.evaluate(
+        "future-scenario",
+        db=object(),
+        scenario_input=EvaluationScenarioInput(evidence=evidence),
+    )
+    assert result.is_success
+    assert result.value is not None
+    assert result.value.overall_score == 91.0
+
+    missing = await registry.evaluate(
+        "future-scenario",
+        db=object(),
+        scenario_input=EvaluationScenarioInput(
+            evidence=SessionEvidence(
+                session_id="missing-evidence",
+                scenario_type="future-scenario",
+                transcript="",
+            )
+        ),
+    )
+    assert missing.is_success is False
+    assert missing.fallback == "[EVALUATION_EVIDENCE_INSUFFICIENT]"
+
+    unknown = await registry.evaluate(
+        "unknown",
+        db=object(),
+        scenario_input=EvaluationScenarioInput(evidence=evidence),
+    )
+    assert unknown.is_success is False
+    assert unknown.fallback == "[EVALUATION_SCENARIO_NOT_CONFIGURED]"

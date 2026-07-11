@@ -304,35 +304,35 @@ architecture guard, Trellis, CodeGraph.
 - `ComprehensiveReportService` receives ports or the frozen configured registry; it never imports a
   concrete scenario.
 
-- [ ] **Step 1: Write port and failure-matrix Red tests**
+- [x] **Step 1: Write port and failure-matrix Red tests**
 
   Prove duplicate/late registration rejection, unknown scenario fail-closed, missing transcript/
   insufficient evidence non-evaluable, frozen snapshot use, and fake scenario extensibility without a
   Sales/Evaluation code edit.
 
-- [ ] **Step 2: Implement immutable ports and SQL projection**
+- [x] **Step 2: Implement immutable ports and SQL projection**
 
   Read persisted ConversationMessage first. Legacy in-memory Sales context, if still required by a
   compatibility test, is supplied by a Sales adapter at root rather than imported by Evaluation.
 
-- [ ] **Step 3: Implement Presentation adapter and root wiring**
+- [x] **Step 3: Implement Presentation adapter and root wiring**
 
   Presentation maps its deterministic review to `EvaluationScenarioResult`; Evaluation maps that result
   once to the existing `ComprehensiveReport` and remains the report persistence single writer.
 
-- [ ] **Step 4: Remove concrete Evaluation imports**
+- [x] **Step 4: Remove concrete Evaluation imports**
 
   Replace Admin lifecycle lookup with an Evaluation-owned immutable config-binding projection. Replace
   Curriculum Roleplay import with neutral Roleplay. Remove Presentation and Sales implementation imports.
   Mount `admin.api.scoring_rulesets` directly from the root router registry at the unchanged
   `/api/v1/admin/scoring-rulesets` path instead of nesting the Admin router inside Evaluation.
 
-- [ ] **Step 5: Run differential and idempotency tests**
+- [x] **Step 5: Run differential and idempotency tests**
 
   Compare complete Sales/Presentation report payloads, DB writes and second-run behavior. Run reconnect
   and report-trigger tests to prove no duplicate evaluation/report.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
   Commit as `refactor(evaluation): consume evidence and scenario ports`.
 
