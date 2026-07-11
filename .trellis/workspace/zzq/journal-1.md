@@ -590,3 +590,48 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: 模块化单体 2.0 Gate 4 领域所有权闭环
+
+**Date**: 2026-07-11
+**Task**: 模块化单体 2.0 Gate 4 领域所有权闭环
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+完成 Roleplay、Configuration Governance、Evaluation Evidence/Scenario ports 与中立 realtime helper 所有权迁移；清除五条反向边并将历史 SCC 从 12 包收缩至 7 包；最终 Brooks 100/100、Trellis blocker=0，clean-start canonical gate 全绿后归档。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `06cc7243` | (see git log) |
+| `d527fa5e` | (see git log) |
+| `81773328` | (see git log) |
+| `279a0a84` | (see git log) |
+| `60ec3a69` | (see git log) |
+| `32f9f45e` | (see git log) |
+| `d0394343` | (see git log) |
+| `c20a7216` | (see git log) |
+| `a6d528a6` | (see git log) |
+| `4be00393` | (see git log) |
+| `3aff68c9` | (see git log) |
+| `3ae8b355` | (see git log) |
+| `d78baf1e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
