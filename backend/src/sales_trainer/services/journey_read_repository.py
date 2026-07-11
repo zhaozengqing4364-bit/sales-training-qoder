@@ -52,6 +52,8 @@ class JourneyReadRepository(Protocol):
         team_department: str | None,
         department: str | None,
         limit: int | None,
+        offset: int = 0,
+        include_development_admin: bool = True,
     ) -> JourneyLearnerPage: ...
 
     async def roleplay_sessions(

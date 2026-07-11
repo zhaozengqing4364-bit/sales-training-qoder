@@ -37,9 +37,12 @@ def _freeze_json_mapping(value: object) -> Mapping[str, object]:
     return MappingProxyType({str(key): freeze(child) for key, child in value.items()})
 
 
-def _team_visible_learner_role_filter() -> Any:
+def _team_visible_learner_role_filter(*, include_development_admin: bool) -> Any:
     learner_filter = User.role == "user"
-    if os.getenv("ENVIRONMENT", "development").strip().lower() != "development":
+    if (
+        not include_development_admin
+        or os.getenv("ENVIRONMENT", "development").strip().lower() != "development"
+    ):
         return learner_filter
     return or_(
         learner_filter,
@@ -67,11 +70,18 @@ class SqlAlchemyJourneyReadRepository:
         team_department: str | None,
         department: str | None,
         limit: int | None,
+        offset: int = 0,
+        include_development_admin: bool = True,
     ) -> JourneyLearnerPage:
         if team_department is not None and department and department != team_department:
             return JourneyLearnerPage(items=(), total=0)
         effective_department = team_department or department
-        filters = [_team_visible_learner_role_filter(), User.is_active.is_(True)]
+        filters = [
+            _team_visible_learner_role_filter(
+                include_development_admin=include_development_admin
+            ),
+            User.is_active.is_(True),
+        ]
         if effective_department:
             filters.append(User.department == effective_department)
         total = int(
@@ -84,6 +94,7 @@ class SqlAlchemyJourneyReadRepository:
             select(User)
             .where(*filters)
             .order_by(User.created_at.desc(), User.user_id.asc())
+            .offset(offset)
         )
         if limit is not None:
             statement = statement.limit(limit)

@@ -351,6 +351,7 @@ class TrainingJourneyService:
             team_department=team_department,
             department=department,
             limit=limit,
+            include_development_admin=True,
         )
         return list(page.items), page.total
 

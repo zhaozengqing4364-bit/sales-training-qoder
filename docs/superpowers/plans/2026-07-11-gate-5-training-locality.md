@@ -212,27 +212,27 @@
 - Consumes: immutable learner projection, Journey payload, record projections and audit log payloads.
 - Produces: pure `dossier`, `workbench`, approval eligibility/default selection and blocked-Journey outputs.
 
-- [ ] **Step 1: Add pure projection characterization tests**
+- [x] **Step 1: Add pure projection characterization tests**
 
   Cover evidence aggregation/dedup/order, module summaries, competencies, status precedence, config blocker,
   retraining before/after comparison, realtime gate, next actions, workbench grouping and redaction.
 
-- [ ] **Step 2: Move deterministic rules without changing payloads**
+- [x] **Step 2: Move deterministic rules without changing payloads**
 
   Projection input is a frozen source DTO or recursively immutable mapping. Output mapping is freshly allocated;
   the Module has no DB, clock, FastAPI, ORM or operation-log import. Inject `generated_at` rather than reading time.
 
-- [ ] **Step 3: Keep transaction and permissions in application orchestration**
+- [x] **Step 3: Keep transaction and permissions in application orchestration**
 
   Service loads viewer-scoped learner, Journey, records and logs; validates requested evidence/capabilities;
   writes one operation log and commits once. Approval remains fail closed and unknown IDs return the same codes.
 
-- [ ] **Step 4: Remove direct `User` ORM import and run differential matrix**
+- [x] **Step 4: Remove direct `User` ORM import and run differential matrix**
 
   Use the Journey repository for learner/page lookup. Run Dossier, phase2 contract, training records, Journey API,
   RBAC, audit and architecture tests; run Ruff/mypy.
 
-- [ ] **Step 5: Commit Dossier locality**
+- [x] **Step 5: Commit Dossier locality**
 
   Commit as `refactor(readiness): isolate dossier projection policy`.
 

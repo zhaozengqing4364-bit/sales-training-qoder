@@ -55,3 +55,13 @@
   locality contracts passed `25/25`; the CodeGraph-selected Journey/phase2/readiness/API/seed matrix passed
   `112/112`; Ruff, focused mypy and the architecture dependency guard passed. The two remaining Gate 5 Red
   assertions are intentionally isolated to Task 4 Readiness extraction.
+- Task 4 reduced `ReadinessDossierService` from 1,284 to 336 lines. The application service now owns only
+  viewer-scoped loading, Journey/record/log orchestration, validation before writes and the single commit;
+  the 992-line pure `ReadinessDossierProjection` owns dossier evidence, summaries, competencies, state
+  precedence, approval eligibility, realtime gate, next actions, workbench grouping and blocked snapshots.
+- Readiness reuses the frozen Journey repository for learner and paged workbench reads. The repository keeps
+  the former fallback semantics explicit: Journey lists may include the development login admin while the
+  Readiness fallback sets `include_development_admin=False`; both use stable offset/order behavior.
+- Task 4 differential evidence passed: pure projection `3/3`, Dossier/phase2/locality `28/28`, and Journey
+  API/RBAC/audit/lineage/Journey/Dossier/phase2 `64/64`. Full focused Ruff/mypy and the architecture dependency
+  guard passed. All backend Gate 5 locality contracts and new port/projection tests are Green `14/14`.

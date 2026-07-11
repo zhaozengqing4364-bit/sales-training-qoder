@@ -67,11 +67,13 @@ async def test_journey_repository_applies_department_active_and_role_scope(
         team_department="销售一部",
         department=None,
         limit=None,
+        include_development_admin=False,
     )
     blocked = await repository.learners(
         team_department="销售一部",
         department="销售二部",
         limit=None,
+        include_development_admin=False,
     )
 
     assert {item.learner_id for item in page.items} == {"active-a", "active-b"}
