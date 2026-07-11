@@ -10,6 +10,7 @@ PLAYWRIGHT_REPORT_HTML="${EVIDENCE_DIR}/task-9-playwright-report.html"
 NEWCOMER_REAL_PROVIDER_EVIDENCE="${EVIDENCE_DIR}/newcomer-real-provider-gate.json"
 NEWCOMER_AI_COACH_REAL_PROVIDER_EVIDENCE="${EVIDENCE_DIR}/newcomer-ai-coach-real-provider-gate.json"
 NEWCOMER_AI_COACH_REAL_PROVIDER_RUNTIME_AUDIT="${EVIDENCE_DIR}/newcomer-ai-coach-real-provider-runtime-audit.json"
+PLAYWRIGHT_LIBRARY_DIR="${PLAYWRIGHT_LIBRARY_DIR:-${ROOT_DIR}/.sisyphus/playwright-libs/root/usr/lib/x86_64-linux-gnu}"
 
 BACKEND_PORT="${BACKEND_PORT:-3444}"
 FRONTEND_PORT="${FRONTEND_PORT:-3445}"
@@ -51,6 +52,16 @@ log() {
 die() {
   printf '\n[%s] [ERROR] %s\n' "$(timestamp)" "$*" >&2
   exit 1
+}
+
+run_playwright() {
+  if [[ -f "${PLAYWRIGHT_LIBRARY_DIR}/libnspr4.so" ]]; then
+    env \
+      LD_LIBRARY_PATH="${PLAYWRIGHT_LIBRARY_DIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
+      npx playwright "$@"
+    return
+  fi
+  npx playwright "$@"
 }
 
 resolve_python_bin() {
@@ -408,7 +419,7 @@ run_newcomer_real_provider_gate() {
     SMOKE_REUSE_EXISTING_STACK=1 \
       PHASE4_E2E_PROVIDER="${NEWCOMER_REAL_PROVIDER_NAME}" \
       NEWCOMER_E2E_EXPECT_REAL_PROVIDER=1 \
-      npx playwright test tests/e2e/newcomer-training-closed-loop.spec.ts \
+      run_playwright test tests/e2e/newcomer-training-closed-loop.spec.ts \
         --grep "realtime roleplay starts from active path" \
         --workers=1
   ); then
@@ -459,7 +470,7 @@ run_newcomer_ai_coach_real_provider_gate() {
 	    SMOKE_REUSE_EXISTING_STACK=1 \
 	      NEWCOMER_AI_COACH_EXPECT_REAL_PROVIDER=1 \
 	      NEWCOMER_AI_COACH_REAL_PROVIDER_AUDIT_FILE="${NEWCOMER_AI_COACH_REAL_PROVIDER_RUNTIME_AUDIT}" \
-	      npx playwright test tests/e2e/newcomer-training-closed-loop.spec.ts \
+	      run_playwright test tests/e2e/newcomer-training-closed-loop.spec.ts \
 	        --grep "AI Coach real provider stream creates a governed first-card after learner choice" \
 	        --workers=1
   ); then
@@ -635,7 +646,7 @@ if [[ ${#GENERIC_PLAYWRIGHT_TARGETS[@]} -gt 0 ]]; then
   (
     cd "${ROOT_DIR}/web"
     SMOKE_REUSE_EXISTING_STACK=1 \
-      npx playwright test "${GENERIC_PLAYWRIGHT_TARGETS[@]}" --workers=1
+      run_playwright test "${GENERIC_PLAYWRIGHT_TARGETS[@]}" --workers=1
   )
 fi
 
@@ -643,7 +654,7 @@ if is_selected_playwright_target "tests/e2e/smoke.spec.ts"; then
   log "Playwright smoke E2E"
   (
     cd "${ROOT_DIR}/web"
-    SMOKE_REUSE_EXISTING_STACK=1 npx playwright test tests/e2e/smoke.spec.ts
+    SMOKE_REUSE_EXISTING_STACK=1 run_playwright test tests/e2e/smoke.spec.ts
   )
 fi
 
@@ -653,7 +664,7 @@ if is_selected_playwright_target "tests/e2e/newcomer-training-closed-loop.spec.t
     cd "${ROOT_DIR}/web"
     SMOKE_REUSE_EXISTING_STACK=1 \
       PHASE4_E2E_PROVIDER=local \
-      npx playwright test tests/e2e/newcomer-training-closed-loop.spec.ts --workers=1
+      run_playwright test tests/e2e/newcomer-training-closed-loop.spec.ts --workers=1
   )
 fi
 
@@ -676,7 +687,7 @@ if is_selected_playwright_target "tests/e2e/presentation-phase4.spec.ts"; then
     ISSUE44_BACKEND_LOG_PATH="${ROOT_DIR}/.dev/logs/backend.log" \
     STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
     SMOKE_REUSE_EXISTING_STACK=1 \
-    npx playwright test tests/e2e/presentation-phase4.spec.ts --workers=1
+    run_playwright test tests/e2e/presentation-phase4.spec.ts --workers=1
   )
 fi
 
@@ -697,7 +708,7 @@ if is_selected_playwright_target "tests/e2e/sales-phase4.spec.ts"; then
     ISSUE43_E2E_RUN_MANIFEST="${ROOT_DIR}/.sisyphus/evidence/issue-43-run-manifest.jsonl" \
     STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
     SMOKE_REUSE_EXISTING_STACK=1 \
-    npx playwright test tests/e2e/sales-phase4.spec.ts --workers=1
+    run_playwright test tests/e2e/sales-phase4.spec.ts --workers=1
   )
 fi
 

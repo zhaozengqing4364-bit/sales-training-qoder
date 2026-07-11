@@ -178,7 +178,7 @@ def test_dev_smoke_up_resets_generated_frontend_dev_state_before_start(
                 f"source {shlex.quote(str(sourceable_script))}",
                 f"ROOT_DIR={shlex.quote(str(ROOT_DIR))}",
                 "rm() { printf 'rm %s\\n' \"$*\"; }",
-                "bash() { printf 'bash %s\\n' \"$*\"; }",
+                "bash() { printf 'bash %s api=%s ws=%s\\n' \"$*\" \"${NEXT_PUBLIC_API_URL:-}\" \"${NEXT_PUBLIC_WS_URL:-}\"; }",
                 "start_local_stack",
             ]
         )
@@ -187,5 +187,8 @@ def test_dev_smoke_up_resets_generated_frontend_dev_state_before_start(
     assert result.returncode == 0, result.stderr + result.stdout
     assert result.stdout.splitlines() == [
         f"rm -rf {ROOT_DIR / 'web' / '.next' / 'dev'}",
-        f"bash {ROOT_DIR / 'scripts' / 'dev-up.sh'}",
+        (
+            f"bash {ROOT_DIR / 'scripts' / 'dev-up.sh'} "
+            "api=http://localhost:3444/api/v1 ws=ws://localhost:3444"
+        ),
     ]

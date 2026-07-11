@@ -141,3 +141,12 @@
   module. The tests now patch the actual authority while continuing to invoke the compatibility exports.
   Exact regression plus identity matrix is `16 passed`, and the durable function-global seam rule is
   recorded in the Gate 4 Trellis spec.
+- The third canonical attempt passed backend (`3285 passed, 1 skipped`), full mypy, Web checks and
+  Vitest (`1329 passed, 6 skipped`) before all three generic Playwright cases failed at browser launch:
+  the non-root environment lacked system `libnspr4.so` although the prepared local browser library
+  bundle existed. The canonical script now routes all seven Playwright invocations through one
+  `run_playwright` seam that conditionally injects the local library path without downloading or
+  skipping. Once Chromium launched, the audit exposed a second environment leak: smoke Next dev had
+  read a public-host `.env.local`, so login cookies and API calls targeted another host and returned
+  401. `dev-smoke-up.sh` now explicitly injects loopback API/WS build inputs while preserving the user's
+  `.env.local`. Script/unit regression is `7 passed`; exact generic Playwright is `3 passed`.

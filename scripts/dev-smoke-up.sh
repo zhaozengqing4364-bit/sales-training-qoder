@@ -14,6 +14,8 @@ REDIS_PORT="${REDIS_PORT:-6379}"
 POSTGRES_USER="${POSTGRES_USER:-dev}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-dev}"
 POSTGRES_DB="${POSTGRES_DB:-sales_training}"
+SMOKE_FRONTEND_API_URL="${SMOKE_FRONTEND_API_URL:-http://localhost:${BACKEND_PORT}/api/v1}"
+SMOKE_FRONTEND_WS_URL="${SMOKE_FRONTEND_WS_URL:-ws://localhost:${BACKEND_PORT}}"
 
 BACKEND_ENV_FILE="${ROOT_DIR}/backend/.env"
 DEFAULT_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
@@ -220,7 +222,9 @@ reset_smoke_frontend_dev_state() {
 
 start_local_stack() {
   reset_smoke_frontend_dev_state
-  bash "${ROOT_DIR}/scripts/dev-up.sh"
+  NEXT_PUBLIC_API_URL="${SMOKE_FRONTEND_API_URL}" \
+    NEXT_PUBLIC_WS_URL="${SMOKE_FRONTEND_WS_URL}" \
+    bash "${ROOT_DIR}/scripts/dev-up.sh"
 }
 
 main() {
