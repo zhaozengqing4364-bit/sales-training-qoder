@@ -134,3 +134,10 @@
   Evaluation tags, then mounts the Evaluation core router. Evaluation still has no Admin import, while
   the committed OpenAPI is byte-current. Regression verification is 15 passed across generator,
   Gate 4 ownership, scoring integration and contract tests; Ruff and mypy are green.
+- The second canonical attempt completed the full unit/contract inventory and exposed exactly two
+  failures (`3283 passed, 1 skipped`). Both tests monkeypatched `AsyncSessionLocal` and
+  `MessageStorageService` on the Sales compatibility module after Task 6 had made its functions identity
+  exports of the Training Runtime authority; Python resolves those globals in the defining neutral
+  module. The tests now patch the actual authority while continuing to invoke the compatibility exports.
+  Exact regression plus identity matrix is `16 passed`, and the durable function-global seam rule is
+  recorded in the Gate 4 Trellis spec.

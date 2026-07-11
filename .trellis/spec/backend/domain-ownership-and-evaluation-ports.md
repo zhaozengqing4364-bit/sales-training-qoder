@@ -103,6 +103,9 @@ Legacy authority. A request constructs exactly one authority and never shadow-wr
 - Neutral event/text/message helpers live in `training_runtime.realtime`. Sales compatibility modules
   forward the same function objects. Presentation retains only the named Sales shared-handler seam
   until Gate 6 proves it can be deleted.
+- Tests that replace a forwarded function's module globals (session factory, storage service or logger)
+  must patch `training_runtime.realtime`, where `function.__globals__` lives; adding look-alike globals
+  to a compatibility export does not create a real seam.
 
 ## 4. Validation & Error Matrix
 

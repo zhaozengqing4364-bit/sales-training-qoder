@@ -8,13 +8,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from common.error_handling.result import Result
-from sales_bot.websocket.components import stepfun_message_helpers as helper_module
 from sales_bot.websocket.components.stepfun_message_helpers import (
     extract_analysis_patch_fields,
     normalize_message_persistence_payload,
     patch_existing_message_analysis,
     save_stepfun_message,
 )
+from training_runtime.realtime import message_persistence as helper_module
 
 
 def test_normalize_message_persistence_payload_adds_sales_stage_and_canonicalizes_analysis() -> None:
