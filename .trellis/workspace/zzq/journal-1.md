@@ -679,3 +679,44 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: 模块化单体 2.0 Gate 6 全部闭环
+
+**Date**: 2026-07-12
+**Task**: 模块化单体 2.0 Gate 6 全部闭环
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+完成闭集 runtime factory、Presentation 应用根组合、Roleplay 转发门面退役、兼容保留治理与收益复核；Brooks 100/100、Trellis blocker=0，canonical backend 3322、Vitest 1345、Playwright 全绿、changed coverage 91.03%，Gate 0A–6 全部闭环。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `463117de` | (see git log) |
+| `1fe72f72` | (see git log) |
+| `4f8f892b` | (see git log) |
+| `71571d0e` | (see git log) |
+| `4d143f3e` | (see git log) |
+| `bd5cd0cb` | (see git log) |
+| `004b191b` | (see git log) |
+| `d3f58ec7` | (see git log) |
+| `99af364a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
