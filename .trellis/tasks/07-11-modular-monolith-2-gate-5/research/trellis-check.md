@@ -4,7 +4,7 @@ Date: 2026-07-11 UTC
 
 ## Result
 
-**Blocking findings: 0.** The check was run after the Brooks pass-1 remediations and before the unique
+**Blocking findings: 0.** The check was run after the Brooks pass-1 remediations and confirmed by the unique
 clean-start canonical gate.
 
 ## Spec and data-flow compliance
@@ -35,13 +35,15 @@ clean-start canonical gate.
 | Trellis context | implement 10 entries, check 8 entries, JSONL validation pass |
 | Artifact hygiene | `git diff --check` and Brooks history JSON parse pass |
 
-The first canonical attempt later exposed a stale critical-branch floor after the Journey extraction. The
+The first canonical attempt exposed a stale critical-branch floor after the Journey extraction. The
 follow-up governance check added a pure projection branch suite and migrated the service/projection floors as a
 non-regressing pair: 340/426 combined versus 290/434 before extraction. Isolated guard evidence is 90.93%
-changed executable coverage with zero changed missing critical branch; final authority still belongs to the
-clean-start rerun.
+changed executable coverage with zero changed missing critical branch. The final clean-start rerun naturally
+exited 0 with backend `3315 passed, 1 skipped`, Vitest `1345 passed, 6 skipped`, Playwright `3/9/11/2/1`,
+selected backend `598 passed, 21 skipped`, final changed coverage 7317/8048 (90.92%), no critical changed
+missing line and the final line `Critical quality gate passed`.
 
 The existing lint warning inventory is non-blocking repository debt and was not suppressed or expanded. One
 pre-existing report-page hook warning became visible because the page was in scope; the audit removed it by using
-the actual `latestSupervisorReview` dependency. The canonical gate remains the final proof for full pytest,
-Vitest, Playwright families, selected backend tests and changed coverage.
+the actual `latestSupervisorReview` dependency. The canonical gate is the final proof for full pytest, Vitest,
+Playwright families, selected backend tests and changed coverage.

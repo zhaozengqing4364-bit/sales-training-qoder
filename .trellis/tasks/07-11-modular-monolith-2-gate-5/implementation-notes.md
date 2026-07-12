@@ -122,3 +122,8 @@
   as an executable pair from pre-Gate-5 `290/434` to service `176/262` plus projection `164/164`: combined
   covered branches rise to 340 and combined ratio to 79.81% from 66.82%. The isolated coverage rerun reports
   no changed missing critical branch and changed executable coverage `7318/8048` (90.93%).
+- The final clean-start canonical rerun completed naturally with `Critical quality gate passed`: backend
+  unit/contract `3315 passed, 1 skipped`; Vitest 213 files / `1345 passed, 6 skipped`; Playwright
+  generic/smoke/newcomer/presentation/sales `3/9/11/2/1 passed` with the one existing real-provider conditional
+  skip; selected backend `598 passed, 21 skipped`; final changed executable coverage `7317/8048` (90.92%).
+  Every critical branch has no changed missing source line and meets its adoption floor; violations are empty.

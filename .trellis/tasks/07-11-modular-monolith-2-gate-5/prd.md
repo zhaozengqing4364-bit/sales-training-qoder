@@ -90,7 +90,7 @@
       `common/db/models.py` 为小型 registry，未产生 Alembic schema diff。
 - [x] 新 Journey/Readiness application code 通过 repository/projection 访问 identity/practice 数据，
       不扩大任何跨包边或 SCC。
-- [ ] Backend focused/affected、frontend focused/affected、OpenAPI、architecture、Ruff、mypy、typecheck、
+- [x] Backend focused/affected、frontend focused/affected、OpenAPI、architecture、Ruff、mypy、typecheck、
       lint、Vitest、selected E2E 和 changed coverage 满足 canonical gate。
 - [x] Brooks audit 与 Trellis check blocking finding=0；文档、ADR、roadmap、Trellis、代码事实一致。
 

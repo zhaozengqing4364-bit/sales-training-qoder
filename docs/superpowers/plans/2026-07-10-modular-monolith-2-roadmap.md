@@ -21,7 +21,8 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 | 2 | Completed（2026-07-11） | Presentation Engine tracer bullet 默认启用、单 flag 可回滚；canonical gate backend 2903 passed、Vitest 1329 passed、全部本地 Playwright、598 个 selected backend 测试和 91.34% changed coverage 通过 |
 | 3 | Completed（2026-07-11） | Provider Port/StepFun codec/Fake contract 与单 Grounding authority 已闭环；Brooks/Trellis review finding=0；canonical gate backend 3271、Vitest 1329、selected backend 598、changed coverage 88.96% 全绿 |
 | 4 | Completed（2026-07-11） | Roleplay、Config Governance、Evaluation ports 与中立 realtime helpers 已闭环；5 条反向边清零，SCC 从 12 包缩至 7 包；Brooks 100/100、Trellis blocker=0；canonical backend 3287、Vitest 1329、selected backend 598、changed coverage 88.75% 全绿 |
-| 5–6 | Not started | 按顺序实施前端/模型 Locality 和兼容层退役 |
+| 5 | Completed（2026-07-12） | Model registry、Journey/Readiness projections、领域 DTO/transport 与 report/readiness ViewModel/action 已闭环；Brooks 100/100、Trellis blocker=0；canonical backend 3315、Vitest 1345、selected backend 598、changed coverage 90.92% 全绿 |
+| 6 | Not started | 退役经消费者与回滚证据证明已无用的兼容层，并复核架构收益 |
 
 Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进度，不把已批准的目标
 设计或已完成的单个基础设施 Gate 误写成模块化单体 2.0 整体完成。
@@ -231,10 +232,10 @@ executable lines 4898/5519（88.75%），critical branch 无 changed missing lin
 
 ## Gate 5：训练闭环与前端 Locality
 
-状态（2026-07-11 UTC）：**实现完成，closure 待验收**。已落地统一 metadata 的物理 model registry、
+状态（2026-07-12 UTC）：**已完成并闭环**。已落地统一 metadata 的物理 model registry、
 冻结 Journey read repository、Journey/Readiness pure projection、领域 TS DTO authority、sessions
-domain builder，以及 report/readiness ViewModel/action。兼容 import/re-export 仍保留，最终 canonical
-gate、Brooks/Trellis 独立审计与归档由 Gate 5 closure 完成。
+domain builder，以及 report/readiness ViewModel/action。兼容 import/re-export 仍保留并作为 Gate 6
+有证据退役的输入。
 
 变更包建议：
 
@@ -245,8 +246,13 @@ gate、Brooks/Trellis 独立审计与归档由 Gate 5 closure 完成。
 5. `common/db/models.py` 物理拆分但保留统一 metadata；
 6. repository/projection 替代跨域 ORM import。
 
-实现验收：报告或训练闭环变化已不再要求同时修改全局页面、全局 DTO 和全局 client；最终质量
-验收以 Gate 5 canonical gate 和零 blocking finding 为准。
+验收：**通过**。报告或训练闭环变化已不再要求同时修改全局页面、全局 DTO 和全局 client。
+最终 clean-start canonical gate 自然 exit 0：backend unit+contract `3315 passed, 1 skipped`；Vitest
+213 files / `1345 passed, 6 skipped`；Playwright generic/smoke/newcomer/presentation/sales 为
+`3/9/11/2/1 passed`（newcomer 1 个既有真实 Provider 条件 skip）；selected backend integration/E2E
+`598 passed, 21 skipped`；changed executable lines 7317/8048（90.92%），critical branch 无 changed
+missing line 或 floor 回退，最终输出 `Critical quality gate passed`。Brooks architecture audit 100/100，
+独立 Trellis check blocking finding=0。
 
 ## Gate 6：兼容层退役和收益复核
 

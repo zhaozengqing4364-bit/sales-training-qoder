@@ -383,7 +383,7 @@ authority evidence and Trellis closure.
   Verify PRD/spec/data flow/reuse, metadata/schema parity, OpenAPI, Ruff, full mypy, typecheck, lint, focused and
   affected tests. Fix/repeat until blocking finding=0.
 
-- [ ] **Step 3: Run one clean-start canonical gate**
+- [x] **Step 3: Run one clean-start canonical gate**
 
   From repo root run `bash scripts/critical-quality-gate.sh` and wait for natural exit. Preserve backend, Vitest,
   every Playwright family, selected backend, changed coverage and final-line evidence. Diagnose failures without

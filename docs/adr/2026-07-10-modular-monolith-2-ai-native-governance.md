@@ -2,8 +2,7 @@
 
 ## Status
 
-Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–4 已闭环；Gate 5
-实现完成、closure 待验收；Gate 6 待实施。
+Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–5 已闭环；Gate 6 待实施。
 本文描述目标边界和迁移约束，不把尚未完成的物理迁移写成当前事实。
 
 ## 背景
@@ -17,7 +16,8 @@ Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。
 - Realtime Mixin 仍通过数百个共享私有字段形成隐藏 Interface；
 - Roleplay Contract、Configuration Governance、Evaluation 的过渡所有权已由 Gate 4 实现迁移；
 - Gate 5 已把 ORM registry、Training Journey/Readiness projection、前端领域 DTO/transport 和
-  report/readiness ViewModel/action authority 接入生产组合，兼容 façade 保留到 Gate 6；
+  report/readiness ViewModel/action authority 接入生产组合；clean-start canonical gate、Brooks 100/100
+  与 Trellis blocking finding=0 已完成，兼容 façade 保留到 Gate 6；
 - 发布门禁只执行部分测试，OpenAPI 和多组测试夹具已经漂移。
 
 AI 辅助开发显著提高提交吞吐。继续按传统人周规划或依赖人工记忆维护边界，会让
