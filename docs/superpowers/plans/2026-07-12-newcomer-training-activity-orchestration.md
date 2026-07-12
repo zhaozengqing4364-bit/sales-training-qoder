@@ -1287,7 +1287,7 @@ git commit -m "feat(newcomer): execute audio and assignment activities"
 - Consumes: existing AI Coach session service and `ExternalSessionStartService`.
 - Produces: activity-keyed AI Coach/realtime sessions with frozen external bindings.
 
-- [ ] **Step 1: Write failing AI Coach activity test**
+- [x] **Step 1: Write failing AI Coach activity test**
 
 ```python
 @pytest.mark.asyncio
@@ -1302,7 +1302,7 @@ async def test_should_create_ai_coach_session_from_activity_profile(test_db, lea
     assert attempt.activity_snapshot["config"]["coach_profile_id"] == "coach-profile-product"
 ```
 
-- [ ] **Step 2: Write failing realtime activity test**
+- [x] **Step 2: Write failing realtime activity test**
 
 ```python
 @pytest.mark.asyncio
@@ -1318,13 +1318,13 @@ async def test_should_freeze_activity_binding_when_starting_stepaudio(test_db, l
     assert binding["path_revision_id"] == realtime_context.path_revision_id
 ```
 
-- [ ] **Step 3: Run tests and verify RED**
+- [x] **Step 3: Run tests and verify RED**
 
 Run: `cd backend && ./.venv/bin/pytest tests/unit/test_newcomer_ai_coach_activity.py tests/unit/test_newcomer_realtime_activity.py -q`
 
 Expected: new handlers are missing.
 
-- [ ] **Step 4: Remove module-key authority from AI Coach runtime**
+- [x] **Step 4: Remove module-key authority from AI Coach runtime**
 
 Replace `NewcomerPathModuleConfig` lookup with:
 
@@ -1338,7 +1338,7 @@ def config_from_activity(context: ActivityExecutionContext) -> AiCoachConfig:
 
 Freeze the activity snapshot into the session config snapshot. Session completion refreshes the unified attempt using evidence ID; it does not inspect `business_skills` or learning-topic keys.
 
-- [ ] **Step 5: Refactor realtime start service**
+- [x] **Step 5: Refactor realtime start service**
 
 Change the public method to:
 
@@ -1355,7 +1355,7 @@ async def start(
 
 Validate pinned activity access, published PracticeTemplate, runtime profile, provider registry and StepAudio readiness; pass an external binding containing `owner`, `enrollment_id`, `path_revision_id`, `phase_id`, `module_id`, `activity_id`, and `attempt_id` to `ExternalSessionStartService`.
 
-- [ ] **Step 6: Run focused and existing realtime tests**
+- [x] **Step 6: Run focused and existing realtime tests**
 
 Run:
 
@@ -1366,7 +1366,7 @@ cd backend
 
 Expected: all tests pass with no fixed `realtime_roleplay` module key.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/sales_trainer/orchestration/activities/ai_coach.py backend/src/sales_trainer/orchestration/activities/realtime_roleplay.py backend/src/sales_trainer/services/ai_coach_chat_runtime.py backend/src/sales_trainer/services/ai_coach_session_service.py backend/src/sales_trainer/services/realtime_roleplay_start_service.py backend/tests/unit/test_newcomer_ai_coach_activity.py backend/tests/unit/test_newcomer_realtime_activity.py backend/tests/unit/test_sales_trainer_realtime_roleplay_start.py

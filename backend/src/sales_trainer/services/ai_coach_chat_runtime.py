@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +23,12 @@ from sales_trainer.services.article_binding_service import (
     ArticleBindingService,
     ArticleBindingServiceError,
 )
+from sales_trainer.services.asset_revision_service import (
+    SalesTrainerAssetRevisionService,
+)
+
+if TYPE_CHECKING:
+    from sales_trainer.orchestration.activities.base import ActivityExecutionContext
 
 
 class AiCoachChatRuntimeError(Exception):
@@ -34,6 +42,31 @@ class AiCoachChatRuntimeError(Exception):
 class AiCoachChatRuntime:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
+
+    async def config_from_activity(
+        self, context: ActivityExecutionContext
+    ) -> AiCoachConfig:
+        if context.activity.type != "ai_coach":
+            raise AiCoachChatRuntimeError(
+                "[NEWCOMER_ACTIVITY_TYPE_MISMATCH]", "当前任务不是 AI 辅导。", 422
+            )
+        profile_id = context.activity.config.coach_profile_id
+        revision = await SalesTrainerAssetRevisionService(self._db).active_revision(
+            resource_type="ai_coach_profile", logical_id=profile_id
+        )
+        if revision is None:
+            raise AiCoachChatRuntimeError(
+                "[AI_COACH_PROFILE_NOT_PUBLISHED]", "AI 教练配置尚未发布。", 409
+            )
+        raw = dict(revision.payload_json)
+        try:
+            config = AiCoachConfig.model_validate(raw.get("config", raw))
+        except ValidationError as exc:
+            raise AiCoachChatRuntimeError(
+                "[AI_COACH_PROFILE_INVALID]", "AI 教练配置不完整。", 409
+            ) from exc
+        self.validate_chat_config(config)
+        return config
 
     def module_ai_coach_config(
         self,

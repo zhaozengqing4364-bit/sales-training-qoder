@@ -47,3 +47,7 @@
 - Task 6：作业附件采用 MIME 白名单、大小限制、安全文件名、SHA-256 元数据；支持 local/COS，业务记录不保存文件字节。
 - Task 6 偏差：保留无 unit/context 的通用音频工具上传，但它不携带训练快照、不能推进新人活动；新人训练只有 execution_context 可形成证据。
 - Task 6 状态契约补充 `needs_review`，与 manual_review 作业语义一致；专项及通用 audio 回归 `33 passed`，Ruff、Mypy 通过。
+- Task 7：AI Coach 新会话从发布的 coach profile revision 与 pinned activity 创建，冻结 profile revision 和完整 activity context。
+- Task 7：StepAudio start 公共服务已直接要求 ActivityExecutionContext/client_token，校验 learner、已发布 PracticeTemplate、启用 VoiceRuntimeProfile 与 provider readiness，external binding owner 为 `newcomer_training`。
+- Task 7：旧 AI Coach 路由内部仍有待 Task 14 删除的 module-key 代码，但新 activity handler/runtime 不读取它；最终 legacy authority 搜索必须归零后才可闭环。
+- Task 7 focused/realtime 回归 `7 passed`；Ruff、Mypy 通过。旧 realtime 测试已按批准的新 activity contract 改写，保留类型、范围、模板和 runtime 失败断言。
