@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development index and non-negotiables"}
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "Temporary edge and SCC executable contract"}
+{"file": ".trellis/spec/backend/realtime-session-engine.md", "reason": "Presentation Engine rollout, snapshot and state authority"}
+{"file": ".trellis/spec/backend/realtime-provider-grounding.md", "reason": "Provider/Grounding rollback and retirement conditions"}
+{"file": ".trellis/spec/backend/domain-ownership-and-evaluation-ports.md", "reason": "Gate 4 neutral ownership and retained shared-handler seam"}
+{"file": ".trellis/spec/backend/training-locality-and-model-registry.md", "reason": "Gate 5 model registry retirement conditions"}
+{"file": ".trellis/spec/frontend/domain-locality-and-report-view-models.md", "reason": "Frontend façade retirement conditions"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Search-before-helper and deletion guidance"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Root composition and runtime data-flow review"}
+{"file": ".trellis/tasks/07-12-modular-monolith-2-gate-6/research/compatibility-retirement-inventory.md", "reason": "Consumer truth, baseline and chosen Gate 6 architecture"}

@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend test, Ruff and mypy verification"}
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "Dependency edge, stale exception and SCC verification"}
+{"file": ".trellis/spec/backend/realtime-session-engine.md", "reason": "Engine differential and rollback verification"}
+{"file": ".trellis/spec/backend/realtime-provider-grounding.md", "reason": "Provider/Grounding compatibility verification"}
+{"file": ".trellis/spec/backend/domain-ownership-and-evaluation-ports.md", "reason": "Package direction and forwarding façade verification"}
+{"file": ".trellis/spec/backend/training-locality-and-model-registry.md", "reason": "Retained model façade proof"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend regression verification"}
+{"file": ".trellis/spec/frontend/domain-locality-and-report-view-models.md", "reason": "Retained frontend façade proof"}
+{"file": ".trellis/tasks/07-12-modular-monolith-2-gate-6/research/compatibility-retirement-inventory.md", "reason": "Acceptance baseline and retained/retired decisions"}
