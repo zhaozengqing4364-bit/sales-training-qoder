@@ -20,3 +20,7 @@
 - CodeGraph impact: `ScenarioRuntimeHandlerSelection` affects 10 symbols; `dispatch_scenario_plugin` 13;
   `LegacyPresentationStepFunRealtimeHandler` 129 (dominated by the two Presentation suites plus shared StepFun
   regressions); `common.roleplay_contracts` 6. These sets define the affected verification matrix.
+- Task 2 Red replaced string assertions with four closed factory choices; 8 tests failed for missing enum values,
+  mandatory string fields and the old root lookup. Green removes the unused descriptor surface and dynamic imports:
+  plugin/Main routing `34 passed`; touched Ruff and mypy pass. The Gate 6 contract advanced from 1/7 to 3/7
+  passing; the four remaining failures belong exactly to Tasks 3–4.

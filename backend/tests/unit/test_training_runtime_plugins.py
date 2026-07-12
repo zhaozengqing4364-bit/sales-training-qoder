@@ -19,12 +19,7 @@ from training_runtime import (
 )
 
 REQUIRED_PLUGIN_METHODS = (
-    "on_session_start",
-    "on_session_end",
     "select_runtime_handler",
-    "build_evidence",
-    "trigger_evaluation",
-    "build_report_view",
     "diagnostics",
 )
 
@@ -69,53 +64,11 @@ def test_should_expose_required_shared_interface_methods() -> None:
             assert callable(getattr(plugin, method_name))
 
 
-def test_should_return_shared_evaluation_evidence_and_report_entrypoints() -> None:
-    sales_descriptor = TrainingRuntimeDescriptor(
-        session_id="sales-session",
-        scenario_type="sales",
-        voice_mode="stepfun_realtime",
-    )
-    presentation_descriptor = TrainingRuntimeDescriptor(
-        session_id="presentation-session",
-        scenario_type="presentation",
-        voice_mode="legacy",
-    )
-
-    sales = get_scenario_plugin("sales")
-    presentation = get_scenario_plugin("presentation")
-
-    assert sales.build_evidence(sales_descriptor).service_path == (
-        "common.conversation.session_evidence.SessionEvidenceService"
-    )
-    assert presentation.build_evidence(presentation_descriptor).method_name == "get_projection"
-    assert sales.trigger_evaluation(sales_descriptor).method_name == (
-        "trigger_report_generation"
-    )
-    assert presentation.trigger_evaluation(presentation_descriptor).payload == {
-        "scenario_type": "presentation"
-    }
-    assert sales.build_report_view(sales_descriptor).service_path.endswith(
-        "TrainingReportSnapshotService"
-    )
-    assert presentation.build_report_view(presentation_descriptor).method_name == (
-        "_get_snapshot_for_session"
-    )
-
-
 def test_should_keep_sales_plugin_stepfun_only_and_legacy_handlers_absent() -> None:
-    descriptor = TrainingRuntimeDescriptor(
-        session_id="sales-session",
-        scenario_type="sales",
-        voice_mode="legacy",
-    )
     plugin = get_scenario_plugin("sales")
 
-    start = plugin.on_session_start(descriptor)
     diagnostics = plugin.diagnostics()
 
-    assert start.runtime_mode == "stepfun_realtime"
-    assert start.service_path == "sales_bot.websocket.stepfun_realtime_handler"
-    assert start.method_name == "create_stepfun_realtime_handler"
     assert diagnostics.runtime_family == "stepfun_only"
     assert diagnostics.details["legacy_handlers_absent"] == {
         module: True for module in LEGACY_SALES_HANDLER_MODULES
@@ -139,32 +92,7 @@ def test_should_select_sales_stepfun_runtime_handler() -> None:
     assert selection.scenario_type == "sales"
     assert selection.runtime_mode == "stepfun_realtime"
     assert selection.websocket_route == "/ws/sales/{session_id}"
-    assert selection.handler_factory_path == "sales_bot.websocket.stepfun_realtime_handler"
-    assert selection.handler_factory_name == "create_stepfun_realtime_handler"
-
-
-def test_should_keep_presentation_training_flow_entrypoints() -> None:
-    legacy_descriptor = TrainingRuntimeDescriptor(
-        session_id="presentation-legacy",
-        scenario_type="presentation",
-        voice_mode="legacy",
-    )
-    stepfun_descriptor = TrainingRuntimeDescriptor(
-        session_id="presentation-stepfun",
-        scenario_type="presentation",
-        voice_mode="stepfun_realtime",
-    )
-    plugin = get_scenario_plugin("presentation")
-
-    legacy_start = plugin.on_session_start(legacy_descriptor)
-    stepfun_start = plugin.on_session_start(stepfun_descriptor)
-    diagnostics = plugin.diagnostics()
-
-    assert legacy_start.runtime_mode == "legacy"
-    assert legacy_start.service_path.endswith("PresentationWebSocketHandler")
-    assert stepfun_start.runtime_mode == "stepfun_realtime"
-    assert stepfun_start.service_path.endswith("PresentationRealtimeEngineHandler")
-    assert diagnostics.runtime_family == "presentation_training_flow"
+    assert selection.factory_key is RuntimeHandlerFactoryKey.SALES_STEPFUN
 
 
 def test_should_select_presentation_runtime_handler_by_voice_mode() -> None:
@@ -186,16 +114,13 @@ def test_should_select_presentation_runtime_handler_by_voice_mode() -> None:
     assert legacy_selection.scenario_type == "presentation"
     assert legacy_selection.runtime_mode == "legacy"
     assert legacy_selection.websocket_route == "/ws/presentation/{session_id}"
-    assert legacy_selection.handler_factory_path == (
-        "presentation_coach.websocket.presentation_handler"
-    )
-    assert legacy_selection.handler_factory_name == "PresentationWebSocketHandler"
+    assert legacy_selection.factory_key is RuntimeHandlerFactoryKey.PRESENTATION_LEGACY
     assert stepfun_selection.runtime_mode == "stepfun_realtime"
     assert stepfun_selection.websocket_route == "/ws/presentation/{session_id}"
-    assert stepfun_selection.handler_factory_path == (
-        "presentation_coach.websocket.presentation_realtime_engine_handler"
+    assert (
+        stepfun_selection.factory_key
+        is RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE
     )
-    assert stepfun_selection.handler_factory_name == "PresentationRealtimeEngineHandler"
 
 
 def test_presentation_stepfun_defaults_to_engine_facade() -> None:
@@ -208,10 +133,6 @@ def test_presentation_stepfun_defaults_to_engine_facade() -> None:
 
     selection = plugin.select_runtime_handler(descriptor)
 
-    assert selection.handler_factory_path == (
-        "presentation_coach.websocket.presentation_realtime_engine_handler"
-    )
-    assert selection.handler_factory_name == "PresentationRealtimeEngineHandler"
     assert selection.factory_key is RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE
 
 
@@ -225,11 +146,10 @@ def test_presentation_stepfun_flag_false_atomically_selects_legacy_adapter() -> 
 
     selection = plugin.select_runtime_handler(descriptor)
 
-    assert selection.handler_factory_path == (
-        "presentation_coach.websocket.presentation_stepfun_realtime_handler"
+    assert (
+        selection.factory_key
+        is RuntimeHandlerFactoryKey.PRESENTATION_STEPFUN_ROLLBACK
     )
-    assert selection.handler_factory_name == "LegacyPresentationStepFunRealtimeHandler"
-    assert selection.factory_key is None
 
 
 def test_presentation_rollout_resolver_is_read_once_per_atomic_selection() -> None:
@@ -251,7 +171,6 @@ def test_presentation_rollout_resolver_is_read_once_per_atomic_selection() -> No
     ).select_runtime_handler(descriptor)
 
     assert calls == 1
-    assert selection.handler_factory_name == "PresentationRealtimeEngineHandler"
     assert selection.factory_key is RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE
 
 
@@ -286,10 +205,7 @@ def test_presentation_rollout_does_not_change_legacy_voice_mode() -> None:
         selection = PresentationScenarioPlugin(
             rollout_resolver=lambda enabled=enabled: enabled
         ).select_runtime_handler(descriptor)
-        assert selection.handler_factory_path == (
-            "presentation_coach.websocket.presentation_handler"
-        )
-        assert selection.handler_factory_name == "PresentationWebSocketHandler"
+        assert selection.factory_key is RuntimeHandlerFactoryKey.PRESENTATION_LEGACY
 
 
 def test_presentation_rollout_diagnostics_identify_selected_and_rollback_paths() -> None:
@@ -304,9 +220,7 @@ def test_presentation_rollout_diagnostics_identify_selected_and_rollback_paths()
     assert enabled["selected_stepfun_runtime"] == "presentation_realtime_engine"
     assert disabled["realtime_engine_enabled"] is False
     assert disabled["selected_stepfun_runtime"] == "legacy_presentation_stepfun"
-    assert enabled["rollback_handler"].endswith(
-        "LegacyPresentationStepFunRealtimeHandler"
-    )
+    assert enabled["rollback_runtime"] == "presentation_stepfun_rollback"
 
 
 def test_presentation_realtime_engine_setting_defaults_true_and_supports_false(
@@ -375,7 +289,7 @@ def test_should_reject_unknown_scenario_type() -> None:
         get_scenario_plugin("roleplay")
 
 
-def test_sales_runtime_selection_points_to_existing_factory() -> None:
+def test_sales_runtime_selection_uses_closed_factory_key() -> None:
     descriptor = TrainingRuntimeDescriptor(
         session_id="sales-session",
         scenario_type="sales",
@@ -383,7 +297,4 @@ def test_sales_runtime_selection_points_to_existing_factory() -> None:
     )
     selection = get_scenario_plugin("sales").select_runtime_handler(descriptor)
 
-    module = __import__(selection.handler_factory_path, fromlist=[selection.handler_factory_name])
-    factory = getattr(module, selection.handler_factory_name)
-
-    assert callable(factory)
+    assert selection.factory_key is RuntimeHandlerFactoryKey.SALES_STEPFUN

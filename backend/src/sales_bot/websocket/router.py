@@ -11,7 +11,7 @@ import asyncio
 import os
 import uuid
 from collections.abc import Callable
-from importlib import import_module
+from types import MappingProxyType
 from typing import Any, cast
 
 from fastapi import APIRouter, Query, WebSocket
@@ -31,11 +31,22 @@ from common.services.session_runtime_lifecycle_hooks import (
     mark_session_runtime_failed,
 )
 from common.websocket.session_manager import get_session_manager
-from training_runtime import TrainingRuntimeDescriptor, dispatch_scenario_plugin
+from sales_bot.websocket.stepfun_realtime_handler import (
+    create_stepfun_realtime_handler,
+)
+from training_runtime import (
+    RuntimeHandlerFactoryKey,
+    TrainingRuntimeDescriptor,
+    dispatch_scenario_plugin,
+)
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+RUNTIME_HANDLER_FACTORIES = MappingProxyType(
+    {RuntimeHandlerFactoryKey.SALES_STEPFUN: create_stepfun_realtime_handler}
+)
 
 # M020/S01/T01 current sales websocket auth posture.
 # This is an explicit inventory of the shipped behavior before T02 tightens the authority line.
@@ -914,8 +925,13 @@ def _instantiate_runtime_handler(
     *,
     transcript_capture_sink: Callable[[dict[str, Any]], Any] | None = None,
 ) -> Any:
-    module = import_module(selection.handler_factory_path)
-    factory = getattr(module, selection.handler_factory_name)
+    try:
+        resolved_key = RuntimeHandlerFactoryKey(selection.factory_key)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("unknown_runtime_handler_factory_key") from exc
+    factory = RUNTIME_HANDLER_FACTORIES.get(resolved_key)
+    if factory is None or resolved_key is not RuntimeHandlerFactoryKey.SALES_STEPFUN:
+        raise ValueError("unknown_runtime_handler_factory_key")
     return factory(transcript_capture_sink=transcript_capture_sink)
 
 

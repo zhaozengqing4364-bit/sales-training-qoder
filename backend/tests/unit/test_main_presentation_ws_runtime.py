@@ -11,7 +11,10 @@ import main
 import websocket_routes
 from common.auth.service import JWTError
 from common.services.runtime_gate import RuntimeAdmissionDecision
-from training_runtime.plugins import ScenarioRuntimeHandlerSelection
+from training_runtime.plugins import (
+    RuntimeHandlerFactoryKey,
+    ScenarioRuntimeHandlerSelection,
+)
 
 
 def presentation_admission_ok() -> RuntimeAdmissionDecision:
@@ -94,6 +97,8 @@ async def test_presentation_ws_uses_persisted_legacy_mode_and_registers_session(
     legacy_handler.handle_connection = AsyncMock()
     stepfun_handler = MagicMock()
     stepfun_handler.handle_connection = AsyncMock()
+    legacy_factory = MagicMock(return_value=legacy_handler)
+    stepfun_factory = MagicMock(return_value=stepfun_handler)
 
     session_manager = MagicMock()
     session_manager.register_session = AsyncMock()
@@ -113,12 +118,13 @@ async def test_presentation_ws_uses_persisted_legacy_mode_and_registers_session(
             new=AsyncMock(return_value=presentation_admission_ok()),
         ),
         patch(
-            "presentation_coach.websocket.presentation_handler.PresentationWebSocketHandler",
-            return_value=legacy_handler,
-        ),
-        patch(
-            "presentation_coach.websocket.presentation_stepfun_realtime_handler.PresentationStepFunRealtimeHandler",
-            return_value=stepfun_handler,
+            "websocket_routes.RUNTIME_HANDLER_FACTORIES",
+            {
+                RuntimeHandlerFactoryKey.PRESENTATION_LEGACY: legacy_factory,
+                RuntimeHandlerFactoryKey.PRESENTATION_STEPFUN_ROLLBACK: (
+                    stepfun_factory
+                ),
+            },
         ),
         patch(
             "common.websocket.session_manager.get_session_manager",
@@ -145,6 +151,8 @@ async def test_presentation_ws_uses_persisted_legacy_mode_and_registers_session(
         trace_id=None,
     )
     stepfun_handler.handle_connection.assert_not_called()
+    legacy_factory.assert_called_once_with()
+    stepfun_factory.assert_not_called()
     session_manager.unregister_session.assert_awaited_once_with(session_id)
 
 
@@ -160,6 +168,9 @@ async def test_presentation_ws_uses_persisted_stepfun_mode() -> None:
     legacy_handler.handle_connection = AsyncMock()
     engine_handler = MagicMock()
     engine_handler.handle_connection = AsyncMock()
+    legacy_factory = MagicMock(return_value=legacy_handler)
+    engine_factory = MagicMock(return_value=engine_handler)
+    rollback_factory = MagicMock()
 
     session_manager = MagicMock()
     session_manager.register_session = AsyncMock()
@@ -179,16 +190,15 @@ async def test_presentation_ws_uses_persisted_stepfun_mode() -> None:
             new=AsyncMock(return_value=presentation_admission_ok()),
         ),
         patch(
-            "presentation_coach.websocket.presentation_handler.PresentationWebSocketHandler",
-            return_value=legacy_handler,
+            "websocket_routes.RUNTIME_HANDLER_FACTORIES",
+            {
+                RuntimeHandlerFactoryKey.PRESENTATION_LEGACY: legacy_factory,
+                RuntimeHandlerFactoryKey.PRESENTATION_STEPFUN_ROLLBACK: (
+                    rollback_factory
+                ),
+                RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE: engine_factory,
+            },
         ),
-        patch(
-            "presentation_coach.websocket.presentation_realtime_engine_handler.PresentationRealtimeEngineHandler",
-            return_value=engine_handler,
-        ) as engine_factory,
-        patch(
-            "presentation_coach.websocket.presentation_stepfun_realtime_handler.LegacyPresentationStepFunRealtimeHandler"
-        ) as rollback_factory,
         patch(
             "common.websocket.session_manager.get_session_manager",
             return_value=session_manager,
@@ -228,6 +238,8 @@ async def test_presentation_ws_flag_false_constructs_only_rollback_handler() -> 
     websocket.close = AsyncMock()
     rollback_handler = MagicMock()
     rollback_handler.handle_connection = AsyncMock()
+    rollback_factory = MagicMock(return_value=rollback_handler)
+    engine_factory = MagicMock()
     session_manager = MagicMock()
     session_manager.register_session = AsyncMock()
     session_manager.unregister_session = AsyncMock()
@@ -254,12 +266,14 @@ async def test_presentation_ws_flag_false_constructs_only_rollback_handler() -> 
             False,
         ),
         patch(
-            "presentation_coach.websocket.presentation_stepfun_realtime_handler.LegacyPresentationStepFunRealtimeHandler",
-            return_value=rollback_handler,
-        ) as rollback_factory,
-        patch(
-            "presentation_coach.websocket.presentation_realtime_engine_handler.PresentationRealtimeEngineHandler"
-        ) as engine_factory,
+            "websocket_routes.RUNTIME_HANDLER_FACTORIES",
+            {
+                RuntimeHandlerFactoryKey.PRESENTATION_STEPFUN_ROLLBACK: (
+                    rollback_factory
+                ),
+                RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE: engine_factory,
+            },
+        ),
         patch(
             "common.websocket.session_manager.get_session_manager",
             return_value=session_manager,
@@ -308,8 +322,7 @@ async def test_presentation_ws_runtime_selection_uses_plugin_seam() -> None:
         scenario_type="presentation",
         runtime_mode="stepfun_realtime",
         websocket_route="/ws/presentation/{session_id}",
-        handler_factory_path="presentation_coach.websocket.presentation_stepfun_realtime_handler",
-        handler_factory_name="PresentationStepFunRealtimeHandler",
+        factory_key=RuntimeHandlerFactoryKey.PRESENTATION_STEPFUN_ROLLBACK,
     )
 
     with (
@@ -327,8 +340,12 @@ async def test_presentation_ws_runtime_selection_uses_plugin_seam() -> None:
         ),
         patch("websocket_routes.dispatch_scenario_plugin", return_value=plugin),
         patch(
-            "presentation_coach.websocket.presentation_stepfun_realtime_handler.PresentationStepFunRealtimeHandler",
-            return_value=selected_handler,
+            "websocket_routes.RUNTIME_HANDLER_FACTORIES",
+            {
+                RuntimeHandlerFactoryKey.PRESENTATION_STEPFUN_ROLLBACK: (
+                    lambda: selected_handler
+                )
+            },
         ),
         patch(
             "common.websocket.session_manager.get_session_manager",
@@ -367,8 +384,6 @@ def test_presentation_ws_rejects_unknown_runtime_handler_factory_key() -> None:
         scenario_type="presentation",
         runtime_mode="stepfun_realtime",
         websocket_route="/ws/presentation/{session_id}",
-        handler_factory_path="presentation_coach.websocket.presentation_handler",
-        handler_factory_name="PresentationWebSocketHandler",
         factory_key="untrusted_factory",  # type: ignore[arg-type]
     )
 

@@ -66,21 +66,21 @@ with the retained StepFun transport base. Compatibility with active consumers st
   `PRESENTATION_STEPFUN_ROLLBACK`, `PRESENTATION_REALTIME_ENGINE`; frozen selection always has one key.
 - Consumes: explicit root `Mapping[RuntimeHandlerFactoryKey, Callable[..., object]]`.
 
-- [ ] **Step 1: Extend Red for all four selections and unknown key**
+- [x] **Step 1: Extend Red for all four selections and unknown key**
 
   Assert each mode resolves exactly one enum and root instantiation never imports a selection-provided module.
 
-- [ ] **Step 2: Delete shallow descriptor methods and string fields**
+- [x] **Step 2: Delete shallow descriptor methods and string fields**
 
   Remove `ScenarioPluginEntrypoint`, lifecycle/evidence/report descriptor methods and helper builders. Keep scenario
   dispatch, selection and diagnostics; construct selections with a mandatory closed enum.
 
-- [ ] **Step 3: Add explicit root mappings**
+- [x] **Step 3: Add explicit root mappings**
 
   Sales and Presentation roots map known keys to local/imported factories. Reject missing or context-inappropriate
   keys before construction and preserve transcript sink / Engine factory kwargs.
 
-- [ ] **Step 4: Run focused Green and commit**
+- [x] **Step 4: Run focused Green and commit**
 
   Run plugin, Sales router and Presentation route tests plus Ruff/mypy for touched modules. Commit as
   `refactor(runtime): close scenario handler factories`.

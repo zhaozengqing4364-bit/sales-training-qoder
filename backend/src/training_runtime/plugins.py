@@ -13,12 +13,13 @@ from common.runtime_descriptor import TrainingRuntimeDescriptor
 
 from .realtime import ENGINE_STATE_VERSION
 
-PluginAction = str
-
 
 class RuntimeHandlerFactoryKey(StrEnum):
     """Closed application-root factory choices for declarative handler selection."""
 
+    SALES_STEPFUN = "sales_stepfun"
+    PRESENTATION_LEGACY = "presentation_legacy"
+    PRESENTATION_STEPFUN_ROLLBACK = "presentation_stepfun_rollback"
     PRESENTATION_REALTIME_ENGINE = "presentation_realtime_engine"
 
 
@@ -31,28 +32,13 @@ LEGACY_SALES_HANDLER_MODULES = (
 
 
 @dataclass(frozen=True)
-class ScenarioPluginEntrypoint:
-    """A shared descriptor for an existing scenario runtime entrypoint."""
-
-    scenario_type: str
-    action: PluginAction
-    session_id: str
-    service_path: str
-    method_name: str
-    runtime_mode: str | None = None
-    payload: dict[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
 class ScenarioRuntimeHandlerSelection:
     """A scenario websocket runtime handler selection."""
 
     scenario_type: str
     runtime_mode: str
     websocket_route: str
-    handler_factory_path: str
-    handler_factory_name: str
-    factory_key: RuntimeHandlerFactoryKey | None = None
+    factory_key: RuntimeHandlerFactoryKey
 
 
 @dataclass(frozen=True)
@@ -70,35 +56,10 @@ class ScenarioTrainingPlugin(Protocol):
 
     scenario_type: str
 
-    def on_session_start(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint: ...
-
-    def on_session_end(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint: ...
-
     def select_runtime_handler(
         self,
         descriptor: TrainingRuntimeDescriptor,
     ) -> ScenarioRuntimeHandlerSelection: ...
-
-    def build_evidence(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint: ...
-
-    def trigger_evaluation(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint: ...
-
-    def build_report_view(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint: ...
 
     def diagnostics(self) -> ScenarioPluginDiagnostics: ...
 
@@ -116,24 +77,6 @@ class SalesScenarioPlugin:
     scenario_type = "sales"
     _runtime_mode = "stepfun_realtime"
 
-    def on_session_start(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint:
-        return self._entrypoint(
-            descriptor,
-            action="on_session_start",
-            service_path="sales_bot.websocket.stepfun_realtime_handler",
-            method_name="create_stepfun_realtime_handler",
-            payload={"websocket_route": "/ws/sales/{session_id}"},
-        )
-
-    def on_session_end(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint:
-        return self._report_trigger_entrypoint(descriptor, action="on_session_end")
-
     def select_runtime_handler(
         self,
         descriptor: TrainingRuntimeDescriptor,
@@ -142,93 +85,18 @@ class SalesScenarioPlugin:
             scenario_type=self.scenario_type,
             runtime_mode=self._runtime_mode,
             websocket_route="/ws/sales/{session_id}",
-            handler_factory_path="sales_bot.websocket.stepfun_realtime_handler",
-            handler_factory_name="create_stepfun_realtime_handler",
-        )
-
-    def build_evidence(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint:
-        return self._entrypoint(
-            descriptor,
-            action="build_evidence",
-            service_path="common.conversation.session_evidence.SessionEvidenceService",
-            method_name="get_projection",
-            payload={"require_completed": False},
-        )
-
-    def trigger_evaluation(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint:
-        return self._report_trigger_entrypoint(
-            descriptor,
-            action="trigger_evaluation",
-        )
-
-    def build_report_view(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint:
-        return self._entrypoint(
-            descriptor,
-            action="build_report_view",
-            service_path=(
-                "evaluation.services.training_report_snapshot_service."
-                "TrainingReportSnapshotService"
-            ),
-            method_name="_get_snapshot_for_session",
+            factory_key=RuntimeHandlerFactoryKey.SALES_STEPFUN,
         )
 
     def diagnostics(self) -> ScenarioPluginDiagnostics:
         return ScenarioPluginDiagnostics(
             scenario_type=self.scenario_type,
             runtime_family="stepfun_only",
-            entrypoints=(
-                "on_session_start",
-                "on_session_end",
-                "build_evidence",
-                "trigger_evaluation",
-                "build_report_view",
-                "diagnostics",
-            ),
+            entrypoints=("select_runtime_handler", "diagnostics"),
             details={
-                "runtime_handler": "sales_bot.websocket.stepfun_realtime_handler.StepFunRealtimeHandler",
+                "runtime_factory": RuntimeHandlerFactoryKey.SALES_STEPFUN.value,
                 "legacy_handlers_absent": legacy_sales_handlers_absent(),
             },
-        )
-
-    def _report_trigger_entrypoint(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-        *,
-        action: PluginAction,
-    ) -> ScenarioPluginEntrypoint:
-        return self._entrypoint(
-            descriptor,
-            action=action,
-            service_path="evaluation.services.report_generation_trigger",
-            method_name="trigger_report_generation",
-        )
-
-    def _entrypoint(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-        *,
-        action: PluginAction,
-        service_path: str,
-        method_name: str,
-        payload: dict[str, object] | None = None,
-    ) -> ScenarioPluginEntrypoint:
-        return ScenarioPluginEntrypoint(
-            scenario_type=self.scenario_type,
-            action=action,
-            session_id=descriptor.session_id,
-            service_path=service_path,
-            method_name=method_name,
-            runtime_mode=self._runtime_mode,
-            payload={"scenario_type": self.scenario_type, **(payload or {})},
         )
 
 
@@ -246,36 +114,6 @@ class PresentationScenarioPlugin:
             lambda: bool(settings.PRESENTATION_REALTIME_ENGINE_ENABLED)
         )
 
-    def on_session_start(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint:
-        runtime_mode = self._runtime_mode(descriptor)
-        if runtime_mode == "stepfun_realtime":
-            realtime_engine_enabled = bool(self._rollout_resolver())
-            handler_module, handler_name = self._stepfun_handler_selection(
-                realtime_engine_enabled
-            )
-            handler_path = f"{handler_module}.{handler_name}"
-        else:
-            handler_path = (
-                "presentation_coach.websocket.presentation_handler."
-                "PresentationWebSocketHandler"
-            )
-        return self._entrypoint(
-            descriptor,
-            action="on_session_start",
-            service_path=handler_path,
-            method_name="handle_connection",
-            payload={"websocket_route": "/ws/presentation/{session_id}"},
-        )
-
-    def on_session_end(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint:
-        return self._report_trigger_entrypoint(descriptor, action="on_session_end")
-
     def select_runtime_handler(
         self,
         descriptor: TrainingRuntimeDescriptor,
@@ -283,61 +121,19 @@ class PresentationScenarioPlugin:
         runtime_mode = self._runtime_mode(descriptor)
         if runtime_mode == "stepfun_realtime":
             realtime_engine_enabled = bool(self._rollout_resolver())
-            handler_factory_path, handler_factory_name = (
-                self._stepfun_handler_selection(realtime_engine_enabled)
-            )
             factory_key = (
                 RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE
                 if realtime_engine_enabled
-                else None
+                else RuntimeHandlerFactoryKey.PRESENTATION_STEPFUN_ROLLBACK
             )
         else:
-            handler_factory_path = "presentation_coach.websocket.presentation_handler"
-            handler_factory_name = "PresentationWebSocketHandler"
-            factory_key = None
+            factory_key = RuntimeHandlerFactoryKey.PRESENTATION_LEGACY
 
         return ScenarioRuntimeHandlerSelection(
             scenario_type=self.scenario_type,
             runtime_mode=runtime_mode,
             websocket_route="/ws/presentation/{session_id}",
-            handler_factory_path=handler_factory_path,
-            handler_factory_name=handler_factory_name,
             factory_key=factory_key,
-        )
-
-    def build_evidence(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint:
-        return self._entrypoint(
-            descriptor,
-            action="build_evidence",
-            service_path="common.conversation.session_evidence.SessionEvidenceService",
-            method_name="get_projection",
-            payload={"require_completed": False},
-        )
-
-    def trigger_evaluation(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint:
-        return self._report_trigger_entrypoint(
-            descriptor,
-            action="trigger_evaluation",
-        )
-
-    def build_report_view(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-    ) -> ScenarioPluginEntrypoint:
-        return self._entrypoint(
-            descriptor,
-            action="build_report_view",
-            service_path=(
-                "evaluation.services.training_report_snapshot_service."
-                "TrainingReportSnapshotService"
-            ),
-            method_name="_get_snapshot_for_session",
         )
 
     def diagnostics(self) -> ScenarioPluginDiagnostics:
@@ -345,23 +141,14 @@ class PresentationScenarioPlugin:
         return ScenarioPluginDiagnostics(
             scenario_type=self.scenario_type,
             runtime_family="presentation_training_flow",
-            entrypoints=(
-                "on_session_start",
-                "on_session_end",
-                "build_evidence",
-                "trigger_evaluation",
-                "build_report_view",
-                "diagnostics",
-            ),
+            entrypoints=("select_runtime_handler", "diagnostics"),
             details={
-                "legacy_handler": "presentation_coach.websocket.presentation_handler.PresentationWebSocketHandler",
-                "stepfun_handler": (
-                    "presentation_coach.websocket.presentation_realtime_engine_handler."
-                    "PresentationRealtimeEngineHandler"
+                "legacy_runtime": RuntimeHandlerFactoryKey.PRESENTATION_LEGACY.value,
+                "stepfun_runtime": (
+                    RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE.value
                 ),
-                "rollback_handler": (
-                    "presentation_coach.websocket.presentation_stepfun_realtime_handler."
-                    "LegacyPresentationStepFunRealtimeHandler"
+                "rollback_runtime": (
+                    RuntimeHandlerFactoryKey.PRESENTATION_STEPFUN_ROLLBACK.value
                 ),
                 "realtime_engine_enabled": realtime_engine_enabled,
                 "selected_stepfun_runtime": (
@@ -371,52 +158,6 @@ class PresentationScenarioPlugin:
                 ),
                 "engine_state_version": ENGINE_STATE_VERSION,
             },
-        )
-
-    @staticmethod
-    def _stepfun_handler_selection(
-        realtime_engine_enabled: bool,
-    ) -> tuple[str, str]:
-        if realtime_engine_enabled:
-            return (
-                "presentation_coach.websocket.presentation_realtime_engine_handler",
-                "PresentationRealtimeEngineHandler",
-            )
-        return (
-            "presentation_coach.websocket.presentation_stepfun_realtime_handler",
-            "LegacyPresentationStepFunRealtimeHandler",
-        )
-
-    def _report_trigger_entrypoint(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-        *,
-        action: PluginAction,
-    ) -> ScenarioPluginEntrypoint:
-        return self._entrypoint(
-            descriptor,
-            action=action,
-            service_path="evaluation.services.report_generation_trigger",
-            method_name="trigger_report_generation",
-        )
-
-    def _entrypoint(
-        self,
-        descriptor: TrainingRuntimeDescriptor,
-        *,
-        action: PluginAction,
-        service_path: str,
-        method_name: str,
-        payload: dict[str, object] | None = None,
-    ) -> ScenarioPluginEntrypoint:
-        return ScenarioPluginEntrypoint(
-            scenario_type=self.scenario_type,
-            action=action,
-            session_id=descriptor.session_id,
-            service_path=service_path,
-            method_name=method_name,
-            runtime_mode=self._runtime_mode(descriptor),
-            payload={"scenario_type": self.scenario_type, **(payload or {})},
         )
 
     @staticmethod
