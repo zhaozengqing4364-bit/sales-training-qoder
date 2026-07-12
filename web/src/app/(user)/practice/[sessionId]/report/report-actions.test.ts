@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import {
     buildPresentationPagePracticePath,
@@ -6,9 +6,15 @@ import {
     buildReplayDeepLink,
     buildRetrySessionPath,
     getRetryFallbackPath,
+    persistHighlightReviewItems,
+    readHighlightReviewItems,
 } from "./report-actions";
 
 describe("report actions", () => {
+    beforeEach(() => {
+        window.localStorage.clear();
+    });
+
     it("encodes route identifiers and query intent", () => {
         expect(buildPresentationPageReplayPath("session/a?b", 3)).toBe(
             "/practice/session%2Fa%3Fb/replay?focus=presentation_page&page=3&page_anchor_status=resolved",
@@ -53,5 +59,34 @@ describe("report actions", () => {
                 persona_id: "persona?1",
             } as never),
         ).toContain("/practice/created%2F1?scenario_type=sales&agent_id=agent%261");
+    });
+
+    it("drops corrupt highlight storage and persists only the review limit", () => {
+        const storageKey = "qoder.highlightReviewList.v1:source/1";
+        window.localStorage.setItem(storageKey, "{broken");
+
+        expect(readHighlightReviewItems("source/1")).toEqual([]);
+        expect(window.localStorage.getItem(storageKey)).toBeNull();
+
+        persistHighlightReviewItems(
+            "source/1",
+            Array.from({ length: 4 }, (_, index) => ({
+                id: `highlight-${index}`,
+                source_session_id: "source/1",
+                turn_number: index + 1,
+                content: `content-${index}`,
+                reason: null,
+                stage_name: null,
+                issue_label: null,
+                suggested_response: null,
+            })),
+        );
+
+        expect(readHighlightReviewItems("source/1")).toHaveLength(3);
+        expect(readHighlightReviewItems("source/1").map((item) => item.id)).toEqual([
+            "highlight-0",
+            "highlight-1",
+            "highlight-2",
+        ]);
     });
 });

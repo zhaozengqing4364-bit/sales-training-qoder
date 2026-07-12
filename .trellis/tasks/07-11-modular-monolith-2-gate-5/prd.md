@@ -77,18 +77,18 @@
 
 ## Acceptance Criteria
 
-- [ ] Training Journey/Readiness application Module 不直接 import `User` 或 `PracticeSession` ORM；
+- [x] Training Journey/Readiness application Module 不直接 import `User` 或 `PracticeSession` ORM；
       SQL adapter 只返回 immutable projections。
-- [ ] Journey、analytics、Readiness dossier/workbench/review differential fixtures 与 Gate 4 baseline
+- [x] Journey、analytics、Readiness dossier/workbench/review differential fixtures 与 Gate 4 baseline
       完全一致，缺失/异常路径仍 fail closed。
-- [ ] report ViewModel/mapper/action Module 通过 Sales、Presentation、partial、non-evaluable、retraining
+- [x] report ViewModel/mapper/action Module 通过 Sales、Presentation、partial、non-evaluable、retraining
       和 supervisor 权限矩阵；页面根文件不再拥有 transport mapping/URL policy。
-- [ ] Journey/Readiness/report 的真实 TS definitions 和 transport 实现在领域文件；全局 files 只组合
+- [x] Journey/Readiness/report 的真实 TS definitions 和 transport 实现在领域文件；全局 files 只组合
       或 re-export，locality contract 可执行。
-- [ ] 65 个 enum/entity class 加 `Base` 的 `common.db.models` 公开 symbol identity/qualified-name
+- [x] 65 个 enum/entity class 加 `Base` 的 `common.db.models` 公开 symbol identity/qualified-name
       compatibility、迁移的 52 个 mapped table 和完整 `Base.metadata` 98-table 表/约束快照不变；
       `common/db/models.py` 为小型 registry，未产生 Alembic schema diff。
-- [ ] 新 Journey/Readiness application code 通过 repository/projection 访问 identity/practice 数据，
+- [x] 新 Journey/Readiness application code 通过 repository/projection 访问 identity/practice 数据，
       不扩大任何跨包边或 SCC。
 - [ ] Backend focused/affected、frontend focused/affected、OpenAPI、architecture、Ruff、mypy、typecheck、
       lint、Vitest、selected E2E 和 changed coverage 满足 canonical gate。
@@ -121,17 +121,45 @@ class JourneyLearnerProjection:
 
 class JourneyReadRepository(Protocol):
     async def learner(self, learner_id: str) -> JourneyLearnerProjection | None: ...
-    async def learners(self, query: JourneyLearnerQuery) -> JourneyLearnerPage: ...
-    async def roleplay_outcomes(self, query: RoleplayOutcomeQuery) -> tuple[RoleplayOutcomeProjection, ...]: ...
+    async def learners(
+        self,
+        *,
+        team_department: str | None,
+        department: str | None,
+        limit: int | None,
+        offset: int = 0,
+        include_development_admin: bool = True,
+    ) -> JourneyLearnerPage: ...
+    async def roleplay_sessions(
+        self,
+        *,
+        learner_ids: frozenset[str],
+    ) -> tuple[JourneyRoleplaySessionProjection, ...]: ...
 
 class ReadinessDossierProjection:
-    def dossier(self, source: ReadinessProjectionSource) -> Mapping[str, object]: ...
-    def workbench(self, dossiers: Sequence[Mapping[str, object]], total: int, query: WorkbenchQuery) -> Mapping[str, object]: ...
+    def _dossier_payload(
+        self,
+        journey: dict[str, Any],
+        *,
+        records: list[dict[str, Any]],
+        review_actions: list[dict[str, Any]],
+        generated_at: datetime,
+        evidence_limit: int | None = None,
+    ) -> dict[str, Any]: ...
+    def _workbench_groups(
+        self,
+        dossiers: list[dict[str, Any]],
+    ) -> dict[WorkbenchGroupKey, dict[str, Any]]: ...
 ```
 
 ```typescript
 export function toSessionReportViewModel(report: PracticeSessionReport): SessionReportViewModel;
-export function buildSessionReportActions(input: SessionReportActionInput): SessionReportActions;
+export function formatReplayAnchorHint(anchor?: ReplayAnchor | null): string;
+export function buildRetrySessionPath(
+  sessionId: string,
+  retry: NonNullable<PracticeSessionReport["retry_entry"]>,
+  extra?: Record<string, string>,
+): string;
 export function createSessionsDomain(deps: SessionsDomainDependencies): SessionsDomain;
 ```
 

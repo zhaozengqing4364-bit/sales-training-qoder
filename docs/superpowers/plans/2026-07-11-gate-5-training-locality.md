@@ -8,6 +8,10 @@
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2 async, pytest, Ruff, mypy, Next.js 16, React 19, TypeScript strict, Vitest, Playwright, CodeGraph, Trellis.
 
+**Execution status (2026-07-11 UTC):** Tasks 1–7 are implemented, verified and committed through their
+respective slices; Task 8 exclusively owns the independent Brooks/Trellis audit, clean-start canonical gate,
+authority evidence and Trellis closure.
+
 ## Global Constraints
 
 - Preserve REST/WS paths, OpenAPI, RBAC, RuntimeGate, frozen snapshots, KB fail-closed, epoch, score/report single-writer and audit behavior.
@@ -161,7 +165,7 @@
 - Test: `backend/tests/unit/test_gate5_locality_contracts.py`
 
 **Interfaces:**
-- Consumes: `JourneyLearnerProjection`, `RoleplayOutcomeProjection`, immutable query DTOs and existing
+- Consumes: `JourneyLearnerProjection`, `JourneyRoleplaySessionProjection`, immutable query DTOs and existing
   RuntimeOutcome projections.
 - Produces: `JourneyReadRepository` and `TrainingJourneyProjection`; public service signatures and payloads
   remain unchanged.
@@ -340,22 +344,22 @@
 - Consumes: final code graph, import inventory, metadata parity and co-change baseline.
 - Produces: seven-section executable contracts and truthful `implementation complete / closure pending` state.
 
-- [ ] **Step 1: Run post-change CodeGraph impact/affected**
+- [x] **Step 1: Run post-change CodeGraph impact/affected**
 
   Sync CodeGraph, capture changed dependency graph/SCC, model/global-barrel consumers, hotspot LOC and affected tests.
 
-- [ ] **Step 2: Write backend and frontend seven-section specs**
+- [x] **Step 2: Write backend and frontend seven-section specs**
 
   Include Scope/Trigger, Signatures, Contracts, Validation/Error Matrix, Good/Base/Bad, Tests Required and Wrong vs
   Correct. Record model import identity, metadata registration order, projection immutability, UI façade rule and
   Gate 6 retirement conditions.
 
-- [ ] **Step 3: Run the design-artifact audit until zero**
+- [x] **Step 3: Run the design-artifact audit until zero**
 
   Audit PRD/plan/spec/research/ADR consistency, file existence, interface names, test commands and rollback claims.
   Fix every hard/advisory mismatch before starting closure.
 
-- [ ] **Step 4: Commit executable knowledge**
+- [x] **Step 4: Commit executable knowledge**
 
   Commit as `docs(architecture): codify gate 5 locality`.
 

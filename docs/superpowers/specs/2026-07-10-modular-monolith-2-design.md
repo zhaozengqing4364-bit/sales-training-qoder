@@ -1,7 +1,7 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，分 Gate 实施中（Gate 0A–4 已完成；Gate 5–6 待实施）
+状态：已批准，分 Gate 实施中（Gate 0A–4 已闭环；Gate 5 实现完成、closure 待验收；Gate 6 待实施）
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 
 实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
@@ -31,7 +31,10 @@ generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 1 �
 条件 skip）、selected backend `598 passed, 21 skipped`、changed executable lines
 4898/5519（88.75%），critical branch 无 changed missing line 或 adoption floor 回退，最终输出
 `Critical quality gate passed`。Brooks architecture audit 100/100、独立 Trellis check blocking
-finding=0。Gate 5–6 按路线图推进，本文件的目标架构尚未整体落地。
+finding=0。Gate 5 已完成代码与可执行规范实现：统一 ORM metadata 下的物理 registry、冻结 Journey
+read port、Journey/Readiness 纯 projection、领域 DTO/transport authority，以及 report/readiness
+ViewModel/action locality 已进入生产组合；canonical gate、独立审计和 Trellis closure 仍待 Gate 5
+最终验收。Gate 6 继续处理兼容边退役，本文件的目标架构尚未整体落地。
 
 ## 1. 背景
 
@@ -51,7 +54,7 @@ finding=0。Gate 5–6 按路线图推进，本文件的目标架构尚未整体
 扫描 Python 静态和字面量动态 import 后，基线存在 49 条跨包边，除 `supervisor` 外的
 12 个包处于同一个强连通分量；当时 Realtime 也主要完成了文件拆分。Gate 1A 已冻结该
 依赖/SCC 基线，Gate 2–3 已先收敛 Realtime 状态、Provider 和 Grounding 决策权；Gate 4
-已完成领域所有权实现，Gate 5–6 继续处理 Locality 和兼容边退役。
+已完成领域所有权实现；Gate 5 已实现 Locality，Gate 6 继续处理兼容边退役。
 
 本设计采用渐进式模块化单体 2.0：不重写、不拆微服务，通过可验证的
 strangler 切片把现有物理目录逐步深化为真正的 Module。

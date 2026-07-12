@@ -42,6 +42,7 @@ Also read `.kiro/steering/frontend-principles.md` for UX constitution (no error 
 | [State Management](./state-management.md) | useEffect + api (most pages), React Query (auth), Zustand (sidebar) | Ready |
 | [Quality Guidelines](./quality-guidelines.md) | Vitest, ESLint, forbidden patterns | Ready |
 | [Type Safety](./type-safety.md) | TypeScript, API types, snake_case | Ready |
+| [Domain Locality and Report ViewModels](./domain-locality-and-report-view-models.md) | Gate 5 domain DTO/transport authority, report/readiness ViewModels, and encoded route actions | Ready |
 
 ---
 

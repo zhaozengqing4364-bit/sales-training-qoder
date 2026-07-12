@@ -231,6 +231,11 @@ executable lines 4898/5519（88.75%），critical branch 无 changed missing lin
 
 ## Gate 5：训练闭环与前端 Locality
 
+状态（2026-07-11 UTC）：**实现完成，closure 待验收**。已落地统一 metadata 的物理 model registry、
+冻结 Journey read repository、Journey/Readiness pure projection、领域 TS DTO authority、sessions
+domain builder，以及 report/readiness ViewModel/action。兼容 import/re-export 仍保留，最终 canonical
+gate、Brooks/Trellis 独立审计与归档由 Gate 5 closure 完成。
+
 变更包建议：
 
 1. Training Journey 只消费报告/Evidence projection；
@@ -240,7 +245,8 @@ executable lines 4898/5519（88.75%），critical branch 无 changed missing lin
 5. `common/db/models.py` 物理拆分但保留统一 metadata；
 6. repository/projection 替代跨域 ORM import。
 
-验收：报告或训练闭环变化不再同时修改全局页面、全局 DTO 和全局 client。
+实现验收：报告或训练闭环变化已不再要求同时修改全局页面、全局 DTO 和全局 client；最终质量
+验收以 Gate 5 canonical gate 和零 blocking finding 为准。
 
 ## Gate 6：兼容层退役和收益复核
 

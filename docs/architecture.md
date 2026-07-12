@@ -365,6 +365,13 @@ executable lines 4898/5519（88.75%），critical branch 无 changed missing lin
 回退，最终输出 `Critical quality gate passed`。Brooks architecture audit 100/100 且 finding=0，
 独立 Trellis check blocking finding=0。
 
+Gate 5 已完成 locality 实现、closure 待最终验收：`common.db.models` 从 2,663 行实体混合文件收敛为
+identity-preserving compatibility registry，所有实体分组仍共享唯一 `Base.metadata`；
+`TrainingJourneyService`/`ReadinessDossierService` 分别收敛到 1,991/336 行并通过 frozen repository
+projection 与纯策略 projection 隔离 ORM。前端 `types.ts`/`client-domains.ts` 收敛到 6,936/519 行，
+Journey/Readiness 与 session-report DTO、sessions transport、report/readiness ViewModel/action 已有领域
+authority。兼容 façade 和历史 import fan-in 属 Gate 6 退役范围，不能在 closure 前写成已删除。
+
 Gate 2 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
 `2903 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
 generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 仅保留 1 个既有
@@ -1092,7 +1099,7 @@ Next.js (端口 3445)
 | `2026-05-11-architecture-boundary-domain-contract` | 领域边界与契约锁定（PRD #23） |
 | `2026-05-11-curriculum-practice-boundary-contract` | 课程考核模块边界契约 |
 | `2026-05-12-case-item-role-profile-pilot-contract` | 案例/角色/画像试点契约 |
-| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2–4 已闭环，Gate 5–6 待完成 |
+| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2–4 已闭环，Gate 5 实现完成待 closure，Gate 6 待完成 |
 
 详见 `docs/adr/`。
 

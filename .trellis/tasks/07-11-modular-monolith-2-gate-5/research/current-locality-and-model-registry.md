@@ -107,3 +107,18 @@ figures justify a Gate 5 locality target and provide a Gate 6 comparison baselin
 - Direct architecture guard: `[architecture] dependency policy satisfied`.
 
 No external provider, production data, schema migration, push or deployment is part of Gate 5.
+
+## Post-change evidence
+
+- CodeGraph was synchronized after Tasks 2–6: 2,039 files, 39,362 nodes and 115,267 edges; the index is
+  up to date. The compatibility registry's broad fan-in still makes model changes select a system-wide
+  matrix, so the full backend and frontend gates remain authoritative.
+- `TrainingJourneyService` is 1,991 lines (from 2,855) and `ReadinessDossierService` is 336 lines (from
+  1,284). Deterministic Journey and Dossier policy now lives in pure projection modules.
+- `common.db.models` has 222 source importers (from 224) because compatibility remains intentional for
+  Gate 5. Identity and complete 98-table metadata parity are executable contracts; Gate 6 owns retirement.
+- The global frontend type barrel has 265 source importers (from 278) and is 6,936 lines (from 8,459); real
+  Journey/Readiness/report definitions now live in domain type modules. `client-domains.ts` is 519 lines
+  (from 657) and delegates the sessions transport to `domains/sessions.ts`.
+- The report page is 2,965 lines (from 3,350) and Readiness detail is 596 lines (from 822). Their pure
+  ViewModel/action tests and the full frontend suite passed 213 files / 1,344 tests with 6 conditional skips.

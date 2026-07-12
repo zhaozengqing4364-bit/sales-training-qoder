@@ -89,3 +89,14 @@
 - Task 6 verification also passed strict TypeScript, changed-file ESLint (errors-only), focused route/pure tests
   `55/55`, and CodeGraph selected the report, Readiness detail and admin-user route tests. No runtime dependency
   or data-fetching waterfall was added by the extraction.
+- Task 7 synchronized CodeGraph at 2,039 files / 39,362 nodes / 115,267 edges and confirmed the dependency
+  graph remains 15 packages / 52 observed edges / one seven-package SCC with no new policy exception. Current
+  compatibility inventories are 222 model-importing backend source files and 265 global-type-barrel frontend
+  source files; these are explicit Gate 6 retirement inputs, not hidden Gate 5 debt claims.
+- Backend/frontend seven-section specs now freeze model identity/import order/metadata, projection immutability,
+  DTO/transport/ViewModel/action locality, user-language fallbacks and Gate 6 retirement conditions. The final
+  design-artifact audit corrected two hard interface-name/signature mismatches plus three advisory evidence/
+  command mismatches; its second pass reports 0 hard and 0 advisory findings.
+- The added corrupt-highlight-storage/three-item-limit regression passed `4/4`; strict TypeScript,
+  changed-file ESLint, architecture policy and `git diff --check` passed. Authority documents remain truthful:
+  implementation is complete while independent audit, canonical gate and archival belong only to Task 8.
