@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import UploadFile
 from sqlalchemy import func, select
@@ -59,6 +59,9 @@ from sales_trainer.services.path_attempt_context_service import (
     PathRuntimeContextPayload,
 )
 from sales_trainer.services.transcription_service import TranscriptionService
+
+if TYPE_CHECKING:
+    from sales_trainer.orchestration.activities.base import ActivityExecutionContext
 
 logger = get_logger(__name__)
 
@@ -176,6 +179,7 @@ class AudioSubmissionService:
         confirmed_material_version_id: str | None,
         actor: User,
         auto_process: bool = True,
+        execution_context: ActivityExecutionContext | None = None,
     ) -> SalesTrainerAudioSubmission:
         content_type = file.content_type or "application/octet-stream"
         self._validate_content_type(content_type)
@@ -210,6 +214,7 @@ class AudioSubmissionService:
                 auto_process=auto_process,
             ),
             actor=actor,
+            execution_context=execution_context,
         )
         return submission
 
@@ -218,13 +223,51 @@ class AudioSubmissionService:
         payload: AudioSubmissionCreate,
         *,
         actor: User,
+        execution_context: ActivityExecutionContext | None = None,
     ) -> SalesTrainerAudioSubmission:
         self._validate_content_type(payload.content_type)
         self._validate_file_size(payload.size_bytes)
         unit = None
         snapshots: dict[str, Any] = {}
         submission_context: PathRuntimeContextPayload | None = None
-        if payload.unit_id is not None:
+        if execution_context is not None and payload.unit_id is not None:
+            raise AudioSubmissionServiceError(
+                "[NEWCOMER_AUDIO_AUTHORITY_CONFLICT]",
+                "录音提交不能同时绑定训练单元和训练活动。",
+                409,
+            )
+        if execution_context is not None:
+            if execution_context.learner_id != str(actor.user_id):
+                raise AudioSubmissionServiceError(
+                    "[NEWCOMER_ACTIVITY_SCOPE_MISMATCH]",
+                    "不能替其他学员提交录音。",
+                    403,
+                )
+            from sales_trainer.services.activity_audio_snapshot_service import (
+                ActivityAudioSnapshotService,
+            )
+
+            frozen = await ActivityAudioSnapshotService(self._db).freeze(
+                context=execution_context,
+                confirmed_material_version_id=payload.confirmed_material_version_id,
+            )
+            snapshots = {
+                "material_snapshot": frozen.material_snapshot,
+                "score_scheme_snapshot": frozen.score_scheme_snapshot,
+                "task_brief_snapshot": frozen.task_brief_snapshot,
+            }
+            submission_context = cast(
+                PathRuntimeContextPayload,
+                {
+                    "path_key": "newcomer_training_path_orchestration",
+                    "path_revision_id": execution_context.path_revision_id,
+                    "path_revision_no": None,
+                    "module_key": execution_context.module_id,
+                    "module_type": "activity_orchestrated",
+                    "legacy_snapshot_only": False,
+                },
+            )
+        elif payload.unit_id is not None:
             unit = await self._db.get(SalesTrainerUnit, payload.unit_id)
             if unit is None or unit.status != "published":
                 raise AudioSubmissionServiceError(
@@ -282,6 +325,9 @@ class AudioSubmissionService:
                 task_brief_snapshot if isinstance(task_brief_snapshot, dict) else None,
                 submission_context,
             )
+        # Generic audio uploads without a training authority remain valid for
+        # non-path tools. They carry no training snapshots and cannot advance a
+        # newcomer activity; only execution_context can do that.
         self._validate_direct_object_if_needed(
             payload.storage_key,
             expected_size_bytes=payload.size_bytes,
@@ -465,7 +511,9 @@ class AudioSubmissionService:
         ):
             return submission
         if submission.user_id != str(actor.user_id):
-            raise AudioSubmissionServiceError("[ACCESS_DENIED]", "无权查看该音频。", 403)
+            raise AudioSubmissionServiceError(
+                "[ACCESS_DENIED]", "无权查看该音频。", 403
+            )
         return submission
 
     async def resolve_audio_file_access(
@@ -560,7 +608,9 @@ class AudioSubmissionService:
         count_stmt = select(func.count()).select_from(SalesTrainerAudioSubmission)
         if user_id:
             stmt = stmt.where(SalesTrainerAudioSubmission.user_id == user_id)
-            count_stmt = count_stmt.where(SalesTrainerAudioSubmission.user_id == user_id)
+            count_stmt = count_stmt.where(
+                SalesTrainerAudioSubmission.user_id == user_id
+            )
         if team_department is not None:
             stmt = stmt.join(User, SalesTrainerAudioSubmission.user_id == User.user_id)
             count_stmt = count_stmt.join(
@@ -591,14 +641,20 @@ class AudioSubmissionService:
             SalesTrainerAudioScoreResult.submission_id
             == SalesTrainerAudioSubmission.submission_id,
         )
-        count_stmt = select(func.count()).select_from(SalesTrainerAudioScoreResult).join(
-            SalesTrainerAudioSubmission,
-            SalesTrainerAudioScoreResult.submission_id
-            == SalesTrainerAudioSubmission.submission_id,
+        count_stmt = (
+            select(func.count())
+            .select_from(SalesTrainerAudioScoreResult)
+            .join(
+                SalesTrainerAudioSubmission,
+                SalesTrainerAudioScoreResult.submission_id
+                == SalesTrainerAudioSubmission.submission_id,
+            )
         )
         if user_id:
             stmt = stmt.where(SalesTrainerAudioSubmission.user_id == user_id)
-            count_stmt = count_stmt.where(SalesTrainerAudioSubmission.user_id == user_id)
+            count_stmt = count_stmt.where(
+                SalesTrainerAudioSubmission.user_id == user_id
+            )
         if submission_id:
             stmt = stmt.where(
                 SalesTrainerAudioScoreResult.submission_id == submission_id
@@ -694,15 +750,19 @@ class AudioSubmissionService:
             if isinstance(materials_config, dict)
             else None
         )
-        required_bindings = [
-            binding
-            for binding in bindings
-            if (
-                isinstance(binding, dict)
-                and binding.get("required") is True
-                and binding.get("confirmation_required") is True
-            )
-        ] if isinstance(bindings, list) else []
+        required_bindings = (
+            [
+                binding
+                for binding in bindings
+                if (
+                    isinstance(binding, dict)
+                    and binding.get("required") is True
+                    and binding.get("confirmation_required") is True
+                )
+            ]
+            if isinstance(bindings, list)
+            else []
+        )
         if not required_bindings:
             raise AudioSubmissionServiceError(
                 scenario.material_error_code,
@@ -714,10 +774,13 @@ class AudioSubmissionService:
         self,
         score: SalesTrainerAudioScoreResult,
     ) -> dict[str, Any]:
-        submission = await self._db.get(SalesTrainerAudioSubmission, score.submission_id)
+        submission = await self._db.get(
+            SalesTrainerAudioSubmission, score.submission_id
+        )
         task_brief_snapshot = (
             submission.task_brief_snapshot
-            if submission is not None and isinstance(submission.task_brief_snapshot, dict)
+            if submission is not None
+            and isinstance(submission.task_brief_snapshot, dict)
             else None
         )
         return _serialize_score_with_lineage(score, task_brief_snapshot)
@@ -744,7 +807,9 @@ class AudioSubmissionService:
         await self._db.flush()
         started_at = datetime.now(UTC)
         try:
-            result = await self._transcription.transcribe_file(str(submission.storage_key))
+            result = await self._transcription.transcribe_file(
+                str(submission.storage_key)
+            )
         except RuntimeError as exc:
             code = str(exc) if str(exc).startswith("[") else "[TRANSCRIPTION_FAILED]"
             _set_orm_fields(
@@ -835,7 +900,9 @@ class AudioSubmissionService:
             else None
         )
         prompt = _resolve_scoring_prompt_from_snapshot(score_scheme_snapshot)
-        prompt_source = "submission_snapshot" if prompt is not None else "current_prompt_row"
+        prompt_source = (
+            "submission_snapshot" if prompt is not None else "current_prompt_row"
+        )
         prompt_id = (
             str(prompt.prompt_id)
             if prompt is not None
@@ -848,7 +915,9 @@ class AudioSubmissionService:
                     unit
                 )
             ).config
-            prompt_id = _resolve_scoring_prompt_id(unit, config_override=effective_config)
+            prompt_id = _resolve_scoring_prompt_id(
+                unit, config_override=effective_config
+            )
         if not prompt_id:
             _set_orm_fields(
                 submission,
@@ -898,9 +967,9 @@ class AudioSubmissionService:
         if threshold is None:
             if effective_config is None and unit is not None:
                 effective_config = (
-                    await EffectiveAudioTrainingConfigResolver(self._db).resolve_for_unit(
-                        unit
-                    )
+                    await EffectiveAudioTrainingConfigResolver(
+                        self._db
+                    ).resolve_for_unit(unit)
                 ).config
             threshold = resolve_audio_pass_threshold(effective_config if unit else None)
         pass_threshold = float(threshold)
@@ -1121,7 +1190,9 @@ class AudioSubmissionService:
         return str(storage_path)
 
     def _local_storage_path(self, user_id: str, filename: str) -> Path:
-        base = Path(os.getenv("SALES_TRAINER_AUDIO_STORAGE_PATH", "./data/sales_trainer_audio"))
+        base = Path(
+            os.getenv("SALES_TRAINER_AUDIO_STORAGE_PATH", "./data/sales_trainer_audio")
+        )
         return base / user_id / f"{uuid.uuid4().hex}{_safe_extension(filename)}"
 
 
@@ -1173,7 +1244,9 @@ def _resolve_scoring_prompt_from_snapshot(
     learner_rubric = prompt_snapshot.get("learner_rubric")
     return SalesTrainerAudioScorePrompt(
         prompt_id=prompt_id,
-        name=str(prompt_snapshot.get("name") or snapshot.get("name") or "历史评分标准快照"),
+        name=str(
+            prompt_snapshot.get("name") or snapshot.get("name") or "历史评分标准快照"
+        ),
         purpose=str(
             prompt_snapshot.get("purpose")
             or snapshot.get("purpose")
@@ -1184,7 +1257,9 @@ def _resolve_scoring_prompt_from_snapshot(
         output_schema=normalize_audio_score_output_schema(output_schema),
         learner_rubric=normalize_learner_rubric(learner_rubric),
         version=prompt_version,
-        status=str(prompt_snapshot.get("status") or snapshot.get("status") or "published"),
+        status=str(
+            prompt_snapshot.get("status") or snapshot.get("status") or "published"
+        ),
     )
 
 
@@ -1201,7 +1276,9 @@ def _coerce_prompt_version(value: Any) -> int | None:
     return None
 
 
-def _resolve_pass_threshold_from_snapshot(snapshot: dict[str, Any] | None) -> float | None:
+def _resolve_pass_threshold_from_snapshot(
+    snapshot: dict[str, Any] | None,
+) -> float | None:
     if snapshot is None:
         return None
     value = snapshot.get("pass_threshold")

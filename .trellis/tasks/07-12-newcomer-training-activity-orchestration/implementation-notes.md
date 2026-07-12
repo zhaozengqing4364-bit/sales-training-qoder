@@ -43,3 +43,7 @@
 - Task 5：Lesson 复用 LearningProgress，发布内容不可用时显式失败；完成章节后写统一 attempt 并关联学习证据。
 - Task 5：Quiz 在 pinned ActivityExecutionContext 下校验 paper/learner 范围，绕开旧新人路径先修条件，冻结路径 revision/module/activity 快照并关联 quiz attempt。
 - Task 5 受影响回归：lesson、quiz 与旧通用 paper 测试共 `15 passed`；Ruff、Mypy 通过。
+- Task 6：录音活动直接冻结 rubric 发布 revision、确认材料版本、路径 revision、enrollment 与 activity 快照，不构造 SalesTrainerUnit。
+- Task 6：作业附件采用 MIME 白名单、大小限制、安全文件名、SHA-256 元数据；支持 local/COS，业务记录不保存文件字节。
+- Task 6 偏差：保留无 unit/context 的通用音频工具上传，但它不携带训练快照、不能推进新人活动；新人训练只有 execution_context 可形成证据。
+- Task 6 状态契约补充 `needs_review`，与 manual_review 作业语义一致；专项及通用 audio 回归 `33 passed`，Ruff、Mypy 通过。

@@ -1154,7 +1154,7 @@ git commit -m "feat(newcomer): execute lesson and quiz activities"
 - Consumes: audio submission/scoring pipeline, material and scoring-rubric assets, attempt repository.
 - Produces: activity-context audio submission and assignment submission.
 
-- [ ] **Step 1: Write failing audio activity test**
+- [x] **Step 1: Write failing audio activity test**
 
 ```python
 @pytest.mark.asyncio
@@ -1177,7 +1177,7 @@ async def test_should_freeze_audio_rubric_and_material_without_sales_trainer_uni
     assert submission.task_brief_snapshot["activity_id"] == audio_context.activity.activity_id
 ```
 
-- [ ] **Step 2: Write failing assignment test**
+- [x] **Step 2: Write failing assignment test**
 
 ```python
 @pytest.mark.asyncio
@@ -1196,13 +1196,13 @@ async def test_should_mark_manual_assignment_as_needs_review(test_db, learner, a
     assert attempt.result_snapshot["text"] == "完成技术环境搭建"
 ```
 
-- [ ] **Step 3: Run tests and verify RED**
+- [x] **Step 3: Run tests and verify RED**
 
 Run: `cd backend && ./.venv/bin/pytest tests/unit/test_newcomer_audio_assessment_activity.py tests/unit/test_newcomer_assignment_activity.py -q`
 
 Expected: handlers and snapshot service are missing.
 
-- [ ] **Step 4: Add direct activity audio snapshots**
+- [x] **Step 4: Add direct activity audio snapshots**
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1233,7 +1233,7 @@ class ActivityAudioSnapshotService:
 
 Resolve the published scoring rubric by `scoring_rubric_id`; require the confirmed version when a material is configured; freeze revision IDs, threshold, activity ID, enrollment ID, and path revision ID. Never construct a `SalesTrainerUnit` or scenario purpose.
 
-- [ ] **Step 5: Extend audio submission service with activity context**
+- [x] **Step 5: Extend audio submission service with activity context**
 
 ```python
 async def create_submission(
@@ -1247,11 +1247,11 @@ async def create_submission(
 
 Require exactly one authority: old generic unit caller or new activity context. For activity context, require `unit_id is None`, use frozen activity snapshots, and rely on the existing snapshot-first scoring path. Attach `audio_submission` evidence to the unified attempt before optional processing.
 
-- [ ] **Step 6: Implement assignment storage and handler**
+- [x] **Step 6: Implement assignment storage and handler**
 
 `AssignmentStorage` supports local and configured COS storage, validates allowlisted MIME types (`text/plain`, PDF, common image types, Office documents), normalizes filenames, enforces `max_file_size_bytes`, and returns `{storage_key, filename, content_type, size_bytes, sha256}`. The handler stores only metadata in `result_snapshot`; it never logs file bytes or text contents.
 
-- [ ] **Step 7: Run focused and affected tests**
+- [x] **Step 7: Run focused and affected tests**
 
 Run:
 
@@ -1262,7 +1262,7 @@ cd backend
 
 Expected: all focused tests and generic audio submission tests pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/src/sales_trainer/orchestration/activities/audio_assessment.py backend/src/sales_trainer/orchestration/activities/assignment.py backend/src/sales_trainer/orchestration/assignment_storage.py backend/src/sales_trainer/services/activity_audio_snapshot_service.py backend/src/sales_trainer/services/audio_submission_service.py backend/src/sales_trainer/schemas.py backend/tests/unit/test_newcomer_audio_assessment_activity.py backend/tests/unit/test_newcomer_assignment_activity.py backend/tests/unit/test_sales_trainer_services.py

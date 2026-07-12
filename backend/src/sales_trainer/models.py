@@ -305,7 +305,7 @@ class NewcomerTrainingActivityAttempt(Base):
             name="ck_newcomer_training_activity_type",
         ),
         CheckConstraint(
-            "status IN ('not_started', 'in_progress', 'submitted', 'completed', 'failed')",
+            "status IN ('not_started', 'in_progress', 'submitted', 'needs_review', 'completed', 'failed')",
             name="ck_newcomer_training_attempt_status",
         ),
         CheckConstraint("attempt_no >= 1", name="ck_newcomer_training_attempt_no"),
