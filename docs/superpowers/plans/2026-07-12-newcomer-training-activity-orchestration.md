@@ -1755,7 +1755,7 @@ git commit -m "feat(newcomer): add orchestration frontend contract"
 - Consumes: API and editor state from Task 10.
 - Produces: three-pane path editor, draft/save/validate/publish workflow.
 
-- [ ] **Step 1: Write failing page and editor tests**
+- [x] **Step 1: Write failing page and editor tests**
 
 ```tsx
 it("shows one outline, one focused inspector, and one learner preview", async () => {
@@ -1777,25 +1777,25 @@ it("moves a module with keyboard controls", async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `cd web && npx vitest run src/app/admin/newcomer-training/path/page.test.tsx src/components/admin/newcomer-training/path-editor.test.tsx`
 
 Expected: components do not exist.
 
-- [ ] **Step 3: Implement the page workflow**
+- [x] **Step 3: Implement the page workflow**
 
 The page loads the config once, initializes a local immutable draft, tracks dirty state, and exposes sticky actions `保存草稿`, `检查并预览`, `发布`. Require a non-empty change reason only for save/publish. Use inline error and Toast; never `alert`, `confirm`, or `prompt`.
 
-- [ ] **Step 4: Implement outline and inspector**
+- [x] **Step 4: Implement outline and inspector**
 
 Use a semantic tree with native `draggable` mouse support plus explicit `上移/下移` buttons. Only the selected phase/module/activity editor renders in the inspector. Add actions create from six module templates and six activity types. Delete uses the shared `ConfirmDialog`.
 
-- [ ] **Step 5: Implement preview and validation panel**
+- [x] **Step 5: Implement preview and validation panel**
 
 Preview renders the learner-facing title, progress outline and one next-step example from the local draft. Validation issues group by phase/module/activity and focus the referenced object on click. Show business messages only.
 
-- [ ] **Step 6: Run component tests, accessibility assertions, and type-check**
+- [x] **Step 6: Run component tests, accessibility assertions, and type-check**
 
 Run:
 

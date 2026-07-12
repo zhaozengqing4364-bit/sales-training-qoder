@@ -72,3 +72,7 @@
 - Task 10：LearningContent 绑定影响改为 activity identity，并增加 canonical `/curriculum/learning-contents/{id}/binding-impact` 读取端点。
 - Task 10 验证：focused/API/learning-content `37 passed`；ESLint focused 通过；`npx tsc --noEmit` 通过；后端 binding-impact 专项、Ruff、Mypy 通过。
 - Task 10 commit：`673d6b0c feat(newcomer): add orchestration frontend contract`。
+- Task 11 RED：管理端路径页与编辑器组件不存在，两个测试套件按预期 import 失败。
+- Task 11：交付左侧语义大纲、中间单对象表单、右侧学员预览/发布校验；支持键盘上移/下移、原生拖放、复制、确认删除，以及按六类活动模板新增模块/活动。
+- Task 11：草稿保存、检查、发布均使用 canonical admin API；检查前自动保存本地草稿，发布前以同一修改说明保存，避免服务端校验/发布旧草稿。
+- Task 11 验证：管理页与编辑器 `5 passed`；`npx tsc --noEmit`、focused ESLint、`git diff --check` 均通过。CodeGraph 尚未索引新增文件，impact 无可识别 symbol。
