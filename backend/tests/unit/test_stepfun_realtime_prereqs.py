@@ -8,6 +8,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "scripts" / "check_stepfun_realtime_prereqs.py"
 
+PRODUCTION_REALTIME_CONFIG = {
+    "STEPFUN_REALTIME_URL": "wss://api.stepfun.com/v1/realtime",
+    "STEPFUN_REALTIME_MODEL": "stepaudio-2.5-realtime",
+    "DEFAULT_VOICE_MODE": "stepfun_realtime",
+    "STEPFUN_REALTIME_INPUT_AUDIO_FORMAT": "pcm16",
+    "STEPFUN_REALTIME_INPUT_SAMPLE_RATE": "24000",
+    "STEPFUN_REALTIME_OUTPUT_AUDIO_FORMAT": "pcm16",
+    "STEPFUN_REALTIME_OUTPUT_SAMPLE_RATE": "24000",
+    "STEPFUN_REALTIME_ENABLE_INPUT_TRANSCRIPTION": "true",
+    "STEPFUN_REALTIME_INPUT_TRANSCRIPTION_LANGUAGE": "zh",
+    "STEPFUN_REALTIME_INPUT_TRANSCRIPTION_MODEL": "step-asr",
+    "STEPFUN_REALTIME_TURN_DETECTION_MODE": "manual_commit",
+    "PRESENTATION_REALTIME_ENGINE_ENABLED": "true",
+    "REALTIME_PROVIDER_PORT_ENABLED": "true",
+    "REALTIME_GROUNDING_MODULE_ENABLED": "true",
+}
+
 
 def run_preflight(env_file: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -17,6 +34,26 @@ def run_preflight(env_file: Path) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
     )
+
+
+def read_env_example(path: Path) -> dict[str, str]:
+    entries: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        entries[name] = value
+    return entries
+
+
+def test_stepfun_realtime_examples_define_production_safe_contract() -> None:
+    for env_example in (ROOT / ".env.example", ROOT / "backend" / ".env.example"):
+        entries = read_env_example(env_example)
+
+        assert entries["STEPFUN_API_KEY"] == "replace-with-stepfun-api-key"
+        for name, expected in PRODUCTION_REALTIME_CONFIG.items():
+            assert entries[name] == expected
 
 
 def test_stepfun_realtime_preflight_redacts_configured_key(tmp_path: Path) -> None:

@@ -206,6 +206,11 @@ DEFAULT_UPSTREAM_KEEPALIVE_PONG_TIMEOUT_MS = 5000
 DEFAULT_UPSTREAM_PROACTIVE_REFRESH_IDLE_MS = 45000
 DEFAULT_AUDIO_BACKPRESSURE_HIGH_WATERMARK_BYTES = 512 * 1024
 TERMINAL_SESSION_STATUSES = {"scoring", "completed"}
+STEPFUN_TURN_DETECTION_POLICY = "policy"
+STEPFUN_TURN_DETECTION_MANUAL_COMMIT = "manual_commit"
+STEPFUN_TURN_DETECTION_MODES = frozenset(
+    {STEPFUN_TURN_DETECTION_POLICY, STEPFUN_TURN_DETECTION_MANUAL_COMMIT}
+)
 
 
 # T01 inventory for M021/S04: these are the shipped StepFun/runtime behaviors that
@@ -371,6 +376,23 @@ class StepFunRealtimeSharedHandler(
         self._stepfun_input_transcription_model = str(
             os.getenv("STEPFUN_REALTIME_INPUT_TRANSCRIPTION_MODEL", "")
         ).strip()
+        turn_detection_mode = (
+            str(
+                os.getenv(
+                    "STEPFUN_REALTIME_TURN_DETECTION_MODE",
+                    STEPFUN_TURN_DETECTION_POLICY,
+                )
+            )
+            .strip()
+            .lower()
+        )
+        if turn_detection_mode not in STEPFUN_TURN_DETECTION_MODES:
+            logger.warning(
+                "invalid_stepfun_turn_detection_mode",
+                fallback=STEPFUN_TURN_DETECTION_MANUAL_COMMIT,
+            )
+            turn_detection_mode = STEPFUN_TURN_DETECTION_MANUAL_COMMIT
+        self._stepfun_turn_detection_mode = turn_detection_mode
         if (
             self._stepfun_input_transcription_enabled
             and not self._stepfun_input_transcription_model
@@ -1457,7 +1479,10 @@ class StepFunRealtimeSharedHandler(
 
         profile = self._active_voice_runtime_profile()
         turn_detection_value = None
-        if self._effective_policy.get("turn_detection") == "server_vad":
+        if (
+            self._stepfun_turn_detection_mode == STEPFUN_TURN_DETECTION_POLICY
+            and self._effective_policy.get("turn_detection") == "server_vad"
+        ):
             turn_detection_value = {"type": "server_vad"}
 
         selected_voice = resolve_session_voice(

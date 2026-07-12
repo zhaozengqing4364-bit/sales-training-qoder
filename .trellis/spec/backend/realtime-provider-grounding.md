@@ -246,3 +246,78 @@ engine.resolve_grounding(
 )
 public_diagnostics = decision.to_frontend_diagnostics(cache_stats=module.cache_stats())
 ```
+
+## 8. Scenario: StepAudio 2.5 Client-Driven Audio Turn Compatibility
+
+### 1. Scope / Trigger
+
+- Trigger: StepFun model/config changes, browser `audio_end` handling, `turn_detection`, or
+  `conversation.item.created` decoding for `stepaudio-2.5-realtime`.
+- Why: StepFun rejects `input_audio_buffer.commit` while `server_vad` is active, and 2.5 may emit a
+  pending audio item whose transcript is an empty string before final ASR arrives.
+
+### 2. Signatures
+
+```text
+STEPFUN_REALTIME_TURN_DETECTION_MODE=manual_commit | policy
+audio_chunk* -> audio_end -> input_audio_buffer.commit -> response.create
+conversation.item.created(item.content[].transcript="") -> ProviderEvent(CONVERSATION_ITEM)
+```
+
+### 3. Contracts
+
+- Production browser sessions use `manual_commit`: `session.update.turn_detection=null`, because
+  the client explicitly closes each audio turn with `audio_end`.
+- `policy` is the rollback mode and may project the frozen runtime Profile's `server_vad`; in that
+  mode clients must not send `input_audio_buffer.commit` and must supply enough trailing silence.
+- Unknown `STEPFUN_REALTIME_TURN_DETECTION_MODE` values fail safe to `manual_commit`; warnings must
+  not include the raw value.
+- A pending `conversation.item.created` with empty optional transcript is a valid lifecycle event.
+  The codec preserves the content entry but must not project an empty top-level transcript.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+|---|---|
+| `manual_commit` + client `audio_end` | Send one commit, await final ASR, then create response |
+| `policy` + frozen `server_vad` | Send `turn_detection={type: server_vad}`; no manual commit contract |
+| Unknown turn-detection mode | Select `manual_commit`, log only the safe fallback |
+| Pending audio item with empty transcript | Decode as `CONVERSATION_ITEM`, omit top-level transcript |
+| Non-empty final transcript event | Decode as `TRANSCRIPTION_FINAL` and preserve text |
+| Manual commit while Server VAD is active | Upstream protocol failure; test/gate must fail visibly |
+
+### 5. Good / Base / Bad Cases
+
+- Good: production env selects `manual_commit`, browser `audio_end` yields one committed turn, and
+  the pending empty transcript does not interrupt the session.
+- Base: `policy` preserves an existing Server VAD deployment for rollback without mutating frozen
+  runtime Profiles.
+- Bad: enable Server VAD while keeping the client-driven commit path, or convert an empty pending
+  transcript into `INVALID_EVENT`.
+
+### 6. Tests Required
+
+- Unit: env examples pin `manual_commit`; handler config overrides a Profile `server_vad` only in
+  that mode; `policy` retains Server VAD.
+- Codec: the StepAudio 2.5 pending audio-item shape decodes to `CONVERSATION_ITEM` without a
+  top-level transcript.
+- Real provider: `CRITICAL_GATE_MODE=newcomer-real-provider` must complete transcript, response,
+  session end, Journey outcome and admin projection with a non-placeholder credential.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+turn_detection = {"type": "server_vad"}
+await send({"type": "input_audio_buffer.commit"})
+data["transcript"] = ""
+```
+
+#### Correct
+
+```python
+turn_detection = None  # client sends audio_end / manual commit
+if transcript:
+    data["transcript"] = transcript
+```

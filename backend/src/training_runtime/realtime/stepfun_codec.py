@@ -692,8 +692,9 @@ def _decode_conversation_item(
     data: dict[str, object] = {"item_type": item_type}
     for key in ("role", "name", "arguments", "transcript"):
         value = _string_value(item.get(key))
-        if value is not None:
-            data[key] = value
+        if value is None or (key != "arguments" and not value):
+            continue
+        data[key] = value
     content = item.get("content")
     if isinstance(content, list):
         normalized: list[dict[str, object]] = []
@@ -715,7 +716,7 @@ def _decode_conversation_item(
             normalized.append(normalized_entry)
         data["content"] = normalized
     transcript = _extract_text_from_container(item)
-    if transcript is not None and "transcript" not in data:
+    if transcript and "transcript" not in data:
         data["transcript"] = transcript
     return _event(
         ProviderEventKind.CONVERSATION_ITEM,

@@ -281,6 +281,31 @@ def test_codec_should_preserve_existing_alternate_transcript_shapes(
     assert event.data == {"text": expected_text}
 
 
+def test_codec_accepts_stepaudio_2_5_pending_audio_item_with_empty_transcript() -> None:
+    event = StepFunEventCodec().decode_event(
+        json.dumps(
+            {
+                "event_id": "00000000-0000-4000-8000-000000000001",
+                "type": "conversation.item.created",
+                "item": {
+                    "id": "item-1",
+                    "object": "realtime.item",
+                    "type": "message",
+                    "status": "in_progress",
+                    "role": "user",
+                    "content": [{"type": "audio", "audio": "", "transcript": ""}],
+                },
+            }
+        ),
+        connection_epoch=1,
+    )
+
+    assert event.kind is ProviderEventKind.CONVERSATION_ITEM
+    assert event.data["item_type"] == "message"
+    assert event.data["role"] == "user"
+    assert "transcript" not in event.data
+
+
 @pytest.mark.parametrize(
     ("raw_payload", "expected_kind", "expected_data"),
     [

@@ -41,7 +41,7 @@ Before writing backend code, read the guides relevant to your change:
 | [Prompt Template Governance](./prompt-template-governance.md) | Prompt defaults, scenario bindings, system-template lock, governance repair | Ready |
 | [Realtime Roleplay V1 Runtime Contract](./realtime-roleplay-v1.md) | Fixed IT-leader realtime roleplay contract, state card, knowledge guard, scoring projection | Ready |
 | [Realtime Session Engine](./realtime-session-engine.md) | Gate 2 Presentation Engine state, rollout/rollback, snapshots, diagnostics, evidence, and Golden differential | Ready |
-| [Realtime Provider and Grounding Authority](./realtime-provider-grounding.md) | Gate 3 neutral Provider Port/StepFun codec, single Grounding decision/cache, projections, lifecycle and rollout matrices | Ready |
+| [Realtime Provider and Grounding Authority](./realtime-provider-grounding.md) | Gate 3 Provider/Grounding authority plus StepAudio 2.5 manual-commit and codec compatibility | Ready |
 | [Domain Ownership and Evaluation Ports](./domain-ownership-and-evaluation-ports.md) | Gate 4 neutral Roleplay/config ownership, Evidence/Scenario ports, root composition and realtime helper seams | Ready |
 | [Training Locality and Model Registry](./training-locality-and-model-registry.md) | Gate 5 identity-preserving ORM registry, frozen Journey reads, and pure Journey/Readiness projections | Ready |
 | [Compatibility Retirement and Root Composition](./compatibility-retirement-and-root-composition.md) | Gate 6 closed runtime factories, app-root composition, consumer-proven retirement, and governed retention | Ready |

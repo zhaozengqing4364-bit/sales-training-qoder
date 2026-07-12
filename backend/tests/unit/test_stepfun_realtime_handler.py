@@ -555,6 +555,7 @@ async def test_provider_port_default_selection_is_frozen_and_does_not_shadow_tra
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("REALTIME_PROVIDER_PORT_ENABLED", raising=False)
+    monkeypatch.setenv("STEPFUN_REALTIME_TURN_DETECTION_MODE", "policy")
     provider = RecordingRealtimeProvider()
     provider_factory_calls: list[dict[str, object]] = []
     legacy_transport = SimpleNamespace(
@@ -2221,6 +2222,7 @@ async def test_connect_upstream_delegates_connection_to_shared_stepfun_transport
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("REALTIME_PROVIDER_PORT_ENABLED", "false")
+    monkeypatch.setenv("STEPFUN_REALTIME_TURN_DETECTION_MODE", "policy")
     upstream_ws = object()
     transport = SimpleNamespace(
         connect=AsyncMock(return_value=upstream_ws),
@@ -2385,6 +2387,22 @@ def test_stepfun_realtime_handler_defaults_to_latest_realtime_model(
     handler = StepFunRealtimeHandler()
 
     assert handler._stepfun_model == "stepaudio-2.5-realtime"
+
+
+def test_stepfun_session_config_forces_manual_commit_when_runtime_is_client_driven(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("STEPFUN_REALTIME_TURN_DETECTION_MODE", "manual_commit")
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {"turn_detection": "server_vad"}
+    handler._build_stepfun_tools_from_policy = MagicMock(return_value=[])
+    handler._enforce_stepfun_tool_guardrails = MagicMock(
+        side_effect=lambda tools: tools
+    )
+
+    config = handler._build_stepfun_session_config()
+
+    assert config.turn_detection is None
 
 
 def test_handler_applies_voice_runtime_profile_from_policy_snapshot() -> None:
