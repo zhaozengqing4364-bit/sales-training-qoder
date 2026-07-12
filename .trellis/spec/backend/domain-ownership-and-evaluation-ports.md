@@ -70,8 +70,8 @@ Legacy authority. A request constructs exactly one authority and never shadow-wr
 
 - `roleplay` owns schema constants, canonical hashes, bundled Situation Packs, compiler,
   disclosure state, visible payload, turn context and compliance decisions.
-- `common.roleplay_contracts` and Curriculum paths are compatibility imports only. They may forward
-  identity but may not contain a second decision algorithm.
+- Consumers import canonical Roleplay contracts from `roleplay`; the former
+  `common.roleplay_contracts` forwarding module is retired and must remain absent.
 - Persisted Roleplay hashes, frozen references and historical reports are never recomputed.
 - Curriculum Pydantic gate DTO conversion stays at the Curriculum adapter boundary.
 
@@ -101,8 +101,8 @@ Legacy authority. A request constructs exactly one authority and never shadow-wr
   removes the reverse import without changing OpenAPI. When replacing a nested router with root
   composition, preserve both registration order and inherited tags; URL parity alone is insufficient.
 - Neutral event/text/message helpers live in `training_runtime.realtime`. Sales compatibility modules
-  forward the same function objects. Presentation retains only the named Sales shared-handler seam
-  until Gate 6 proves it can be deleted.
+  forward the same function objects. Presentation owns a neutral-port behavior mixin; only the app root
+  combines it with the retained Sales shared transport, so no Presentation-to-Sales package edge remains.
 - Tests that replace a forwarded function's module globals (session factory, storage service or logger)
   must patch `training_runtime.realtime`, where `function.__globals__` lives; adding look-alike globals
   to a compatibility export does not create a real seam.
@@ -134,8 +134,8 @@ Legacy authority. A request constructs exactly one authority and never shadow-wr
 - **Base**: a rollout flag is false; the named Legacy authority runs alone and produces byte-equal
   contracts/audit rows without rewriting historical data.
 - **Bad**: Evaluation imports Presentation to branch on scenario, Curriculum invokes Admin lifecycle
-  to read a version, a missing transcript becomes score 0, both rollout paths write, or Presentation
-  imports Sales helper implementations in addition to the retained shared handler.
+  to read a version, a missing transcript becomes score 0, both rollout paths write, or a Presentation
+  domain module imports Sales transport/helper implementations.
 
 ## 6. Tests Required
 

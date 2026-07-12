@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–5 已闭环；Gate 6 待实施。
-本文描述目标边界和迁移约束，不把尚未完成的物理迁移写成当前事实。
+Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–5 已闭环；Gate 6 实现完成，
+最终 Brooks/Trellis/canonical closure 待完成。本文区分已实现事实、明确保留面和后续退役条件。
 
 ## 背景
 
@@ -17,7 +17,7 @@ Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。
 - Roleplay Contract、Configuration Governance、Evaluation 的过渡所有权已由 Gate 4 实现迁移；
 - Gate 5 已把 ORM registry、Training Journey/Readiness projection、前端领域 DTO/transport 和
   report/readiness ViewModel/action authority 接入生产组合；clean-start canonical gate、Brooks 100/100
-  与 Trellis blocking finding=0 已完成，兼容 façade 保留到 Gate 6；
+  与 Trellis blocking finding=0 已完成；Gate 6 已按消费者与 rollback 证据退役或保留 façade；
 - 发布门禁只执行部分测试，OpenAPI 和多组测试夹具已经漂移。
 
 AI 辅助开发显著提高提交吞吐。继续按传统人周规划或依赖人工记忆维护边界，会让
@@ -116,8 +116,9 @@ integration/E2E 为 `598 passed, 21 skipped`。changed executable lines 为 41/5
 Gate 2 完成事实（2026-07-11 UTC）：Presentation 的 `stepfun_realtime` 生产入口默认选择
 `PresentationRealtimeEngineHandler`，由 app root 用 immutable closed factory key 组合
 `RealtimeSessionEngine` 和命名兼容 Adapter；`PRESENTATION_REALTIME_ENGINE_ENABLED=false`
-在构造前原子回滚到 `LegacyPresentationStepFunRealtimeHandler`，每个 session 只构造一个
-handler。Engine 显式拥有 versioned Connection/Turn/Grounding/Evidence 状态，兼容 Adapter
+在构造前原子回滚到当时命名的 `LegacyPresentationStepFunRealtimeHandler`（Gate 6 已重命名并移至
+应用根组合），每个 session 只构造一个 handler。Engine 显式拥有 versioned
+Connection/Turn/Grounding/Evidence 状态，兼容 Adapter
 仍是 message、score、report 和 reconnect persistence 的唯一 writer；snapshot 仅 additive
 新增 `runtime_state.realtime_engine` 并兼容 pre-Gate 恢复。Presentation 从第一次 base 初始化
 即禁用 Sales capability construction，Sales 默认行为不变。真实 Golden differential 覆盖
@@ -145,10 +146,10 @@ owner，stale epoch/correlation/decision 均 fail closed。Sales 2x2 和 Present
 score/report single writer 保持兼容。Engine 仍使用 diagnostics schema v1，frontend/runtime
 projection 不暴露 query、snippet、claim、raw Provider error 或 secret。
 
-Gate 3 不等于整条 Presentation 边退役。Gate 4 已把 message persistence、Roleplay、Evaluation
-和中立 realtime helper 移到稳定所有权，但兼容 Adapter 仍继承 `sales_bot` Shared Handler，
-实际 `presentation_coach -> sales_bot` dependency policy 临时边继续保留；Gate 6 import-graph
-证明完成前不得删除。
+Gate 3 当时不等于整条 Presentation 边退役。Gate 4 先把 message persistence、Roleplay、Evaluation
+和中立 realtime helper 移到稳定所有权；Gate 6 再把 Presentation behavior 收敛为中立 port mixin，
+仅在应用根与 retained Sales transport 组合。最终 AST 图已无 `presentation_coach -> sales_bot`，对应
+policy target 同步删除；Sales 域仍不反向依赖应用根。
 Gate 3 closure 证据（2026-07-11 UTC）：whole-branch Brooks Architecture Audit 100/100 且
 Critical/Important finding=0，独立 Trellis check finding=0。最终 clean-start canonical gate
 自然 exit 0：backend unit+contract `3271 passed, 1 skipped`；Vitest 209 files /
@@ -172,6 +173,35 @@ Provider 条件 skip）；selected backend integration/E2E `598 passed, 21 skipp
 executable lines 4898/5519（88.75%），critical branch 无 changed missing line 或 adoption floor
 回退，最终输出 `Critical quality gate passed`。本地 Playwright 库与 loopback smoke build inputs
 由门禁显式注入，消除了宿主共享库和 `.env.local` 对 release truth 的环境污染。
+
+Gate 5 完成事实（2026-07-12 UTC）：`common.db.models` 已物理收敛为 identity-preserving registry，
+实体分组共享唯一 `Base.metadata`；Training Journey/Readiness 通过 frozen repository port 和纯 projection
+隔离 ORM，前端 Journey/Readiness/report 已有领域 DTO、transport、ViewModel 和 action authority。
+最终 clean-start canonical gate 为 backend `3315 passed, 1 skipped`、Vitest `1345 passed, 6 skipped`、
+五组 Playwright `3/9/11/2/1 passed`、selected backend `598 passed, 21 skipped`、changed coverage
+7317/8048（90.92%），最终输出 `Critical quality gate passed`；Brooks 100/100、Trellis finding=0。
+
+Gate 6 实现事实（2026-07-12 UTC）：`ScenarioRuntimeHandlerSelection` 只包含 scenario、mode、route 和
+一个非空闭集 `RuntimeHandlerFactoryKey`；Sales-local map 与 application-root Presentation map 的互斥
+并集覆盖四个 key，未知 key 在构造前 fail closed。无生产消费者的 `ScenarioPluginEntrypoint` 及描述器
+方法已删除；Curriculum 直接消费 `roleplay` owner 后，`common.roleplay_contracts` 转发门面已删除。
+Presentation behavior 通过中立 `StepFunRuntimeAdapterPort` 显式声明 retained transport 合同，只在
+`runtime_composition.py` 与 Sales shared transport 组合。治理图从 52 降为 51 条边，
+`presentation_coach -> sales_bot` 消失，七包 SCC 不变；Gate 6 聚焦矩阵 `161 passed`。
+
+兼容面分类决定如下。它们的保留不等同于未执行 Gate 6：
+
+| 面 | 状态 / owner | reason | retire_when |
+|---|---|---|---|
+| plugin 字符串入口、`ScenarioPluginEntrypoint` | retired / Runtime platform | 无生产消费者且由闭集 factory 替代 | 已满足并删除 |
+| `common.roleplay_contracts` | retired / Roleplay owner | 唯一生产消费者已迁到 canonical owner | 已满足并删除 |
+| `common.db.models` registry | retained / Data platform | 222 个生产 importer、统一 metadata/import-order authority | importer 迁完、Alembic/identity 通过且一发布窗口结束 |
+| frontend `types.ts` / `client-domains.ts` | retained / Frontend platform | 262 个源码 importer，外部/generated client inventory 未完整 | domain-local consumer 迁完且发布窗口结束 |
+| Legacy Grounding adapter/cache | retained / Realtime platform | flag=false 时真实构造 | rollout telemetry 与发布窗口证明 rollback 未使用 |
+| Presentation Engine / Provider / Grounding flags | retained / Realtime platform | 三项 constructor-time rollback 仍有效 | 分别满足 release evidence、Golden 与 ADR deprecation 条件 |
+| `common -> roleplay` defaults edge | follow-up / Business rules owner | `common/business_rules/defaults.py` 活跃 registry import | defaults authority 迁移且历史 hash/snapshot parity 通过 |
+
+Gate 6 最终 Brooks/Trellis/canonical 证据写入前，ADR 状态保持 closure pending。
 
 ### 8. 使用可验证变更包衡量进度
 

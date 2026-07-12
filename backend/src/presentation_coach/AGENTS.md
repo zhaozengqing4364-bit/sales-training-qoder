@@ -22,7 +22,8 @@ backend/src/presentation_coach/
 | Prompt role binding | `services/prompt_role_resolver.py` |
 | Talking-point / forbidden-word matching | `services/point_tracker.py`, `services/forbidden_matcher.py` |
 | Interruption detection | `services/interruption_detector.py` |
-| StepFun realtime handler | `websocket/presentation_stepfun_realtime_handler.py` |
+| StepFun behavior mixin | `websocket/presentation_stepfun_realtime_handler.py` |
+| Concrete StepFun adapter | `backend/src/runtime_composition.py` (application root) |
 | Legacy ASR/TTS handler | `websocket/presentation_handler.py` |
 | WS route registration | `backend/src/websocket_routes.py` |
 | Runtime plugin selection | `backend/src/training_runtime/plugins.py` |
@@ -36,6 +37,8 @@ backend/src/presentation_coach/
 
 - NEVER surface raw exceptions to the client during practice (Constitution I).
 - ALWAYS keep StepFun and legacy handler selection aligned with `PresentationScenarioPlugin`.
+- NEVER import Sales transport implementations; express required hooks through the neutral adapter port and let
+  the application root compose the concrete transport.
 - Upload/replace/delete must respect active-session blockers documented in `presentations.py`.
 - Changing talking-point or forbidden-word shapes affects both runtime scoring and stored sessions.
 

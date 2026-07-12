@@ -50,11 +50,12 @@ class StepFunRuntimeAdapterPort:
     _cancel_pending_response_after_commit: Any
     _create_response_from_pending_commit: Any
 
-    def _next(self, name: str) -> Callable[..., Any]:
-        return cast(Callable[..., Any], getattr(super(), name))
+    def _transport(self) -> Any:
+        """Return the next explicit transport implementation in the root MRO."""
+        return cast(Any, super())
 
     def __init__(self, **kwargs: Any) -> None:
-        self._next("__init__")(**kwargs)
+        self._transport().__init__(**kwargs)
 
     async def handle_connection(
         self,
@@ -63,7 +64,7 @@ class StepFunRuntimeAdapterPort:
         token: str,
         trace_id: str | None = None,
     ) -> None:
-        await self._next("handle_connection")(
+        await self._transport().handle_connection(
             websocket,
             session_id,
             token,
@@ -71,48 +72,48 @@ class StepFunRuntimeAdapterPort:
         )
 
     def _create_state_snapshot(self) -> Any:
-        return self._next("_create_state_snapshot")()
+        return self._transport()._create_state_snapshot()
 
     async def _restore_session_state(self, state: Any) -> None:
-        await self._next("_restore_session_state")(state)
+        await self._transport()._restore_session_state(state)
 
     async def _connect_upstream(self) -> None:
-        await self._next("_connect_upstream")()
+        await self._transport()._connect_upstream()
 
     async def _save_session_state(self) -> None:
-        await self._next("_save_session_state")()
+        await self._transport()._save_session_state()
 
     async def _create_response(self, *, count_turn: bool = False) -> bool:
         return bool(
-            await self._next("_create_response")(count_turn=count_turn)
+            await self._transport()._create_response(count_turn=count_turn)
         )
 
     async def _handle_upstream_response_created(
         self, event: dict[str, Any]
     ) -> None:
-        await self._next("_handle_upstream_response_created")(event)
+        await self._transport()._handle_upstream_response_created(event)
 
     async def _handle_upstream_response_audio_delta(
         self, event: dict[str, Any]
     ) -> None:
-        await self._next("_handle_upstream_response_audio_delta")(event)
+        await self._transport()._handle_upstream_response_audio_delta(event)
 
     async def _handle_binary_frame(self, data: bytes) -> bool:
-        return bool(await self._next("_handle_binary_frame")(data))
+        return bool(await self._transport()._handle_binary_frame(data))
 
     def _reset_turn_runtime_state(self) -> None:
-        self._next("_reset_turn_runtime_state")()
+        self._transport()._reset_turn_runtime_state()
 
     async def _prepare_grounding_context(self, user_text: str) -> None:
-        await self._next("_prepare_grounding_context")(user_text)
+        await self._transport()._prepare_grounding_context(user_text)
 
     async def _load_effective_policy(self) -> None:
-        await self._next("_load_effective_policy")()
+        await self._transport()._load_effective_policy()
 
     async def sync_lifecycle_transition(
         self, transition: SessionLifecycleTransition
     ) -> None:
-        await self._next("sync_lifecycle_transition")(transition)
+        await self._transport().sync_lifecycle_transition(transition)
 
     async def _handle_client_text(self, raw_text: str) -> None:
-        await self._next("_handle_client_text")(raw_text)
+        await self._transport()._handle_client_text(raw_text)

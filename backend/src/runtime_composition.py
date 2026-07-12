@@ -47,16 +47,3 @@ PRESENTATION_RUNTIME_HANDLER_FACTORIES: Mapping[
         ),
     }
 )
-
-
-def create_presentation_runtime_handler(
-    factory_key: str | RuntimeHandlerFactoryKey,
-) -> Any:
-    try:
-        resolved_key = RuntimeHandlerFactoryKey(factory_key)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("unknown_runtime_handler_factory_key") from exc
-    factory = PRESENTATION_RUNTIME_HANDLER_FACTORIES.get(resolved_key)
-    if factory is None:
-        raise ValueError("unknown_runtime_handler_factory_key")
-    return factory()

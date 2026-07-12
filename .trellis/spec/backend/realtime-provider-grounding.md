@@ -16,10 +16,11 @@ Apply this contract when a change touches:
 - Provider/Grounding diagnostics, cache/metric ownership, timeout or session close; or
 - the Sales 2x2, Presentation 2x2x2, Fake Provider, Golden differential or architecture policy.
 
-Gate 3 neutralizes Provider and Grounding ownership inside the modular monolith. It does not add a
-second production Provider and does not remove the full `presentation_coach -> sales_bot` edge: the
-compatibility adapter still consumes Sales persistence, prompt, Roleplay and report helpers. That
-governed edge retires only after Gate 4 ownership moves and Gate 6 import-graph proof.
+Gate 3 neutralizes Provider and Grounding ownership inside the modular monolith and adds no second
+production Provider. Gate 6 subsequently removed the `presentation_coach -> sales_bot` domain edge:
+the application root composes Presentation behavior with the retained shared transport. The three
+constructor-time rollback flags and Legacy Grounding cache/adapter remain active until their release
+evidence and deprecation windows satisfy the Gate 6 retirement contract.
 
 ## 2. Signatures
 

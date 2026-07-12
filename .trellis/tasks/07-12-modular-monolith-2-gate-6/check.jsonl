@@ -7,3 +7,5 @@
 {"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend regression verification"}
 {"file": ".trellis/spec/frontend/domain-locality-and-report-view-models.md", "reason": "Retained frontend façade proof"}
 {"file": ".trellis/tasks/07-12-modular-monolith-2-gate-6/research/compatibility-retirement-inventory.md", "reason": "Acceptance baseline and retained/retired decisions"}
+{"file": ".trellis/spec/backend/compatibility-retirement-and-root-composition.md", "reason": "Closed key, root-map, policy and retained-surface verification"}
+{"file": ".trellis/tasks/07-12-modular-monolith-2-gate-6/research/benefit-review.md", "reason": "Before/after claims and evidence boundary verification"}

@@ -7,8 +7,8 @@
 
 Apply this contract when a change:
 
-- modifies `training_runtime/realtime/`, `PresentationRealtimeEngineHandler`, or
-  `LegacyPresentationStepFunRealtimeHandler`;
+- modifies `training_runtime/realtime/`, `PresentationRealtimeEngineHandler`,
+  `PresentationStepFunRuntimeMixin`, or the root `PresentationStepFunRealtimeAdapter`;
 - changes Presentation realtime handler selection, its app-root factory map, or
   `PRESENTATION_REALTIME_ENGINE_ENABLED`;
 - changes connection, turn, grounding, evidence, reconnect, tool-follow-up, or audio-turn
@@ -17,16 +17,18 @@ Apply this contract when a change:
 - touches shared StepFun construction used by Sales and Presentation; or
 - changes the Golden Conversation differential or realtime release-gate selection.
 
-Gate 2 established explicit Engine state and a Presentation composition façade. Gate 3 now supplies
-the neutral `RealtimeProviderPort`, StepFun codec/adapter and one default Grounding decision/cache
-authority. The StepFun wire/persistence implementation remains in a compatibility adapter, so the
-temporary `presentation_coach -> sales_bot` implementation edge is still real for persistence,
-prompt, Roleplay and report helpers. See `realtime-provider-grounding.md`.
+Gate 2 established explicit Engine state and a Presentation composition façade. Gate 3 supplies the
+neutral `RealtimeProviderPort`, StepFun codec/adapter and one default Grounding decision/cache
+authority. Gate 6 removed the domain edge: Presentation owns a behavior mixin over the neutral
+`StepFunRuntimeAdapterPort`, while the application root alone composes it with the retained shared
+transport. See `compatibility-retirement-and-root-composition.md`.
 
 ## 2. Signatures
 
 ```python
 class RuntimeHandlerFactoryKey(StrEnum):
+    PRESENTATION_LEGACY = "presentation_legacy"
+    PRESENTATION_STEPFUN_ROLLBACK = "presentation_stepfun_rollback"
     PRESENTATION_REALTIME_ENGINE = "presentation_realtime_engine"
 
 
@@ -35,9 +37,7 @@ class ScenarioRuntimeHandlerSelection:
     scenario_type: str
     runtime_mode: str
     websocket_route: str
-    handler_factory_path: str
-    handler_factory_name: str
-    factory_key: RuntimeHandlerFactoryKey | None = None
+    factory_key: RuntimeHandlerFactoryKey
 
 
 class RealtimeSessionEngine:
@@ -92,6 +92,7 @@ class RealtimeSessionEngine:
 
 
 class PresentationRealtimeEngineHandler:
+    def __init__(self, *, runtime_engine_factory, runtime_adapter_factory): ...
     async def handle_connection(self, websocket, session_id, token, trace_id=None): ...
     async def send_message(self, message): ...
     async def close(self, code=1000, reason="Session closed"): ...
@@ -104,8 +105,10 @@ Selection and app-root construction:
 ```python
 PRESENTATION_REALTIME_ENGINE_ENABLED: bool = True
 
-_RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
-    RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE: RealtimeSessionEngine,
+PRESENTATION_RUNTIME_HANDLER_FACTORIES = MappingProxyType({
+    RuntimeHandlerFactoryKey.PRESENTATION_LEGACY: PresentationWebSocketHandler,
+    RuntimeHandlerFactoryKey.PRESENTATION_STEPFUN_ROLLBACK: PresentationStepFunRealtimeAdapter,
+    RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE: create_presentation_realtime_engine_handler,
 })
 ```
 
@@ -115,7 +118,7 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
 
 - Default `true` selects `PresentationRealtimeEngineHandler` for persisted
   `stepfun_realtime` Presentation sessions.
-- Explicit `false` selects `LegacyPresentationStepFunRealtimeHandler`; route admission,
+- Explicit `false` selects the root `PresentationStepFunRealtimeAdapter`; route admission,
   persisted voice mode, WebSocket protocol, close codes, and snapshot fields stay compatible.
 - Selection reads the flag exactly once. It is frozen/hashable and carries only scalar strings
   plus the closed `RuntimeHandlerFactoryKey`; no dict, callable, class, or runtime object crosses
@@ -186,9 +189,9 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
 
 - `PresentationRealtimeEngineHandler` is a composition façade, not a
   `StepFunRealtimeSharedHandler` subclass and not a `__getattr__` proxy.
-- Its real adapter may temporarily reuse `sales_bot` StepFun mixins during Gate 2, but is created
-  with `scenario="presentation"` and `sales_capabilities_enabled=False` from the first base
-  initialization.
+- Presentation behavior imports no Sales module. The application root composes it with the retained
+  StepFun shared transport through an explicit cooperative-MRO port and creates it with
+  `scenario="presentation"` and `sales_capabilities_enabled=False` from the first base initialization.
 - Presentation must not construct SalesStage, FuzzyDetection, or RealtimeScoring capability
   objects. Sales defaults remain `scenario="sales"` and `sales_capabilities_enabled=True`.
 - Existing adapter persistence remains the single writer for messages, scores, reports, and
@@ -196,7 +199,7 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
 
 ### Golden differential
 
-- The differential drives a real Legacy handler and the real façade's real compatibility
+- The differential drives the real root rollback adapter and the real façade's real compatibility
   adapter through connect/start/text/binary/transcription/`response.done`/reconnect/close.
 - Gate 3 executes all Presentation Engine/Provider/Grounding 2x2x2 selections and the Sales
   Provider/Grounding 2x2 construction matrix. Every combination selects one authority per axis.
@@ -246,14 +249,13 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
 - **Good**: the flag is enabled, the app root resolves the closed Engine factory key, the façade
   composes one Presentation adapter, a reconnect restores epoch 2, and the Golden differential
   matches Legacy events/writes/snapshots while Engine terminal evidence is deduped.
-- **Base**: the flag is disabled, the named Legacy adapter runs alone with unchanged wire and
+- **Base**: the flag is disabled, the named root rollback adapter runs alone with unchanged wire and
   persistence behavior; Sales keeps its existing default constructor and reconnect flow.
 - **Bad**: a plugin passes a factory callable or kwargs dict, the façade nests/removes legacy
   diagnostics, Engine writes a second message/score/report, `response.done` completes the new
   follow-up turn, rejected or per-frame audio creates evidence, raw chunks accumulate in memory,
   audio keys use mutable `turn_count`, Tool execution owns a second retrieval cache, or
-  documentation claims the full Presentation-to-Sales edge is retired while the compatibility
-  adapter still imports `sales_bot` persistence/prompt/Roleplay/report helpers.
+  a domain imports the other domain's transport, or a root map accepts executable module/attribute strings.
 
 ## 6. Tests Required
 
@@ -273,8 +275,8 @@ _RUNTIME_HANDLER_ENGINE_FACTORIES = MappingProxyType({
   `backend/tests/unit/test_stepfun_realtime_upstream.py`,
   `backend/tests/integration/test_sales_realtime_reconnect_flow.py`, and
   `backend/tests/integration/test_websocket_status_contract.py`.
-- Architecture: run `backend/scripts/architecture_dependency_guard.py --check`; do not remove
-  the `presentation_coach -> sales_bot` temporary edge until the actual import disappears.
+- Architecture: run `backend/scripts/architecture_dependency_guard.py --check`; the
+  `presentation_coach -> sales_bot` edge must stay absent and the two root maps must remain disjoint/exhaustive.
 - Quality: Ruff, mypy, backend unit+contract, and a fresh natural
   `bash scripts/critical-quality-gate.sh` run. Do not add `xfail`, permanent skip, or `|| true`.
 
@@ -303,8 +305,8 @@ selection = ScenarioRuntimeHandlerSelection(
     factory_key=RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE,
 )
 
-factory = _RUNTIME_HANDLER_ENGINE_FACTORIES[selection.factory_key]
-handler = PresentationRealtimeEngineHandler(runtime_engine_factory=factory)
+factory = PRESENTATION_RUNTIME_HANDLER_FACTORIES[selection.factory_key]
+handler = factory()
 
 await legacy_adapter.persist_message(message)  # only writer
 engine.record_evidence(

@@ -39,3 +39,10 @@
   `common.roleplay_contracts`, and kept the remaining `common -> roleplay` policy edge because
   `common.business_rules.defaults` is still an active source. Roleplay/Gate 4/Gate 6 matrix is `33 passed`; Ruff,
   full mypy (`677 source files`) and architecture policy pass. Gate 6 contracts are now 9/9 Green.
+- Task 5 post-change measurement: 15 governed packages, 51 edges, no Presentation-to-Sales edge, and the same
+  seven-package SCC. The remaining Common-to-Roleplay source is only `common/business_rules/defaults.py:9`.
+  CodeGraph's refreshed index contains 2043 files, 39422 nodes and 115358 edges; the core runtime changes select
+  227 affected test files. The consolidated Gate 6 matrix is `161 passed` in pytest 39.39s / shell 48.129s.
+- Refactor review removed the unused `create_presentation_runtime_handler` wrapper from the root composition
+  module. `websocket_routes` remains the single Presentation resolution/admission point, avoiding two shallow
+  factory-resolution APIs.

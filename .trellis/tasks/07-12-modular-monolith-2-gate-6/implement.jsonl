@@ -8,3 +8,5 @@
 {"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Search-before-helper and deletion guidance"}
 {"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Root composition and runtime data-flow review"}
 {"file": ".trellis/tasks/07-12-modular-monolith-2-gate-6/research/compatibility-retirement-inventory.md", "reason": "Consumer truth, baseline and chosen Gate 6 architecture"}
+{"file": ".trellis/spec/backend/compatibility-retirement-and-root-composition.md", "reason": "Gate 6 closed factory, root composition and retirement contract"}
+{"file": ".trellis/tasks/07-12-modular-monolith-2-gate-6/research/benefit-review.md", "reason": "Comparable edge, fan-in, affected-test and co-change evidence"}

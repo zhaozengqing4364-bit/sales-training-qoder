@@ -1,7 +1,7 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，分 Gate 实施中（Gate 0A–5 已闭环；Gate 6 待实施）
+状态：已批准，Gate 0A–5 已闭环；Gate 6 实现完成、最终审计与 canonical closure 待完成
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 
 实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
@@ -38,8 +38,12 @@ exit 0：backend `3315 passed, 1 skipped`、Vitest 213 files / `1345 passed, 6 s
 generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 1 个既有真实 Provider 条件
 skip）、selected backend `598 passed, 21 skipped`、changed executable lines 7317/8048（90.92%），
 critical branch 无 changed missing line 或 adoption floor 回退，最终输出 `Critical quality gate passed`。
-Brooks architecture audit 100/100、独立 Trellis check blocking finding=0。Gate 6 继续处理兼容边退役，
-本文件的目标架构尚未整体落地。
+Brooks architecture audit 100/100、独立 Trellis check blocking finding=0。Gate 6 已将 runtime plugin
+选择收敛为四个闭集 factory key，删除无消费者 `ScenarioPluginEntrypoint` 和 Common Roleplay 转发门面，
+并在应用根组合 Presentation behavior 与 retained StepFun transport；实际依赖图从 52 条边降为 51 条，
+`presentation_coach -> sales_bot` 消失、七包 SCC 未扩大。仍有真实消费者或 rollout 价值的模型/前端
+façade、Legacy Grounding cache/adapter 和三项 rollback flag 明确保留。最终 Brooks/Trellis/canonical
+closure 尚未完成，因此不把整个 Gate 6 预先标记闭环。
 
 ## 1. 背景
 
@@ -59,7 +63,8 @@ Brooks architecture audit 100/100、独立 Trellis check blocking finding=0。Ga
 扫描 Python 静态和字面量动态 import 后，基线存在 49 条跨包边，除 `supervisor` 外的
 12 个包处于同一个强连通分量；当时 Realtime 也主要完成了文件拆分。Gate 1A 已冻结该
 依赖/SCC 基线，Gate 2–3 已先收敛 Realtime 状态、Provider 和 Grounding 决策权；Gate 4
-已完成领域所有权实现；Gate 5 已完成 Locality 实现与验收，Gate 6 继续处理兼容边退役。
+已完成领域所有权实现；Gate 5 已完成 Locality 实现与验收；Gate 6 已完成消费者证据驱动的兼容边
+退役实现，等待最终独立门禁闭环。
 
 本设计采用渐进式模块化单体 2.0：不重写、不拆微服务，通过可验证的
 strangler 切片把现有物理目录逐步深化为真正的 Module。
@@ -215,12 +220,12 @@ Presentation = Engine + StepFun/Legacy Adapter + Presentation Hooks + Evidence
 Examiner = Engine/Exam Runtime Port + Exam Scorer + Completion Writer
 ```
 
-Presentation tracer bullet 已在 Gate 2 落地：façade 不再继承 Sales handler，兼容 Adapter
-从第一次 base 初始化即声明 `scenario="presentation"` 且不构造 SalesStage、FuzzyDetection、
-RealtimeScoring。兼容 Adapter 仍临时复用 `sales_bot` StepFun Shared Handler，所以实际
-`presentation_coach -> sales_bot` 依赖和 architecture policy 临时例外尚未退役。Gate 4 已迁移
-message persistence、Roleplay、Evaluation 以及中立 event/text helper；Gate 6 仍须依据实际
-import graph 删除 Shared Handler 兼容继承，不能以 façade 或单个 Port 已组合化代替整条边退役事实。
+Presentation tracer bullet 已在 Gate 2 落地：façade 不继承 Sales handler，兼容 Adapter 从第一次
+base 初始化即声明 `scenario="presentation"` 且不构造 SalesStage、FuzzyDetection、RealtimeScoring。
+Gate 6 进一步让 Presentation 只拥有 `PresentationStepFunRuntimeMixin`，由中立
+`StepFunRuntimeAdapterPort` 显式声明 cooperative-MRO 需求；顶层 `runtime_composition.py` 才把它与
+retained `StepFunRealtimeSharedHandler` 组合。Presentation 域不再 import Sales，实际
+`presentation_coach -> sales_bot` 边及对应临时 target 已由 AST 图证明删除。
 
 ### 6.3 Roleplay Contract bounded context
 
@@ -253,10 +258,10 @@ Evidence 不足继续返回 non-evaluable，而不是制造低分或完整报告
 ### 6.6 Shared Kernel 和持久化
 
 `common` 逐步缩为稳定技术 Kernel：ID、时间、Result、审计、trace、基础 auth、
-通用 port。近期不拆数据库：
+通用 port。Gate 5 已在不拆数据库的前提下完成模型文件物理分组：
 
 - 先通过 repository/projection 限制跨域 ORM 消费；
-- 再物理拆分 `common/db/models.py`，继续共享同一个 `Base.metadata`；
+- `common/db/models.py` 现为 identity-preserving registry，实体分组继续共享同一个 `Base.metadata`；
 - 只有当表的写入所有权稳定后，才评估 schema 或部署边界。
 
 ### 6.7 前端 Locality

@@ -44,6 +44,7 @@ Before writing backend code, read the guides relevant to your change:
 | [Realtime Provider and Grounding Authority](./realtime-provider-grounding.md) | Gate 3 neutral Provider Port/StepFun codec, single Grounding decision/cache, projections, lifecycle and rollout matrices | Ready |
 | [Domain Ownership and Evaluation Ports](./domain-ownership-and-evaluation-ports.md) | Gate 4 neutral Roleplay/config ownership, Evidence/Scenario ports, root composition and realtime helper seams | Ready |
 | [Training Locality and Model Registry](./training-locality-and-model-registry.md) | Gate 5 identity-preserving ORM registry, frozen Journey reads, and pure Journey/Readiness projections | Ready |
+| [Compatibility Retirement and Root Composition](./compatibility-retirement-and-root-composition.md) | Gate 6 closed runtime factories, app-root composition, consumer-proven retirement, and governed retention | Ready |
 | [Error Handling](./error-handling.md) | `Result[T]`, API responses, middleware fallbacks | Ready |
 | [Quality Guidelines](./quality-guidelines.md) | pytest, ruff, mypy, forbidden patterns | Ready |
 | [Platform Contract Truth](./platform-contract-truth.md) | Contributor registry isolation, effective route inventory, runtime-generated OpenAPI parity | Ready |

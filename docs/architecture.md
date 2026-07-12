@@ -250,7 +250,7 @@
 
 | 端点 | 场景 | Handler | 消息协议 |
 |------|------|---------|----------|
-| `/ws/presentation` | PPT 演练 | `PresentationWebSocketHandler` / `PresentationRealtimeEngineHandler`；flag 关闭时回滚到 `LegacyPresentationStepFunRealtimeHandler` | JSON 消息 |
+| `/ws/presentation` | PPT 演练 | `PresentationWebSocketHandler` / `PresentationRealtimeEngineHandler`；flag 关闭时回滚到 root-composed `PresentationStepFunRealtimeAdapter` | JSON 消息 |
 | `/ws/sales/{session_id}` | 销售对练 | `StepFunRealtimeHandler` / `Phase4LocalProviderHandler` | StepFun Realtime 协议 |
 | `/ws/curriculum/examiner/{session_id}` | 课程考核 | `ExaminerWebSocketHandler` | JSON 消息 |
 
@@ -305,7 +305,7 @@ preparing → in_progress → paused → in_progress → completed
 - 下行音频流通过同一 WebSocket 返回给前端
 - 支持函数调用（知识检索、评分等）和工具链编排
 
-### 4.2 Realtime Session Engine、Provider 与 Grounding（Gate 2–3 当前事实）
+### 4.2 Realtime Session Engine、Provider、Grounding 与 Gate 6 root composition
 
 Presentation 的 `stepfun_realtime` 生产入口已采用组合式 tracer bullet：
 
@@ -316,10 +316,17 @@ PresentationScenarioPlugin
   │    → app-root static factory map
   │    → PresentationRealtimeEngineHandler
   │         ├─ RealtimeSessionEngine
-  │         └─ LegacyPresentationStepFunRealtimeHandler（兼容 Adapter）
+  │         └─ PresentationStepFunRealtimeAdapter（应用根组合的兼容 Adapter）
   └─ false
-       → LegacyPresentationStepFunRealtimeHandler（单一路径回滚）
+       → PresentationStepFunRealtimeAdapter（单一路径回滚）
 ```
+
+Gate 6 后，`ScenarioRuntimeHandlerSelection` 只携带 scenario、mode、route 和 mandatory
+`RuntimeHandlerFactoryKey`，不携带可执行 module/attribute 字符串。Sales delivery root 与顶层
+Presentation application root 分别持有互斥的只读 factory map，其并集精确覆盖 Sales StepFun、
+Presentation legacy、Presentation StepFun rollback、Presentation Engine 四种选择；未知或跨 root key
+在构造前 fail closed。无消费者的 plugin lifecycle/evidence/evaluation/report descriptor surface 与
+`common.roleplay_contracts` forwarding module 已删除。
 
 - Engine 显式维护 versioned `ConnectionState`、`TurnState`、`GroundingState` 和
   `EvidenceState`，并拒绝非法转换、旧 request、active-turn 重入和 evidence 冲突；
@@ -353,9 +360,10 @@ Gate 3 已在默认生产路径完成 Provider/Grounding 中立化：
   一个 authority，Golden wire、snapshot、persistence、reconnect 和 single writer 保持一致。
 
 Gate 4 已在 Gate 3 Provider/Grounding 基础上迁移 message persistence、Roleplay、Evaluation 和
-中立 realtime helpers。Presentation 兼容 Adapter 仍临时继承 `sales_bot` Shared Handler，因此
-`presentation_coach -> sales_bot` 实际依赖和 architecture policy 临时例外仍存在；Gate 6 以
-import graph 证明边消失后才能退役，不能因 Port/Module 已中立化而提前删除。
+中立 realtime helpers。Gate 6 让 Presentation 域只保留 `PresentationStepFunRuntimeMixin`，以
+`StepFunRuntimeAdapterPort` 显式列出 cooperative-MRO 合同；顶层 `runtime_composition.py` 才将其与
+retained Sales shared transport 组合。AST 图现为 15 包、51 条边，`presentation_coach -> sales_bot`
+和对应 policy target 已消失，七包 SCC 未扩大。
 
 Gate 4 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
 `3287 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
@@ -372,8 +380,10 @@ projection 与纯策略 projection 隔离 ORM。前端 `types.ts`/`client-domain
 Journey/Readiness 与 session-report DTO、sessions transport、report/readiness ViewModel/action 已有领域
 authority。clean-start canonical gate 以 backend `3315 passed, 1 skipped`、Vitest `1345 passed,
 6 skipped`、五组 Playwright `3/9/11/2/1 passed`、selected backend `598 passed, 21 skipped`、changed
-coverage 7317/8048（90.92%）自然通过；Brooks 100/100、Trellis blocking finding=0。兼容 façade 和
-历史 import fan-in 属 Gate 6 退役范围，不能在消费者与回滚证据不足时删除。
+coverage 7317/8048（90.92%）自然通过；Brooks 100/100、Trellis blocking finding=0。Gate 6 的
+consumer scan 证明 `common.db.models` 仍有 222 个生产 importer、前端 global type façade 仍有 262 个
+源码 importer；它们与 Legacy Grounding cache/adapter、三项 rollout flag 明确保留，待发布窗口、
+遥测和 consumer migration 满足各自 `retire_when`，不因文件体积而强删。
 
 Gate 2 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
 `2903 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
@@ -1102,7 +1112,7 @@ Next.js (端口 3445)
 | `2026-05-11-architecture-boundary-domain-contract` | 领域边界与契约锁定（PRD #23） |
 | `2026-05-11-curriculum-practice-boundary-contract` | 课程考核模块边界契约 |
 | `2026-05-12-case-item-role-profile-pilot-contract` | 案例/角色/画像试点契约 |
-| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2–5 已闭环，Gate 6 待完成 |
+| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2–5 已闭环，Gate 6 实现完成、最终门禁待闭环 |
 
 详见 `docs/adr/`。
 

@@ -163,16 +163,16 @@ with the retained StepFun transport base. Compatibility with active consumers st
 - Produces: seven-section executable spec and a `retired/retained/follow-up` decision table.
 - Consumes: final CodeGraph graph, Git co-change baseline, import fan-in and focused timing evidence.
 
-- [ ] **Step 1: Rerun graph, affected, fan-in and co-change measures**
+- [x] **Step 1: Rerun graph, affected, fan-in and co-change measures**
 
   Record exact before/after edges, SCC, removed symbols, retained importer counts, affected tests and elapsed time.
 
-- [ ] **Step 2: Write the executable spec**
+- [x] **Step 2: Write the executable spec**
 
   Include Scope/Trigger, Signatures, Contracts, Validation/Error Matrix, Good/Base/Bad, Tests Required and Wrong vs
   Correct. Encode closed factory and root-only composition constraints.
 
-- [ ] **Step 3: Update authority documents and commit**
+- [x] **Step 3: Update authority documents and commit**
 
   Mark every original Gate 6 item completed, retained with evidence or follow-up decision. Commit as
   `docs(architecture): codify gate 6 retirement`.
