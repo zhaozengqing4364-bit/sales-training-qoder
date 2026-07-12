@@ -927,7 +927,7 @@ git commit -m "feat(newcomer): govern activity path revisions"
 - Consumes: contracts and repositories from Tasks 1–2.
 - Produces: `ActivityExecutionContext`, `ActivityProjection`, `ActivityHandler`, `ActivityTypeRegistry`, `aggregate_path_progress`.
 
-- [ ] **Step 1: Write failing registry and completion tests**
+- [x] **Step 1: Write failing registry and completion tests**
 
 ```python
 def test_should_register_exactly_six_handlers() -> None:
@@ -953,13 +953,13 @@ def test_should_complete_module_when_all_required_activities_complete() -> None:
     assert result.total_required == 2
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `cd backend && ./.venv/bin/pytest tests/unit/test_newcomer_orchestration_registry.py tests/unit/test_newcomer_orchestration_completion.py -q`
 
 Expected: new interfaces are missing.
 
-- [ ] **Step 3: Define the handler protocol**
+- [x] **Step 3: Define the handler protocol**
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -999,17 +999,17 @@ class ActivityHandler(Protocol):
         raise NotImplementedError
 ```
 
-- [ ] **Step 4: Implement closed registry and aggregation**
+- [x] **Step 4: Implement closed registry and aggregation**
 
 `ActivityTypeRegistry.handler_for(type_key)` must raise `[NEWCOMER_ACTIVITY_TYPE_UNSUPPORTED]` for unknown values and must not dynamically import from config. `aggregate_activity/module/phase/path_progress` must treat `passed`, `completed`, and configured `submitted` completion as handler-owned results; required failures block, optional failures do not.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `cd backend && ./.venv/bin/pytest tests/unit/test_newcomer_orchestration_registry.py tests/unit/test_newcomer_orchestration_completion.py -q`
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/src/sales_trainer/orchestration/activities backend/src/sales_trainer/orchestration/registry.py backend/src/sales_trainer/orchestration/completion.py backend/tests/unit/test_newcomer_orchestration_registry.py backend/tests/unit/test_newcomer_orchestration_completion.py

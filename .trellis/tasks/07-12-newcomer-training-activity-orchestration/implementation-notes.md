@@ -37,3 +37,6 @@
   PracticeTemplate、VoiceRuntimeProfile 与通用发布 revision；无逐活动查询。
 - Task 3 权限与审计：内容管理员可编辑、平台管理员可发布；草稿、发布、恢复、删除均写操作日志。
 - Task 3 Ruff：`All checks passed!`；Mypy：`Success: no issues found in 8 source files`。
+- Task 4 RED：registry、activities 包缺失导致两个 collection error。
+- Task 4 GREEN：封闭六类型注册表、统一执行上下文/投影协议、模块/阶段/路径纯函数聚合，`4 passed`。
+- Task 4 Ruff 与 Mypy 均通过；配置不能触发动态 import，未知类型使用稳定错误码拒绝。
