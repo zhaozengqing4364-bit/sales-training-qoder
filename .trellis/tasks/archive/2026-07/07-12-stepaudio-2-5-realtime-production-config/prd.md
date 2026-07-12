@@ -40,7 +40,7 @@ Provider gate 证明鉴权、建连、会话、Journey outcome 与管理端记�
 - [x] StepFun prereq、transport、Provider contract、codec 和 realtime selection 聚焦测试全绿。
 - [x] 真实 Provider gate 到达官方上游并通过，证据为脱敏 `passed/executed`。
 - [x] Ruff/mypy/architecture guard 通过，用户原有 readiness 改动保持未纳入本任务。
-- [ ] 配置/验证证据提交、Trellis 任务归档；credential 不提交。
+- [x] 配置/验证证据提交；Trellis 任务进入归档，credential 未提交。
 
 ## Definition of Done
 
