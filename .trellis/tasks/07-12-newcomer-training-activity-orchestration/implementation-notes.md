@@ -64,3 +64,4 @@
 - Task 9：删除固定路径、专题、商务礼仪、旧 AI Coach chat 与旧 dashboard/journey authority 及其过期测试；保留 LearningContent、ExamPaper、材料、评分、revision、StepAudio 与统一 AI Coach session 引擎。
 - Task 9 结构检查：`CANONICAL_NEWCOMER_MODULE_KEYS|business_etiquette|customer_faq|company_product_demo|business_skills` 在 `backend/src/sales_trainer` 运行时代码中零命中；应用 composition root 可导入。
 - Task 9 后端新人回归：`84 passed`；Ruff 全通过；Mypy `Success: no issues found in 116 source files`。
+- Task 9 commit：`bcdb7cae refactor(newcomer): remove fixed path prototype`。

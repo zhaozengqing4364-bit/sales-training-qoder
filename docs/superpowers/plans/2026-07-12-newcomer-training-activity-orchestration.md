@@ -1629,7 +1629,7 @@ cd backend
 
 Expected: all new orchestration tests pass; `rg` finds no fixed business module authority in runtime code.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A backend/src/sales_trainer backend/scripts/seed_newcomer_training_path.py backend/scripts/reset_newcomer_training_prototype.py backend/tests
