@@ -23,6 +23,9 @@ Use this contract whenever newcomer training paths, activities, enrollment progr
 - Candidate validation is read-only. Candidate publish saves and activates one immutable revision in the same request transaction.
 - Draft save and candidate publish accept `expected_revision_id`; a mismatch returns `[NEWCOMER_PATH_REVISION_CONFLICT]` with HTTP 409 and never overwrites the newer revision.
 - Journey module/activity projections carry configured `estimated_minutes`; only one activity is marked as the primary next action.
+- Learner-facing copy is controlled configuration, not presentation code: `PhaseConfig.outcome`, `ModuleConfig.outcome`, and activity `objective`, `why_it_matters`, `steps`, `success_criteria`, `primary_action_label` are optional additive fields in schema v1.
+- Journey projections carry these fields unchanged. Old revisions return null/empty defaults and the frontend may apply trusted activity-type guidance; it must never execute or render HTML/CSS/script from configuration.
+- Admin candidate preview and the real learner journey must adapt into the same learner mission ViewModel and render the same mission component.
 - Alembic runs before application startup; `create_all` is bootstrap-only and must not precede pending migrations.
 
 ## 4. Validation & Error Matrix
@@ -53,6 +56,7 @@ Use this contract whenever newcomer training paths, activities, enrollment progr
 - Integration tests for admin draft/validate/publish/restore and learner journey/activity APIs.
 - Reset dry-run/apply, seed idempotency, and verify-mode evidence.
 - Frontend Vitest for editor state, in-flow resource creation, renderer registry, and one-primary-action projection.
+- Contract and frontend tests for learner-copy defaults, configured-copy round trips, and the shared admin/learner mission preview.
 - Playwright for admin editor, learner journey, and immutable enrollment closed loop.
 - Alembic head, OpenAPI parity, Ruff, Mypy, TypeScript, ESLint, Vitest, and production build.
 

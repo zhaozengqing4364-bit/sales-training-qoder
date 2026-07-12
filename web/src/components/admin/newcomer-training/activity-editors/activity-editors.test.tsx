@@ -20,7 +20,7 @@ const resources = {
     coach_profiles: [{ id: "coach-1", title: "产品教练", status: "published" }],
 };
 
-const base = { activity_id: "activity-1", title: "活动", description: null, order_index: 1, required: true, estimated_minutes: 10, prerequisites: [] };
+const base = { activity_id: "activity-1", title: "活动", description: null, objective: null, why_it_matters: null, steps: [], success_criteria: [], primary_action_label: null, order_index: 1, required: true, estimated_minutes: 10, prerequisites: [] };
 
 describe("activity editors", () => {
     it("edits audio assessment without exposing prompt IDs or JSON", async () => {

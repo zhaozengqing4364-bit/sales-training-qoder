@@ -34,7 +34,7 @@ export const adminRoutes: readonly NewcomerTrainingAuditRoute[] = [
     label: "路径编排",
     path: "/admin/newcomer-training/path",
     critical: true,
-    expectText: ["新人训练路径", "训练路径大纲", "检查并预览"],
+    expectText: ["新人训练路径", "训练路径大纲", "预览学员页面", "检查"],
     forbiddenText: forbidden,
   },
   {

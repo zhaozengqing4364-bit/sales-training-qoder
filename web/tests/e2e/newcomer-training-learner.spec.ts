@@ -13,7 +13,7 @@ import { learnerRoutes } from "./newcomer-training-route-manifest";
 test.describe("新人训练学员端", () => {
   test.setTimeout(180_000);
 
-  test("首页只有一个主要下一步并按阶段渐进展示", async ({ page }, testInfo) => {
+  test("首页先展示一个具体任务并按阶段展示后续安排", async ({ page }, testInfo) => {
     ensureAuditDirectories();
     await loginFromUi(page, learnerEmail);
     const results = [];
@@ -28,7 +28,15 @@ test.describe("新人训练学员端", () => {
     await page.goto("/newcomer-training");
     const primaryActions = page.locator('[data-primary-action="true"]');
     await expect(primaryActions).toHaveCount(1);
-    await expect(page.getByText(/当前阶段/)).toBeVisible();
+    await expect(page.getByText("当前任务", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "为什么要做" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "完成步骤" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "怎样算完成" })).toBeVisible();
+    await expect(page.getByText(/当前阶段：/)).toHaveCount(0);
     await expect(primaryActions.first()).toHaveText(/开始内容学习|开始做题|开始录音讲解|开始实时对练|开始 AI 辅导|开始完成作业/);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/newcomer-training");
+    await expect(page.locator('[data-primary-action="true"]')).toBeInViewport();
   });
 });

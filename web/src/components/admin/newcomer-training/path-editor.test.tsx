@@ -14,19 +14,36 @@ function payload(): TrainingPathPayload {
             phase_id: "phase-product",
             title: "产品能力",
             description: null,
+            outcome: "能独立讲解核心产品",
             order_index: 1,
             required: true,
             modules: ["产品 A", "产品 B", "产品 C"].map((title, index) => ({
                 module_id: `module-${index + 1}`,
                 title,
                 description: null,
+                outcome: `能讲清${title}的适用场景`,
                 order_index: index + 1,
                 required: true,
                 estimated_minutes: 30,
                 audience_rule: { learner_levels: [], roles: [], departments: [] },
                 prerequisites: [],
                 completion_policy: { mode: "all_required", activity_ids: [], count: null },
-                activities: [],
+                activities: index === 0 ? [{
+                    activity_id: "activity-product-a",
+                    type: "lesson" as const,
+                    title: "产品 A 学习",
+                    description: null,
+                    objective: "能说出产品 A 的三个核心价值",
+                    why_it_matters: "这是完成客户讲解的基础",
+                    steps: ["阅读产品资料"],
+                    success_criteria: ["说出三个核心价值"],
+                    primary_action_label: "开始产品 A 学习",
+                    order_index: 1,
+                    required: true,
+                    estimated_minutes: 20,
+                    prerequisites: [],
+                    config: { learning_content_id: "content-1", completion_mode: "all_chapters" as const },
+                }] : [],
             })),
         }],
     };
@@ -43,13 +60,20 @@ function response(): TrainingPathConfigResponse {
 }
 
 describe("PathEditor", () => {
-    it("shows one outline, one focused inspector, and one learner preview", () => {
+    it("uses a focused two-pane editor and opens the real learner preview on demand", async () => {
+        const user = userEvent.setup();
         render(<PathEditor initialModel={response()} />);
 
         expect(screen.getByRole("tree", { name: "训练路径大纲" })).toBeTruthy();
         expect(screen.getByRole("form", { name: "路径设置" })).toBeTruthy();
+        expect(screen.getByTestId("path-editor-layout").getAttribute("data-layout")).toBe("two-pane");
+        expect(screen.queryByRole("region", { name: "学员预览" })).toBeNull();
+
+        await user.click(screen.getByRole("button", { name: "预览学员页面" }));
+
         expect(screen.getByRole("region", { name: "学员预览" })).toBeTruthy();
-        expect(screen.getByRole("region", { name: "学员预览" }).textContent).toContain("产品 C");
+        expect(screen.getByRole("heading", { name: "产品 A 学习" })).toBeTruthy();
+        expect(screen.getByText("能说出产品 A 的三个核心价值")).toBeTruthy();
         expect(screen.queryByText("fallback_applied=true")).toBeNull();
     });
 
@@ -99,7 +123,6 @@ describe("PathEditor", () => {
         await user.selectOptions(screen.getByLabelText("完成规则"), "at_least_count");
         await user.clear(screen.getByLabelText("至少完成活动数"));
         await user.type(screen.getByLabelText("至少完成活动数"), "1");
-        await user.type(screen.getByLabelText("修改说明"), "调整适用范围");
         await user.click(screen.getByRole("button", { name: "保存草稿" }));
 
         expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
@@ -107,14 +130,54 @@ describe("PathEditor", () => {
                 audience_rule: expect.objectContaining({ departments: ["华东销售", "华南销售"] }),
                 completion_policy: expect.objectContaining({ mode: "at_least_count", count: 1 }),
             }), expect.anything(), expect.anything()] })],
-        }), "调整适用范围", "draft-1");
+        }), "保存训练路径草稿", "draft-1");
+    });
+
+    it("round-trips learner-facing outcomes and activity guidance", async () => {
+        const user = userEvent.setup();
+        const onSave = vi.fn();
+        render(<PathEditor initialModel={response()} onSave={onSave} />);
+
+        await user.click(screen.getByRole("button", { name: "编辑阶段 产品能力" }));
+        await user.clear(screen.getByLabelText("完成阶段后，学员能做到"));
+        await user.type(screen.getByLabelText("完成阶段后，学员能做到"), "能独立完成产品介绍");
+
+        await user.click(screen.getByRole("button", { name: "编辑活动 产品 A 学习" }));
+        await user.clear(screen.getByLabelText("本次任务目标"));
+        await user.type(screen.getByLabelText("本次任务目标"), "能面向客户讲清三个产品价值");
+        await user.click(screen.getByRole("button", { name: "添加步骤" }));
+        await user.type(screen.getByLabelText("步骤 2"), "用自己的话复述价值");
+        await user.click(screen.getByRole("button", { name: "保存草稿" }));
+
+        expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+            phases: [expect.objectContaining({
+                outcome: "能独立完成产品介绍",
+                modules: [expect.objectContaining({ activities: [expect.objectContaining({
+                    objective: "能面向客户讲清三个产品价值",
+                    steps: ["阅读产品资料", "用自己的话复述价值"],
+                })] }), expect.anything(), expect.anything()],
+            })],
+        }), "保存训练路径草稿", "draft-1");
+    });
+
+    it("does not persist an unfinished blank step", async () => {
+        const user = userEvent.setup();
+        const onSave = vi.fn();
+        render(<PathEditor initialModel={response()} onSave={onSave} />);
+
+        await user.click(screen.getByRole("button", { name: "编辑活动 产品 A 学习" }));
+        await user.click(screen.getByRole("button", { name: "添加步骤" }));
+        await user.click(screen.getByRole("button", { name: "保存草稿" }));
+
+        const savedPath = onSave.mock.calls[0][0] as TrainingPathPayload;
+        expect(savedPath.phases[0].modules[0].activities[0].steps).toEqual(["阅读产品资料"]);
     });
 
     it("asks for impact confirmation before publishing", async () => {
         const user = userEvent.setup();
         const onPublish = vi.fn();
         render(<PathEditor initialModel={response()} onPublish={onPublish} />);
-        await user.type(screen.getByLabelText("修改说明"), "发布产品路径");
+        await user.type(screen.getByLabelText("发布说明"), "发布产品路径");
         await user.click(screen.getByRole("button", { name: "发布" }));
         expect(screen.getByText("发布后只影响新进入训练的学员")).toBeTruthy();
         expect(onPublish).not.toHaveBeenCalled();

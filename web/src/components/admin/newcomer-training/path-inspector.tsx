@@ -11,6 +11,7 @@ import { QuizEditor } from "./activity-editors/quiz-editor";
 import { RealtimeRoleplayEditor } from "./activity-editors/realtime-roleplay-editor";
 import type { ActivityEditorResources, QuickCreateKind } from "./activity-editors/types";
 import { PathRuleEditor } from "./path-rule-editor";
+import { StringListField } from "./string-list-field";
 
 interface PathInspectorProps {
     path: TrainingPathPayload;
@@ -29,13 +30,15 @@ function Field({ label, value, onChange, multiline = false }: { label: string; v
     </label>;
 }
 
-function BaseForm({ name, title, description, required, estimatedMinutes, onPatch, children }: {
+function BaseForm({ name, title, description, required, estimatedMinutes, outcome, outcomeLabel, onPatch, children }: {
     name: string; title: string; description: string | null; required?: boolean; estimatedMinutes?: number | null;
+    outcome?: string | null; outcomeLabel?: string;
     onPatch: (patch: Record<string, unknown>) => void; children?: React.ReactNode;
 }) {
     return <form aria-label={name} onSubmit={(event) => event.preventDefault()} className="space-y-4">
         <Field label="名称" value={title} onChange={(value) => onPatch({ title: value })} />
-        <Field label="说明" value={description ?? ""} multiline onChange={(value) => onPatch({ description: value || null })} />
+        {outcomeLabel ? <Field label={outcomeLabel} value={outcome ?? ""} onChange={(value) => onPatch({ outcome: value || null })} /> : null}
+        <Field label="补充说明（可选）" value={description ?? ""} multiline onChange={(value) => onPatch({ description: value || null })} />
         {required !== undefined && <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={required} onChange={(event) => onPatch({ required: event.target.checked })} />必修</label>}
         {estimatedMinutes !== undefined && <label className="block text-sm font-medium text-slate-700">预计用时（分钟）<input type="number" min={0} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" value={estimatedMinutes ?? ""} onChange={(event) => onPatch({ estimated_minutes: event.target.value ? Number(event.target.value) : null })} /></label>}
         {children}
@@ -69,10 +72,17 @@ export function PathInspector({ path, selection, onPatch, resources, onActivityC
     return <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">当前编辑</p><h2 className="mt-1 text-lg font-semibold text-slate-900">{selection.kind === "path" ? "路径设置" : selection.kind === "phase" ? "阶段设置" : selection.kind === "module" ? "模块设置" : "活动设置"}</h2></div>
         {selection.kind === "path" && <BaseForm name="路径设置" title={(selected as TrainingPathPayload).title} description={(selected as TrainingPathPayload).description} onPatch={onPatch} />}
-        {selection.kind === "phase" && <BaseForm name="阶段设置" title={(selected as PhaseConfig).title} description={(selected as PhaseConfig).description} required={(selected as PhaseConfig).required} onPatch={onPatch} />}
-        {selection.kind === "module" && <BaseForm name="模块设置" title={(selected as ModuleConfig).title} description={(selected as ModuleConfig).description} required={(selected as ModuleConfig).required} estimatedMinutes={(selected as ModuleConfig).estimated_minutes} onPatch={onPatch}><PathRuleEditor path={path} value={selected as ModuleConfig} onPatch={onPatch} /></BaseForm>}
+        {selection.kind === "phase" && <BaseForm name="阶段设置" title={(selected as PhaseConfig).title} description={(selected as PhaseConfig).description} outcome={(selected as PhaseConfig).outcome} outcomeLabel="完成阶段后，学员能做到" required={(selected as PhaseConfig).required} onPatch={onPatch} />}
+        {selection.kind === "module" && <BaseForm name="模块设置" title={(selected as ModuleConfig).title} description={(selected as ModuleConfig).description} outcome={(selected as ModuleConfig).outcome} outcomeLabel="完成模块后，学员能做到" required={(selected as ModuleConfig).required} estimatedMinutes={(selected as ModuleConfig).estimated_minutes} onPatch={onPatch}><PathRuleEditor path={path} value={selected as ModuleConfig} onPatch={onPatch} /></BaseForm>}
         {selection.kind === "activity" && <BaseForm name="活动设置" title={(selected as ActivityConfig).title} description={(selected as ActivityConfig).description} required={(selected as ActivityConfig).required} estimatedMinutes={(selected as ActivityConfig).estimated_minutes} onPatch={onPatch}>
             <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">活动类型：{ACTIVITY_PRESENTATIONS[(selected as ActivityConfig).type].label}</p>
+            <div className="grid gap-4 md:grid-cols-2">
+                <Field label="本次任务目标" value={(selected as ActivityConfig).objective ?? ""} multiline onChange={(value) => onPatch({ objective: value || null })} />
+                <Field label="为什么要做" value={(selected as ActivityConfig).why_it_matters ?? ""} multiline onChange={(value) => onPatch({ why_it_matters: value || null })} />
+            </div>
+            <StringListField label="学员怎么完成" itemLabel="步骤" values={(selected as ActivityConfig).steps} onChange={(steps) => onPatch({ steps })} />
+            <StringListField label="怎样算通过" itemLabel="标准" values={(selected as ActivityConfig).success_criteria} onChange={(success_criteria) => onPatch({ success_criteria })} />
+            <Field label="主按钮文案（可选）" value={(selected as ActivityConfig).primary_action_label ?? ""} onChange={(value) => onPatch({ primary_action_label: value || null })} />
             <PathRuleEditor path={path} value={selected as ActivityConfig} onPatch={onPatch} />
             {editor}
         </BaseForm>}

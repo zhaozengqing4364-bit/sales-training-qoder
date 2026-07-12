@@ -39,6 +39,16 @@ async def test_should_seed_three_composable_product_modules(test_db):
         "quiz",
         "audio_assessment",
     ]
+    assert payload.phases[0].outcome == "能用 3 分钟讲清公司与方案"
+    assert payload.phases[1].outcome == "能独立讲解核心产品与适用场景"
+    first_activity = payload.phases[0].modules[0].activities[0]
+    assert first_activity.objective == "完成一次清晰、完整的公司与方案讲解"
+    assert first_activity.steps == [
+        "先阅读并熟悉公司与方案材料",
+        "按真实客户沟通方式完成讲解",
+        "检查录音后提交评测",
+    ]
+    assert first_activity.success_criteria
     assert summary.verified is True
 
 

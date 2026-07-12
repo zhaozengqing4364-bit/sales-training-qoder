@@ -67,11 +67,27 @@
 
 Journey 的模块与活动投影包含 `estimated_minutes`。`primary_next_action` 仍只返回一个权威活动；动作按钮文案由前端封闭活动类型映射生成，不使用内容标题冒充动作。
 
+### 学员表达字段（向后兼容）
+
+`schema_version` 继续使用 `newcomer_training_orchestration_v1`。以下字段是对既有 JSON 合同的可选添加，历史 revision 无需迁移：
+
+| 层级 | 字段 | 约束与语义 |
+|---|---|---|
+| Phase | `outcome` | 最长 240 字；完成阶段后学员能做到什么 |
+| Module | `outcome` | 最长 240 字；完成模块后学员能做到什么 |
+| Activity | `objective` | 最长 240 字；本次具体任务目标 |
+| Activity | `why_it_matters` | 最长 500 字；对学员可理解的业务价值 |
+| Activity | `steps` | 最多 10 项、每项最长 240 字 |
+| Activity | `success_criteria` | 最多 10 项、每项最长 240 字 |
+| Activity | `primary_action_label` | 最长 40 字；为空时使用活动类型的受信任动作文案 |
+
+Journey 的 Phase、Module、Activity 分别投影上述字段。旧 revision 缺失字段时，服务端返回 `null`/空列表，前端按活动类型提供受信任的目标、步骤和通过标准回退。字段只接受纯文本，不允许 HTML、CSS、组件名、脚本或 URL。
+
 ## 错误与安全
 
 错误使用统一 envelope 和稳定错误码。非法类型、缺失资源、资源未发布、依赖未满足、对象越权、revision 冲突及外部 Provider 不可用均 fail-closed；不得返回伪成功或从旧配置回填。
 
-客户端只根据后端返回的活动类型进入本地封闭 Runner 注册表。配置中的未知字段由严格 schema 拒绝，敏感密钥不进入 payload、响应、日志或审计元数据。
+客户端只根据后端返回的活动类型进入本地封闭 Runner 注册表。除上述学员表达字段外，配置中的未知字段由严格 schema 拒绝，敏感密钥不进入 payload、响应、日志或审计元数据。
 
 ## 兼容性
 

@@ -15,11 +15,13 @@ def _payload(title: str) -> TrainingPathPayload:
                 {
                     "phase_id": "phase-product",
                     "title": "产品能力",
+                    "outcome": "能独立讲解核心产品",
                     "order_index": 1,
                     "modules": [
                         {
                             "module_id": "product-a",
                             "title": "产品 A",
+                            "outcome": "能说明产品 A 的适用场景",
                             "order_index": 1,
                             "estimated_minutes": 35,
                             "completion_policy": {"mode": "all_required"},
@@ -28,6 +30,11 @@ def _payload(title: str) -> TrainingPathPayload:
                                     "activity_id": "activity-product-a-assignment",
                                     "type": "assignment",
                                     "title": "总结产品 A",
+                                    "objective": "用客户语言总结产品 A",
+                                    "why_it_matters": "客户只关心产品能解决什么问题",
+                                    "steps": ["回顾资料", "整理要点", "提交总结"],
+                                    "success_criteria": ["包含适用场景", "包含客户收益"],
+                                    "primary_action_label": "开始整理总结",
                                     "order_index": 1,
                                     "estimated_minutes": 15,
                                     "config": {
@@ -75,6 +82,14 @@ async def test_should_pin_revision_and_return_one_primary_next_action(
     assert journey.primary_next_action.activity_id == "activity-product-a-assignment"
     assert journey.phases[0].modules[0].estimated_minutes == 35
     assert journey.phases[0].modules[0].activities[0].estimated_minutes == 15
+    assert journey.phases[0].outcome == "能独立讲解核心产品"
+    assert journey.phases[0].modules[0].outcome == "能说明产品 A 的适用场景"
+    activity = journey.phases[0].modules[0].activities[0]
+    assert activity.objective == "用客户语言总结产品 A"
+    assert activity.why_it_matters == "客户只关心产品能解决什么问题"
+    assert activity.steps == ["回顾资料", "整理要点", "提交总结"]
+    assert activity.success_criteria == ["包含适用场景", "包含客户收益"]
+    assert journey.primary_next_action.label == "开始整理总结"
     assert (
         sum(
             activity.is_primary_next_action

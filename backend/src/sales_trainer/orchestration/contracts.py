@@ -67,6 +67,16 @@ class ActivityBase(StrictModel):
     required: bool = True
     estimated_minutes: int | None = Field(default=None, ge=1, le=1440)
     prerequisites: list[str] = Field(default_factory=list, max_length=50)
+    objective: str | None = Field(default=None, max_length=240)
+    why_it_matters: str | None = Field(default=None, max_length=500)
+    steps: list[Annotated[str, Field(min_length=1, max_length=240)]] = Field(
+        default_factory=list,
+        max_length=10,
+    )
+    success_criteria: list[
+        Annotated[str, Field(min_length=1, max_length=240)]
+    ] = Field(default_factory=list, max_length=10)
+    primary_action_label: str | None = Field(default=None, max_length=40)
 
 
 class LessonActivity(ActivityBase):
@@ -126,6 +136,7 @@ class ModuleConfig(StrictModel):
     module_id: str = Field(min_length=1, max_length=80)
     title: str = Field(min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=1000)
+    outcome: str | None = Field(default=None, max_length=240)
     order_index: int = Field(ge=1)
     required: bool = True
     estimated_minutes: int | None = Field(default=None, ge=1, le=10_080)
@@ -139,6 +150,7 @@ class PhaseConfig(StrictModel):
     phase_id: str = Field(min_length=1, max_length=80)
     title: str = Field(min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=1000)
+    outcome: str | None = Field(default=None, max_length=240)
     order_index: int = Field(ge=1)
     required: bool = True
     modules: list[ModuleConfig] = Field(default_factory=list, max_length=100)
@@ -186,6 +198,11 @@ class JourneyActivityProgress(StrictModel):
     activity_type: ActivityType
     title: str
     description: str | None = None
+    objective: str | None = None
+    why_it_matters: str | None = None
+    steps: list[str] = Field(default_factory=list)
+    success_criteria: list[str] = Field(default_factory=list)
+    primary_action_label: str | None = None
     required: bool
     estimated_minutes: int | None = None
     status: str
@@ -203,6 +220,7 @@ class JourneyModuleProgress(StrictModel):
     module_id: str
     title: str
     description: str | None = None
+    outcome: str | None = None
     required: bool
     estimated_minutes: int | None = None
     status: str
@@ -219,6 +237,7 @@ class JourneyPhaseProgress(StrictModel):
     phase_id: str
     title: str
     description: str | None = None
+    outcome: str | None = None
     required: bool
     status: str
     completed: bool

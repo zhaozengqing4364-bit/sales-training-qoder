@@ -386,6 +386,10 @@ def _path_payload(
             "activity_id": activity_id,
             "type": "lesson",
             "title": title,
+            "objective": f"掌握{title.replace('学习', '')}的关键知识",
+            "why_it_matters": "准确理解是后续讲解、做题和实战的基础",
+            "steps": ["阅读全部学习内容", "记录关键要点", "完成学习并确认"],
+            "success_criteria": ["完成全部必修章节", "能复述本次学习的关键要点"],
             "order_index": order,
             "config": {"learning_content_id": content_id},
         }
@@ -397,15 +401,38 @@ def _path_payload(
             "activity_id": activity_id,
             "type": "quiz",
             "title": title,
+            "objective": f"通过{title}确认关键知识掌握情况",
+            "why_it_matters": "及时发现知识盲区，避免把错误理解带入客户沟通",
+            "steps": ["独立完成全部题目", "提交并查看结果", "针对错题补充学习"],
+            "success_criteria": ["测验得分达到 80 分"],
             "order_index": order,
             "config": {"exam_paper_id": paper_id, "pass_score": 80},
         }
 
-    def audio(activity_id: str, title: str, key: str, order: int) -> dict[str, object]:
+    def audio(
+        activity_id: str,
+        title: str,
+        key: str,
+        order: int,
+        subject: str,
+    ) -> dict[str, object]:
         return {
             "activity_id": activity_id,
             "type": "audio_assessment",
             "title": title,
+            "objective": f"完成一次清晰、完整的{subject}讲解",
+            "why_it_matters": "把材料转化为自己的表达，提前发现讲解中的遗漏",
+            "steps": [
+                f"先阅读并熟悉{subject}材料",
+                "按真实客户沟通方式完成讲解",
+                "检查录音后提交评测",
+            ],
+            "success_criteria": [
+                "讲解覆盖核心内容且结构清晰",
+                "表达自然，客户能够理解关键价值",
+                "评分达到 75 分",
+            ],
+            "primary_action_label": "开始录音讲解",
             "order_index": order,
             "config": {
                 "scoring_rubric_id": rubrics[key],
@@ -418,18 +445,22 @@ def _path_payload(
     product_a = [
         lesson("product-a-lesson", "学习产品 A", content["product-a"], 1),
         quiz("product-a-quiz", "产品 A 小测", papers["product-a"], 2),
-        audio("product-a-audio", "讲解产品 A", "product-a", 3),
+        audio("product-a-audio", "讲解产品 A", "product-a", 3, "产品 A"),
     ]
     product_b = [
         lesson("product-b-lesson", "学习产品 B", content["product-b"], 1),
         quiz("product-b-quiz", "产品 B 小测", papers["product-b"], 2),
-        audio("product-b-audio", "讲解产品 B", "product-b", 3),
+        audio("product-b-audio", "讲解产品 B", "product-b", 3, "产品 B"),
     ]
     practice = [
         {
             "activity_id": "coach-optional",
             "type": "ai_coach",
             "title": "AI 教练巩固",
+            "objective": "针对当前薄弱点完成一次个性化巩固",
+            "why_it_matters": "集中解决一个具体问题，比重复泛学更有效",
+            "steps": ["回答诊断问题", "按反馈修正表达", "确认下一步练习目标"],
+            "success_criteria": ["完成教练设定的本次辅导目标"],
             "order_index": 1,
             "required": False,
             "config": {"coach_profile_id": coach_id},
@@ -438,6 +469,10 @@ def _path_payload(
             "activity_id": "assignment-summary",
             "type": "assignment",
             "title": "提交学习总结",
+            "objective": "把本次训练收获整理为可复用的行动总结",
+            "why_it_matters": "主动总结能把短期记忆沉淀为长期能力",
+            "steps": ["回顾本次训练", "写出关键收获与改进点", "检查后提交"],
+            "success_criteria": ["包含至少一个关键收获和一个后续行动"],
             "order_index": 2,
             "config": {
                 "submission_type": "text_or_file",
@@ -451,6 +486,10 @@ def _path_payload(
                 "activity_id": "realtime-roleplay",
                 "type": "realtime_roleplay",
                 "title": "StepAudio 实时对练",
+                "objective": "在模拟客户场景中完成一次完整沟通",
+                "why_it_matters": "在安全环境中练习临场判断和真实对话节奏",
+                "steps": ["了解客户情境", "完成实时语音对练", "根据反馈复盘"],
+                "success_criteria": ["完成整场对练并覆盖核心沟通目标"],
                 "order_index": 3,
                 "config": realtime,
             }
@@ -463,15 +502,23 @@ def _path_payload(
                 {
                     "phase_id": "onboarding",
                     "title": "入门认知",
+                    "outcome": "能用 3 分钟讲清公司与方案",
                     "order_index": 1,
                     "modules": [
                         {
                             "module_id": "ppt-intro",
                             "title": "公司与方案介绍",
+                            "outcome": "能面向客户完成一段清晰的公司与方案介绍",
                             "order_index": 1,
                             "completion_policy": {"mode": "all_required"},
                             "activities": [
-                                audio("ppt-intro-audio", "PPT 讲解录音", "ppt", 1)
+                                audio(
+                                    "ppt-intro-audio",
+                                    "PPT 讲解录音",
+                                    "ppt",
+                                    1,
+                                    "公司与方案",
+                                )
                             ],
                         }
                     ],
@@ -479,11 +526,13 @@ def _path_payload(
                 {
                     "phase_id": "products",
                     "title": "产品能力",
+                    "outcome": "能独立讲解核心产品与适用场景",
                     "order_index": 2,
                     "modules": [
                         {
                             "module_id": "product-a",
                             "title": "产品 A 核心功能",
+                            "outcome": "能讲清产品 A 的价值、功能和适用场景",
                             "order_index": 1,
                             "completion_policy": {"mode": "all_required"},
                             "activities": product_a,
@@ -491,6 +540,7 @@ def _path_payload(
                         {
                             "module_id": "product-b",
                             "title": "产品 B 核心功能",
+                            "outcome": "能讲清产品 B 的价值、功能和适用场景",
                             "order_index": 2,
                             "completion_policy": {"mode": "all_required"},
                             "activities": product_b,
@@ -498,11 +548,16 @@ def _path_payload(
                         {
                             "module_id": "standard-demo",
                             "title": "标准产品 Demo",
+                            "outcome": "能独立完成一次标准产品演示",
                             "order_index": 3,
                             "completion_policy": {"mode": "all_required"},
                             "activities": [
                                 audio(
-                                    "standard-demo-audio", "标准 Demo 讲解", "demo", 1
+                                    "standard-demo-audio",
+                                    "标准 Demo 讲解",
+                                    "demo",
+                                    1,
+                                    "标准产品 Demo",
                                 )
                             ],
                         },
@@ -511,11 +566,13 @@ def _path_payload(
                 {
                     "phase_id": "practice",
                     "title": "实战演练",
+                    "outcome": "能完成客户场景演示并通过综合考核",
                     "order_index": 3,
                     "modules": [
                         {
                             "module_id": "technical",
                             "title": "技术基础",
+                            "outcome": "能回答客户常见的基础技术问题",
                             "order_index": 1,
                             "completion_policy": {"mode": "all_required"},
                             "activities": [
@@ -536,6 +593,7 @@ def _path_payload(
                         {
                             "module_id": "practice-loop",
                             "title": "综合实战",
+                            "outcome": "能在完整客户场景中应用所学能力",
                             "order_index": 2,
                             "completion_policy": {"mode": "all_required"},
                             "activities": practice,

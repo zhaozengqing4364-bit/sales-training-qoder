@@ -49,6 +49,11 @@ interface ActivityBase {
     required: boolean;
     estimated_minutes: number | null;
     prerequisites: string[];
+    objective: string | null;
+    why_it_matters: string | null;
+    steps: string[];
+    success_criteria: string[];
+    primary_action_label: string | null;
 }
 
 export interface LessonActivity extends ActivityBase {
@@ -105,6 +110,7 @@ export interface ModuleConfig {
     module_id: string;
     title: string;
     description: string | null;
+    outcome: string | null;
     order_index: number;
     required: boolean;
     estimated_minutes: number | null;
@@ -118,6 +124,7 @@ export interface PhaseConfig {
     phase_id: string;
     title: string;
     description: string | null;
+    outcome: string | null;
     order_index: number;
     required: boolean;
     modules: ModuleConfig[];
@@ -209,6 +216,11 @@ export interface JourneyActivityProgress {
     activity_type: ActivityType;
     title: string;
     description: string | null;
+    objective: string | null;
+    why_it_matters: string | null;
+    steps: string[];
+    success_criteria: string[];
+    primary_action_label: string | null;
     required: boolean;
     estimated_minutes: number | null;
     status: string;
@@ -226,6 +238,7 @@ export interface JourneyModuleProgress {
     module_id: string;
     title: string;
     description: string | null;
+    outcome: string | null;
     required: boolean;
     estimated_minutes: number | null;
     status: string;
@@ -242,6 +255,7 @@ export interface JourneyPhaseProgress {
     phase_id: string;
     title: string;
     description: string | null;
+    outcome: string | null;
     required: boolean;
     status: string;
     completed: boolean;

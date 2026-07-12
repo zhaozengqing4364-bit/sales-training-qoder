@@ -6,17 +6,23 @@ import { JourneyHome } from "./journey-home";
 
 function phase(id: string, title: string, status: string, completed: boolean): JourneyPhaseProgress {
     return {
-        phase_id: id, title, description: null, required: true, status, completed,
+        phase_id: id, title, description: null, outcome: `${title}完成目标`, required: true, status, completed,
         completed_count: completed ? 1 : 0, total_required: 1, percent: completed ? 100 : 0,
         locked: status === "locked", lock_reason: status === "locked" ? "完成当前阶段后解锁" : null,
         modules: [{
-            module_id: `${id}-module`, title: `${title}模块`, description: null, required: true,
+            module_id: `${id}-module`, title: `${title}模块`, description: null, outcome: `能完成${title}任务`, required: true,
             estimated_minutes: 35,
             status, completed, completed_count: completed ? 1 : 0, total_required: 1,
             percent: completed ? 100 : 0, locked: status === "locked", lock_reason: null,
             activities: [{
                 activity_id: `${id}-activity`, activity_type: "lesson", title: `${title}学习`,
-                description: null, required: true, estimated_minutes: 15, status, completed, passed: null, score: null,
+                description: null,
+                objective: status === "in_progress" ? "能向客户讲清核心产品价值" : null,
+                why_it_matters: status === "in_progress" ? "这是完成客户演示的基础" : null,
+                steps: status === "in_progress" ? ["阅读资料", "整理要点", "完成讲解"] : [],
+                success_criteria: status === "in_progress" ? ["覆盖三个核心价值"] : [],
+                primary_action_label: null,
+                required: true, estimated_minutes: 15, status, completed, passed: null, score: null,
                 max_score: null, locked: status === "locked", lock_reason: null,
                 action_key: completed ? null : "continue_lesson",
                 is_primary_next_action: status === "in_progress",
@@ -33,7 +39,11 @@ describe("JourneyHome", () => {
     it("shows exactly one primary continue action", () => {
         render(<JourneyHome journey={journey()} />);
         expect(screen.getAllByRole("link", { name: "开始内容学习" })).toHaveLength(1);
-        expect(screen.getByText("当前阶段：产品能力")).toBeTruthy();
+        expect(screen.getByRole("heading", { name: "产品能力学习" })).toBeTruthy();
+        expect(screen.getByText("能向客户讲清核心产品价值")).toBeTruthy();
+        expect(screen.getByText("这是完成客户演示的基础")).toBeTruthy();
+        expect(screen.getByText("覆盖三个核心价值")).toBeTruthy();
+        expect(screen.queryByText("当前阶段：产品能力")).toBeNull();
         expect(screen.queryByText("我的全部录音")).toBeNull();
     });
 

@@ -246,12 +246,12 @@ class NewcomerJourneyService:
                     is_primary = (
                         primary is None and activity.required and action_key is not None
                     )
-                    if is_primary:
+                    if is_primary and action_key is not None:
                         primary = JourneyNextAction(
                             activity_id=activity.activity_id,
                             activity_type=activity.type,
                             action_key=action_key,
-                            label=activity.title,
+                            label=activity.primary_action_label or activity.title,
                         )
                     elif (
                         optional_candidate is None
@@ -263,7 +263,7 @@ class NewcomerJourneyService:
                                 activity_id=activity.activity_id,
                                 activity_type=activity.type,
                                 action_key=action_key,
-                                label=activity.title,
+                                label=activity.primary_action_label or activity.title,
                             ),
                             phase.phase_id,
                             module.module_id,
@@ -274,6 +274,11 @@ class NewcomerJourneyService:
                             activity_type=activity.type,
                             title=activity.title,
                             description=activity.description,
+                            objective=activity.objective,
+                            why_it_matters=activity.why_it_matters,
+                            steps=activity.steps,
+                            success_criteria=activity.success_criteria,
+                            primary_action_label=activity.primary_action_label,
                             required=activity.required,
                             estimated_minutes=activity.estimated_minutes,
                             status=projection.status,
@@ -296,6 +301,7 @@ class NewcomerJourneyService:
                         module_id=module.module_id,
                         title=module.title,
                         description=module.description,
+                        outcome=module.outcome,
                         required=module.required,
                         estimated_minutes=module.estimated_minutes,
                         status="completed"
@@ -321,6 +327,7 @@ class NewcomerJourneyService:
                     phase_id=phase.phase_id,
                     title=phase.title,
                     description=phase.description,
+                    outcome=phase.outcome,
                     required=phase.required,
                     status="completed"
                     if phase_aggregate.completed

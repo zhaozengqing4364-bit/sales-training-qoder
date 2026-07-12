@@ -184,3 +184,67 @@ def test_should_reject_arbitrary_route_in_activity_config() -> None:
 
     with pytest.raises(ValidationError):
         TrainingPathPayload.model_validate(payload)
+
+
+def test_should_accept_optional_learner_presentation_and_default_legacy_values() -> None:
+    legacy = TrainingPathPayload.model_validate(
+        {
+            "title": "旧版路径",
+            "phases": [
+                {
+                    "phase_id": "phase-1",
+                    "title": "阶段",
+                    "order_index": 1,
+                    "modules": [_product_module(product="a", order_index=1)],
+                }
+            ],
+        }
+    )
+    legacy_phase = legacy.phases[0]
+    legacy_module = legacy_phase.modules[0]
+    legacy_activity = legacy_module.activities[0]
+
+    assert legacy_phase.outcome is None
+    assert legacy_module.outcome is None
+    assert legacy_activity.objective is None
+    assert legacy_activity.why_it_matters is None
+    assert legacy_activity.steps == []
+    assert legacy_activity.success_criteria == []
+    assert legacy_activity.primary_action_label is None
+
+    enriched = TrainingPathPayload.model_validate(
+        {
+            "title": "新版路径",
+            "phases": [
+                {
+                    "phase_id": "phase-1",
+                    "title": "产品讲解",
+                    "outcome": "能独立完成产品讲解",
+                    "order_index": 1,
+                    "modules": [
+                        {
+                            **_product_module(product="a", order_index=1),
+                            "outcome": "能讲清适用场景",
+                            "activities": [
+                                {
+                                    **_lesson_activity(product="a"),
+                                    "objective": "完成核心资料学习",
+                                    "why_it_matters": "讲解前先建立准确认知",
+                                    "steps": ["阅读", "记录", "确认完成"],
+                                    "success_criteria": ["完成全部章节"],
+                                    "primary_action_label": "开始学习",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert enriched.phases[0].outcome == "能独立完成产品讲解"
+    assert enriched.phases[0].modules[0].activities[0].steps == [
+        "阅读",
+        "记录",
+        "确认完成",
+    ]
