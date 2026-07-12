@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from collections.abc import AsyncIterator
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +40,10 @@ class ClientTokenRequest(StrictModel):
 
 class QuizAttemptRequest(ClientTokenRequest):
     answers: list[QuizAnswerSubmit] = Field(min_length=1)
+
+
+class AiCoachTurnRequest(ClientTokenRequest):
+    answer: str = Field(min_length=1, max_length=10_000)
 
 
 def _forbidden() -> JSONResponse:
@@ -228,10 +234,19 @@ async def start_realtime(
         context = await NewcomerJourneyService(db).context_for_activity(
             learner=current_user, activity_id=activity_id
         )
-        await RealtimeRoleplayActivityHandler(db).start(
+        start_result = await RealtimeRoleplayActivityHandler(db).start_session(
             context, actor=current_user, client_token=payload.client_token
         )
-        return await _detail(db, current_user, activity_id)
+        return success_response(
+            {
+                "session_id": start_result["session_id"],
+                "detail": (
+                    await NewcomerJourneyService(db).activity_detail(
+                        learner=current_user, activity_id=activity_id
+                    )
+                ).model_dump(),
+            }
+        )
     except Exception as exc:
         return _error(exc)
 
@@ -249,13 +264,111 @@ async def start_ai_coach(
         context = await NewcomerJourneyService(db).context_for_activity(
             learner=current_user, activity_id=activity_id
         )
-        await AiCoachActivityHandler(db).start(
+        _, session = await AiCoachActivityHandler(db).start_session(
             context, actor=current_user, client_token=payload.client_token
         )
         await db.commit()
-        return await _detail(db, current_user, activity_id)
+        return success_response(
+            {
+                "session_id": str(session.session_id),
+                "first_question": str(
+                    cast(dict[str, Any], session.coach_state or {}).get(
+                        "current_question"
+                    )
+                    or ""
+                ),
+                "detail": (
+                    await NewcomerJourneyService(db).activity_detail(
+                        learner=current_user, activity_id=activity_id
+                    )
+                ).model_dump(),
+            }
+        )
     except Exception as exc:
         return _error(exc)
+
+
+@learner_router.post(
+    "/activities/{activity_id}/ai-coach/sessions/{session_id}/turns",
+    response_model=None,
+)
+async def submit_ai_coach_turn(
+    activity_id: str,
+    session_id: str,
+    payload: AiCoachTurnRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if not can_learn_newcomer_training_path(current_user):
+        return _forbidden()
+    try:
+        context = await NewcomerJourneyService(db).context_for_activity(
+            learner=current_user, activity_id=activity_id
+        )
+        if context.activity.type != "ai_coach":
+            raise NewcomerOrchestrationError(
+                "[NEWCOMER_ACTIVITY_TYPE_MISMATCH]", "当前任务不是 AI 辅导。", 422
+            )
+        state = await AiCoachActivityHandler(db).submit_turn(
+            context,
+            session_id=session_id,
+            actor=current_user,
+            answer=payload.answer,
+            client_token=payload.client_token,
+        )
+        return success_response(
+            {
+                **state,
+                "detail": (
+                    await NewcomerJourneyService(db).activity_detail(
+                        learner=current_user, activity_id=activity_id
+                    )
+                ).model_dump(),
+            }
+        )
+    except Exception as exc:
+        return _error(exc)
+
+
+@learner_router.post(
+    "/activities/{activity_id}/ai-coach/sessions/{session_id}/turns/stream",
+    response_model=None,
+)
+async def stream_ai_coach_turn(
+    activity_id: str,
+    session_id: str,
+    payload: AiCoachTurnRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse | JSONResponse:
+    if not can_learn_newcomer_training_path(current_user):
+        return _forbidden()
+
+    async def events() -> AsyncIterator[str]:
+        yield f"data: {json.dumps({'type': 'started'}, ensure_ascii=False)}\n\n"
+        try:
+            context = await NewcomerJourneyService(db).context_for_activity(
+                learner=current_user, activity_id=activity_id
+            )
+            state = await AiCoachActivityHandler(db).submit_turn(
+                context,
+                session_id=session_id,
+                actor=current_user,
+                answer=payload.answer,
+                client_token=payload.client_token,
+            )
+            detail = await NewcomerJourneyService(db).activity_detail(
+                learner=current_user, activity_id=activity_id
+            )
+            yield f"data: {json.dumps({'type': 'result', **state, 'detail': detail.model_dump(mode='json')}, ensure_ascii=False)}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(getattr(exc, 'message', 'AI 教练暂时无法反馈，请重试。'))}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @learner_router.post("/activities/{activity_id}/assignments", response_model=None)

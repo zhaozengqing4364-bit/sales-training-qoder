@@ -59,6 +59,16 @@ async def test_should_pin_revision_and_return_one_primary_next_action(
         learner=test_user
     )
 
+    detail = await NewcomerJourneyService(test_db).activity_detail(
+        learner=test_user, activity_id="activity-product-a-assignment"
+    )
+    assert detail.runner.model_dump() == {
+        "type": "assignment",
+        "submission_type": "text",
+        "review_mode": "automatic_complete",
+        "max_file_size_bytes": 10485760,
+    }
+
     assert journey.path_revision_id == published.revision_id
     assert journey.primary_next_action.activity_id == "activity-product-a-assignment"
     assert (

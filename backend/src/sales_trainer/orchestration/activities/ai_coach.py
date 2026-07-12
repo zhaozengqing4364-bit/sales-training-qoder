@@ -7,7 +7,10 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from sales_trainer.models import NewcomerTrainingActivityAttempt
+from sales_trainer.models import (
+    NewcomerTrainingActivityAttempt,
+    SalesTrainerAiCoachSession,
+)
 from sales_trainer.orchestration.activities.base import (
     ActivityExecutionContext,
     ActivityProjection,
@@ -33,6 +36,14 @@ class AiCoachActivityHandler:
     async def start(
         self, context: ActivityExecutionContext, *, actor: User, client_token: str
     ) -> NewcomerTrainingActivityAttempt:
+        attempt, _ = await self.start_session(
+            context, actor=actor, client_token=client_token
+        )
+        return attempt
+
+    async def start_session(
+        self, context: ActivityExecutionContext, *, actor: User, client_token: str
+    ) -> tuple[NewcomerTrainingActivityAttempt, SalesTrainerAiCoachSession]:
         attempt = await self._attempts.create(
             enrollment_id=context.enrollment_id,
             path_revision_id=context.path_revision_id,
@@ -44,12 +55,13 @@ class AiCoachActivityHandler:
         session = await self._sessions.create_activity_session(
             context=context, actor=actor
         )
-        return await self._attempts.attach_evidence(
+        attempt = await self._attempts.attach_evidence(
             attempt_id=str(attempt.attempt_id),
             evidence_type="ai_coach_session",
             evidence_id=str(session.session_id),
             status="in_progress",
         )
+        return attempt, session
 
     async def project(self, context: ActivityExecutionContext) -> ActivityProjection:
         attempt = await self._attempts.latest_for_activity(
@@ -69,6 +81,24 @@ class AiCoachActivityHandler:
             bool(attempt.passed) if attempt and attempt.passed is not None else None,
             None if status == "completed" else {"action": "start_ai_coach"},
             None,
+        )
+
+    async def submit_turn(
+        self,
+        context: ActivityExecutionContext,
+        *,
+        session_id: str,
+        actor: User,
+        answer: str,
+        client_token: str,
+    ) -> dict[str, Any]:
+        if context.activity.type != "ai_coach":
+            raise RuntimeError("activity context is not ai_coach")
+        return await self._sessions.submit_activity_turn(
+            session_id=session_id,
+            actor=actor,
+            answer=answer,
+            client_token=client_token,
         )
 
     async def validate_config(self, activity: Any) -> tuple[Any, ...]:

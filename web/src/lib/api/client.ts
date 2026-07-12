@@ -2131,6 +2131,7 @@ const salesTrainerDomain = createSalesTrainerDomain({
 const newcomerTrainingDomain = createNewcomerTrainingDomain({
     request: apiFetch,
     upload: apiUpload,
+    stream: apiStream,
 });
 const supportRuntimeDomain = createSupportRuntimeDomain({ request: apiFetch });
 const adminSalesTrainerDomain = createAdminSalesTrainerDomain({

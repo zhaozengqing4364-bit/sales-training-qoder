@@ -1890,7 +1890,7 @@ npx tsc --noEmit
 
 Expected: tests pass, duplicate submissions are disabled while pending, server errors remain in the drawer.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add web/src/components/admin/newcomer-training
@@ -1918,7 +1918,7 @@ git commit -m "feat(newcomer): add activity editors and quick create"
 - Consumes: canonical journey/activity API.
 - Produces: learner home, module detail and one generic activity route.
 
-- [ ] **Step 1: Write failing learner-home tests**
+- [x] **Step 1: Write failing learner-home tests**
 
 ```tsx
 it("shows exactly one primary continue action", () => {
@@ -1936,7 +1936,7 @@ it("collapses completed and future phases", () => {
 });
 ```
 
-- [ ] **Step 2: Write failing activity dispatch test**
+- [x] **Step 2: Write failing activity dispatch test**
 
 ```tsx
 it.each([
@@ -1952,17 +1952,17 @@ it.each([
 });
 ```
 
-- [ ] **Step 3: Run tests and verify RED**
+- [x] **Step 3: Run tests and verify RED**
 
 Run: `cd web && npx vitest run src/components/newcomer-training/journey-home.test.tsx src/components/newcomer-training/activity-shell.test.tsx`
 
 Expected: components are missing.
 
-- [ ] **Step 4: Implement learner home and module detail**
+- [x] **Step 4: Implement learner home and module detail**
 
 Home renders current phase, overall progress, estimated duration and one primary action above a progressive phase outline. Module detail renders ordered activity steps, feedback and one next action. Move recording history, all scores and remediation history out of home; link them to the existing records surface filtered by enrollment/module.
 
-- [ ] **Step 5: Implement trusted runner registry**
+- [x] **Step 5: Implement trusted runner registry**
 
 ```typescript
 export const ACTIVITY_RUNNERS: Record<ActivityType, ComponentType<ActivityRunnerProps>> = {
@@ -1977,11 +1977,11 @@ export const ACTIVITY_RUNNERS: Record<ActivityType, ComponentType<ActivityRunner
 
 The activity route reads `activityId`, fetches server-authoritative detail, and dispatches by returned type. It never accepts a component or target URL from config.
 
-- [ ] **Step 6: Reuse mature interaction components**
+- [x] **Step 6: Reuse mature interaction components**
 
 Extract reusable content from old audio/quiz/coach pages into the six runners, replacing `unitId`, module keys and scenario slugs with `activityId`. Keep polling, recorder cleanup, question validation, StepAudio start, streaming coach messages and accessible upload states.
 
-- [ ] **Step 7: Run learner tests and type-check**
+- [x] **Step 7: Run learner tests and type-check**
 
 Run:
 

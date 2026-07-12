@@ -8,13 +8,17 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import Field
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.response import error_response, success_response
 from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
+from sales_trainer.models import (
+    SalesTrainerAssetActiveRevision,
+    SalesTrainerAssetRevision,
+)
 from sales_trainer.orchestration.contracts import StrictModel, TrainingPathPayload
 from sales_trainer.orchestration.errors import (
     NewcomerOrchestrationError,
@@ -31,15 +35,11 @@ from sales_trainer.permissions import (
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
-from sales_trainer.models import (
-    SalesTrainerAssetActiveRevision,
-    SalesTrainerAssetRevision,
-)
+from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.readiness_dossier_service import (
     ReadinessDossierError,
     ReadinessDossierService,
 )
-from sales_trainer.services.operation_log_service import OperationLogService
 
 admin_router = APIRouter(prefix="/admin/newcomer-training/path")
 admin_journey_router = APIRouter(prefix="/admin/newcomer-training")

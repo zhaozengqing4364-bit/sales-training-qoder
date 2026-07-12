@@ -251,9 +251,58 @@ class ModuleDetailResponse(StrictModel):
     module: JourneyModuleProgress
 
 
+class LessonRunnerDescriptor(StrictModel):
+    type: Literal["lesson"] = "lesson"
+    learning_content_id: str
+    completion_mode: Literal["all_chapters", "learner_confirmed"]
+
+
+class QuizRunnerDescriptor(StrictModel):
+    type: Literal["quiz"] = "quiz"
+    exam_paper_id: str
+    pass_score: float
+    max_attempts: int | None = None
+
+
+class AudioRunnerDescriptor(StrictModel):
+    type: Literal["audio_assessment"] = "audio_assessment"
+    material_id: str | None = None
+    material_version_id: str | None = None
+    material_title: str | None = None
+    pass_score: float
+    max_attempts: int | None = None
+
+
+class RealtimeRunnerDescriptor(StrictModel):
+    type: Literal["realtime_roleplay"] = "realtime_roleplay"
+
+
+class AiCoachRunnerDescriptor(StrictModel):
+    type: Literal["ai_coach"] = "ai_coach"
+
+
+class AssignmentRunnerDescriptor(StrictModel):
+    type: Literal["assignment"] = "assignment"
+    submission_type: Literal["text", "file", "text_or_file"]
+    review_mode: Literal["automatic_complete", "manual_review"]
+    max_file_size_bytes: int
+
+
+ActivityRunnerDescriptor = Annotated[
+    LessonRunnerDescriptor
+    | QuizRunnerDescriptor
+    | AudioRunnerDescriptor
+    | RealtimeRunnerDescriptor
+    | AiCoachRunnerDescriptor
+    | AssignmentRunnerDescriptor,
+    Field(discriminator="type"),
+]
+
+
 class ActivityDetailResponse(StrictModel):
     enrollment_id: str
     path_revision_id: str
     phase_id: str
     module_id: str
     activity: JourneyActivityProgress
+    runner: ActivityRunnerDescriptor

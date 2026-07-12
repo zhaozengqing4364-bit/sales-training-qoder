@@ -82,3 +82,9 @@
 - Task 12：学习内容、试卷、材料版本和结构化录音评分标准可在编辑器内创建、发布、自动绑定；题目、对练模板、语音方案、AI 教练方案从已发布资源选择。
 - Task 12：新增 canonical 评分标准与教练方案选项 API；评分标准写入通用不可变 revision、激活引用和操作日志，不再错误绑定旧音频 Prompt 资源类型。
 - Task 12 验证：前端 focused `11 passed`、TypeScript、ESLint 通过；后端新增资源 API `2 passed`、Ruff、Mypy 通过。
+- Task 12 commit：`0590e01d feat(newcomer): add activity editors and quick create`。
+- Task 13 RED：学员首页、统一活动页和受信任 Renderer 注册表不存在；测试按预期 import 失败。
+- Task 13：学员首页只显示一个主下一步，当前阶段展开、已完成/未来阶段折叠；模块页按顺序展示活动和唯一下一步，记录入口独立。
+- Task 13：六类活动由封闭 `ACTIVITY_RUNNERS` 注册表分发；lesson 读取章节并保存进度，quiz 逐题作答，audio 确认冻结材料版本后上传并轮询，realtime 使用受信任 session ID 进入现有练习页，assignment 支持文字/文件，AI Coach 支持幂等多轮反馈。
+- Task 13：Activity detail 增加服务端从 pinned revision 投影的类型化 runner descriptor；不接受配置中的组件名、路由或 URL。Realtime/AI start 返回服务端 session identity。
+- Task 13 验证：前端 learner/API focused `11 passed`、TypeScript、ESLint 通过；后端 newcomer unit/integration `82 passed`，orchestration/AI Ruff、Mypy 通过。

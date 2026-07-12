@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,14 +20,26 @@ from sales_trainer.orchestration.completion import (
     aggregate_phase_progress,
 )
 from sales_trainer.orchestration.contracts import (
+    ActivityConfig,
     ActivityDetailResponse,
+    ActivityRunnerDescriptor,
+    AiCoachRunnerDescriptor,
+    AssignmentConfig,
+    AssignmentRunnerDescriptor,
+    AudioAssessmentConfig,
+    AudioRunnerDescriptor,
     JourneyActivityProgress,
     JourneyModuleProgress,
     JourneyNextAction,
     JourneyPhaseProgress,
     JourneyProgressSummary,
     JourneyResponse,
+    LessonConfig,
+    LessonRunnerDescriptor,
     ModuleDetailResponse,
+    QuizConfig,
+    QuizRunnerDescriptor,
+    RealtimeRunnerDescriptor,
     TrainingPathPayload,
 )
 from sales_trainer.orchestration.errors import NewcomerOrchestrationError
@@ -111,6 +124,12 @@ class NewcomerJourneyService:
                             phase_id=phase.phase_id,
                             module_id=module.module_id,
                             activity=activity,
+                            runner=await _runner_descriptor(
+                                self._db,
+                                (await self.context_for_activity(
+                                    learner=learner, activity_id=activity_id
+                                )).activity
+                            ),
                         )
         raise NewcomerOrchestrationError(
             "[NEWCOMER_ACTIVITY_NOT_FOUND]", "训练活动不存在。", 404
@@ -370,6 +389,56 @@ def _action_key(activity_type: str) -> str:
         "ai_coach": "start_ai_coach",
         "assignment": "submit_assignment",
     }[activity_type]
+
+
+async def _runner_descriptor(
+    db: AsyncSession, activity: ActivityConfig
+) -> ActivityRunnerDescriptor:
+    if activity.type == "lesson":
+        lesson_config = cast(LessonConfig, activity.config)
+        return LessonRunnerDescriptor(
+            learning_content_id=lesson_config.learning_content_id,
+            completion_mode=lesson_config.completion_mode,
+        )
+    if activity.type == "quiz":
+        quiz_config = cast(QuizConfig, activity.config)
+        return QuizRunnerDescriptor(
+            exam_paper_id=quiz_config.exam_paper_id,
+            pass_score=quiz_config.pass_score,
+            max_attempts=quiz_config.max_attempts,
+        )
+    if activity.type == "audio_assessment":
+        audio_config = cast(AudioAssessmentConfig, activity.config)
+        material_version_id = None
+        material_title = None
+        if audio_config.material_id:
+            from sales_trainer.models import SalesTrainerMaterial
+
+            material = await db.get(SalesTrainerMaterial, audio_config.material_id)
+            if material is not None:
+                material_version_id = (
+                    str(material.current_version_id)
+                    if material.current_version_id is not None
+                    else None
+                )
+                material_title = str(material.name)
+        return AudioRunnerDescriptor(
+            material_id=audio_config.material_id,
+            material_version_id=material_version_id,
+            material_title=material_title,
+            pass_score=audio_config.pass_score,
+            max_attempts=audio_config.max_attempts,
+        )
+    if activity.type == "realtime_roleplay":
+        return RealtimeRunnerDescriptor()
+    if activity.type == "ai_coach":
+        return AiCoachRunnerDescriptor()
+    assignment_config = cast(AssignmentConfig, activity.config)
+    return AssignmentRunnerDescriptor(
+        submission_type=assignment_config.submission_type,
+        review_mode=assignment_config.review_mode,
+        max_file_size_bytes=assignment_config.max_file_size_bytes,
+    )
 
 
 __all__ = ["NewcomerJourneyService"]

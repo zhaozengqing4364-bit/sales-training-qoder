@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from typing import Any
 
@@ -18,6 +19,7 @@ from sales_trainer.models import (
 from sales_trainer.orchestration.activities.base import ActivityExecutionContext
 from sales_trainer.orchestration.contracts import AiCoachActivityConfig
 from sales_trainer.schemas import AiCoachConfig
+from sales_trainer.services.ai_coach_scoring_service import AiCoachScoringService
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
@@ -33,9 +35,16 @@ class AiCoachSessionServiceError(Exception):
 
 
 class AiCoachSessionService:
-    def __init__(self, db: AsyncSession, **_: Any) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        scoring: AiCoachScoringService | None = None,
+        **_: Any,
+    ) -> None:
         self._db = db
         self._logs = OperationLogService(db)
+        self._scoring = scoring or AiCoachScoringService()
 
     async def create_activity_session(
         self, *, context: ActivityExecutionContext, actor: User
@@ -71,6 +80,10 @@ class AiCoachSessionService:
             raise AiCoachSessionServiceError(
                 "[AI_COACH_NOT_CONFIGURED]", "AI 教练尚未配置可用提示模板。", 409
             )
+        first_question = str(
+            raw_profile.get("first_question")
+            or "请先说说你对本次内容的理解。"
+        )
         session = SalesTrainerAiCoachSession(
             user_id=context.learner_id,
             module_key=context.module_id,
@@ -95,6 +108,7 @@ class AiCoachSessionService:
             },
             status="in_progress",
             trace_id=str(uuid.uuid4()),
+            coach_state={"current_question": first_question, "turn_number": 1},
         )
         self._db.add(session)
         await self._db.flush()
@@ -102,10 +116,7 @@ class AiCoachSessionService:
             SalesTrainerAiCoachTurn(
                 session_id=session.session_id,
                 turn_number=1,
-                question=str(
-                    raw_profile.get("first_question")
-                    or "请先说说你对本次内容的理解。"
-                ),
+                question=first_question,
                 user_answer="",
                 max_score=100,
                 missed_points=[],
@@ -162,6 +173,149 @@ class AiCoachSessionService:
         await self._db.commit()
         await self._db.refresh(session)
         return session
+
+    async def submit_activity_turn(
+        self,
+        *,
+        session_id: str,
+        actor: User,
+        answer: str,
+        client_token: str,
+    ) -> dict[str, Any]:
+        session = await self._db.scalar(
+            select(SalesTrainerAiCoachSession)
+            .where(SalesTrainerAiCoachSession.session_id == session_id)
+            .with_for_update()
+        )
+        if session is None or str(session.user_id) != str(actor.user_id):
+            raise AiCoachSessionServiceError(
+                "[AI_COACH_SESSION_NOT_FOUND]", "AI 教练会话不存在。", 404
+            )
+        coach_state = dict(session.coach_state or {})
+        client_token_hash = hashlib.sha256(client_token.encode("utf-8")).hexdigest()
+        if coach_state.get("last_client_token_hash") == client_token_hash and isinstance(
+            coach_state.get("last_response"), dict
+        ):
+            return dict(coach_state["last_response"])
+        if str(session.status) != "in_progress":
+            return self._session_state(session, feedback=None, question=None)
+        turns = list(
+            (
+                await self._db.execute(
+                    select(SalesTrainerAiCoachTurn)
+                    .where(SalesTrainerAiCoachTurn.session_id == session_id)
+                    .order_by(SalesTrainerAiCoachTurn.turn_number)
+                    .with_for_update()
+                )
+            ).scalars()
+        )
+        if not turns:
+            raise AiCoachSessionServiceError(
+                "[AI_COACH_TURN_NOT_FOUND]", "AI 教练当前问题不存在。", 409
+            )
+        current = turns[-1]
+        if str(current.user_answer or "").strip():
+            return self._session_state(
+                session,
+                feedback=str(current.ai_feedback or ""),
+                question=str(current.next_question or "") or None,
+            )
+        config = dict(session.config_snapshot or {})
+        scored = await self._scoring.score_turn(
+            question=str(current.question),
+            user_answer=answer,
+            config=config,
+            session_id=session_id,
+            previous_turns=[
+                {"question": str(item.question), "user_answer": str(item.user_answer)}
+                for item in turns[:-1]
+            ],
+        )
+        if not scored.is_success or scored.value is None:
+            raise AiCoachSessionServiceError(
+                str(scored.fallback or "[AI_COACH_SCORING_FAILED]"),
+                "AI 教练暂时无法完成反馈，请稍后重试。",
+                503,
+            )
+        output = scored.value
+        setattr(current, "user_answer", answer)
+        setattr(current, "ai_feedback", str(output["feedback"]))
+        setattr(current, "score", output.get("score"))
+        setattr(current, "max_score", output.get("max_score"))
+        setattr(current, "missed_points", list(output.get("missed_points") or []))
+        setattr(
+            current,
+            "next_question",
+            str(output.get("next_question") or "") or None,
+        )
+        setattr(current, "raw_model_output", output.get("raw_model_output"))
+        setattr(current, "validated_output", output)
+        passed = bool(output.get("passed"))
+        max_turns = int(config.get("max_turns") or 10)
+        finished = passed or int(current.turn_number) >= max_turns
+        next_question = None if finished else str(
+            output.get("next_question") or "请结合反馈再补充说明。"
+        )
+        if finished:
+            await self.finish_activity_session(
+                session_id=session_id,
+                actor=actor,
+                passed=passed,
+                score=float(output["score"]),
+                max_score=float(output.get("max_score") or 100),
+            )
+        else:
+            self._db.add(
+                SalesTrainerAiCoachTurn(
+                    session_id=session_id,
+                    turn_number=int(current.turn_number) + 1,
+                    question=next_question,
+                    user_answer="",
+                    max_score=100,
+                    missed_points=[],
+                )
+            )
+            await self._logs.record(
+                actor=actor,
+                action="newcomer_activity.ai_coach.turn_submitted",
+                target_type="sales_trainer_ai_coach_session",
+                target_id=session_id,
+                metadata={"turn_number": int(current.turn_number)},
+            )
+        response = self._session_state(
+            session,
+            feedback=str(output["feedback"]),
+            question=next_question,
+        )
+        setattr(
+            session,
+            "coach_state",
+            {
+                "current_question": next_question,
+                "turn_number": int(current.turn_number) + (0 if finished else 1),
+                "last_client_token_hash": client_token_hash,
+                "last_response": response,
+            },
+        )
+        await self._db.commit()
+        return response
+
+    @staticmethod
+    def _session_state(
+        session: SalesTrainerAiCoachSession,
+        *,
+        feedback: str | None,
+        question: str | None,
+    ) -> dict[str, Any]:
+        return {
+            "session_id": str(session.session_id),
+            "status": str(session.status),
+            "mastery_state": str(session.mastery_state)
+            if session.mastery_state is not None
+            else None,
+            "feedback": feedback,
+            "next_question": question,
+        }
 
 
 __all__ = ["AiCoachSessionService", "AiCoachSessionServiceError"]

@@ -11,14 +11,20 @@ import type {
     ModuleDetailResponse,
     PathValidationResponse,
     QuizAttemptRequest,
+    RealtimeStartResponse,
+    AiCoachStartResponse,
+    AiCoachTurnResponse,
+    AiCoachTurnStreamEvent,
     TrainingPathConfigResponse,
     TrainingPathPayload,
 } from "../types/newcomer-training";
-import type { ApiRequest, ApiUpload } from "./shared";
+import type { NewcomerExamPaper } from "../types";
+import type { ApiRequest, ApiStream, ApiUpload } from "./shared";
 
 type NewcomerTrainingDomainDependencies = {
     request: ApiRequest;
     upload: ApiUpload;
+    stream: ApiStream;
 };
 
 type AdminNewcomerTrainingDomainDependencies = {
@@ -31,6 +37,7 @@ const activityPath = (activityId: string) =>
 export function createNewcomerTrainingDomain({
     request,
     upload,
+    stream,
 }: NewcomerTrainingDomainDependencies) {
     return {
         getJourney: () => request<JourneyResponse>("/newcomer-training/journey"),
@@ -39,6 +46,9 @@ export function createNewcomerTrainingDomain({
         ),
         getActivity: (activityId: string) => request<ActivityDetailResponse>(
             activityPath(activityId),
+        ),
+        getExamPaper: (paperId: string) => request<NewcomerExamPaper>(
+            `/newcomer-training/exam-papers/${encodeURIComponent(paperId)}`,
         ),
         completeLessonChapter: (activityId: string, chapterId: string, clientToken: string) =>
             request<ActivityDetailResponse>(
@@ -65,15 +75,25 @@ export function createNewcomerTrainingDomain({
             return upload<ActivityDetailResponse>(`${activityPath(activityId)}/audio/submissions`, form);
         },
         startRealtime: (activityId: string, clientToken: string) =>
-            request<ActivityDetailResponse>(`${activityPath(activityId)}/realtime/sessions`, {
+            request<RealtimeStartResponse>(`${activityPath(activityId)}/realtime/sessions`, {
                 method: "POST",
                 body: JSON.stringify({ client_token: clientToken }),
             }),
         startAiCoach: (activityId: string, clientToken: string) =>
-            request<ActivityDetailResponse>(`${activityPath(activityId)}/ai-coach/sessions`, {
+            request<AiCoachStartResponse>(`${activityPath(activityId)}/ai-coach/sessions`, {
                 method: "POST",
                 body: JSON.stringify({ client_token: clientToken }),
             }),
+        submitAiCoachTurn: (activityId: string, sessionId: string, answer: string, clientToken: string) =>
+            request<AiCoachTurnResponse>(
+                `${activityPath(activityId)}/ai-coach/sessions/${encodeURIComponent(sessionId)}/turns`,
+                { method: "POST", body: JSON.stringify({ answer, client_token: clientToken }) },
+            ),
+        streamAiCoachTurn: (activityId: string, sessionId: string, answer: string, clientToken: string, signal?: AbortSignal) =>
+            stream<AiCoachTurnStreamEvent>(
+                `${activityPath(activityId)}/ai-coach/sessions/${encodeURIComponent(sessionId)}/turns/stream`,
+                { method: "POST", body: JSON.stringify({ answer, client_token: clientToken }), signal },
+            ),
         submitAssignment: (activityId: string, payload: AssignmentSubmissionRequest) => {
             const form = new FormData();
             form.append("client_token", payload.client_token);

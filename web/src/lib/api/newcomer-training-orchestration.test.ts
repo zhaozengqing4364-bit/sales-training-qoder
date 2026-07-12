@@ -9,7 +9,8 @@ describe("newcomer training orchestration API", () => {
     it("uses activity identity for learner actions", async () => {
         const request = vi.fn().mockResolvedValue({ activity: { activity_id: "activity-1" } });
         const upload = vi.fn().mockResolvedValue({ activity: { activity_id: "activity-1" } });
-        const domain = createNewcomerTrainingDomain({ request, upload });
+        const stream = vi.fn();
+        const domain = createNewcomerTrainingDomain({ request, upload, stream });
 
         await domain.getJourney();
         await domain.completeLessonChapter("activity-1", "chapter-1", "token-1");

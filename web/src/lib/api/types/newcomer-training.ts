@@ -280,7 +280,16 @@ export interface ActivityDetailResponse {
     phase_id: string;
     module_id: string;
     activity: JourneyActivityProgress;
+    runner: ActivityRunnerDescriptor;
 }
+
+export type ActivityRunnerDescriptor =
+    | { type: "lesson"; learning_content_id: string; completion_mode: "all_chapters" | "learner_confirmed" }
+    | { type: "quiz"; exam_paper_id: string; pass_score: number; max_attempts: number | null }
+    | { type: "audio_assessment"; material_id: string | null; material_version_id: string | null; material_title: string | null; pass_score: number; max_attempts: number | null }
+    | { type: "realtime_roleplay" }
+    | { type: "ai_coach" }
+    | { type: "assignment"; submission_type: "text" | "file" | "text_or_file"; review_mode: "automatic_complete" | "manual_review"; max_file_size_bytes: number };
 
 export interface ClientTokenRequest {
     client_token: string;
@@ -304,3 +313,28 @@ export interface AssignmentSubmissionRequest extends ClientTokenRequest {
     text?: string | null;
     file?: File | null;
 }
+
+export interface RealtimeStartResponse {
+    session_id: string;
+    detail: ActivityDetailResponse;
+}
+
+export interface AiCoachStartResponse {
+    session_id: string;
+    first_question: string;
+    detail: ActivityDetailResponse;
+}
+
+export interface AiCoachTurnResponse {
+    session_id: string;
+    status: string;
+    mastery_state: string | null;
+    feedback: string | null;
+    next_question: string | null;
+    detail: ActivityDetailResponse;
+}
+
+export type AiCoachTurnStreamEvent =
+    | { type: "started" }
+    | ({ type: "result" } & AiCoachTurnResponse)
+    | { type: "error"; message: string };
