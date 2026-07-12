@@ -47,11 +47,7 @@ def is_sales_trainer_admin(user: User) -> bool:
 
 @lru_cache(maxsize=8)
 def _resolve_sales_trainer_manager_roles(raw_value: str) -> frozenset[str]:
-    configured = {
-        item.strip().lower()
-        for item in raw_value.split(",")
-        if item.strip()
-    }
+    configured = {item.strip().lower() for item in raw_value.split(",") if item.strip()}
     if not configured:
         return frozenset(DEFAULT_TRAINING_MANAGER_ROLES)
 
@@ -148,6 +144,18 @@ def can_enter_sales_trainer_learning_path(user: User) -> bool:
 
 
 def can_enter_sales_trainer_realtime(user: User) -> bool:
+    return can_enter_sales_trainer_learning_path(user)
+
+
+def can_manage_newcomer_training_path(user: User) -> bool:
+    return is_sales_trainer_admin(user) or is_sales_trainer_content_admin(user)
+
+
+def can_publish_newcomer_training_path(user: User) -> bool:
+    return is_sales_trainer_admin(user)
+
+
+def can_learn_newcomer_training_path(user: User) -> bool:
     return can_enter_sales_trainer_learning_path(user)
 
 

@@ -183,9 +183,7 @@ def validate_path_graph(payload: TrainingPathPayload) -> tuple[PathIssue, ...]:
                 register(
                     _Node(
                         object_id=activity.activity_id,
-                        field_path=(
-                            f"{module_path}.activities[{activity_index}]"
-                        ),
+                        field_path=(f"{module_path}.activities[{activity_index}]"),
                         prerequisites=tuple(activity.prerequisites),
                     )
                 )

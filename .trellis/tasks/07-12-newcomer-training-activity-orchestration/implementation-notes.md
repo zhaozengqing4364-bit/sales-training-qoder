@@ -31,3 +31,9 @@
 - Task 2 Mypy：`Success: no issues found in 1 source file`。
 - Task 2 Alembic：默认空 SQLite 的既有历史链在 `001` 失败，未触达 `092`；错误为
   `no such table: practice_sessions`，已纳入最终 reset/seed 验证项。
+- Task 3 RED：revision service 模块不存在，collection error，符合功能缺失预期。
+- Task 3 GREEN：修订服务与管理 API `4 passed`；assignment-only 路径完成草稿、校验、发布闭环。
+- Task 3 资源校验：按资源类型批量读取 LearningContent、ExamPaper、Material、
+  PracticeTemplate、VoiceRuntimeProfile 与通用发布 revision；无逐活动查询。
+- Task 3 权限与审计：内容管理员可编辑、平台管理员可发布；草稿、发布、恢复、删除均写操作日志。
+- Task 3 Ruff：`All checks passed!`；Mypy：`Success: no issues found in 8 source files`。

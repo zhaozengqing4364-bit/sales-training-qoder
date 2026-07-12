@@ -46,9 +46,7 @@ class RealtimeRoleplayConfig(StrictModel):
 
 class AiCoachActivityConfig(StrictModel):
     coach_profile_id: str = Field(min_length=1, max_length=120)
-    completion_mode: Literal["session_completed", "goal_reached"] = (
-        "session_completed"
-    )
+    completion_mode: Literal["session_completed", "goal_reached"] = "session_completed"
 
 
 class AssignmentConfig(StrictModel):
@@ -153,3 +151,24 @@ class TrainingPathPayload(StrictModel):
     title: str = Field(min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=1000)
     phases: list[PhaseConfig] = Field(default_factory=list, max_length=50)
+
+
+class PathIssueResponse(StrictModel):
+    code: str
+    message: str
+    object_id: str
+    field_path: str
+    severity: str = "error"
+
+
+class PathValidationResponse(StrictModel):
+    can_publish: bool
+    issues: list[PathIssueResponse] = Field(default_factory=list)
+
+
+class TrainingPathConfigResponse(StrictModel):
+    active_revision_id: str | None
+    active_revision_no: int | None
+    working_revision_id: str | None
+    payload: TrainingPathPayload
+    validation: PathValidationResponse | None = None

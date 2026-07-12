@@ -20,6 +20,9 @@ from sales_trainer.dashboard_recommendation import (
     register_sales_trainer_dashboard_recommendation_provider,
 )
 from sales_trainer.material_upload_api import sales_trainer_admin_material_upload_router
+from sales_trainer.orchestration.admin_api import (
+    admin_router as newcomer_orchestration_admin_router,
+)
 from sales_trainer.paper_api import (
     newcomer_admin_paper_router,
     newcomer_paper_router,
@@ -118,6 +121,11 @@ def register_sales_trainer_routers(app: FastAPI) -> None:
         newcomer_admin_path_config_router,
         prefix="/api/v1",
         tags=["admin-newcomer-training-path-config"],
+    )
+    app.include_router(
+        newcomer_orchestration_admin_router,
+        prefix="/api/v1",
+        tags=["admin-newcomer-training-path-orchestration"],
     )
     app.include_router(
         sales_trainer_admin_regrade_router,

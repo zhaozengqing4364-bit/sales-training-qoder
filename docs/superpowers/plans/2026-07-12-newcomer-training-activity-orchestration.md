@@ -690,7 +690,7 @@ git commit -m "feat(newcomer): persist enrollments and activity attempts"
 - Consumes: `TrainingPathPayload`, `PathIssue`, `validate_path_graph`.
 - Produces: `TrainingPathConfigResponse`, `PathValidationResponse`, `TrainingPathRevisionService`, `PathResourceValidator`, `admin_router`.
 
-- [ ] **Step 1: Write failing revision-service tests**
+- [x] **Step 1: Write failing revision-service tests**
 
 ```python
 @pytest.mark.asyncio
@@ -724,13 +724,13 @@ async def test_should_restore_history_as_new_draft_not_move_active_pointer(test_
     assert restored.payload_json["title"] == "版本一"
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `cd backend && ./.venv/bin/pytest tests/unit/test_newcomer_orchestration_revision_service.py -q`
 
 Expected: imports fail for the new services.
 
-- [ ] **Step 3: Implement resource validation**
+- [x] **Step 3: Implement resource validation**
 
 `PathResourceValidator.validate(payload)` must return `PathIssue` values and perform batched reads:
 
@@ -766,7 +766,7 @@ class TrainingPathConfigResponse(StrictModel):
 
 `PathIssueResponse` mirrors `PathIssue` fields exactly. Construct these DTOs inside the revision service; do not add ORM-aware classmethods to transport models.
 
-- [ ] **Step 4: Implement revision service**
+- [x] **Step 4: Implement revision service**
 
 ```python
 PATH_RESOURCE_TYPE = "newcomer_training_path_orchestration"
@@ -861,7 +861,7 @@ class TrainingPathRevisionService:
 
 `save_draft` validates Pydantic and graph shape but permits resource issues. `publish` rejects any graph or resource issue before calling the existing revision publish authority. Record operation-log actions `newcomer_path.draft_saved`, `newcomer_path.published`, and `newcomer_path.revision_restored`.
 
-- [ ] **Step 5: Add explicit permission helpers and admin API**
+- [x] **Step 5: Add explicit permission helpers and admin API**
 
 Add helpers:
 
@@ -893,7 +893,7 @@ GET    /activity-types
 
 Require manage permission for reads/draft, publish permission for publish, and write actor/reason/request ID to audit records.
 
-- [ ] **Step 6: Run service and API tests**
+- [x] **Step 6: Run service and API tests**
 
 Run:
 
@@ -904,7 +904,7 @@ cd backend
 
 Expected: all tests pass, including 403 object-capability cases and business-language issue payloads.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/sales_trainer/orchestration/contracts.py backend/src/sales_trainer/orchestration/resource_validator.py backend/src/sales_trainer/orchestration/revision_service.py backend/src/sales_trainer/orchestration/admin_api.py backend/src/sales_trainer/permissions.py backend/src/sales_trainer/router_registration.py backend/tests/unit/test_newcomer_orchestration_revision_service.py backend/tests/integration/test_newcomer_orchestration_admin_api.py
