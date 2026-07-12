@@ -201,7 +201,7 @@ with the retained StepFun transport base. Compatibility with active consumers st
   Run `bash scripts/critical-quality-gate.sh` from the repository root and wait for natural exit. The required final
   line is `Critical quality gate passed`; no skip/assertion weakening is accepted.
 
-- [ ] **Step 4: Close, archive and journal**
+- [x] **Step 4: Close, archive and journal**
 
   Write exact evidence, complete all checkboxes, validate JSONL, commit excluding the user readiness document, use
   Trellis update/finish workflows, archive the task and record all Gate 6 work commits.
