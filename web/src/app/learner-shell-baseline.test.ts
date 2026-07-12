@@ -34,7 +34,7 @@ const SHARED_ERROR_SHELLS = [
 ] as const;
 const BROWSER_LOCAL_TIME_SURFACES = [
     "app/(dashboard)/history/page.tsx",
-    "app/(user)/practice/[sessionId]/report/page.tsx",
+    "app/(user)/practice/[sessionId]/report/report-view-model.ts",
     "app/(user)/practice/[sessionId]/replay/page.tsx",
 ] as const;
 

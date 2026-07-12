@@ -76,3 +76,16 @@
   transport code, so no new client runtime barrel, component render dependency or async waterfall was added.
   TypeScript and changed-file ESLint passed; the Gate 5/domain and report/replay/readiness/team consumer matrix
   passed 10 files / `137 passed`.
+- Task 6 extracted pure report score/status/trend/compliance/presentation/replay mapping into
+  `report-view-model.ts`, route/query/retry/highlight-storage knowledge into `report-actions.ts`, and Readiness
+  evidence/status/snapshot/retraining/default-selection mapping into `readiness-view-model.ts`. Reserved route
+  identifiers are now encoded, unknown Readiness/report enum values use user-language fallbacks, and the pages
+  retain their existing loading/error/permission/submitting/retry hierarchy.
+- The report page fell from 3,350 to 2,965 lines and the Readiness detail page from 822 to 596 lines without a
+  visual redesign. New pure tests cover route encoding, replay anchor degradation, score/tone mapping, internal
+  diagnostic redaction, evidence defaults and retraining comparison. The first full Vitest run exposed one
+  source-locality baseline that still expected date formatting in `page.tsx`; updating that executable baseline
+  to the new ViewModel authority made the canonical rerun Green: 213 files, `1344 passed, 6 skipped`.
+- Task 6 verification also passed strict TypeScript, changed-file ESLint (errors-only), focused route/pure tests
+  `55/55`, and CodeGraph selected the report, Readiness detail and admin-user route tests. No runtime dependency
+  or data-fetching waterfall was added by the extraction.

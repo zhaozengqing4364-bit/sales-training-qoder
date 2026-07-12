@@ -296,33 +296,33 @@
 - Consumes: domain DTOs from Task 5.
 - Produces: user-language ViewModels, action descriptors and existing loading/retry state.
 
-- [ ] **Step 1: Characterize mapping and action behavior**
+- [x] **Step 1: Characterize mapping and action behavior**
 
   Test score/status labels, evidence completeness/degradation, claim truth, Presentation page replay/retry,
   retraining task link, supervisor decisions/calibration, dossier evidence/result/retraining labels and unknown enum
   redaction. Test URL encoding with IDs containing reserved characters.
 
-- [ ] **Step 2: Implement pure ViewModel mappers**
+- [x] **Step 2: Implement pure ViewModel mappers**
 
   Mappers accept DTO + viewer capability and return render-ready labels/tone/sections/actions. They never call
   `api`, router, storage or React hooks and never expose raw internal codes as the fallback label.
 
-- [ ] **Step 3: Centralize side-effect actions**
+- [x] **Step 3: Centralize side-effect actions**
 
   `report-actions.ts` owns URLSearchParams, retraining session-link clear/read/write and route intent payloads.
   Hooks/pages invoke action descriptors; no duplicate URL construction remains in JSX handlers.
 
-- [ ] **Step 4: Simplify route roots without redesign**
+- [x] **Step 4: Simplify route roots without redesign**
 
   Keep the existing JSX hierarchy and copy. Move only interpretation/action knowledge. Existing loading, empty,
   error, partial, permission, submitting and retry states remain visible and route tests stay behavior-equivalent.
 
-- [ ] **Step 5: Verify frontend locality**
+- [x] **Step 5: Verify frontend locality**
 
   Run new pure tests, existing report/readiness/Journey route tests, typecheck, lint, full Vitest and CodeGraph
   affected selection.
 
-- [ ] **Step 6: Commit route locality**
+- [x] **Step 6: Commit route locality**
 
   Commit as `refactor(report): isolate view models and actions`.
 

@@ -78,163 +78,40 @@ import {
 } from "@/lib/session-evidence";
 import { cn } from "@/lib/utils";
 import { useSessionReportData } from "./use-session-report-data";
-
-function buildPresentationPageReplayPath(sessionId: string, pageNumber: number): string {
-    const params = new URLSearchParams();
-    params.set("focus", "presentation_page");
-    params.set("page", String(pageNumber));
-    params.set("page_anchor_status", "resolved");
-    return `/practice/${sessionId}/replay?${params.toString()}`;
-}
-
-function buildPresentationPagePracticePath({
-    sessionId,
-    presentationId,
-    pageNumber,
-    sourceSessionId,
-}: {
-    sessionId: string;
-    presentationId: string;
-    pageNumber: number;
-    sourceSessionId: string;
-}): string {
-    const params = new URLSearchParams();
-    params.set("scenario_type", "presentation");
-    params.set("presentation_id", presentationId);
-    params.set("focus", "presentation_page");
-    params.set("page", String(pageNumber));
-    params.set("source_session_id", sourceSessionId);
-    return `/practice/${sessionId}?${params.toString()}`;
-}
-
-function buildPresentationPageFocusIntent({
-    sourceSessionId,
-    pageSummary,
-}: {
-    sourceSessionId: string;
-    pageSummary: PresentationReview["page_summaries"][number];
-}) {
-    return {
-        version: "presentation_page_retry_v1",
-        source_session_id: sourceSessionId,
-        presentation_page: {
-            page_number: pageSummary.page_number,
-            reason: pageSummary.missing_required_points.length > 0
-                ? "missing_required_points"
-                : "page_review",
-            summary: pageSummary.summary,
-            missing_required_points: pageSummary.missing_required_points,
-        },
-    };
-}
-
-function formatSnapshotTime(value?: string | null): string {
-    if (!value) return "--";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "--";
-    return date.toLocaleString("zh-CN", {
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-    });
-}
-
-function getScoreColor(score: number): string {
-    if (score >= 80) return "text-green-600";
-    if (score >= 60) return "text-yellow-600";
-    return "text-red-600";
-}
-
-function getScoreLabel(score: number): string {
-    if (score >= 90) return "优秀";
-    if (score >= 80) return "良好";
-    if (score >= 60) return "及格";
-    return "待改进";
-}
-
-const SUPERVISOR_DECISION_LABELS: Record<SupervisorDecision, string> = {
-    pending: "待评审",
-    approved: "通过",
-    rejected: "打回",
-    needs_retraining: "要求复训",
-};
-
-const READINESS_STATUS_LABELS: Record<ReadinessStatus, string> = {
-    not_ready: "暂不达标",
-    shadow_only: "仅影子跟练",
-    ready_for_trial: "可试点上岗",
-    approved: "正式通过",
-};
-
-const CALIBRATION_LABELS: Record<CalibrationLabel, string> = {
-    accurate: "AI 评分准确",
-    too_high: "AI 偏高",
-    too_low: "AI 偏低",
-    wrong_reason: "理由不对",
-    missing_evidence: "证据不足",
-};
-
-function formatScoreValue(value?: number | null): string {
-    return typeof value === "number" && Number.isFinite(value)
-        ? value.toFixed(1)
-        : "--";
-}
-
-function formatTrendDelta(delta?: number | null): string {
-    if (delta === null || delta === undefined || Number.isNaN(delta)) {
-        return "--";
-    }
-    const sign = delta > 0 ? "+" : "";
-    return `${sign}${delta.toFixed(1)} 分`;
-}
-
-function formatTrendDate(value: string): string {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-        return "--";
-    }
-    return date.toLocaleDateString("zh-CN", {
-        month: "2-digit",
-        day: "2-digit",
-    });
-}
-
-function formatRoleplayStatusLabel(status?: string | null): string {
-    switch (status) {
-        case "ready": return "配置正常";
-        case "legacy": return "历史配置";
-        case "missing": return "配置缺失";
-        case "invalid": return "配置异常";
-        default: return status || "未记录";
-    }
-}
-
-function getRoleplaySummaryTone(status?: string | null, blockingCount = 0) {
-    if (status === "missing" || status === "invalid" || blockingCount > 0) {
-        return {
-            card: "border-amber-200 bg-amber-50/80",
-            badge: "border-amber-200 bg-white/80 text-amber-700",
-            text: "text-amber-900",
-            note: "text-amber-700",
-        };
-    }
-    if (status === "legacy") {
-        return {
-            card: "border-slate-200 bg-slate-50/80",
-            badge: "border-slate-200 bg-white/80 text-slate-700",
-            text: "text-slate-900",
-            note: "text-slate-600",
-        };
-    }
-    return {
-        card: "border-emerald-200 bg-emerald-50/80",
-        badge: "border-emerald-200 bg-white/80 text-emerald-700",
-        text: "text-emerald-900",
-        note: "text-emerald-700",
-    };
-}
+import {
+    buildPresentationPageFocusIntent,
+    buildPresentationPagePracticePath,
+    buildPresentationPageReplayPath,
+    buildReplayDeepLink,
+    buildRetrySessionPath,
+    getRetryFallbackPath,
+    HIGHLIGHT_REVIEW_LIMIT,
+    isHighlightReviewItem,
+    persistHighlightReviewItems,
+    readHighlightReviewItems,
+    type HighlightReviewItem,
+    type ReplayDeepLinkFocus,
+} from "./report-actions";
+import {
+    buildPresentationIssueItems,
+    buildSalesDimensionScores,
+    CALIBRATION_LABELS,
+    formatReplayAnchorHint,
+    formatRoleplayStatusLabel,
+    formatScoreValue,
+    formatSnapshotTime,
+    formatTrendDate,
+    formatTrendDelta,
+    formatVoiceModeLabel,
+    getRoleplaySummaryTone,
+    getScoreColor,
+    getScoreLabel,
+    hasEnhancedInsights,
+    hasReplayAnchorTarget,
+    hasVoiceSourceKeys,
+    READINESS_STATUS_LABELS,
+    SUPERVISOR_DECISION_LABELS,
+} from "./report-view-model";
 
 function RoleplayComplianceSummaryCard({
     summary,
@@ -373,42 +250,6 @@ function getRetrievalStatusClasses(tone: ReturnType<typeof formatRetrievalStatus
     };
 }
 
-function buildSalesDimensionScores(scores: {
-    logic: number | null;
-    accuracy: number | null;
-    completeness: number | null;
-}) {
-    return [
-        {
-            name: "价值表达",
-            score: scores.logic ?? 0,
-            description: "是否把产品能力翻译成客户收益与业务价值。",
-        },
-        {
-            name: "证据与收益",
-            score: scores.accuracy ?? 0,
-            description: "是否用案例、数据或 ROI 证据支撑收益主张。",
-        },
-        {
-            name: "异议推进",
-            score: scores.completeness ?? 0,
-            description: "是否处理价格/竞品/风险异议并推动下一步。",
-        },
-    ];
-}
-
-function formatVoiceModeLabel(mode: string | null | undefined): string {
-    if (!mode) return "--";
-    if (mode === "legacy") return "经典语音模式";
-    if (mode === "stepfun_realtime") return "实时语音模式";
-    return "已选择语音模式";
-}
-
-function hasVoiceSourceKeys(source: Record<string, string> | null | undefined): boolean {
-    if (!source) return false;
-    return Object.keys(source).length > 0;
-}
-
 const SALES_RUBRIC_EXPLAINERS = [
     {
         id: "discovery_qualification",
@@ -437,40 +278,6 @@ const SALES_RUBRIC_EXPLAINERS = [
     },
 ] as const;
 
-function buildPresentationIssueItems(review?: PresentationReview | null) {
-    const pageIssueCounts = (review?.page_summaries || []).reduce((counts, pageSummary) => {
-        for (const cluster of pageSummary.issue_clusters || []) {
-            counts.set(cluster.issue_type, (counts.get(cluster.issue_type) || 0) + 1);
-        }
-        return counts;
-    }, new Map<string, number>());
-
-    const diagnosticIssueTypes = Array.isArray(review?.diagnostics?.page_issue_types)
-        ? review.diagnostics.page_issue_types.filter(Boolean)
-        : [];
-    const issueTypes = diagnosticIssueTypes.length > 0
-        ? diagnosticIssueTypes
-        : Array.from(pageIssueCounts.keys());
-
-    if (issueTypes.length > 0) {
-        return issueTypes
-            .map((issueType) => ({
-                issueType,
-                count: pageIssueCounts.get(issueType) || Number(review?.issue_counts?.[issueType] || 0),
-                label: formatPresentationIssueLabel(issueType) || issueType,
-            }))
-            .filter((item) => item.count > 0);
-    }
-
-    return Object.entries(review?.issue_counts || {})
-        .map(([issueType, rawCount]) => ({
-            issueType,
-            count: Number(rawCount || 0),
-            label: formatPresentationIssueLabel(issueType) || issueType,
-        }))
-        .filter((item) => item.count > 0);
-}
-
 function isReportNotFound(error: unknown): boolean {
     if (error instanceof ApiRequestError) {
         return error.status === 404
@@ -481,118 +288,6 @@ function isReportNotFound(error: unknown): boolean {
     return error instanceof Error && /404|not found/i.test(error.message);
 }
 
-function hasEnhancedInsights(report: ComprehensiveReport | null): boolean {
-    if (!report) {
-        return false;
-    }
-
-    return Boolean(
-        report.key_strengths.length
-        || report.key_improvements.length
-        || report.recommendations.length
-        || report.detailed_feedback?.trim(),
-    );
-}
-
-type ReplayDeepLinkFocus = "main_issue" | "next_goal" | "learning_evidence";
-
-function hasReplayAnchorTarget(anchor?: ReplayAnchor | null): boolean {
-    if (!anchor) {
-        return false;
-    }
-
-    return Boolean(
-        (typeof anchor.message_id === "string" && anchor.message_id.trim())
-        || typeof anchor.turn_number === "number",
-    );
-}
-
-function buildReplayDeepLink(
-    sessionId: string,
-    options: {
-        focus: ReplayDeepLinkFocus;
-        anchor?: ReplayAnchor | null;
-        turnNumber?: number | null;
-    },
-): string {
-    const params = new URLSearchParams();
-    params.set("focus", options.focus);
-
-    const anchor = options.anchor;
-    if (anchor) {
-        if (typeof anchor.message_id === "string" && anchor.message_id.trim()) {
-            params.set("message_id", anchor.message_id);
-        }
-        if (typeof anchor.turn_number === "number") {
-            params.set("turn", String(anchor.turn_number));
-        }
-        params.set("anchor_status", anchor.status);
-        if (anchor.degraded_reason) {
-            params.set("anchor_reason", anchor.degraded_reason);
-        }
-        if (anchor.marker?.type) {
-            params.set("marker_type", anchor.marker.type);
-        }
-        if (typeof anchor.marker?.timestamp_ms === "number") {
-            params.set("marker_timestamp_ms", String(anchor.marker.timestamp_ms));
-        }
-    } else if (typeof options.turnNumber === "number") {
-        params.set("turn", String(options.turnNumber));
-    }
-
-    return `/practice/${sessionId}/replay?${params.toString()}`;
-}
-
-function formatReplayAnchorHint(anchor?: ReplayAnchor | null): string {
-    if (!anchor || !hasReplayAnchorTarget(anchor) || anchor.status === "missing") {
-        return "当前暂无可定位的回放片段。";
-    }
-
-    if (anchor.status === "resolved") {
-        if (typeof anchor.turn_number === "number") {
-            return `回放将定位到第 ${anchor.turn_number} 轮高光片段。`;
-        }
-        return "回放将定位到对应高光片段。";
-    }
-
-    if (anchor.degraded_reason === "missing_marker") {
-        if (typeof anchor.turn_number === "number") {
-            return `高光标记缺失，回放将直接定位到第 ${anchor.turn_number} 轮。`;
-        }
-        return "高光标记缺失，回放将直接定位到相关对话片段。";
-    }
-
-    if (anchor.degraded_reason === "no_matching_highlight") {
-        if (anchor.marker?.label) {
-            return `未找到精确高光，回放将定位到“${anchor.marker.label}”阶段。`;
-        }
-        if (typeof anchor.turn_number === "number") {
-            return `未找到精确高光，回放将定位到第 ${anchor.turn_number} 轮附近。`;
-        }
-    }
-
-    return "当前暂无可定位的回放片段。";
-}
-
-function getRetryFallbackPath(retry?: PracticeSessionReport["retry_entry"] | null): string {
-    return retry?.scenario_type === "presentation" ? "/training/presentation" : "/training/sales";
-}
-
-const HIGHLIGHT_REVIEW_STORAGE_PREFIX = "qoder.highlightReviewList.v1";
-const HIGHLIGHT_REVIEW_SCHEMA_VERSION = "highlight_review_v1";
-const HIGHLIGHT_REVIEW_LIMIT = 3;
-
-type HighlightReviewItem = {
-    id: string;
-    source_session_id: string;
-    turn_number: number;
-    content: string;
-    reason: string | null;
-    stage_name: string | null;
-    issue_label: string | null;
-    suggested_response: string | null;
-};
-
 type HighlightReviewFocusIntent = NonNullable<NonNullable<PracticeSessionReport["retry_entry"]>["focus_intent"]> & {
     highlight_review: {
         version: "highlight_review_v1";
@@ -600,16 +295,6 @@ type HighlightReviewFocusIntent = NonNullable<NonNullable<PracticeSessionReport[
         items: HighlightReviewItem[];
     };
 };
-
-type HighlightReviewStoragePayload = {
-    schema_version: typeof HIGHLIGHT_REVIEW_SCHEMA_VERSION;
-    updated_at: string;
-    items: HighlightReviewItem[];
-};
-
-function getHighlightReviewStorageKey(sessionId: string): string {
-    return `${HIGHLIGHT_REVIEW_STORAGE_PREFIX}:${sessionId}`;
-}
 
 function getHighlightReviewSuggestedResponse(highlight: HighlightItem): string | null {
     return highlight.learning_evidence?.suggested_response
@@ -641,69 +326,6 @@ function buildHighlightReviewItem(sessionId: string, highlight: HighlightItem): 
         issue_label: formatIssueTypeLabel(highlight.learning_evidence?.issue_family ?? null),
         suggested_response: getHighlightReviewSuggestedResponse(highlight),
     };
-}
-
-function isHighlightReviewItem(item: unknown): item is HighlightReviewItem {
-    const record = item && typeof item === "object" ? item as Record<string, unknown> : null;
-    return Boolean(
-        record
-        && typeof record.id === "string"
-        && typeof record.content === "string"
-        && typeof record.turn_number === "number"
-        && typeof record.source_session_id === "string",
-    );
-}
-
-function readHighlightReviewItems(sessionId: string): HighlightReviewItem[] {
-    if (typeof window === "undefined") {
-        return [];
-    }
-
-    const storageKey = getHighlightReviewStorageKey(sessionId);
-    try {
-        const raw = window.localStorage.getItem(storageKey);
-        if (!raw) {
-            return [];
-        }
-
-        const parsed = JSON.parse(raw);
-        const payload = parsed && typeof parsed === "object"
-            ? parsed as Partial<HighlightReviewStoragePayload>
-            : null;
-        if (
-            !payload
-            || payload.schema_version !== HIGHLIGHT_REVIEW_SCHEMA_VERSION
-            || !Array.isArray(payload.items)
-        ) {
-            window.localStorage.removeItem(storageKey);
-            return [];
-        }
-
-        return payload.items.filter(isHighlightReviewItem).slice(0, HIGHLIGHT_REVIEW_LIMIT);
-    } catch (error) {
-        debug.warn("[Report] Failed to read highlight review list", { sessionId, error });
-        window.localStorage.removeItem(storageKey);
-        return [];
-    }
-}
-
-function persistHighlightReviewItems(sessionId: string, items: HighlightReviewItem[]) {
-    if (typeof window === "undefined") {
-        return;
-    }
-
-    try {
-        window.localStorage.setItem(
-            getHighlightReviewStorageKey(sessionId),
-            JSON.stringify({
-                schema_version: HIGHLIGHT_REVIEW_SCHEMA_VERSION,
-                updated_at: new Date().toISOString(),
-                items: items.slice(0, HIGHLIGHT_REVIEW_LIMIT),
-            } satisfies HighlightReviewStoragePayload),
-        );
-    } catch (error) {
-        debug.warn("[Report] Failed to persist highlight review list", { sessionId, error });
-    }
 }
 
 function mapPersistedHighlightReviewItems(
@@ -1672,12 +1294,7 @@ export default function ComprehensiveReportPage() {
                 presentation_id: retry.presentation_id || undefined,
                 focus_intent: retry.focus_intent || undefined,
             });
-            const nextParams = new URLSearchParams();
-            nextParams.set("scenario_type", retry.scenario_type);
-            if (retry.agent_id) nextParams.set("agent_id", retry.agent_id);
-            if (retry.persona_id) nextParams.set("persona_id", retry.persona_id);
-            if (retry.presentation_id) nextParams.set("presentation_id", retry.presentation_id);
-            router.push(`/practice/${created.session_id}?${nextParams.toString()}`);
+            router.push(buildRetrySessionPath(created.session_id, retry));
         } catch (err) {
             debug.warn("[Report] Retry session creation failed", { sessionId, error: err });
             setRetryHint(getApiErrorMessage(err));
@@ -1762,14 +1379,10 @@ export default function ComprehensiveReportPage() {
                 presentation_id: retry.presentation_id || undefined,
                 focus_intent: focusIntent,
             });
-            const nextParams = new URLSearchParams();
-            nextParams.set("scenario_type", retry.scenario_type);
-            nextParams.set("review_source", "highlight_review");
-            nextParams.set("source_session_id", sessionId);
-            if (retry.agent_id) nextParams.set("agent_id", retry.agent_id);
-            if (retry.persona_id) nextParams.set("persona_id", retry.persona_id);
-            if (retry.presentation_id) nextParams.set("presentation_id", retry.presentation_id);
-            router.push(`/practice/${created.session_id}?${nextParams.toString()}`);
+            router.push(buildRetrySessionPath(created.session_id, retry, {
+                review_source: "highlight_review",
+                source_session_id: sessionId,
+            }));
         } catch (err) {
             debug.warn("[Report] Highlight review retry session creation failed", { sessionId, error: err });
             setRetryHint(getApiErrorMessage(err));
