@@ -22,7 +22,7 @@ from common.services.external_session_start import (
     ExternalSessionStartService,
 )
 from curriculum_practice.models import PracticeTemplate
-from sales_trainer.orchestration.activities.base import ActivityExecutionContext
+from sales_trainer.orchestration.activities.base import ActivityExecutionContext, activity_snapshot
 from sales_trainer.orchestration.contracts import RealtimeRoleplayConfig
 from sales_trainer.orchestration.repository import AttemptRepository
 from sales_trainer.services.operation_log_service import OperationLogService
@@ -106,7 +106,7 @@ class RealtimeRoleplayStartService:
             path_revision_id=execution_context.path_revision_id,
             activity_id=execution_context.activity.activity_id,
             activity_type="realtime_roleplay",
-            activity_snapshot=execution_context.activity.model_dump(mode="json"),
+            activity_snapshot=activity_snapshot(execution_context),
             client_token=client_token,
         )
         binding = {

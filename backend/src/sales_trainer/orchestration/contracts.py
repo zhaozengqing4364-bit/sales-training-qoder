@@ -172,3 +172,88 @@ class TrainingPathConfigResponse(StrictModel):
     working_revision_id: str | None
     payload: TrainingPathPayload
     validation: PathValidationResponse | None = None
+
+
+class JourneyNextAction(StrictModel):
+    activity_id: str
+    activity_type: ActivityType
+    action_key: str
+    label: str
+
+
+class JourneyActivityProgress(StrictModel):
+    activity_id: str
+    activity_type: ActivityType
+    title: str
+    description: str | None = None
+    required: bool
+    status: str
+    completed: bool
+    passed: bool | None = None
+    score: float | None = None
+    max_score: float | None = None
+    locked: bool = False
+    lock_reason: str | None = None
+    action_key: str | None = None
+    is_primary_next_action: bool = False
+
+
+class JourneyModuleProgress(StrictModel):
+    module_id: str
+    title: str
+    description: str | None = None
+    required: bool
+    status: str
+    completed: bool
+    completed_count: int
+    total_required: int
+    percent: float
+    locked: bool = False
+    lock_reason: str | None = None
+    activities: list[JourneyActivityProgress] = Field(default_factory=list)
+
+
+class JourneyPhaseProgress(StrictModel):
+    phase_id: str
+    title: str
+    description: str | None = None
+    required: bool
+    status: str
+    completed: bool
+    completed_count: int
+    total_required: int
+    percent: float
+    locked: bool = False
+    lock_reason: str | None = None
+    modules: list[JourneyModuleProgress] = Field(default_factory=list)
+
+
+class JourneyProgressSummary(StrictModel):
+    completed: bool
+    completed_count: int
+    total_required: int
+    percent: float
+
+
+class JourneyResponse(StrictModel):
+    enrollment_id: str
+    path_revision_id: str
+    path_title: str
+    phases: list[JourneyPhaseProgress] = Field(default_factory=list)
+    progress: JourneyProgressSummary
+    primary_next_action: JourneyNextAction | None = None
+
+
+class ModuleDetailResponse(StrictModel):
+    enrollment_id: str
+    path_revision_id: str
+    phase_id: str
+    module: JourneyModuleProgress
+
+
+class ActivityDetailResponse(StrictModel):
+    enrollment_id: str
+    path_revision_id: str
+    phase_id: str
+    module_id: str
+    activity: JourneyActivityProgress

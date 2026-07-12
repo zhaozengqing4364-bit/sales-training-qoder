@@ -53,4 +53,21 @@ class ActivityHandler(Protocol):
     ) -> NewcomerTrainingActivityAttempt: ...
 
 
-__all__ = ["ActivityExecutionContext", "ActivityHandler", "ActivityProjection"]
+def activity_snapshot(context: ActivityExecutionContext) -> dict[str, object]:
+    return {
+        **context.activity.model_dump(mode="json"),
+        "context": {
+            "enrollment_id": context.enrollment_id,
+            "path_revision_id": context.path_revision_id,
+            "phase_id": context.phase_id,
+            "module_id": context.module_id,
+        },
+    }
+
+
+__all__ = [
+    "ActivityExecutionContext",
+    "ActivityHandler",
+    "ActivityProjection",
+    "activity_snapshot",
+]

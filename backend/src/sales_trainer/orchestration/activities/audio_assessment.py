@@ -12,6 +12,7 @@ from sales_trainer.models import NewcomerTrainingActivityAttempt
 from sales_trainer.orchestration.activities.base import (
     ActivityExecutionContext,
     ActivityProjection,
+    activity_snapshot,
 )
 from sales_trainer.orchestration.contracts import AudioAssessmentConfig
 from sales_trainer.orchestration.errors import NewcomerOrchestrationError
@@ -48,7 +49,7 @@ class AudioAssessmentActivityHandler:
             path_revision_id=context.path_revision_id,
             activity_id=context.activity.activity_id,
             activity_type=self.type_key,
-            activity_snapshot=context.activity.model_dump(mode="json"),
+            activity_snapshot=activity_snapshot(context),
             client_token=client_token,
         )
         submission = await self._audio.save_uploaded_file(

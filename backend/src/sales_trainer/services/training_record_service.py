@@ -13,6 +13,8 @@ from common.services.runtime_outcome_projection import (
     RuntimeOutcomeProjectionService,
 )
 from sales_trainer.models import (
+    NewcomerTrainingActivityAttempt,
+    NewcomerTrainingEnrollment,
     SalesTrainerAiCoachSession,
     SalesTrainerAudioSubmission,
     SalesTrainerBusinessEtiquetteQuizAttempt,
@@ -57,6 +59,10 @@ class TrainingRecordService:
         learner_level: str | None = None,
         role_level: str | None = None,
         status: str | None = None,
+        activity_id: str | None = None,
+        activity_type: str | None = None,
+        phase_id: str | None = None,
+        module_id: str | None = None,
         viewer: User | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -67,6 +73,10 @@ class TrainingRecordService:
             learner_level=learner_level,
             role_level=role_level,
             status=status,
+            activity_id=activity_id,
+            activity_type=activity_type,
+            phase_id=phase_id,
+            module_id=module_id,
         )
         keys, total = await self._record_window(
             user_id=user_id,
@@ -98,6 +108,10 @@ class TrainingRecordService:
                     learner_level=learner_level,
                     role_level=role_level,
                     status=status,
+                    activity_id=activity_id,
+                    activity_type=activity_type,
+                    phase_id=phase_id,
+                    module_id=module_id,
                 )
             ]
             return enriched[offset : offset + limit], len(enriched)
@@ -145,6 +159,13 @@ class TrainingRecordService:
                 projection,
                 include_logs=True,
             )
+        elif record_type == "newcomer_activity_attempt":
+            activity_attempt = await self._db.get(
+                NewcomerTrainingActivityAttempt, record_id
+            )
+            if activity_attempt is None:
+                return None
+            record = await self._serialize_activity_attempt(activity_attempt)
         else:
             return None
         policy, _ = await resolve_phase2_policy(self._db)
@@ -202,6 +223,12 @@ class TrainingRecordService:
                 team_department=team_department,
             )
         ]
+        branches.append(
+            self._activity_attempt_window_select(
+                user_id=user_id,
+                team_department=team_department,
+            )
+        )
         if material_version_id is None:
             branches.append(
                 self._quiz_window_select(
@@ -251,6 +278,26 @@ class TrainingRecordService:
         result = await self._db.execute(stmt)
         keys = [(str(row.record_type), str(row.record_id)) for row in result.all()]
         return keys, total
+
+    def _activity_attempt_window_select(
+        self, *, user_id: str | None, team_department: str | None
+    ) -> Any:
+        stmt = select(
+            literal("newcomer_activity_attempt").label("record_type"),
+            NewcomerTrainingActivityAttempt.attempt_id.label("record_id"),
+            NewcomerTrainingActivityAttempt.created_at.label("submitted_at"),
+        ).join(
+            NewcomerTrainingEnrollment,
+            NewcomerTrainingEnrollment.enrollment_id
+            == NewcomerTrainingActivityAttempt.enrollment_id,
+        )
+        if user_id:
+            stmt = stmt.where(NewcomerTrainingEnrollment.learner_id == user_id)
+        if team_department is not None:
+            stmt = stmt.join(
+                User, NewcomerTrainingEnrollment.learner_id == User.user_id
+            ).where(User.department == team_department)
+        return stmt
 
     def _audio_window_select(
         self,
@@ -426,7 +473,51 @@ class TrainingRecordService:
                     projection,
                     include_logs=include_logs,
                 )
+        if activity_attempt_ids := ids_by_type.get("newcomer_activity_attempt"):
+            result = await self._db.execute(
+                select(NewcomerTrainingActivityAttempt).where(
+                    NewcomerTrainingActivityAttempt.attempt_id.in_(activity_attempt_ids)
+                )
+            )
+            for activity_attempt in result.scalars().all():
+                attempt_id = str(activity_attempt.attempt_id)
+                serialized[
+                    ("newcomer_activity_attempt", attempt_id)
+                ] = await self._serialize_activity_attempt(activity_attempt)
         return [serialized[key] for key in keys if key in serialized]
+
+    async def _serialize_activity_attempt(
+        self, attempt: NewcomerTrainingActivityAttempt
+    ) -> dict[str, Any]:
+        enrollment = await self._db.get(
+            NewcomerTrainingEnrollment, str(attempt.enrollment_id)
+        )
+        snapshot = json_dict_or_empty(attempt.activity_snapshot)
+        return {
+            "record_type": "newcomer_activity_attempt",
+            "record_id": str(attempt.attempt_id),
+            "evidence_id": str(attempt.evidence_id or attempt.attempt_id),
+            "user_id": str(enrollment.learner_id) if enrollment else None,
+            "enrollment_id": str(attempt.enrollment_id),
+            "path_revision_id": str(attempt.path_revision_id),
+            "activity_id": str(attempt.activity_id),
+            "activity_type": str(attempt.activity_type),
+            "phase_id": _snapshot_context_value(snapshot, "phase_id"),
+            "module_id": _snapshot_context_value(snapshot, "module_id"),
+            "phase_title": _snapshot_context_value(snapshot, "phase_title"),
+            "module_title": _snapshot_context_value(snapshot, "module_title"),
+            "activity_title": snapshot.get("title"),
+            "status": str(attempt.status),
+            "score": float(attempt.score) if attempt.score is not None else None,
+            "max_score": float(attempt.max_score)
+            if attempt.max_score is not None
+            else None,
+            "passed": bool(attempt.passed) if attempt.passed is not None else None,
+            "submitted_at": attempt.created_at,
+            "completed_at": attempt.completed_at,
+            "evidence_type": attempt.evidence_type,
+            "source_evidence_id": attempt.evidence_id,
+        }
 
     async def _attach_journey_context(
         self,
@@ -845,10 +936,24 @@ def _advanced_record_filter_present(
     learner_level: str | None,
     role_level: str | None,
     status: str | None,
+    activity_id: str | None,
+    activity_type: str | None,
+    phase_id: str | None,
+    module_id: str | None,
 ) -> bool:
     return any(
         _normalise_filter_value(value)
-        for value in (training_stage, module_key, learner_level, role_level, status)
+        for value in (
+            training_stage,
+            module_key,
+            learner_level,
+            role_level,
+            status,
+            activity_id,
+            activity_type,
+            phase_id,
+            module_id,
+        )
     )
 
 
@@ -860,17 +965,33 @@ def _record_matches_filters(
     learner_level: str | None,
     role_level: str | None,
     status: str | None,
+    activity_id: str | None,
+    activity_type: str | None,
+    phase_id: str | None,
+    module_id: str | None,
 ) -> bool:
     training_stage = _normalise_filter_value(training_stage)
     module_key = _normalise_filter_value(module_key)
     learner_level = _normalise_filter_value(learner_level)
     role_level = _normalise_filter_value(role_level)
     status = _normalise_filter_value(status)
+    activity_id = _normalise_filter_value(activity_id)
+    activity_type = _normalise_filter_value(activity_type)
+    phase_id = _normalise_filter_value(phase_id)
+    module_id = _normalise_filter_value(module_id)
     if training_stage and record.get("training_stage") != training_stage:
         return False
     if module_key and record.get("module_key") != module_key:
         return False
     if status and record.get("status") != status:
+        return False
+    if activity_id and record.get("activity_id") != activity_id:
+        return False
+    if activity_type and record.get("activity_type") != activity_type:
+        return False
+    if phase_id and record.get("phase_id") != phase_id:
+        return False
+    if module_id and record.get("module_id") != module_id:
         return False
     if learner_level:
         level = record.get("learner_level")
@@ -881,6 +1002,13 @@ def _record_matches_filters(
         if not isinstance(level, dict) or level.get("level_key") != role_level:
             return False
     return True
+
+
+def _snapshot_context_value(snapshot: dict[str, Any], key: str) -> Any:
+    context = snapshot.get("context")
+    if isinstance(context, dict) and key in context:
+        return context.get(key)
+    return snapshot.get(key)
 
 
 def _normalise_filter_value(value: str | None) -> str | None:

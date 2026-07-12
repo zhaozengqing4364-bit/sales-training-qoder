@@ -10,6 +10,7 @@ from common.db.models import User
 from sales_trainer.orchestration.activities.base import (
     ActivityExecutionContext,
     ActivityProjection,
+    activity_snapshot,
 )
 from sales_trainer.orchestration.contracts import LessonConfig
 from sales_trainer.orchestration.errors import NewcomerOrchestrationError
@@ -86,7 +87,7 @@ class LessonActivityHandler:
             path_revision_id=context.path_revision_id,
             activity_id=context.activity.activity_id,
             activity_type=self.type_key,
-            activity_snapshot=context.activity.model_dump(mode="json"),
+            activity_snapshot=activity_snapshot(context),
             client_token=client_token,
         )
         projection = await self.project(context)
@@ -98,6 +99,52 @@ class LessonActivityHandler:
                 status="completed",
             )
         return projection
+
+    async def confirm(
+        self,
+        context: ActivityExecutionContext,
+        *,
+        actor: User,
+        client_token: str,
+    ) -> ActivityProjection:
+        config = self._config(context)
+        if config.completion_mode != "learner_confirmed":
+            raise NewcomerOrchestrationError(
+                "[NEWCOMER_LESSON_CONFIRM_NOT_ALLOWED]",
+                "该学习任务需要完成全部章节。",
+                409,
+            )
+        if str(actor.user_id) != context.learner_id:
+            raise NewcomerOrchestrationError(
+                "[NEWCOMER_ACTIVITY_SCOPE_MISMATCH]",
+                "不能修改其他学员的训练进度。",
+                403,
+            )
+        attempt = await self._attempts.create(
+            enrollment_id=context.enrollment_id,
+            path_revision_id=context.path_revision_id,
+            activity_id=context.activity.activity_id,
+            activity_type=self.type_key,
+            activity_snapshot=activity_snapshot(context),
+            client_token=client_token,
+        )
+        await self._attempts.attach_evidence(
+            attempt_id=str(attempt.attempt_id),
+            evidence_type="learner_confirmation",
+            evidence_id=str(attempt.attempt_id),
+            status="completed",
+        )
+        return ActivityProjection(
+            context.activity.activity_id,
+            self.type_key,
+            "completed",
+            True,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
 
     @staticmethod
     def _config(context: ActivityExecutionContext) -> LessonConfig:

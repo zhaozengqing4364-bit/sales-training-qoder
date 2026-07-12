@@ -1394,7 +1394,7 @@ git commit -m "feat(newcomer): bind coach and realtime to activities"
 - Consumes: active revision, enrollment/attempt repositories, registry and completion engine.
 - Produces: `JourneyResponse`, `ModuleDetailResponse`, `ActivityDetailResponse`, canonical journey/action endpoints, admin journey projection.
 
-- [ ] **Step 1: Write failing journey tests**
+- [x] **Step 1: Write failing journey tests**
 
 ```python
 @pytest.mark.asyncio
@@ -1423,13 +1423,13 @@ async def test_should_keep_existing_enrollment_on_old_revision_after_publish(tes
     assert after.path_revision_id == first.revision_id
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `cd backend && ./.venv/bin/pytest tests/unit/test_newcomer_orchestration_journey_service.py -q`
 
 Expected: service is missing.
 
-- [ ] **Step 3: Implement journey projection**
+- [x] **Step 3: Implement journey projection**
 
 First add transport DTOs to `contracts.py`: `JourneyActivityProgress`, `JourneyModuleProgress`, `JourneyPhaseProgress`, `JourneyProgressSummary`, `JourneyNextAction`, `JourneyResponse`, `ModuleDetailResponse`, and `ActivityDetailResponse`. Each activity DTO contains stable IDs, business labels, status, completion fields and a server-generated action key; it contains no arbitrary route.
 
@@ -1476,7 +1476,7 @@ On every read, refresh attempts with handler projections, aggregate progress, an
 
 Implement `require_module_from_journey(journey, module_id)` and `activity_detail_from(context, projection)` as pure mappers in `journey_service.py`; missing IDs raise `[NEWCOMER_MODULE_NOT_FOUND]` or `[NEWCOMER_ACTIVITY_NOT_FOUND]` with 404.
 
-- [ ] **Step 4: Add learner endpoints**
+- [x] **Step 4: Add learner endpoints**
 
 Mount under `APIRouter(prefix="/newcomer-training")`:
 
@@ -1499,7 +1499,7 @@ Every write accepts or derives a client token, repeats object-level access check
 
 Replace `module_key + kind` evidence identity with stable `activity_id + activity_type`. Readiness competencies derive from activity snapshots and configured rubric/quiz capability metadata, not product names. Training records expose phase/module/activity titles from frozen snapshots. Admin list/analytics filter by `activity_id`, `activity_type`, phase, and module.
 
-- [ ] **Step 6: Run focused and downstream tests**
+- [x] **Step 6: Run focused and downstream tests**
 
 Run:
 
@@ -1510,7 +1510,7 @@ cd backend
 
 Expected: all tests pass; no test fixture needs a fixed business module key.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/sales_trainer/orchestration/contracts.py backend/src/sales_trainer/orchestration/journey_service.py backend/src/sales_trainer/orchestration/learner_api.py backend/src/sales_trainer/orchestration/registry.py backend/src/sales_trainer/router_registration.py backend/src/sales_trainer/services/readiness_dossier_service.py backend/src/sales_trainer/services/training_record_service.py backend/src/sales_trainer/api.py backend/tests/unit/test_newcomer_orchestration_journey_service.py backend/tests/integration/test_newcomer_orchestration_learner_api.py backend/tests/unit/test_sales_trainer_readiness_dossier_service.py backend/tests/unit/test_sales_trainer_training_record_service.py

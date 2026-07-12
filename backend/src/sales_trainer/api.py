@@ -22,7 +22,6 @@ from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_trace_id
 from sales_trainer.permissions import (
-    can_enter_sales_trainer_realtime,
     can_manage_sales_trainer,
     can_manage_sales_trainer_questions,
     can_retry_sales_trainer_jobs,
@@ -60,8 +59,6 @@ from sales_trainer.schemas import (
     ReadinessDossierReviewAction,
     ReadinessDossierReviewActionCreate,
     ReadinessWorkbenchResponse,
-    RealtimeRoleplayStartRequest,
-    RealtimeRoleplayStartResponse,
     SalesTrainerManagerDashboardResponse,
     SalesTrainerMaterialCreate,
     SalesTrainerMaterialListResponse,
@@ -133,10 +130,6 @@ from sales_trainer.services.quiz_service import QuizService, QuizServiceError
 from sales_trainer.services.readiness_dossier_service import (
     ReadinessDossierError,
     ReadinessDossierService,
-)
-from sales_trainer.services.realtime_roleplay_start_service import (
-    RealtimeRoleplayStartError,
-    RealtimeRoleplayStartService,
 )
 from sales_trainer.services.roleplay_observation_service import (
     RoleplayObservationService,
@@ -463,56 +456,6 @@ async def list_training_paths(
     ]
     return success_response(
         SalesTrainerPathListResponse(items=payload, total=len(payload))
-    )
-
-
-@router.get("/journey", response_model=None)
-async def get_my_training_journey(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    access_error = _require_learner_path_access_response(current_user)
-    if access_error is not None:
-        return access_error
-    try:
-        journey = await TrainingJourneyService(db).get_learner_journey(
-            str(current_user.user_id),
-            viewer=current_user,
-        )
-    except TrainingJourneyError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(
-        TrainingJourneyResponse.model_validate(journey).model_dump()
-    )
-
-
-@router.post("/realtime-roleplay/start", response_model=None)
-async def start_realtime_roleplay(
-    payload: RealtimeRoleplayStartRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    if not can_enter_sales_trainer_realtime(current_user):
-        return _api_error(
-            "[NEWCOMER_REALTIME_PERMISSION_DENIED]",
-            status_code=403,
-            message="当前账号无权开始新人实时对练。",
-        )
-    try:
-        result = await RealtimeRoleplayStartService(db).start(
-            actor=current_user,
-            module_key=payload.module_key,
-            trace_id=get_trace_id(),
-        )
-    except RealtimeRoleplayStartError as exc:
-        return _api_error(
-            exc.code,
-            status_code=exc.status_code,
-            message=exc.message,
-            details=exc.details,
-        )
-    return success_response(
-        RealtimeRoleplayStartResponse.model_validate(result).model_dump()
     )
 
 

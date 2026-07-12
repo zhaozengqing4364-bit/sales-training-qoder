@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import cast
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from sales_trainer.orchestration.activities.base import ActivityHandler
 from sales_trainer.orchestration.errors import NewcomerOrchestrationError
 
@@ -48,3 +50,32 @@ class ActivityTypeRegistry:
 
 
 __all__ = ["ActivityTypeRegistry", "SUPPORTED_ACTIVITY_TYPES"]
+
+
+def build_activity_registry(db: AsyncSession) -> ActivityTypeRegistry:
+    from sales_trainer.orchestration.activities.ai_coach import AiCoachActivityHandler
+    from sales_trainer.orchestration.activities.assignment import (
+        AssignmentActivityHandler,
+    )
+    from sales_trainer.orchestration.activities.audio_assessment import (
+        AudioAssessmentActivityHandler,
+    )
+    from sales_trainer.orchestration.activities.lesson import LessonActivityHandler
+    from sales_trainer.orchestration.activities.quiz import QuizActivityHandler
+    from sales_trainer.orchestration.activities.realtime_roleplay import (
+        RealtimeRoleplayActivityHandler,
+    )
+
+    return ActivityTypeRegistry(
+        [
+            LessonActivityHandler(db),
+            QuizActivityHandler(db),
+            AudioAssessmentActivityHandler(db),
+            RealtimeRoleplayActivityHandler(db),
+            AiCoachActivityHandler(db),
+            AssignmentActivityHandler(db),
+        ]
+    )
+
+
+__all__.append("build_activity_registry")

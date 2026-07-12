@@ -51,3 +51,9 @@
 - Task 7：StepAudio start 公共服务已直接要求 ActivityExecutionContext/client_token，校验 learner、已发布 PracticeTemplate、启用 VoiceRuntimeProfile 与 provider readiness，external binding owner 为 `newcomer_training`。
 - Task 7：旧 AI Coach 路由内部仍有待 Task 14 删除的 module-key 代码，但新 activity handler/runtime 不读取它；最终 legacy authority 搜索必须归零后才可闭环。
 - Task 7 focused/realtime 回归 `7 passed`；Ruff、Mypy 通过。旧 realtime 测试已按批准的新 activity contract 改写，保留类型、范围、模板和 runtime 失败断言。
+- Task 8 RED：canonical journey service 不存在导致 collection error。
+- Task 8：首次读取固定 active revision 到 enrollment；后续发布不改变历史路径。服务端统一投影阶段/模块/活动状态，只标记一个主下一步，required 完成后可推荐 optional。
+- Task 8：新增 canonical learner journey/detail/action API；所有写入重新解析 pinned context 并由六类 handler 执行。
+- Task 8：统一 attempt 快照补齐 enrollment/path revision/phase/module 上下文；TrainingRecordService 支持 activity_id/type/phase/module 过滤和冻结标题投影。
+- Task 8 focused + readiness regression + activity records 共 `15 passed`；Ruff、Mypy 通过。
+- Task 8 未关闭项：ReadinessDossier 与旧 admin journey 仍引用将在 Task 9 删除的 TrainingJourneyService；Step 5 保持未勾选，必须在固定后端权威删除时改为 orchestration projection 后再关闭。
