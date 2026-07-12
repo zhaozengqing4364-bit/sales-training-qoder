@@ -14,19 +14,6 @@ from common.business_rules.defaults import (
     ROLEPLAY_SITUATION_PACKS_KEY,
 )
 from common.business_rules.service import BusinessRuleConfigService
-from common.roleplay_contracts import (
-    LEGACY_ROLEPLAY_STATUS,
-    ROLEPLAY_COMPLIANCE_METRICS_KEY,
-    ROLEPLAY_CONTRACT_COMPILER_VERSION,
-    ROLEPLAY_CONTRACT_SCHEMA_VERSION,
-    ROLEPLAY_DISCLOSURE_STATE_KEY,
-    ROLEPLAY_STAGE_AUTHORITY,
-    check_roleplay_output,
-    roleplay_contract_hash,
-)
-from common.roleplay_contracts import (
-    roleplay_audit_hash as _audit_hash,
-)
 from curriculum_practice.models import CaseItem, PracticeTemplate
 from curriculum_practice.schemas import (
     GateResult,
@@ -48,6 +35,19 @@ from curriculum_practice.services.roleplay.situation_pack_reference_query import
 )
 from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
+)
+from roleplay.contracts import (
+    LEGACY_ROLEPLAY_STATUS,
+    ROLEPLAY_COMPLIANCE_METRICS_KEY,
+    ROLEPLAY_CONTRACT_COMPILER_VERSION,
+    ROLEPLAY_CONTRACT_SCHEMA_VERSION,
+    ROLEPLAY_DISCLOSURE_STATE_KEY,
+    ROLEPLAY_STAGE_AUTHORITY,
+    check_roleplay_output,
+    roleplay_contract_hash,
+)
+from roleplay.contracts import (
+    roleplay_audit_hash as _audit_hash,
 )
 
 GENERAL_PRACTICE_SITUATION = "general_practice"

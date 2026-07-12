@@ -136,17 +136,17 @@ with the retained StepFun transport base. Compatibility with active consumers st
 - Consumes: canonical `roleplay.contracts` public functions.
 - Produces: no `common.roleplay_contracts` module; function identity/hash/Golden output unchanged.
 
-- [ ] **Step 1: Migrate the only production consumer and compatibility tests**
+- [x] **Step 1: Migrate the only production consumer and compatibility tests**
 
   Import canonical symbols from `roleplay`; replace compatibility identity assertions with absence and parity
   assertions against the owner.
 
-- [ ] **Step 2: Delete forwarding module and run parity**
+- [x] **Step 2: Delete forwarding module and run parity**
 
   Run Roleplay contract, observability, curriculum, Gate 4 and Gate 6 tests. Keep `common -> roleplay` temporary
   target because `common.business_rules.defaults` remains an active source.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
   Commit as `refactor(roleplay): retire common forwarding facade`.
 

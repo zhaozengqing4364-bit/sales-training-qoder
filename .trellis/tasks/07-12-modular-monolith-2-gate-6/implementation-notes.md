@@ -35,3 +35,7 @@
   import a global composition root would invert delivery ownership. The final design keeps one Sales-local root
   map and one top-level Presentation composition map; their disjoint union is exhaustively tested against the
   closed enum. No factory implementation or string locator is duplicated.
+- Task 4 migrated the sole production forwarding consumer and compatibility tests to `roleplay.contracts`, deleted
+  `common.roleplay_contracts`, and kept the remaining `common -> roleplay` policy edge because
+  `common.business_rules.defaults` is still an active source. Roleplay/Gate 4/Gate 6 matrix is `33 passed`; Ruff,
+  full mypy (`677 source files`) and architecture policy pass. Gate 6 contracts are now 9/9 Green.

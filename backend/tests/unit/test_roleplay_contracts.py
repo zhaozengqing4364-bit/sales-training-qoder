@@ -7,12 +7,6 @@ from common.business_rules.defaults import (
     ROLEPLAY_SITUATION_PACKS_KEY,
 )
 from common.business_rules.service import BusinessRuleConfigService
-from common.roleplay_contracts import (
-    check_roleplay_output as neutral_check_roleplay_output,
-)
-from common.roleplay_contracts import (
-    roleplay_contract_hash,
-)
 from curriculum_practice.schemas import PracticeTemplatePublishCandidate
 from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
@@ -28,6 +22,12 @@ from curriculum_practice.services.roleplay_contracts import (
 )
 from curriculum_practice.services.roleplay_contracts import (
     check_roleplay_output as legacy_check_roleplay_output,
+)
+from roleplay.contracts import (
+    check_roleplay_output as neutral_check_roleplay_output,
+)
+from roleplay.contracts import (
+    roleplay_contract_hash,
 )
 
 

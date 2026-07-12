@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from common.roleplay_contracts import check_roleplay_output
+from roleplay.contracts import check_roleplay_output
 from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstreamMixin
 
 

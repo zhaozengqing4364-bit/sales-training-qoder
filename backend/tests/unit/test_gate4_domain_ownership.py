@@ -12,7 +12,6 @@ import yaml
 from scripts.architecture_dependency_guard import collect_edges
 
 from common.business_rules.defaults import DEFAULT_ROLEPLAY_SITUATION_PACKS
-from common.roleplay_contracts import check_roleplay_output
 from curriculum_practice.services.roleplay.situation_pack_dto import SituationPackDTO
 from curriculum_practice.services.roleplay.situation_pack_hasher import (
     situation_pack_content_hash,
@@ -28,6 +27,7 @@ from evaluation.services.comprehensive_report import (
     ComprehensiveReport,
     DimensionScore,
 )
+from roleplay.contracts import check_roleplay_output
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GOLDEN_ROOT = REPO_ROOT / "backend" / "tests" / "golden"
@@ -189,18 +189,15 @@ def test_gate4_reverse_dependency_inventory_cannot_expand_during_migration() -> 
     assert remaining == set()
 
 
-def test_roleplay_neutral_primitives_are_compatibility_authority() -> None:
+def test_roleplay_neutral_primitives_are_canonical_authority() -> None:
     contracts = importlib.import_module("roleplay.contracts")
     situation_packs = importlib.import_module("roleplay.situation_packs")
 
-    from common.roleplay_contracts import (
-        check_roleplay_output as compatibility_check,
-    )
     from curriculum_practice.services.roleplay.situation_pack_dto import (
         SituationPackDTO,
     )
 
-    assert compatibility_check is contracts.check_roleplay_output
+    assert check_roleplay_output is contracts.check_roleplay_output
     assert SituationPackDTO is situation_packs.SituationPackSnapshot
     assert _roleplay_payload() == _load_json(
         GOLDEN_ROOT / "roleplay" / "gate4-roleplay-contracts.json"
@@ -397,7 +394,7 @@ async def test_evaluation_scenario_registry_is_frozen_extensible_and_fail_closed
     assert unknown.fallback == "[EVALUATION_SCENARIO_NOT_CONFIGURED]"
 
 
-def test_presentation_realtime_retains_only_named_sales_handler_seam() -> None:
+def test_presentation_realtime_has_no_sales_domain_import() -> None:
     from sales_bot.websocket.components.stepfun_event_payloads import (
         build_heartbeat_event as compatibility_heartbeat,
     )
@@ -426,7 +423,7 @@ def test_presentation_realtime_retains_only_named_sales_handler_seam() -> None:
         and node.module.startswith("sales_bot")
     }
 
-    assert sales_imports == {"sales_bot.websocket.stepfun_realtime_handler"}
+    assert sales_imports == set()
     assert compatibility_heartbeat is build_heartbeat_event
     assert compatibility_extract_response_text is extract_response_text
     assert compatibility_save_message is save_stepfun_message
