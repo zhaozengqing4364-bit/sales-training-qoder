@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from typing import Any, Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from common.api.response import error_response, success_response
 from common.auth.service import get_current_user
@@ -29,10 +31,15 @@ from sales_trainer.permissions import (
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
+from sales_trainer.models import (
+    SalesTrainerAssetActiveRevision,
+    SalesTrainerAssetRevision,
+)
 from sales_trainer.services.readiness_dossier_service import (
     ReadinessDossierError,
     ReadinessDossierService,
 )
+from sales_trainer.services.operation_log_service import OperationLogService
 
 admin_router = APIRouter(prefix="/admin/newcomer-training/path")
 admin_journey_router = APIRouter(prefix="/admin/newcomer-training")
@@ -52,6 +59,19 @@ class ReadinessReviewRequest(StrictModel):
     reason: str = Field(min_length=1, max_length=500)
     capability_keys: list[str] = Field(default_factory=list, max_length=50)
     source_evidence_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class RubricDimensionRequest(StrictModel):
+    key: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    weight: float = Field(gt=0, le=100)
+
+
+class RubricCreateRequest(StrictModel):
+    title: str = Field(min_length=1, max_length=200)
+    pass_score: float = Field(ge=0, le=100)
+    dimensions: list[RubricDimensionRequest] = Field(min_length=1, max_length=20)
 
 
 def _forbidden() -> JSONResponse:
@@ -219,6 +239,91 @@ async def activity_types(
                 ("assignment", "作业任务"),
             )
         ]
+    )
+
+
+@admin_router.get("/coach-profiles", response_model=None)
+async def coach_profiles(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if not can_manage_newcomer_training_path(current_user):
+        return _forbidden()
+    return success_response(
+        await _active_asset_options(db, resource_type="ai_coach_profile")
+    )
+
+
+async def _active_asset_options(
+    db: AsyncSession, *, resource_type: str
+) -> list[dict[str, str]]:
+    rows = (
+        await db.execute(
+            select(SalesTrainerAssetRevision)
+            .join(
+                SalesTrainerAssetActiveRevision,
+                SalesTrainerAssetActiveRevision.active_revision_id
+                == SalesTrainerAssetRevision.revision_id,
+            )
+            .where(
+                SalesTrainerAssetActiveRevision.resource_type == resource_type,
+                SalesTrainerAssetRevision.status == "published",
+            )
+            .order_by(SalesTrainerAssetRevision.logical_id)
+        )
+    ).scalars()
+    return [
+        {
+            "id": str(row.logical_id),
+            "title": str(row.payload_json.get("title") or row.logical_id),
+            "status": "published",
+        }
+        for row in rows
+    ]
+
+
+@admin_router.get("/scoring-rubrics", response_model=None)
+async def scoring_rubrics(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if not can_manage_newcomer_training_path(current_user):
+        return _forbidden()
+    return success_response(
+        await _active_asset_options(db, resource_type="audio_scoring_rubric")
+    )
+
+
+@admin_router.post("/scoring-rubrics", response_model=None)
+async def create_scoring_rubric(
+    payload: RubricCreateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if not can_manage_newcomer_training_path(current_user):
+        return _forbidden()
+    logical_id = str(uuid4())
+    revision = await SalesTrainerAssetRevisionService(db).create_published_revision(
+        resource_type="audio_scoring_rubric",
+        logical_id=logical_id,
+        payload=payload.model_dump(mode="json"),
+        actor=current_user,
+        change_class="scoring_high_risk",
+        reason="在训练路径编辑器中创建评分标准",
+        trace_id=_trace_id(request),
+    )
+    await OperationLogService(db).record(
+        actor=current_user,
+        action="newcomer_training_scoring_rubric_created",
+        target_type="audio_scoring_rubric",
+        target_id=logical_id,
+        request_id=_trace_id(request),
+        metadata={"revision_id": str(revision.revision.revision_id)},
+    )
+    await db.commit()
+    return success_response(
+        {"id": logical_id, "title": payload.title, "status": "published"}
     )
 
 

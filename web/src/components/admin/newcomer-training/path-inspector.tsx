@@ -3,11 +3,21 @@
 import type { ActivityConfig, ModuleConfig, PhaseConfig, TrainingPathPayload } from "@/lib/api/types/newcomer-training";
 import type { EditorSelection } from "@/lib/newcomer-training/editor-state";
 import { ACTIVITY_PRESENTATIONS } from "@/lib/newcomer-training/activity-registry";
+import { AiCoachEditor } from "./activity-editors/ai-coach-editor";
+import { AssignmentEditor } from "./activity-editors/assignment-editor";
+import { AudioAssessmentEditor } from "./activity-editors/audio-assessment-editor";
+import { LessonEditor } from "./activity-editors/lesson-editor";
+import { QuizEditor } from "./activity-editors/quiz-editor";
+import { RealtimeRoleplayEditor } from "./activity-editors/realtime-roleplay-editor";
+import type { ActivityEditorResources, QuickCreateKind } from "./activity-editors/types";
 
 interface PathInspectorProps {
     path: TrainingPathPayload;
     selection: EditorSelection;
     onPatch: (patch: Record<string, unknown>) => void;
+    resources: ActivityEditorResources;
+    onActivityChange: (activity: ActivityConfig) => void;
+    onQuickCreate: (kind: QuickCreateKind) => void;
 }
 
 function Field({ label, value, onChange, multiline = false }: { label: string; value: string; onChange: (value: string) => void; multiline?: boolean }) {
@@ -46,8 +56,15 @@ function findSelected(path: TrainingPathPayload, selection: EditorSelection): Tr
     return path;
 }
 
-export function PathInspector({ path, selection, onPatch }: PathInspectorProps) {
+export function PathInspector({ path, selection, onPatch, resources, onActivityChange, onQuickCreate }: PathInspectorProps) {
     const selected = findSelected(path, selection);
+    const activity = selection.kind === "activity" ? selected as ActivityConfig : null;
+    const editor = activity?.type === "lesson" ? <LessonEditor value={activity} resources={resources} onChange={onActivityChange} onQuickCreate={onQuickCreate} /> :
+        activity?.type === "quiz" ? <QuizEditor value={activity} resources={resources} onChange={onActivityChange} onQuickCreate={onQuickCreate} /> :
+            activity?.type === "audio_assessment" ? <AudioAssessmentEditor value={activity} resources={resources} onChange={onActivityChange} onQuickCreate={onQuickCreate} /> :
+                activity?.type === "realtime_roleplay" ? <RealtimeRoleplayEditor value={activity} resources={resources} onChange={onActivityChange} /> :
+                    activity?.type === "ai_coach" ? <AiCoachEditor value={activity} resources={resources} onChange={onActivityChange} /> :
+                        activity?.type === "assignment" ? <AssignmentEditor value={activity} resources={resources} onChange={onActivityChange} /> : null;
     return <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">当前编辑</p><h2 className="mt-1 text-lg font-semibold text-slate-900">{selection.kind === "path" ? "路径设置" : selection.kind === "phase" ? "阶段设置" : selection.kind === "module" ? "模块设置" : "活动设置"}</h2></div>
         {selection.kind === "path" && <BaseForm name="路径设置" title={(selected as TrainingPathPayload).title} description={(selected as TrainingPathPayload).description} onPatch={onPatch} />}
@@ -55,6 +72,7 @@ export function PathInspector({ path, selection, onPatch }: PathInspectorProps) 
         {selection.kind === "module" && <BaseForm name="模块设置" title={(selected as ModuleConfig).title} description={(selected as ModuleConfig).description} required={(selected as ModuleConfig).required} estimatedMinutes={(selected as ModuleConfig).estimated_minutes} onPatch={onPatch} />}
         {selection.kind === "activity" && <BaseForm name="活动设置" title={(selected as ActivityConfig).title} description={(selected as ActivityConfig).description} required={(selected as ActivityConfig).required} estimatedMinutes={(selected as ActivityConfig).estimated_minutes} onPatch={onPatch}>
             <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">活动类型：{ACTIVITY_PRESENTATIONS[(selected as ActivityConfig).type].label}</p>
+            {editor}
         </BaseForm>}
     </section>;
 }

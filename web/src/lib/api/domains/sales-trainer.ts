@@ -59,6 +59,11 @@ import type {
     TrainingJourneyListResponse,
     TrainingJourneyResponse,
 } from "../types/training-journey";
+import type {
+    NewcomerExamPaper,
+    NewcomerExamPaperCreateRequest,
+    NewcomerExamPaperListResponse,
+} from "../types";
 import type { ApiRequest, ApiUpload } from "./shared";
 import { buildQueryString } from "./shared";
 
@@ -460,6 +465,27 @@ export function createAdminSalesTrainerDomain({
             });
             return request<SalesTrainerQuestionListResponse>(
                 `/admin/sales-trainer/questions${query}`,
+            );
+        },
+
+        listExamPapers: async (params?: { include_archived?: boolean }) => {
+            const query = buildQueryString({ include_archived: params?.include_archived });
+            return request<NewcomerExamPaperListResponse>(
+                `/admin/newcomer-training/exam-papers${query}`,
+            );
+        },
+
+        createExamPaper: async (payload: NewcomerExamPaperCreateRequest) => {
+            return request<NewcomerExamPaper>("/admin/newcomer-training/exam-papers", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        publishExamPaper: async (paperId: string) => {
+            return request<NewcomerExamPaper>(
+                `/admin/newcomer-training/exam-papers/${encodeURIComponent(paperId)}/publish`,
+                { method: "POST" },
             );
         },
 

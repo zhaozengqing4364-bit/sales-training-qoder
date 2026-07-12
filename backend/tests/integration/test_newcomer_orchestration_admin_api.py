@@ -82,6 +82,67 @@ async def test_admin_activity_type_catalog_has_exact_six_types(
 
 
 @pytest.mark.asyncio
+async def test_admin_lists_only_active_governed_coach_profiles(
+    async_client, auth_headers, test_db, test_user
+):
+    from sales_trainer.services.asset_revision_service import (
+        SalesTrainerAssetRevisionService,
+    )
+
+    await SalesTrainerAssetRevisionService(test_db).create_published_revision(
+        resource_type="ai_coach_profile",
+        logical_id="product-coach",
+        payload={"title": "产品教练", "config": {"enabled": True}},
+        actor=test_user,
+        change_class="semantic",
+        reason="测试教练方案",
+    )
+    await test_db.commit()
+
+    response = await async_client.get(
+        "/api/v1/admin/newcomer-training/path/coach-profiles",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"] == [
+        {"id": "product-coach", "title": "产品教练", "status": "published"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_admin_creates_and_lists_structured_audio_rubric(
+    async_client, auth_headers
+):
+    created = await async_client.post(
+        "/api/v1/admin/newcomer-training/path/scoring-rubrics",
+        headers={**auth_headers, "x-request-id": "rubric-create"},
+        json={
+            "title": "产品讲解评分标准",
+            "pass_score": 80,
+            "dimensions": [
+                {"key": "accuracy", "label": "内容准确", "weight": 1}
+            ],
+        },
+    )
+    assert created.status_code == 200, created.text
+    rubric_id = created.json()["data"]["id"]
+
+    listed = await async_client.get(
+        "/api/v1/admin/newcomer-training/path/scoring-rubrics",
+        headers=auth_headers,
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["data"] == [
+        {
+            "id": rubric_id,
+            "title": "产品讲解评分标准",
+            "status": "published",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_admin_journey_uses_activity_identity(
     async_client, auth_headers, test_user
 ):

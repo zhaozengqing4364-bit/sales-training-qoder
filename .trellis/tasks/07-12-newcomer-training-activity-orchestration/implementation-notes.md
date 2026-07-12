@@ -76,3 +76,9 @@
 - Task 11：交付左侧语义大纲、中间单对象表单、右侧学员预览/发布校验；支持键盘上移/下移、原生拖放、复制、确认删除，以及按六类活动模板新增模块/活动。
 - Task 11：草稿保存、检查、发布均使用 canonical admin API；检查前自动保存本地草稿，发布前以同一修改说明保存，避免服务端校验/发布旧草稿。
 - Task 11 验证：管理页与编辑器 `5 passed`；`npx tsc --noEmit`、focused ESLint、`git diff --check` 均通过。CodeGraph 尚未索引新增文件，impact 无可识别 symbol。
+- Task 11 commit：`a0651a75 feat(newcomer): build focused path editor`。
+- Task 12 RED：六类编辑器和流程内资源抽屉不存在，两个测试套件按预期 import 失败。
+- Task 12：六类活动均使用类型化业务表单，内部绑定和完成策略收入口径明确的高级设置；页面不展示 raw JSON、Prompt ID 或 runtime binding。
+- Task 12：学习内容、试卷、材料版本和结构化录音评分标准可在编辑器内创建、发布、自动绑定；题目、对练模板、语音方案、AI 教练方案从已发布资源选择。
+- Task 12：新增 canonical 评分标准与教练方案选项 API；评分标准写入通用不可变 revision、激活引用和操作日志，不再错误绑定旧音频 Prompt 资源类型。
+- Task 12 验证：前端 focused `11 passed`、TypeScript、ESLint 通过；后端新增资源 API `2 passed`、Ruff、Mypy 通过。

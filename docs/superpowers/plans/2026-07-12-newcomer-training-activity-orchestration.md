@@ -1807,7 +1807,7 @@ npx tsc --noEmit
 
 Expected: all tests pass; all icon buttons have accessible names and focus remains visible.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add web/src/app/admin/newcomer-training/path web/src/components/admin/newcomer-training
@@ -1834,7 +1834,7 @@ git commit -m "feat(newcomer): build focused path editor"
 - Consumes: existing asset APIs/forms and typed activity config.
 - Produces: six ordinary forms and resource quick-create drawer.
 
-- [ ] **Step 1: Write failing editor tests**
+- [x] **Step 1: Write failing editor tests**
 
 ```tsx
 it("edits audio assessment without exposing prompt IDs or JSON", async () => {
@@ -1857,17 +1857,17 @@ it("creates a missing paper in flow and binds it", async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `cd web && npx vitest run src/components/admin/newcomer-training/resource-picker-drawer.test.tsx src/components/admin/newcomer-training/activity-editors/activity-editors.test.tsx`
 
 Expected: editors are missing.
 
-- [ ] **Step 3: Implement six typed editors**
+- [x] **Step 3: Implement six typed editors**
 
 Each editor receives `{value, disabled, resources, onChange, onQuickCreate}`. Render only business fields from the approved spec. Put audience, prerequisites, AI/runtime diagnostics and retry policy under an `高级设置` disclosure. Do not implement a generic JSON-schema form.
 
-- [ ] **Step 4: Implement quick-create drawer**
+- [x] **Step 4: Implement quick-create drawer**
 
 Reuse existing API methods and form logic to create/publish the minimal asset, refresh options, call `onCreated`, and close without route changes:
 
@@ -1878,7 +1878,7 @@ Reuse existing API methods and form logic to create/publish the minimal asset, r
 - AI Coach: select governed coach profile;
 - assignment: no asset creation.
 
-- [ ] **Step 5: Run tests and type-check**
+- [x] **Step 5: Run tests and type-check**
 
 Run:
 

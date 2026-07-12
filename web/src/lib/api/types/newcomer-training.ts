@@ -174,6 +174,29 @@ export interface ActivityTypeDescriptor {
     label: string;
 }
 
+export interface CoachProfileOption {
+    id: string;
+    title: string;
+    status: "published";
+}
+
+export interface ScoringRubricOption {
+    id: string;
+    title: string;
+    status: "published";
+}
+
+export interface ScoringRubricCreateRequest {
+    title: string;
+    pass_score: number;
+    dimensions: Array<{
+        key: string;
+        label: string;
+        description?: string | null;
+        weight: number;
+    }>;
+}
+
 export interface JourneyNextAction {
     activity_id: string;
     activity_type: ActivityType;

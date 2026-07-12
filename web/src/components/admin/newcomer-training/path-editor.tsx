@@ -12,6 +12,8 @@ import { PathInspector } from "./path-inspector";
 import { PathOutline } from "./path-outline";
 import { PathPreview } from "./path-preview";
 import { PathValidationPanel } from "./path-validation-panel";
+import { ResourcePickerDrawer, type ResourcePickerKind } from "./resource-picker-drawer";
+import type { ActivityEditorResources, ResourceOption } from "./activity-editors/types";
 
 type Mutation = (path: TrainingPathPayload, reason: string) => Promise<void> | void;
 
@@ -20,7 +22,10 @@ export interface PathEditorProps {
     onSave?: Mutation;
     onValidate?: (path: TrainingPathPayload) => Promise<PathValidationResponse> | PathValidationResponse;
     onPublish?: Mutation;
+    resources?: ActivityEditorResources;
 }
+
+const EMPTY_RESOURCES: ActivityEditorResources = { learning_contents: [], exam_papers: [], scoring_rubrics: [], materials: [], practice_templates: [], runtime_profiles: [], coach_profiles: [] };
 
 const nextId = () => crypto.randomUUID();
 
@@ -41,7 +46,7 @@ function defaultActivity(type: ActivityType = "lesson"): ActivityConfig {
     }
 }
 
-export function PathEditor({ initialModel, onSave, onValidate, onPublish }: PathEditorProps) {
+export function PathEditor({ initialModel, onSave, onValidate, onPublish, resources: initialResources = EMPTY_RESOURCES }: PathEditorProps) {
     const [draft, setDraft] = useState(initialModel.payload);
     const [selection, setSelection] = useState<EditorSelection>({ kind: "path" });
     const [validation, setValidation] = useState(initialModel.validation);
@@ -50,6 +55,8 @@ export function PathEditor({ initialModel, onSave, onValidate, onPublish }: Path
     const [pending, setPending] = useState<"save" | "validate" | "publish" | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<{ kind: "phase" | "module" | "activity"; id: string; title: string } | null>(null);
+    const [resources, setResources] = useState(initialResources);
+    const [quickCreate, setQuickCreate] = useState<ResourcePickerKind | null>(null);
 
     const mutate = (transform: (path: TrainingPathPayload) => TrainingPathPayload) => { setDraft((current) => transform(current)); setDirty(true); setValidation(null); };
     const findSibling = (kind: "phase" | "module" | "activity", id: string, direction: "up" | "down") => {
@@ -94,10 +101,20 @@ export function PathEditor({ initialModel, onSave, onValidate, onPublish }: Path
                 onAddPhase={() => { const phase = defaultPhase(); mutate((path) => addPhase(path, phase)); setSelection({ kind: "phase", phase_id: phase.phase_id }); }}
                 onAddModule={(phaseId, type) => { const moduleConfig = defaultModule(type); mutate((path) => addModule(path, phaseId, moduleConfig)); setSelection({ kind: "module", module_id: moduleConfig.module_id }); }}
                 onAddActivity={(moduleId, type) => { const activity = defaultActivity(type); mutate((path) => addActivity(path, moduleId, activity)); setSelection({ kind: "activity", activity_id: activity.activity_id }); }} />
-            <PathInspector path={draft} selection={selection} onPatch={(patch) => mutate((path) => updateSelectedObject(path, selection, patch))} />
+            <PathInspector path={draft} selection={selection} resources={resources} onQuickCreate={setQuickCreate} onPatch={(patch) => mutate((path) => updateSelectedObject(path, selection, patch))} onActivityChange={(activity) => mutate((path) => updateSelectedObject(path, selection, activity as unknown as Record<string, unknown>))} />
             <div className="space-y-4"><PathPreview path={draft} /><PathValidationPanel validation={validation} onFocusIssue={focusIssue} /></div>
         </div>
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur"><div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-end gap-3"><label className="mr-auto min-w-[260px] text-xs font-medium text-slate-600">修改说明<input aria-label="修改说明" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="例如：增加产品 A 训练模块" className="ml-2 w-72 rounded-full border border-slate-200 px-3 py-2 text-sm" /></label><Button variant="secondary" isLoading={pending === "save"} onClick={() => void run("save")}><Save className="mr-2 h-4 w-4" />保存草稿</Button><Button variant="outline" isLoading={pending === "validate"} onClick={() => void run("validate")}><CheckCircle2 className="mr-2 h-4 w-4" />检查并预览</Button><Button isLoading={pending === "publish"} onClick={() => void run("publish")}><Send className="mr-2 h-4 w-4" />发布</Button></div></div>
         <ConfirmDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }} title={`删除${deleteTarget?.title ?? "对象"}`} description="删除后，其下级内容也会从当前草稿移除。保存前仍可刷新页面放弃修改。" confirmText="删除" variant="danger" onConfirm={() => { if (!deleteTarget) return; const target = deleteTarget; mutate((path) => target.kind === "phase" ? deletePhase(path, target.id) : target.kind === "module" ? deleteModule(path, target.id) : deleteActivity(path, target.id)); setSelection({ kind: "path" }); setDeleteTarget(null); }} />
+        {quickCreate && <ResourcePickerDrawer kind={quickCreate} open onOpenChange={(open) => { if (!open) setQuickCreate(null); }} onCreated={(resource: ResourceOption) => {
+            const key = quickCreate === "learning_content" ? "learning_contents" : quickCreate === "exam_paper" ? "exam_papers" : quickCreate === "material" ? "materials" : "scoring_rubrics";
+            setResources((current) => ({ ...current, [key]: [...current[key], resource] }));
+            const field = quickCreate === "learning_content" ? "learning_content_id" : quickCreate === "exam_paper" ? "exam_paper_id" : quickCreate === "material" ? "material_id" : "scoring_rubric_id";
+            if (selection.kind === "activity") {
+                const selectedActivity = draft.phases.flatMap((phase) => phase.modules).flatMap((moduleConfig) => moduleConfig.activities).find((item) => item.activity_id === selection.activity_id);
+                if (selectedActivity) mutate((path) => updateSelectedObject(path, selection, { config: { ...selectedActivity.config, [field]: resource.id } }));
+            }
+            setQuickCreate(null);
+        }} />}
     </div>;
 }

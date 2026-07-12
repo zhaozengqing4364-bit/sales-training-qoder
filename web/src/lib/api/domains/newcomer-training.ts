@@ -1,6 +1,9 @@
 import type {
     ActivityDetailResponse,
     ActivityTypeDescriptor,
+    CoachProfileOption,
+    ScoringRubricCreateRequest,
+    ScoringRubricOption,
     AssetRevisionSummary,
     AssignmentSubmissionRequest,
     AudioSubmissionRequest,
@@ -110,5 +113,12 @@ export function createAdminNewcomerTrainingDomain({
                 { method: "POST", body: JSON.stringify({ reason }) },
             ),
         listActivityTypes: () => request<ActivityTypeDescriptor[]>(`${base}/activity-types`),
+        listCoachProfiles: () => request<CoachProfileOption[]>(`${base}/coach-profiles`),
+        listScoringRubrics: () => request<ScoringRubricOption[]>(`${base}/scoring-rubrics`),
+        createScoringRubric: (payload: ScoringRubricCreateRequest) =>
+            request<ScoringRubricOption>(`${base}/scoring-rubrics`, {
+                method: "POST",
+                body: JSON.stringify(payload),
+            }),
     };
 }

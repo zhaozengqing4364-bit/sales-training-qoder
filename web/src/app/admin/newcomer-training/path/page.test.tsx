@@ -6,7 +6,18 @@ import Page from "./page";
 const { getPath } = vi.hoisted(() => ({ getPath: vi.fn() }));
 
 vi.mock("@/lib/api/client", () => ({
-    api: { admin: { newcomerTraining: { getPath } } },
+    api: {
+        learningContents: { list: vi.fn().mockResolvedValue({ items: [], total: 0 }) },
+        admin: {
+            newcomerTraining: { getPath, listCoachProfiles: vi.fn().mockResolvedValue([]), listScoringRubrics: vi.fn().mockResolvedValue([]) },
+            salesTrainer: {
+                listExamPapers: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+                listMaterials: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+            },
+            listPracticeTemplates: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+            getVoiceRuntimeProfiles: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+        },
+    },
 }));
 
 vi.mock("@/components/ui/toast", () => ({
