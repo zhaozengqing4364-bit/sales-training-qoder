@@ -389,7 +389,7 @@ authority evidence and Trellis closure.
   every Playwright family, selected backend, changed coverage and final-line evidence. Diagnose failures without
   skips or weakened assertions.
 
-- [ ] **Step 4: Close and archive**
+- [x] **Step 4: Close and archive**
 
   Mark all PRD/plan criteria only after evidence, validate JSONL, commit excluding the readiness document, use
   `trellis-update-spec`, `trellis-finish-work`, archive and journal. Continue directly to Gate 6.
