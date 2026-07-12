@@ -24,3 +24,14 @@
   mandatory string fields and the old root lookup. Green removes the unused descriptor surface and dynamic imports:
   plugin/Main routing `34 passed`; touched Ruff and mypy pass. The Gate 6 contract advanced from 1/7 to 3/7
   passing; the four remaining failures belong exactly to Tasks 3–4.
+- Task 3 added two Red contracts for root composition and mandatory Engine adapter injection. The concrete
+  `PresentationStepFunRealtimeAdapter` now has an explicit cooperative MRO:
+  Presentation behavior → neutral `StepFunRuntimeAdapterPort` → retained Sales transport. This makes the former
+  hidden inheritance requirements inspectable without a Presentation-to-Sales import. Presentation/Engine/Main/
+  practice-evidence affected matrix passes 112 of 113 cases; the only excluded Red is Task 4's Common Roleplay
+  façade deletion. Ruff and full mypy (`678 source files`) pass. Architecture policy passes with 51 edges,
+  `presentation_coach -> sales_bot` absent, and the seven-package SCC unchanged.
+- Deviation: the initial plan described one exhaustive root map. Review showed that making the Sales domain router
+  import a global composition root would invert delivery ownership. The final design keeps one Sales-local root
+  map and one top-level Presentation composition map; their disjoint union is exhaustively tested against the
+  closed enum. No factory implementation or string locator is duplicated.

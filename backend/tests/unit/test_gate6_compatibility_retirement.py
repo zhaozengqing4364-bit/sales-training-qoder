@@ -3,14 +3,15 @@ from __future__ import annotations
 import ast
 import dataclasses
 import importlib
+import inspect
 from pathlib import Path
 
 import yaml
-
 from scripts.architecture_dependency_guard import (
     collect_edges,
     strongly_connected_components,
 )
+
 from training_runtime import plugins
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -117,10 +118,41 @@ def test_scenario_plugin_surface_contains_no_unused_executable_descriptors() -> 
 
 def test_application_root_factory_map_is_exhaustive() -> None:
     composition = importlib.import_module("runtime_composition")
+    sales_router = importlib.import_module("sales_bot.websocket.router")
 
-    assert set(composition.RUNTIME_HANDLER_FACTORIES) == set(
-        plugins.RuntimeHandlerFactoryKey
+    presentation_keys = set(composition.PRESENTATION_RUNTIME_HANDLER_FACTORIES)
+    sales_keys = set(sales_router.RUNTIME_HANDLER_FACTORIES)
+
+    assert presentation_keys.isdisjoint(sales_keys)
+    assert presentation_keys | sales_keys == set(plugins.RuntimeHandlerFactoryKey)
+
+
+def test_presentation_runtime_is_root_composed_from_domain_behavior_and_transport() -> None:
+    composition = importlib.import_module("runtime_composition")
+    presentation = importlib.import_module(
+        "presentation_coach.websocket.presentation_stepfun_realtime_handler"
     )
+
+    assert hasattr(presentation, "PresentationStepFunRuntimeMixin")
+    assert not hasattr(presentation, "LegacyPresentationStepFunRealtimeHandler")
+    assert composition.PresentationStepFunRealtimeAdapter.__mro__[1:4] == (
+        presentation.PresentationStepFunRuntimeMixin,
+        importlib.import_module(
+            "training_runtime.realtime.stepfun_adapter_port"
+        ).StepFunRuntimeAdapterPort,
+        importlib.import_module(
+            "sales_bot.websocket.stepfun_realtime_handler"
+        ).StepFunRealtimeSharedHandler,
+    )
+
+
+def test_presentation_engine_facade_requires_root_adapter_injection() -> None:
+    handler = importlib.import_module(
+        "presentation_coach.websocket.presentation_realtime_engine_handler"
+    ).PresentationRealtimeEngineHandler
+    parameter = inspect.signature(handler).parameters["runtime_adapter_factory"]
+
+    assert parameter.default is inspect.Parameter.empty
 
 
 def test_presentation_domain_no_longer_imports_sales_domain() -> None:

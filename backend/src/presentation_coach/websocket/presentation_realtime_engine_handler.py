@@ -11,9 +11,6 @@ from fastapi import WebSocket
 
 from common.db.session_lifecycle import SessionLifecycleTransition
 from common.websocket.base_handler import WebSocketSendResult
-from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
-    LegacyPresentationStepFunRealtimeHandler,
-)
 
 
 class RealtimeEngine(Protocol):
@@ -71,9 +68,7 @@ class PresentationRealtimeEngineHandler:
         self,
         *,
         runtime_engine_factory: RuntimeEngineFactory,
-        runtime_adapter_factory: RuntimeAdapterFactory = (
-            LegacyPresentationStepFunRealtimeHandler
-        ),
+        runtime_adapter_factory: RuntimeAdapterFactory,
     ) -> None:
         self._hooks = PresentationScenarioHooks()
         self._engine = runtime_engine_factory(

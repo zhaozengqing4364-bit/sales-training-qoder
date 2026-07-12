@@ -68,7 +68,7 @@ PROMPT_SOURCE_TAXONOMY: tuple[PromptSourceTaxonomyEntry, ...] = (
         runtime_consumers=(
             "sales_bot.services.voice_runtime_policy.VoiceRuntimePolicyService.resolve_effective_policy",
             "sales_bot.websocket.stepfun_realtime_handler.StepFunRealtimeHandler",
-            "presentation_coach.websocket.presentation_stepfun_realtime_handler.PresentationStepFunRealtimeHandler",
+            "runtime_composition.PresentationStepFunRealtimeAdapter",
         ),
         notes="Compiles the shipped realtime instruction contract that StepFun-mode sessions actually execute.",
     ),

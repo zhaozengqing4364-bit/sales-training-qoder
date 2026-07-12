@@ -13,9 +13,8 @@ from agent.capabilities.realtime_scoring import RealtimeScoringCapability
 from agent.capabilities.sales_stage import SalesStageCapability
 from common.error_handling.result import Result
 from common.websocket.base_handler import BaseWebSocketHandler
-from presentation_coach.websocket import presentation_stepfun_realtime_handler
-from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
-    PresentationStepFunRealtimeHandler,
+from runtime_composition import (
+    PresentationStepFunRealtimeAdapter as PresentationStepFunRealtimeHandler,
 )
 from sales_bot.websocket.stepfun_realtime_handler import (
     StepFunRealtimeHandler,
@@ -80,7 +79,7 @@ def test_presentation_constructor_skips_all_sales_capability_objects() -> None:
             "sales_bot.websocket.stepfun_realtime_handler.RealtimeScoringCapability"
         ) as realtime_scoring,
     ):
-        handler = presentation_stepfun_realtime_handler.LegacyPresentationStepFunRealtimeHandler()
+        handler = PresentationStepFunRealtimeHandler()
 
     sales_stage.assert_not_called()
     fuzzy_detection.assert_not_called()
@@ -102,7 +101,7 @@ def test_presentation_scenario_is_passed_to_first_base_initialization(
 
     monkeypatch.setattr(BaseWebSocketHandler, "__init__", recording_init)
 
-    handler = presentation_stepfun_realtime_handler.LegacyPresentationStepFunRealtimeHandler()
+    handler = PresentationStepFunRealtimeHandler()
 
     assert initialized_scenarios == ["presentation"]
     assert handler.scenario == "presentation"

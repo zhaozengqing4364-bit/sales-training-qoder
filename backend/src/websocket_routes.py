@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import Awaitable, Callable
-from types import MappingProxyType
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, Query, WebSocket
@@ -21,14 +20,8 @@ from common.services.session_runtime_lifecycle_hooks import (
     mark_session_runtime_failed,
 )
 from curriculum_practice.websocket.router import router as examiner_ws_router
-from presentation_coach.websocket.presentation_handler import (
-    PresentationWebSocketHandler,
-)
-from presentation_coach.websocket.presentation_realtime_engine_handler import (
-    PresentationRealtimeEngineHandler,
-)
-from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
-    LegacyPresentationStepFunRealtimeHandler,
+from runtime_composition import (
+    PRESENTATION_RUNTIME_HANDLER_FACTORIES,
 )
 from sales_bot.websocket.router import router as sales_ws_router
 from training_runtime import TrainingRuntimeDescriptor
@@ -36,22 +29,13 @@ from training_runtime.plugins import (
     RuntimeHandlerFactoryKey,
     dispatch_scenario_plugin,
 )
-from training_runtime.realtime import RealtimeSessionEngine
 
 logger = get_logger(__name__)
 router = APIRouter()
 
-RUNTIME_HANDLER_FACTORIES = MappingProxyType(
-    {
-        RuntimeHandlerFactoryKey.PRESENTATION_LEGACY: PresentationWebSocketHandler,
-        RuntimeHandlerFactoryKey.PRESENTATION_STEPFUN_ROLLBACK: (
-            LegacyPresentationStepFunRealtimeHandler
-        ),
-        RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE: (
-            PresentationRealtimeEngineHandler
-        ),
-    }
-)
+RUNTIME_HANDLER_FACTORIES: Mapping[
+    RuntimeHandlerFactoryKey, Callable[[], Any]
+] = PRESENTATION_RUNTIME_HANDLER_FACTORIES
 
 ResolveRuntime = Callable[[str], Awaitable[tuple[str | None, str]]]
 ResolveFlag = Callable[[str], Awaitable[bool]]
@@ -109,12 +93,10 @@ def _instantiate_runtime_handler(selection: Any) -> Any:
         resolved_key = RuntimeHandlerFactoryKey(selection.factory_key)
     except (AttributeError, TypeError, ValueError) as exc:
         raise ValueError("unknown_runtime_handler_factory_key") from exc
-    handler_factory = RUNTIME_HANDLER_FACTORIES.get(resolved_key)
-    if handler_factory is None or resolved_key is RuntimeHandlerFactoryKey.SALES_STEPFUN:
+    factory = RUNTIME_HANDLER_FACTORIES.get(resolved_key)
+    if factory is None:
         raise ValueError("unknown_runtime_handler_factory_key")
-    if resolved_key is RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE:
-        return handler_factory(runtime_engine_factory=RealtimeSessionEngine)
-    return handler_factory()
+    return factory()
 
 
 async def _handle_presentation_websocket(

@@ -97,16 +97,15 @@ temporary_edges:
     expires_on: 2026-10-31
 
   - source: presentation_coach
-    targets: [agent, prompt_templates, sales_bot, support]
+    targets: [agent, prompt_templates, support]
     owner: presentation-coach
     reason: >-
       The Presentation facade is composition-based and Gate 3 neutralized
       Provider/Grounding; Gate 4 moved neutral event, text, persistence, Roleplay
-      and Evaluation helpers, but the named compatibility adapter still inherits
-      the Sales shared StepFun handler and imports prompt/support adapters.
+      and Evaluation helpers. Gate 6 composes the retained StepFun transport only
+      at the application root; Presentation still imports prompt/support adapters.
     retire_when: >-
-      Gate 4 moves those remaining owners behind neutral ports and Gate 6
-      proves the presentation_coach -> sales_bot import edge is absent.
+      Prompt and support collaborators move behind neutral owner ports.
     expires_on: 2026-10-31
 
   - source: sales_bot

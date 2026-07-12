@@ -13,14 +13,15 @@ import pytest
 from starlette.websockets import WebSocketState
 
 from common.websocket.session_state_service import SessionStateSnapshot
-from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
-    LegacyPresentationStepFunRealtimeHandler,
+from runtime_composition import (
+    PresentationStepFunRealtimeAdapter as LegacyPresentationStepFunRealtimeHandler,
 )
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeSharedHandler
 from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstreamMixin
 from sales_bot.websocket.stepfun_runtime_types import RealtimeResponseState
 from training_runtime import (
     PresentationScenarioPlugin,
+    RuntimeHandlerFactoryKey,
     TrainingRuntimeDescriptor,
 )
 from training_runtime.realtime import (
@@ -168,13 +169,17 @@ def test_presentation_rollouts_select_exactly_one_2x2x2_path(
             ),
         )
         adapter = runtime.runtime_adapter
-        assert selection.handler_factory_name == "PresentationRealtimeEngineHandler"
+        assert (
+            selection.factory_key
+            is RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE
+        )
     else:
         adapter = LegacyPresentationStepFunRealtimeHandler(
             provider_factory=provider_factory,
         )
         assert (
-            selection.handler_factory_name == "LegacyPresentationStepFunRealtimeHandler"
+            selection.factory_key
+            is RuntimeHandlerFactoryKey.PRESENTATION_STEPFUN_ROLLBACK
         )
 
     assert adapter._provider_port_enabled is provider_enabled
@@ -1503,7 +1508,7 @@ async def test_golden_differential_preserves_external_single_writer_contract(
     selection = PresentationScenarioPlugin(
         rollout_resolver=lambda: True
     ).select_runtime_handler(descriptor)
-    assert selection.handler_factory_name == "PresentationRealtimeEngineHandler"
+    assert selection.factory_key is RuntimeHandlerFactoryKey.PRESENTATION_REALTIME_ENGINE
 
     from presentation_coach.websocket.presentation_realtime_engine_handler import (
         PresentationRealtimeEngineHandler,
@@ -1525,6 +1530,7 @@ async def test_golden_differential_preserves_external_single_writer_contract(
                     if engine_enabled:
                         surface = PresentationRealtimeEngineHandler(
                             runtime_engine_factory=RealtimeSessionEngine,
+                            runtime_adapter_factory=LegacyPresentationStepFunRealtimeHandler,
                         )
                         adapter = surface.runtime_adapter
                     else:
@@ -1549,6 +1555,7 @@ async def test_golden_differential_preserves_external_single_writer_contract(
                         if engine_enabled:
                             reconnect_surface = PresentationRealtimeEngineHandler(
                                 runtime_engine_factory=RealtimeSessionEngine,
+                                runtime_adapter_factory=LegacyPresentationStepFunRealtimeHandler,
                             )
                             return (
                                 reconnect_surface.runtime_adapter,
@@ -1678,12 +1685,14 @@ async def test_golden_differential_detects_real_handler_event_mutation() -> None
     def engine_reconnect_factory() -> tuple[Any, Any]:
         reconnect_facade = PresentationRealtimeEngineHandler(
             runtime_engine_factory=RealtimeSessionEngine,
+            runtime_adapter_factory=LegacyPresentationStepFunRealtimeHandler,
         )
         return reconnect_facade.runtime_adapter, reconnect_facade
 
     legacy = LegacyPresentationStepFunRealtimeHandler()
     facade = PresentationRealtimeEngineHandler(
         runtime_engine_factory=RealtimeSessionEngine,
+        runtime_adapter_factory=LegacyPresentationStepFunRealtimeHandler,
     )
     legacy_result = await _drive_real_golden_conversation(
         initial_handler=legacy,

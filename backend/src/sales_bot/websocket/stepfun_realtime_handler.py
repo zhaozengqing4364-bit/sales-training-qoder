@@ -180,6 +180,7 @@ from training_runtime.realtime import (
     RealtimeGroundingModule,
     grounding_retrieval_from_legacy_payload,
 )
+from training_runtime.realtime.constants import TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS
 from training_runtime.realtime.stepfun_provider import StepFunRealtimeProvider
 
 logger = get_logger(__name__)
@@ -190,7 +191,6 @@ PENDING_RESPONSE_FALLBACK_SECONDS = 0.8
 TRANSCRIPTION_WAIT_GRACE_SECONDS = 2.4
 GROUNDING_WAIT_GRACE_SECONDS = 8.0
 GROUNDING_WAIT_POLL_SECONDS = 0.05
-TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS = 2.0
 DEFAULT_GROUNDING_PREFETCH_TIMEOUT_MS = 220
 DEFAULT_KB_LOCK_DECISION_TIMEOUT_MS = 2200
 DEFAULT_INTERNAL_RETRIEVAL_CACHE_TTL_MS = 8000

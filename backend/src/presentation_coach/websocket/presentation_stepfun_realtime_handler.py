@@ -36,10 +36,7 @@ from presentation_coach.services.prompt_role_resolver import (
 )
 from presentation_coach.websocket.components import PresentationEventEmitter
 from prompt_templates.service import PromptTemplateService
-from sales_bot.websocket.stepfun_realtime_handler import (
-    TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS,
-    StepFunRealtimeSharedHandler,
-)
+from training_runtime.realtime.constants import TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS
 from training_runtime.realtime.events import build_heartbeat_event
 from training_runtime.realtime.message_persistence import (
     extract_analysis_patch_fields,
@@ -47,6 +44,7 @@ from training_runtime.realtime.message_persistence import (
     patch_existing_message_analysis,
     save_stepfun_message,
 )
+from training_runtime.realtime.stepfun_adapter_port import StepFunRuntimeAdapterPort
 from training_runtime.realtime.text_payloads import (
     extract_response_text,
     extract_text_payload,
@@ -75,8 +73,17 @@ class _AcceptedAudioEvidenceAccumulator:
         return f"sha256:{self.digest.hexdigest()}"
 
 
-class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
-    """Rollback-compatible StepFun adapter for the presentation scenario."""
+class PresentationStepFunRuntimeMixin(StepFunRuntimeAdapterPort):
+    """Presentation behavior composed with a StepFun transport at the app root."""
+
+    _feedback_context: Any
+    _fuzzy_detection_capability: Any
+    _last_emitted_stage: Any
+    _last_final_transcript_turn: Any
+    _persona_scoring_weights: Any
+    _realtime_scoring_capability: Any
+    _sales_stage_capability: Any
+    _sales_stage_context: Any
 
     def __init__(
         self,
@@ -1072,8 +1079,3 @@ class LegacyPresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
             self._grounding_preparation_in_progress = False
 
         await self._create_response_from_pending_commit()
-
-
-# Temporary import compatibility only. Production rollout selection targets the
-# explicit Engine façade or the named Legacy adapter.
-PresentationStepFunRealtimeHandler = LegacyPresentationStepFunRealtimeHandler

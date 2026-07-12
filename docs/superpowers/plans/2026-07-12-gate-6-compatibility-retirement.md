@@ -102,22 +102,22 @@ with the retained StepFun transport base. Compatibility with active consumers st
 - Produces: root factories for legacy rollback and `PresentationRealtimeEngineHandler(runtime_adapter_factory=...)`.
 - Consumes: existing `StepFunRealtimeSharedHandler` only at the root composition module.
 
-- [ ] **Step 1: Add composition and 2x2x2 Red tests**
+- [x] **Step 1: Add composition and 2x2x2 Red tests**
 
   Assert Presentation files contain no Sales import, concrete MRO is mixin then shared transport, Engine façade
   requires an injected adapter factory, and every rollout constructs exactly one selected authority.
 
-- [ ] **Step 2: Convert Presentation concrete adapter to behavior mixin**
+- [x] **Step 2: Convert Presentation concrete adapter to behavior mixin**
 
   Remove the Sales base import, declare only the structural attributes/hooks the mixin consumes under type checking,
   retain wire behavior, and rename the old misleading `Legacy...Handler` surface.
 
-- [ ] **Step 3: Compose at application root and remove policy edge**
+- [x] **Step 3: Compose at application root and remove policy edge**
 
   Build the concrete adapter in `runtime_composition.py`, inject it through root factory mappings, then remove only
   `sales_bot` from the Presentation temporary target list after the graph proves the edge absent.
 
-- [ ] **Step 4: Run Golden/affected Green and commit**
+- [x] **Step 4: Run Golden/affected Green and commit**
 
   Run Presentation Engine/adapter, StepFun transport/provider/grounding, snapshot, main route, practice evidence,
   architecture guard, Ruff and full mypy. Commit as `refactor(presentation): compose legacy transport at root`.

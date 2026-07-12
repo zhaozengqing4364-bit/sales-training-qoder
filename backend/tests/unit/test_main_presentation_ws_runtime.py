@@ -223,8 +223,7 @@ async def test_presentation_ws_uses_persisted_stepfun_mode() -> None:
         "query-token",
         trace_id=None,
     )
-    engine_factory.assert_called_once()
-    assert set(engine_factory.call_args.kwargs) == {"runtime_engine_factory"}
+    engine_factory.assert_called_once_with()
     rollback_factory.assert_not_called()
     legacy_handler.handle_connection.assert_not_called()
     session_manager.unregister_session.assert_awaited_once_with(session_id)

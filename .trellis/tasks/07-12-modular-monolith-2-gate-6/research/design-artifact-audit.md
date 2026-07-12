@@ -37,3 +37,9 @@ state. This prevents a false architecture win that would break snapshots or roll
 - Gate 5 model identity and frontend locality retirement conditions remain intact.
 - No schema, API, wire, permission, transaction or user-flow change is proposed.
 - No task relies on sub-agent dispatch or user input.
+
+## Implementation correction
+
+The exhaustive factory proof is the disjoint union of the Sales route's local root and the top-level Presentation
+composition root. A single global map would have required `sales_bot.websocket.router` to depend back on an app
+root. The corrected design preserves dependency direction while retaining one implementation per factory.
