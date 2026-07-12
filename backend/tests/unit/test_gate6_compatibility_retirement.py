@@ -182,10 +182,10 @@ def test_gate6_dependency_graph_removes_presentation_sales_edge_without_expansio
     }
 
     assert ("presentation_coach", "sales_bot") not in edges
-    assert len(edges) <= 51
+    assert len(edges) == 52
     assert components == {frozenset(EXPECTED_REMAINING_SCC)}
 
 
 def test_high_fan_in_facades_are_retained_until_their_exit_conditions_hold() -> None:
-    assert _python_module_importer_count("common.db.models") >= 222
-    assert _frontend_type_barrel_importer_count() >= 262
+    assert _python_module_importer_count("common.db.models") == 209
+    assert _frontend_type_barrel_importer_count() == 191

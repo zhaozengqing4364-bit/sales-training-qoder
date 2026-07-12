@@ -2991,204 +2991,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sales-trainer/units:
-    get:
-      tags:
-      - sales-trainer
-      - sales-trainer
-      summary: List Published Units
-      operationId: list_published_units_api_v1_sales_trainer_units_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sales-trainer/paths:
-    get:
-      tags:
-      - sales-trainer
-      - sales-trainer
-      summary: List Training Paths
-      operationId: list_training_paths_api_v1_sales_trainer_paths_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sales-trainer/journey:
-    get:
-      tags:
-      - sales-trainer
-      - sales-trainer
-      summary: Get My Training Journey
-      operationId: get_my_training_journey_api_v1_sales_trainer_journey_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sales-trainer/realtime-roleplay/start:
-    post:
-      tags:
-      - sales-trainer
-      - sales-trainer
-      summary: Start Realtime Roleplay
-      operationId: start_realtime_roleplay_api_v1_sales_trainer_realtime_roleplay_start_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RealtimeRoleplayStartRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sales-trainer/units/{unit_id}:
-    get:
-      tags:
-      - sales-trainer
-      - sales-trainer
-      summary: Get Published Unit
-      operationId: get_published_unit_api_v1_sales_trainer_units__unit_id__get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: unit_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Unit Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sales-trainer/units/{unit_id}/brief:
-    get:
-      tags:
-      - sales-trainer
-      - sales-trainer
-      summary: Get Published Unit Brief
-      operationId: get_published_unit_brief_api_v1_sales_trainer_units__unit_id__brief_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: unit_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Unit Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/sales-trainer/materials/versions/{version_id}/file:
     get:
       tags:
@@ -4907,54 +4709,38 @@ paths:
           - type: string
           - type: 'null'
           title: User Id
-      - name: unit_id
+      - name: activity_id
         in: query
         required: false
         schema:
           anyOf:
           - type: string
           - type: 'null'
-          title: Unit Id
-      - name: material_version_id
+          title: Activity Id
+      - name: activity_type
         in: query
         required: false
         schema:
           anyOf:
           - type: string
           - type: 'null'
-          title: Material Version Id
-      - name: training_stage
+          title: Activity Type
+      - name: phase_id
         in: query
         required: false
         schema:
           anyOf:
           - type: string
           - type: 'null'
-          title: Training Stage
-      - name: module_key
+          title: Phase Id
+      - name: module_id
         in: query
         required: false
         schema:
           anyOf:
           - type: string
           - type: 'null'
-          title: Module Key
-      - name: learner_level
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Learner Level
-      - name: role_level
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Role Level
+          title: Module Id
       - name: status
         in: query
         required: false
@@ -4988,371 +4774,6 @@ paths:
           - type: string
           - type: 'null'
           title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/sales-trainer/journeys:
-    get:
-      tags:
-      - admin-sales-trainer
-      - admin-sales-trainer
-      summary: Admin List Training Journeys
-      operationId: admin_list_training_journeys_api_v1_admin_sales_trainer_journeys_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: department
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Department
-      - name: training_stage
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Training Stage
-      - name: module_key
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Module Key
-      - name: learner_level
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Learner Level
-      - name: role_level
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Role Level
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 100
-          minimum: 1
-          default: 50
-          title: Limit
-      - name: offset
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 0
-          default: 0
-          title: Offset
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/sales-trainer/journeys/analytics:
-    get:
-      tags:
-      - admin-sales-trainer
-      - admin-sales-trainer
-      summary: Admin Get Training Journey Analytics
-      operationId: admin_get_training_journey_analytics_api_v1_admin_sales_trainer_journeys_analytics_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: department
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Department
-      - name: training_stage
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Training Stage
-      - name: module_key
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Module Key
-      - name: learner_level
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Learner Level
-      - name: role_level
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Role Level
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 1000
-          minimum: 1
-          default: 500
-          title: Limit
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/sales-trainer/journeys/{learner_id}:
-    get:
-      tags:
-      - admin-sales-trainer
-      - admin-sales-trainer
-      summary: Admin Get Training Journey
-      operationId: admin_get_training_journey_api_v1_admin_sales_trainer_journeys__learner_id__get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: learner_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Learner Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/sales-trainer/manager-dashboard:
-    get:
-      tags:
-      - admin-sales-trainer
-      - admin-sales-trainer
-      summary: Admin Get Manager Dashboard
-      operationId: admin_get_manager_dashboard_api_v1_admin_sales_trainer_manager_dashboard_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/sales-trainer/readiness/workbench:
-    get:
-      tags:
-      - admin-sales-trainer
-      - admin-sales-trainer
-      summary: Admin Get Readiness Workbench
-      operationId: admin_get_readiness_workbench_api_v1_admin_sales_trainer_readiness_workbench_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: department
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Department
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 100
-          minimum: 1
-          default: 50
-          title: Limit
-      - name: offset
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 0
-          default: 0
-          title: Offset
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}:
-    get:
-      tags:
-      - admin-sales-trainer
-      - admin-sales-trainer
-      summary: Admin Get Readiness Dossier
-      operationId: admin_get_readiness_dossier_api_v1_admin_sales_trainer_readiness_dossiers__learner_id__get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: learner_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Learner Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/sales-trainer/readiness/dossiers/{learner_id}/review-actions:
-    post:
-      tags:
-      - admin-sales-trainer
-      - admin-sales-trainer
-      summary: Admin Create Readiness Review Action
-      operationId: admin_create_readiness_review_action_api_v1_admin_sales_trainer_readiness_dossiers__learner_id__review_actions_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: learner_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Learner Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ReadinessDossierReviewActionCreate'
       responses:
         '200':
           description: Successful Response
@@ -6422,1324 +5843,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/modules/{module_key}/article:
-    get:
-      tags:
-      - newcomer-training-articles
-      - newcomer-training-articles
-      summary: Get Newcomer Module Article
-      operationId: get_newcomer_module_article_api_v1_newcomer_training_modules__module_key__article_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: module_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Module Key
-      - name: learning_content_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 36
-          - type: 'null'
-          title: Learning Content Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/modules/{module_key}/article-progress:
-    get:
-      tags:
-      - newcomer-training-articles
-      - newcomer-training-articles
-      summary: Get Newcomer Module Article Progress
-      operationId: get_newcomer_module_article_progress_api_v1_newcomer_training_modules__module_key__article_progress_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: module_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Module Key
-      - name: learning_content_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 36
-          - type: 'null'
-          title: Learning Content Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-    post:
-      tags:
-      - newcomer-training-articles
-      - newcomer-training-articles
-      summary: Complete Newcomer Module Article Chapter
-      operationId: complete_newcomer_module_article_chapter_api_v1_newcomer_training_modules__module_key__article_progress_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: module_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Module Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NewcomerArticleProgressRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/business-etiquette/article:
-    get:
-      tags:
-      - newcomer-training-business-etiquette
-      - newcomer-training-business-etiquette
-      summary: Get Business Etiquette Article
-      operationId: get_business_etiquette_article_api_v1_newcomer_training_business_etiquette_article_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/business-etiquette/article-progress:
-    post:
-      tags:
-      - newcomer-training-business-etiquette
-      - newcomer-training-business-etiquette
-      summary: Complete Business Etiquette Article Chapter
-      operationId: complete_business_etiquette_article_chapter_api_v1_newcomer_training_business_etiquette_article_progress_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NewcomerArticleProgressRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/business-etiquette/learning-units:
-    get:
-      tags:
-      - newcomer-training-business-etiquette
-      - newcomer-training-business-etiquette
-      summary: Get Business Etiquette Learning Units
-      operationId: get_business_etiquette_learning_units_api_v1_newcomer_training_business_etiquette_learning_units_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/business-etiquette/learning-units/{unit_key}/quiz:
-    get:
-      tags:
-      - newcomer-training-business-etiquette
-      - newcomer-training-business-etiquette
-      summary: Get Business Etiquette Unit Quiz
-      operationId: get_business_etiquette_unit_quiz_api_v1_newcomer_training_business_etiquette_learning_units__unit_key__quiz_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: unit_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Unit Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/business-etiquette/learning-units/{unit_key}/quiz-attempts:
-    post:
-      tags:
-      - newcomer-training-business-etiquette
-      - newcomer-training-business-etiquette
-      summary: Submit Business Etiquette Unit Quiz Attempt
-      operationId: submit_business_etiquette_unit_quiz_attempt_api_v1_newcomer_training_business_etiquette_learning_units__unit_key__quiz_attempts_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: unit_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Unit Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BusinessEtiquetteUnitQuizAttemptCreate'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-    get:
-      tags:
-      - newcomer-training-business-etiquette
-      - newcomer-training-business-etiquette
-      summary: List My Business Etiquette Unit Quiz Attempts
-      operationId: list_my_business_etiquette_unit_quiz_attempts_api_v1_newcomer_training_business_etiquette_learning_units__unit_key__quiz_attempts_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: unit_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Unit Key
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 50
-          minimum: 1
-          default: 20
-          title: Limit
-      - name: offset
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 0
-          default: 0
-          title: Offset
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/business-etiquette/ai-coach/progress:
-    get:
-      tags:
-      - newcomer-training-business-etiquette
-      - newcomer-training-business-etiquette
-      summary: Get Business Etiquette Ai Coach Progress
-      operationId: get_business_etiquette_ai_coach_progress_api_v1_newcomer_training_business_etiquette_ai_coach_progress_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: session_id
-        in: query
-        required: true
-        schema:
-          type: string
-          minLength: 1
-          maxLength: 36
-          title: Session Id
-      - name: unit_key
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 80
-          - type: 'null'
-          title: Unit Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/business-etiquette/retraining-sessions:
-    post:
-      tags:
-      - newcomer-training-business-etiquette
-      - newcomer-training-business-etiquette
-      summary: Start Business Etiquette Retraining Session
-      operationId: start_business_etiquette_retraining_session_api_v1_newcomer_training_business_etiquette_retraining_sessions_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        content:
-          application/json:
-            schema:
-              anyOf:
-              - $ref: '#/components/schemas/BusinessEtiquetteRetrainingStartRequest'
-              - type: 'null'
-              title: Payload
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/customer-faq/topic:
-    get:
-      tags:
-      - newcomer-training-customer-faq
-      - newcomer-training-customer-faq
-      summary: Get Customer Faq Learning Topic
-      operationId: get_customer_faq_learning_topic_api_v1_newcomer_training_customer_faq_topic_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/customer-faq/learning-units/{unit_key}/short-answer-attempts:
-    post:
-      tags:
-      - newcomer-training-customer-faq
-      - newcomer-training-customer-faq
-      summary: Submit Customer Faq Unit Short Answer Attempt
-      operationId: submit_customer_faq_unit_short_answer_attempt_api_v1_newcomer_training_customer_faq_learning_units__unit_key__short_answer_attempts_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: unit_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Unit Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CustomerFaqShortAnswerSubmitRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/modules/{module_key}/article-binding:
-    put:
-      tags:
-      - admin-newcomer-training-articles
-      - admin-newcomer-training-articles
-      summary: Bind Newcomer Module Article
-      operationId: bind_newcomer_module_article_api_v1_admin_newcomer_training_modules__module_key__article_binding_put
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: module_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Module Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NewcomerArticleBindingUpdate'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/learning-contents/{content_id}/binding-impact:
-    get:
-      tags:
-      - admin-newcomer-training-articles
-      - admin-newcomer-training-articles
-      summary: Get Learning Content Binding Impact
-      operationId: get_learning_content_binding_impact_api_v1_admin_newcomer_training_learning_contents__content_id__binding_impact_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: content_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Content Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/imports:
-    post:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Import Business Etiquette Markdown
-      operationId: import_business_etiquette_markdown_api_v1_admin_newcomer_training_business_etiquette_imports_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Body_import_business_etiquette_markdown_api_v1_admin_newcomer_training_business_etiquette_imports_post'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/release-impact:
-    get:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Preview Business Etiquette Release Impact
-      operationId: preview_business_etiquette_release_impact_api_v1_admin_newcomer_training_business_etiquette_release_impact_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: training_pack_key
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 80
-          - type: 'null'
-          title: Training Pack Key
-      - name: target_revision_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 36
-          - type: 'null'
-          title: Target Revision Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/release:
-    post:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Publish Business Etiquette Release
-      operationId: publish_business_etiquette_release_api_v1_admin_newcomer_training_business_etiquette_release_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BusinessEtiquetteReleasePublishRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/retraining-assignments:
-    post:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Assign Business Etiquette Retraining
-      operationId: assign_business_etiquette_retraining_api_v1_admin_newcomer_training_business_etiquette_retraining_assignments_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BusinessEtiquetteRetrainingAssignmentRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/capabilities:
-    get:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Get Business Etiquette Capabilities
-      operationId: get_business_etiquette_capabilities_api_v1_admin_newcomer_training_business_etiquette_capabilities_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: training_pack_key
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 80
-          - type: 'null'
-          title: Training Pack Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-    put:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Save Business Etiquette Capabilities
-      operationId: save_business_etiquette_capabilities_api_v1_admin_newcomer_training_business_etiquette_capabilities_put
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BusinessEtiquetteCapabilitySnapshotSaveRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/capabilities/{capability_key}/publish:
-    post:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Publish Business Etiquette Capability
-      operationId: publish_business_etiquette_capability_api_v1_admin_newcomer_training_business_etiquette_capabilities__capability_key__publish_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: capability_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Capability Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        content:
-          application/json:
-            schema:
-              anyOf:
-              - $ref: '#/components/schemas/BusinessEtiquetteCapabilityActionRequest'
-              - type: 'null'
-              title: Payload
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/capabilities/{capability_key}/archive:
-    post:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Archive Business Etiquette Capability
-      operationId: archive_business_etiquette_capability_api_v1_admin_newcomer_training_business_etiquette_capabilities__capability_key__archive_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: capability_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Capability Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        content:
-          application/json:
-            schema:
-              anyOf:
-              - $ref: '#/components/schemas/BusinessEtiquetteCapabilityActionRequest'
-              - type: 'null'
-              title: Payload
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/question-drafts/generate:
-    post:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Generate Business Etiquette Question Drafts
-      operationId: generate_business_etiquette_question_drafts_api_v1_admin_newcomer_training_business_etiquette_question_drafts_generate_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BusinessEtiquetteQuestionDraftGenerateRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/question-drafts:
-    get:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: List Business Etiquette Question Drafts
-      operationId: list_business_etiquette_question_drafts_api_v1_admin_newcomer_training_business_etiquette_question_drafts_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: training_pack_key
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 80
-          - type: 'null'
-          title: Training Pack Key
-      - name: chapter_order
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: integer
-            maximum: 100
-            minimum: 1
-          - type: 'null'
-          title: Chapter Order
-      - name: question_type
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 30
-          - type: 'null'
-          title: Question Type
-      - name: status
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 30
-          - type: 'null'
-          title: Status
-      - name: capability_key
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 80
-          - type: 'null'
-          title: Capability Key
-      - name: batch_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 36
-          - type: 'null'
-          title: Batch Id
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 100
-          minimum: 1
-          default: 50
-          title: Limit
-      - name: offset
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 0
-          default: 0
-          title: Offset
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/question-drafts/{draft_id}:
-    put:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Update Business Etiquette Question Draft
-      operationId: update_business_etiquette_question_draft_api_v1_admin_newcomer_training_business_etiquette_question_drafts__draft_id__put
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: draft_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Draft Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BusinessEtiquetteQuestionDraftUpdateRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/question-drafts/{draft_id}/approve:
-    post:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Approve Business Etiquette Question Draft
-      operationId: approve_business_etiquette_question_draft_api_v1_admin_newcomer_training_business_etiquette_question_drafts__draft_id__approve_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: draft_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Draft Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BusinessEtiquetteQuestionDraftApproveRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/question-drafts/{draft_id}/reject:
-    post:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Reject Business Etiquette Question Draft
-      operationId: reject_business_etiquette_question_draft_api_v1_admin_newcomer_training_business_etiquette_question_drafts__draft_id__reject_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: draft_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Draft Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BusinessEtiquetteQuestionDraftRejectRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/learning-units:
-    get:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: List Admin Business Etiquette Learning Units
-      operationId: list_admin_business_etiquette_learning_units_api_v1_admin_newcomer_training_business_etiquette_learning_units_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/learning-units/{unit_key}/quiz-preview:
-    get:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: Preview Business Etiquette Unit Quiz
-      operationId: preview_business_etiquette_unit_quiz_api_v1_admin_newcomer_training_business_etiquette_learning_units__unit_key__quiz_preview_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: unit_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Unit Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/business-etiquette/quiz-attempts:
-    get:
-      tags:
-      - admin-newcomer-training-business-etiquette
-      - admin-newcomer-training-business-etiquette
-      summary: List Business Etiquette Quiz Attempts
-      operationId: list_business_etiquette_quiz_attempts_api_v1_admin_newcomer_training_business_etiquette_quiz_attempts_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: user_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 36
-          - type: 'null'
-          title: User Id
-      - name: learning_unit_key
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 80
-          - type: 'null'
-          title: Learning Unit Key
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 100
-          minimum: 1
-          default: 50
-          title: Limit
-      - name: offset
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 0
-          default: 0
-          title: Offset
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/admin/newcomer-training/papers:
     get:
       tags:
@@ -8021,13 +6124,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/path-config:
+  /api/v1/admin/newcomer-training/path/:
     get:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Get Path Config
-      operationId: get_path_config_api_v1_admin_newcomer_training_path_config_get
+      - admin-newcomer-training-path-orchestration
+      summary: Get Path
+      operationId: get_path_api_v1_admin_newcomer_training_path__get
       security:
       - HTTPBearer: []
       parameters:
@@ -8051,12 +6153,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/newcomer-training/path/draft:
     put:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Save Path Config
-      operationId: save_path_config_api_v1_admin_newcomer_training_path_config_put
+      - admin-newcomer-training-path-orchestration
+      summary: Save Draft
+      operationId: save_draft_api_v1_admin_newcomer_training_path_draft_put
       security:
       - HTTPBearer: []
       parameters:
@@ -8073,7 +6175,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewcomerPathConfigSaveRequest'
+              $ref: '#/components/schemas/DraftRequest'
       responses:
         '200':
           description: Successful Response
@@ -8086,13 +6188,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/path-config/publish/preview:
-    post:
+    delete:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Preview Path Config Publish
-      operationId: preview_path_config_publish_api_v1_admin_newcomer_training_path_config_publish_preview_post
+      - admin-newcomer-training-path-orchestration
+      summary: Delete Draft
+      operationId: delete_draft_api_v1_admin_newcomer_training_path_draft_delete
       security:
       - HTTPBearer: []
       parameters:
@@ -8116,13 +6216,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/path-config/publish:
+  /api/v1/admin/newcomer-training/path/validate:
     post:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Publish Path Config
-      operationId: publish_path_config_api_v1_admin_newcomer_training_path_config_publish_post
+      - admin-newcomer-training-path-orchestration
+      summary: Validate Draft
+      operationId: validate_draft_api_v1_admin_newcomer_training_path_validate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/newcomer-training/path/publish:
+    post:
+      tags:
+      - admin-newcomer-training-path-orchestration
+      summary: Publish
+      operationId: publish_api_v1_admin_newcomer_training_path_publish_post
       security:
       - HTTPBearer: []
       parameters:
@@ -8139,7 +6267,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewcomerPathConfigActionRequest'
+              $ref: '#/components/schemas/ReasonRequest'
       responses:
         '200':
           description: Successful Response
@@ -8152,13 +6280,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/path-config/revisions:
+  /api/v1/admin/newcomer-training/path/revisions:
     get:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: List Path Config Revisions
-      operationId: list_path_config_revisions_api_v1_admin_newcomer_training_path_config_revisions_get
+      - admin-newcomer-training-path-orchestration
+      summary: Revisions
+      operationId: revisions_api_v1_admin_newcomer_training_path_revisions_get
       security:
       - HTTPBearer: []
       parameters:
@@ -8182,13 +6309,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/path-config/dead-data-diagnostics:
+  /api/v1/admin/newcomer-training/path/revisions/{revision_id}/restore:
+    post:
+      tags:
+      - admin-newcomer-training-path-orchestration
+      summary: Restore
+      operationId: restore_api_v1_admin_newcomer_training_path_revisions__revision_id__restore_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: revision_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Revision Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/newcomer-training/path/activity-types:
     get:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Get Path Config Dead Data Diagnostics
-      operationId: get_path_config_dead_data_diagnostics_api_v1_admin_newcomer_training_path_config_dead_data_diagnostics_get
+      - admin-newcomer-training-path-orchestration
+      summary: Activity Types
+      operationId: activity_types_api_v1_admin_newcomer_training_path_activity_types_get
       security:
       - HTTPBearer: []
       parameters:
@@ -8212,13 +6379,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/learning-topics/config:
+  /api/v1/admin/newcomer-training/path/coach-profiles:
     get:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Get Learning Topics Config
-      operationId: get_learning_topics_config_api_v1_admin_newcomer_training_learning_topics_config_get
+      - admin-newcomer-training-path-orchestration
+      summary: Coach Profiles
+      operationId: coach_profiles_api_v1_admin_newcomer_training_path_coach_profiles_get
       security:
       - HTTPBearer: []
       parameters:
@@ -8242,224 +6408,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-    put:
-      tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Save Learning Topics Config
-      operationId: save_learning_topics_config_api_v1_admin_newcomer_training_learning_topics_config_put
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NewcomerLearningTopicsSaveRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/learning-topics/business-etiquette/generate-draft:
-    post:
-      tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Generate Business Etiquette Learning Topic Draft
-      operationId: generate_business_etiquette_learning_topic_draft_api_v1_admin_newcomer_training_learning_topics_business_etiquette_generate_draft_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        content:
-          application/json:
-            schema:
-              anyOf:
-              - $ref: '#/components/schemas/NewcomerLearningTopicsGenerateDraftRequest'
-              - type: 'null'
-              title: Payload
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/learning-topics/customer-faq/parse:
-    post:
-      tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Parse Customer Faq Learning Topic Material
-      operationId: parse_customer_faq_learning_topic_material_api_v1_admin_newcomer_training_learning_topics_customer_faq_parse_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CustomerFaqImportParseRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/learning-topics/customer-faq/generate-draft:
-    post:
-      tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Generate Customer Faq Learning Topic Draft
-      operationId: generate_customer_faq_learning_topic_draft_api_v1_admin_newcomer_training_learning_topics_customer_faq_generate_draft_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CustomerFaqGenerateDraftRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/learning-topics/publish/preview:
-    post:
-      tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Preview Learning Topics Publish
-      operationId: preview_learning_topics_publish_api_v1_admin_newcomer_training_learning_topics_publish_preview_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/learning-topics/publish:
-    post:
-      tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Publish Learning Topics Config
-      operationId: publish_learning_topics_config_api_v1_admin_newcomer_training_learning_topics_publish_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NewcomerLearningTopicsActionRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/learning-topics/revisions:
+  /api/v1/admin/newcomer-training/path/scoring-rubrics:
     get:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: List Learning Topics Revisions
-      operationId: list_learning_topics_revisions_api_v1_admin_newcomer_training_learning_topics_revisions_get
+      - admin-newcomer-training-path-orchestration
+      summary: Scoring Rubrics
+      operationId: scoring_rubrics_api_v1_admin_newcomer_training_path_scoring_rubrics_get
       security:
       - HTTPBearer: []
       parameters:
@@ -8483,13 +6437,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/learning-topics/rollback/preview:
     post:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Preview Learning Topics Rollback
-      operationId: preview_learning_topics_rollback_api_v1_admin_newcomer_training_learning_topics_rollback_preview_post
+      - admin-newcomer-training-path-orchestration
+      summary: Create Scoring Rubric
+      operationId: create_scoring_rubric_api_v1_admin_newcomer_training_path_scoring_rubrics_post
       security:
       - HTTPBearer: []
       parameters:
@@ -8506,7 +6458,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewcomerLearningTopicsRollbackPreviewRequest'
+              $ref: '#/components/schemas/RubricCreateRequest'
       responses:
         '200':
           description: Successful Response
@@ -8519,16 +6471,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/learning-topics/rollback:
-    post:
+  /api/v1/admin/newcomer-training/journeys/{learner_id}:
+    get:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Rollback Learning Topics Config
-      operationId: rollback_learning_topics_config_api_v1_admin_newcomer_training_learning_topics_rollback_post
+      - admin-newcomer-training-journey
+      summary: Learner Journey
+      operationId: learner_journey_api_v1_admin_newcomer_training_journeys__learner_id__get
       security:
       - HTTPBearer: []
       parameters:
+      - name: learner_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Learner Id
       - name: app_session
         in: cookie
         required: false
@@ -8537,12 +6494,6 @@ paths:
           - type: string
           - type: 'null'
           title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NewcomerLearningTopicsActionRequest'
       responses:
         '200':
           description: Successful Response
@@ -8555,16 +6506,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/path-config/rollback/preview:
-    post:
+  /api/v1/admin/newcomer-training/journeys:
+    get:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Preview Path Config Rollback
-      operationId: preview_path_config_rollback_api_v1_admin_newcomer_training_path_config_rollback_preview_post
+      - admin-newcomer-training-journey
+      summary: Learner Journeys
+      operationId: learner_journeys_api_v1_admin_newcomer_training_journeys_get
       security:
       - HTTPBearer: []
       parameters:
+      - name: department
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Department
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
       - name: app_session
         in: cookie
         required: false
@@ -8573,12 +6548,6 @@ paths:
           - type: string
           - type: 'null'
           title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NewcomerPathRollbackPreviewRequest'
       responses:
         '200':
           description: Successful Response
@@ -8591,16 +6560,110 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/path-config/rollback:
-    post:
+  /api/v1/admin/newcomer-training/readiness/workbench:
+    get:
       tags:
-      - admin-newcomer-training-path-config
-      - admin-newcomer-training-path-config
-      summary: Rollback Path Config
-      operationId: rollback_path_config_api_v1_admin_newcomer_training_path_config_rollback_post
+      - admin-newcomer-training-journey
+      summary: Readiness Workbench
+      operationId: readiness_workbench_api_v1_admin_newcomer_training_readiness_workbench_get
       security:
       - HTTPBearer: []
       parameters:
+      - name: department
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Department
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/newcomer-training/readiness/dossiers/{learner_id}:
+    get:
+      tags:
+      - admin-newcomer-training-journey
+      summary: Readiness Dossier
+      operationId: readiness_dossier_api_v1_admin_newcomer_training_readiness_dossiers__learner_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: learner_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Learner Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/newcomer-training/readiness/dossiers/{learner_id}/review-actions:
+    post:
+      tags:
+      - admin-newcomer-training-journey
+      summary: Create Readiness Review
+      operationId: create_readiness_review_api_v1_admin_newcomer_training_readiness_dossiers__learner_id__review_actions_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: learner_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Learner Id
       - name: app_session
         in: cookie
         required: false
@@ -8614,7 +6677,493 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewcomerPathConfigActionRequest'
+              $ref: '#/components/schemas/ReadinessReviewRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/journey:
+    get:
+      tags:
+      - newcomer-training-orchestration
+      summary: Journey
+      operationId: journey_api_v1_newcomer_training_journey_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/modules/{module_id}:
+    get:
+      tags:
+      - newcomer-training-orchestration
+      summary: Module Detail
+      operationId: module_detail_api_v1_newcomer_training_modules__module_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: module_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Module Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/activities/{activity_id}:
+    get:
+      tags:
+      - newcomer-training-orchestration
+      summary: Activity Detail
+      operationId: activity_detail_api_v1_newcomer_training_activities__activity_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activity Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/activities/{activity_id}/lesson/chapters/{chapter_id}/complete:
+    post:
+      tags:
+      - newcomer-training-orchestration
+      summary: Complete Lesson Chapter
+      operationId: complete_lesson_chapter_api_v1_newcomer_training_activities__activity_id__lesson_chapters__chapter_id__complete_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activity Id
+      - name: chapter_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Chapter Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientTokenRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/activities/{activity_id}/lesson/confirm:
+    post:
+      tags:
+      - newcomer-training-orchestration
+      summary: Confirm Lesson
+      operationId: confirm_lesson_api_v1_newcomer_training_activities__activity_id__lesson_confirm_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activity Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientTokenRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/activities/{activity_id}/quiz/attempts:
+    post:
+      tags:
+      - newcomer-training-orchestration
+      summary: Submit Quiz
+      operationId: submit_quiz_api_v1_newcomer_training_activities__activity_id__quiz_attempts_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activity Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuizAttemptRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/activities/{activity_id}/audio/submissions:
+    post:
+      tags:
+      - newcomer-training-orchestration
+      summary: Submit Audio
+      operationId: submit_audio_api_v1_newcomer_training_activities__activity_id__audio_submissions_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activity Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_submit_audio_api_v1_newcomer_training_activities__activity_id__audio_submissions_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/activities/{activity_id}/realtime/sessions:
+    post:
+      tags:
+      - newcomer-training-orchestration
+      summary: Start Realtime
+      operationId: start_realtime_api_v1_newcomer_training_activities__activity_id__realtime_sessions_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activity Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientTokenRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/activities/{activity_id}/ai-coach/sessions:
+    post:
+      tags:
+      - newcomer-training-orchestration
+      summary: Start Ai Coach
+      operationId: start_ai_coach_api_v1_newcomer_training_activities__activity_id__ai_coach_sessions_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activity Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientTokenRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/activities/{activity_id}/ai-coach/sessions/{session_id}/turns:
+    post:
+      tags:
+      - newcomer-training-orchestration
+      summary: Submit Ai Coach Turn
+      operationId: submit_ai_coach_turn_api_v1_newcomer_training_activities__activity_id__ai_coach_sessions__session_id__turns_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activity Id
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiCoachTurnRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/activities/{activity_id}/ai-coach/sessions/{session_id}/turns/stream:
+    post:
+      tags:
+      - newcomer-training-orchestration
+      summary: Stream Ai Coach Turn
+      operationId: stream_ai_coach_turn_api_v1_newcomer_training_activities__activity_id__ai_coach_sessions__session_id__turns_stream_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activity Id
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiCoachTurnRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/newcomer-training/activities/{activity_id}/assignments:
+    post:
+      tags:
+      - newcomer-training-orchestration
+      summary: Submit Assignment
+      operationId: submit_assignment_api_v1_newcomer_training_activities__activity_id__assignments_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activity Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_submit_assignment_api_v1_newcomer_training_activities__activity_id__assignments_post'
       responses:
         '200':
           description: Successful Response
@@ -9208,659 +7757,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/UnitRollbackRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/ai-coach/chat/sessions:
-    post:
-      tags:
-      - newcomer-training-ai-coach
-      - newcomer-training-ai-coach
-      summary: Create Ai Coach Chat Session
-      operationId: create_ai_coach_chat_session_api_v1_newcomer_training_ai_coach_chat_sessions_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AiCoachChatSessionCreate'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/ai-coach/chat/sessions/stream:
-    post:
-      tags:
-      - newcomer-training-ai-coach
-      - newcomer-training-ai-coach
-      summary: Create Ai Coach Chat Session Stream
-      operationId: create_ai_coach_chat_session_stream_api_v1_newcomer_training_ai_coach_chat_sessions_stream_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AiCoachChatSessionCreate'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}:
-    get:
-      tags:
-      - newcomer-training-ai-coach
-      - newcomer-training-ai-coach
-      summary: Get Ai Coach Chat Session
-      operationId: get_ai_coach_chat_session_api_v1_newcomer_training_ai_coach_chat_sessions__session_id__get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: session_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Session Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}/messages/stream:
-    post:
-      tags:
-      - newcomer-training-ai-coach
-      - newcomer-training-ai-coach
-      summary: Send Ai Coach Chat Message Stream
-      operationId: send_ai_coach_chat_message_stream_api_v1_newcomer_training_ai_coach_chat_sessions__session_id__messages_stream_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: session_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Session Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AiCoachChatMessageCreate'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}/messages:
-    post:
-      tags:
-      - newcomer-training-ai-coach
-      - newcomer-training-ai-coach
-      summary: Send Ai Coach Chat Message
-      operationId: send_ai_coach_chat_message_api_v1_newcomer_training_ai_coach_chat_sessions__session_id__messages_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: session_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Session Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AiCoachChatMessageCreate'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}/events/{event_id}/answer/stream:
-    post:
-      tags:
-      - newcomer-training-ai-coach
-      - newcomer-training-ai-coach
-      summary: Submit Ai Coach Chat Event Answer Stream
-      operationId: submit_ai_coach_chat_event_answer_stream_api_v1_newcomer_training_ai_coach_chat_sessions__session_id__events__event_id__answer_stream_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: session_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Session Id
-      - name: event_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Event Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AiCoachChatEventAnswerSubmit'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}/events/{event_id}/answer:
-    post:
-      tags:
-      - newcomer-training-ai-coach
-      - newcomer-training-ai-coach
-      summary: Submit Ai Coach Chat Event Answer
-      operationId: submit_ai_coach_chat_event_answer_api_v1_newcomer_training_ai_coach_chat_sessions__session_id__events__event_id__answer_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: session_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Session Id
-      - name: event_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Event Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AiCoachChatEventAnswerSubmit'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/ai-coach/sessions:
-    post:
-      tags:
-      - newcomer-training-ai-coach
-      - newcomer-training-ai-coach
-      summary: Create Ai Coach Session
-      description: Create a new AI coach session.
-      operationId: create_ai_coach_session_api_v1_newcomer_training_ai_coach_sessions_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AiCoachSessionCreate'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/ai-coach/sessions/{session_id}/turns:
-    post:
-      tags:
-      - newcomer-training-ai-coach
-      - newcomer-training-ai-coach
-      summary: Submit Ai Coach Turn
-      description: Submit an answer for the current turn.
-      operationId: submit_ai_coach_turn_api_v1_newcomer_training_ai_coach_sessions__session_id__turns_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: session_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Session Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AiCoachTurnSubmit'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/ai-coach/sessions/{session_id}/turns/{turn_id}/submit:
-    post:
-      tags:
-      - newcomer-training-ai-coach
-      - newcomer-training-ai-coach
-      summary: Submit Ai Coach Turn V1
-      description: 'Explicit per-turn submit endpoint.
-
-
-        Matches the frontend URL shape ``/sessions/{session_id}/turns/{turn_id}``
-
-        and validates that ``turn_id`` corresponds to the latest turn (otherwise
-
-        we 409 to prevent a stale client from writing against a replaced
-
-        binding).'
-      operationId: submit_ai_coach_turn_v1_api_v1_newcomer_training_ai_coach_sessions__session_id__turns__turn_id__submit_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: session_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Session Id
-      - name: turn_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Turn Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AiCoachTurnSubmitV1'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/newcomer-training/ai-coach/sessions/{session_id}:
-    get:
-      tags:
-      - newcomer-training-ai-coach
-      - newcomer-training-ai-coach
-      summary: Get Ai Coach Session
-      description: Get an AI coach session with all turns.
-      operationId: get_ai_coach_session_api_v1_newcomer_training_ai_coach_sessions__session_id__get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: session_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Session Id
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config:
-    get:
-      tags:
-      - admin-newcomer-training-ai-coach
-      - admin-newcomer-training-ai-coach
-      summary: Get Ai Coach Config
-      description: Get AI coach config for a module.
-      operationId: get_ai_coach_config_api_v1_admin_newcomer_training_modules__module_key__ai_coach_config_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: module_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Module Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-    put:
-      tags:
-      - admin-newcomer-training-ai-coach
-      - admin-newcomer-training-ai-coach
-      summary: Save Ai Coach Config
-      description: Save AI coach config for a module.
-      operationId: save_ai_coach_config_api_v1_admin_newcomer_training_modules__module_key__ai_coach_config_put
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: module_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Module Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AiCoachConfig'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config/publish:
-    post:
-      tags:
-      - admin-newcomer-training-ai-coach
-      - admin-newcomer-training-ai-coach
-      summary: Publish Ai Coach Config
-      description: 'Publish the latest working path-config revision (which may contain the AI 教练 config).
-
-
-        The AI 教练 config is stored as a nested field of NewcomerPathModuleConfig and
-
-        therefore ships via the existing path_config publish workflow (NewcomerPathConfigService.publish_config).
-
-        This endpoint simply exposes a shortcut so admins can publish from the AI 教练 tab
-
-        without navigating back to the path-config center.
-
-
-        NOTE: callers cannot supply an arbitrary ``revision_id`` here — the
-
-        publish workflow always promotes the latest working revision. Any
-
-        external rollback must go through the dedicated
-
-        ``POST /admin/newcomer-training/path-config/rollback`` endpoint and
-
-        is constrained to published revisions by the path-config service.'
-      operationId: publish_ai_coach_config_api_v1_admin_newcomer_training_modules__module_key__ai_coach_config_publish_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: module_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Module Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config/rollback:
-    post:
-      tags:
-      - admin-newcomer-training-ai-coach
-      - admin-newcomer-training-ai-coach
-      summary: Rollback Ai Coach Config
-      description: 'Roll back the AI 教练 (path) config to a previously published revision.
-
-
-        Enforces that ``revision_id`` refers to a *published* revision. Working
-
-        revisions cannot be the target of a rollback; admins must publish them
-
-        first via the dedicated ``publish`` endpoint. This matches the
-
-        path-config rollback workflow and keeps the audit trail consistent.'
-      operationId: rollback_ai_coach_config_api_v1_admin_newcomer_training_modules__module_key__ai_coach_config_rollback_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: module_key
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Module Key
-      - name: app_session
-        in: cookie
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: App Session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-              title: Payload
       responses:
         '200':
           description: Successful Response
@@ -19411,6 +17307,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/learning-contents/{content_id}/binding-impact:
+    get:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: Get Learning Content Binding Impact
+      operationId: get_learning_content_binding_impact_api_v1_curriculum_learning_contents__content_id__binding_impact_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/curriculum/learning-contents/{content_id}/chapters:
     post:
       tags:
@@ -26352,434 +24284,97 @@ components:
       additionalProperties: false
       type: object
       title: AgentVoicePolicyPayload
-    AiCoachAnswerPayloadV1:
+    AiCoachActivity:
       properties:
-        variant:
-          type: string
-          enum:
-          - choice
-          - text
-          title: Variant
-        option_ids:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
-          title: Option Ids
-        text:
-          anyOf:
-          - type: string
-            maxLength: 8000
-          - type: 'null'
-          title: Text
-      additionalProperties: false
-      type: object
-      required:
-      - variant
-      title: AiCoachAnswerPayloadV1
-    AiCoachChatEventAnswerSubmit:
-      properties:
-        answer_payload:
-          $ref: '#/components/schemas/AiCoachAnswerPayloadV1'
-      additionalProperties: false
-      type: object
-      required:
-      - answer_payload
-      title: AiCoachChatEventAnswerSubmit
-    AiCoachChatMessageCreate:
-      properties:
-        content:
-          anyOf:
-          - type: string
-            maxLength: 2000
-            minLength: 1
-          - type: 'null'
-          title: Content
-        command:
-          anyOf:
-          - type: string
-            enum:
-            - continue
-            - explain
-            - switch_scenario
-            - summarize
-            - end
-            - retry
-          - type: 'null'
-          title: Command
-        event_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Event Id
-      additionalProperties: false
-      type: object
-      title: AiCoachChatMessageCreate
-    AiCoachChatSessionCreate:
-      properties:
-        module_key:
+        activity_id:
           type: string
           maxLength: 80
           minLength: 1
-          title: Module Key
-        resume_strategy:
+          title: Activity Id
+        title:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Title
+        description:
           anyOf:
           - type: string
-            enum:
-            - latest_active_or_new
-            - latest_in_progress
-            - new
+            maxLength: 1000
           - type: 'null'
-          title: Resume Strategy
+          title: Description
+        order_index:
+          type: integer
+          minimum: 1.0
+          title: Order Index
+        required:
+          type: boolean
+          title: Required
+          default: true
+        estimated_minutes:
+          anyOf:
+          - type: integer
+            maximum: 1440.0
+            minimum: 1.0
+          - type: 'null'
+          title: Estimated Minutes
+        prerequisites:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Prerequisites
+        type:
+          type: string
+          const: ai_coach
+          title: Type
+        config:
+          $ref: '#/components/schemas/AiCoachActivityConfig'
       additionalProperties: false
       type: object
       required:
-      - module_key
-      title: AiCoachChatSessionCreate
-    AiCoachConfig:
+      - activity_id
+      - title
+      - order_index
+      - type
+      - config
+      title: AiCoachActivity
+    AiCoachActivityConfig:
       properties:
-        enabled:
-          type: boolean
-          title: Enabled
-          default: false
-        coach_mode:
+        coach_profile_id:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Coach Profile Id
+        completion_mode:
           type: string
           enum:
-          - single_choice_drill
-          - multiple_choice_drill
-          - short_answer_drill
-          - mixed_drill
-          title: Coach Mode
-          default: mixed_drill
-        allowed_interaction_types:
-          items:
-            type: string
-            enum:
-            - single_choice
-            - multiple_choice
-            - short_answer
-          type: array
-          title: Allowed Interaction Types
-        allowed_training_card_types:
-          items:
-            type: string
-            enum:
-            - scenario_judgment
-            - expression_rewrite
-            - role_response
-          type: array
-          maxItems: 3
-          minItems: 1
-          title: Allowed Training Card Types
-        chat_enabled:
-          type: boolean
-          title: Chat Enabled
-          default: true
-        allowed_ui_event_types:
-          items:
-            type: string
-            enum:
-            - quiz_card
-            - explanation_card
-            - summary_card
-            - followup_prompt
-          type: array
-          title: Allowed Ui Event Types
-        max_cards_per_message:
-          type: integer
-          maximum: 5.0
-          minimum: 1.0
-          title: Max Cards Per Message
-          default: 1
-        streaming_enabled:
-          type: boolean
-          title: Streaming Enabled
-          default: true
-        entry_resume_policy:
-          type: string
-          enum:
-          - latest_active_or_new
-          - latest_in_progress
-          - new
-          title: Entry Resume Policy
-          default: latest_active_or_new
-        generation_timeout_seconds:
-          type: integer
-          maximum: 120.0
-          minimum: 5.0
-          title: Generation Timeout Seconds
-          default: 120
-        proactive_coaching_enabled:
-          type: boolean
-          title: Proactive Coaching Enabled
-          default: false
-        session_start_behavior:
-          type: string
-          enum:
-          - welcome_only
-          - plan_then_wait
-          - plan_and_first_card
-          title: Session Start Behavior
-          default: welcome_only
-        auto_advance_enabled:
-          type: boolean
-          title: Auto Advance Enabled
-          default: false
-        max_auto_steps_per_session:
-          type: integer
-          maximum: 10.0
-          minimum: 1.0
-          title: Max Auto Steps Per Session
-          default: 5
-        correct_streak_to_increase_difficulty:
-          type: integer
-          maximum: 10.0
-          minimum: 1.0
-          title: Correct Streak To Increase Difficulty
-          default: 2
-        incorrect_streak_to_remediate:
-          type: integer
-          maximum: 10.0
-          minimum: 1.0
-          title: Incorrect Streak To Remediate
-          default: 1
-        incorrect_streak_to_pause:
-          type: integer
-          maximum: 10.0
-          minimum: 1.0
-          title: Incorrect Streak To Pause
-          default: 2
-        remediation_strategy:
-          type: string
-          enum:
-          - explain_then_retry
-          - ask_user_choice
-          - simplify_then_retry
-          title: Remediation Strategy
-          default: explain_then_retry
-        summary_when_mastery_reached:
-          type: boolean
-          title: Summary When Mastery Reached
-          default: true
-        allowed_next_actions:
-          items:
-            type: string
-            enum:
-            - continue_drill
-            - increase_difficulty
-            - remediate
-            - switch_scenario
-            - summarize
-            - ask_user_choice
-            - end_session
-          type: array
-          title: Allowed Next Actions
-        chat_welcome_message:
-          type: string
-          maxLength: 300
-          minLength: 1
-          title: Chat Welcome Message
-          default: 你好，我是商务技巧 AI 教练。你可以直接说想练什么，我会把练习卡片放在对话里。
-        empty_response_recovery_message:
-          type: string
-          maxLength: 300
-          minLength: 1
-          title: Empty Response Recovery Message
-          default: 我没有拿到可操作的训练卡片。你可以继续下一题、换个场景，或先总结本轮。
-        empty_response_recovery_prompts:
-          items:
-            type: string
-          type: array
-          maxItems: 4
-          minItems: 1
-          title: Empty Response Recovery Prompts
-        generation_failure_recovery_message:
-          type: string
-          maxLength: 300
-          minLength: 1
-          title: Generation Failure Recovery Message
-          default: 我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。
-        generation_failure_recovery_prompts:
-          items:
-            type: string
-          type: array
-          maxItems: 4
-          minItems: 1
-          title: Generation Failure Recovery Prompts
-        prompt_template_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Prompt Template Id
-        prompt_revision_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Prompt Revision Id
-        prompt_contract_hash:
-          anyOf:
-          - type: string
-            maxLength: 128
-            minLength: 1
-          - type: 'null'
-          title: Prompt Contract Hash
-          description: Runtime audit contract hash. Module config keeps this null; session runtime records
-            the compiled prompt hash.
-        scoring_prompt_template_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Scoring Prompt Template Id
-        scoring_prompt_revision_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Scoring Prompt Revision Id
-        scoring_contract_hash:
-          anyOf:
-          - type: string
-            maxLength: 128
-            minLength: 1
-          - type: 'null'
-          title: Scoring Contract Hash
-          description: Runtime audit contract hash for the scoring prompt. Module config keeps this null;
-            session runtime records the compiled prompt hash.
-        min_turns:
-          type: integer
-          maximum: 20.0
-          minimum: 1.0
-          title: Min Turns
-          default: 3
-        max_turns:
-          type: integer
-          maximum: 50.0
-          minimum: 1.0
-          title: Max Turns
-          default: 10
-        mastery_threshold:
-          type: number
-          maximum: 100.0
-          minimum: 0.0
-          title: Mastery Threshold
-          default: 80.0
-        output_schema_version:
-          type: string
-          maxLength: 32
-          minLength: 1
-          title: Output Schema Version
-          default: ai_coach_interaction_v1
-        generation_model:
-          anyOf:
-          - type: string
-            maxLength: 120
-            minLength: 1
-          - type: 'null'
-          title: Generation Model
-        scoring_model:
-          anyOf:
-          - type: string
-            maxLength: 120
-            minLength: 1
-          - type: 'null'
-          title: Scoring Model
-        retry_policy:
-          $ref: '#/components/schemas/AiCoachRetryPolicy'
-        failure_behavior:
-          type: string
-          enum:
-          - abort
-          - skip_turn
-          - continue_with_fallback
-          title: Failure Behavior
-          default: skip_turn
-      additionalProperties: false
-      type: object
-      title: AiCoachConfig
-    AiCoachRetryPolicy:
-      properties:
-        max_retries:
-          type: integer
-          maximum: 5.0
-          minimum: 0.0
-          title: Max Retries
-          default: 1
-        retry_backoff:
-          type: number
-          maximum: 30.0
-          exclusiveMinimum: 0.0
-          title: Retry Backoff
-          default: 1.0
-      additionalProperties: false
-      type: object
-      title: AiCoachRetryPolicy
-    AiCoachSessionCreate:
-      properties:
-        module_key:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Module Key
-        coach_mode:
-          anyOf:
-          - type: string
-            enum:
-            - single_choice_drill
-            - multiple_choice_drill
-            - short_answer_drill
-            - mixed_drill
-          - type: 'null'
-          title: Coach Mode
-        interaction_type:
-          anyOf:
-          - type: string
-            enum:
-            - single_choice
-            - multiple_choice
-            - short_answer
-          - type: 'null'
-          title: Interaction Type
+          - session_completed
+          - goal_reached
+          title: Completion Mode
+          default: session_completed
       additionalProperties: false
       type: object
       required:
-      - module_key
-      title: AiCoachSessionCreate
-    AiCoachTurnSubmit:
+      - coach_profile_id
+      title: AiCoachActivityConfig
+    AiCoachTurnRequest:
       properties:
-        user_answer:
-          anyOf:
-          - type: string
-            maxLength: 8000
-            minLength: 1
-          - type: 'null'
-          title: User Answer
-        answer_payload:
-          anyOf:
-          - $ref: '#/components/schemas/AiCoachAnswerPayloadV1'
-          - type: 'null'
-      additionalProperties: false
-      type: object
-      title: AiCoachTurnSubmit
-    AiCoachTurnSubmitV1:
-      properties:
-        answer_payload:
-          $ref: '#/components/schemas/AiCoachAnswerPayloadV1'
+        client_token:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Client Token
+        answer:
+          type: string
+          maxLength: 10000
+          minLength: 1
+          title: Answer
       additionalProperties: false
       type: object
       required:
-      - answer_payload
-      title: AiCoachTurnSubmitV1
-      description: v1 turn submission; always uses the structured answer payload.
+      - client_token
+      - answer
+      title: AiCoachTurnRequest
     AnswerabilityProfileCreateRequest:
       properties:
         profile_key:
@@ -26980,6 +24575,196 @@ components:
       - recent_change_summary
       - health_summary
       title: AssetGovernanceSummary
+    AssignmentActivity:
+      properties:
+        activity_id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Activity Id
+        title:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Title
+        description:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Description
+        order_index:
+          type: integer
+          minimum: 1.0
+          title: Order Index
+        required:
+          type: boolean
+          title: Required
+          default: true
+        estimated_minutes:
+          anyOf:
+          - type: integer
+            maximum: 1440.0
+            minimum: 1.0
+          - type: 'null'
+          title: Estimated Minutes
+        prerequisites:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Prerequisites
+        type:
+          type: string
+          const: assignment
+          title: Type
+        config:
+          $ref: '#/components/schemas/AssignmentConfig'
+      additionalProperties: false
+      type: object
+      required:
+      - activity_id
+      - title
+      - order_index
+      - type
+      - config
+      title: AssignmentActivity
+    AssignmentConfig:
+      properties:
+        submission_type:
+          type: string
+          enum:
+          - text
+          - file
+          - text_or_file
+          title: Submission Type
+        review_mode:
+          type: string
+          enum:
+          - automatic_complete
+          - manual_review
+          title: Review Mode
+        max_file_size_bytes:
+          type: integer
+          maximum: 52428800.0
+          minimum: 1.0
+          title: Max File Size Bytes
+          default: 10485760
+      additionalProperties: false
+      type: object
+      required:
+      - submission_type
+      - review_mode
+      title: AssignmentConfig
+    AudienceRule:
+      properties:
+        learner_levels:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Learner Levels
+        roles:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Roles
+        departments:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Departments
+      additionalProperties: false
+      type: object
+      title: AudienceRule
+    AudioAssessmentActivity:
+      properties:
+        activity_id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Activity Id
+        title:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Title
+        description:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Description
+        order_index:
+          type: integer
+          minimum: 1.0
+          title: Order Index
+        required:
+          type: boolean
+          title: Required
+          default: true
+        estimated_minutes:
+          anyOf:
+          - type: integer
+            maximum: 1440.0
+            minimum: 1.0
+          - type: 'null'
+          title: Estimated Minutes
+        prerequisites:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Prerequisites
+        type:
+          type: string
+          const: audio_assessment
+          title: Type
+        config:
+          $ref: '#/components/schemas/AudioAssessmentConfig'
+      additionalProperties: false
+      type: object
+      required:
+      - activity_id
+      - title
+      - order_index
+      - type
+      - config
+      title: AudioAssessmentActivity
+    AudioAssessmentConfig:
+      properties:
+        scoring_rubric_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Scoring Rubric Id
+        material_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Material Id
+        pass_score:
+          type: number
+          maximum: 100.0
+          minimum: 0.0
+          title: Pass Score
+        max_attempts:
+          anyOf:
+          - type: integer
+            maximum: 100.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Attempts
+      additionalProperties: false
+      type: object
+      required:
+      - scoring_rubric_id
+      - pass_score
+      title: AudioAssessmentConfig
     AudioAuditPayloadSchema:
       properties:
         summary:
@@ -27364,34 +25149,6 @@ components:
       required:
       - file
       title: Body_create_test_bank_import_api_v1_curriculum_test_bank_imports_post
-    Body_import_business_etiquette_markdown_api_v1_admin_newcomer_training_business_etiquette_imports_post:
-      properties:
-        training_pack_key:
-          anyOf:
-          - type: string
-            maxLength: 80
-            minLength: 1
-          - type: 'null'
-          title: Training Pack Key
-        allow_overwrite_draft:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Allow Overwrite Draft
-        reason:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Reason
-        file:
-          type: string
-          contentMediaType: application/octet-stream
-          title: File
-      type: object
-      required:
-      - file
-      title: Body_import_business_etiquette_markdown_api_v1_admin_newcomer_training_business_etiquette_imports_post
     Body_replace_presentation_api_v1_presentations__presentation_id__replace_post:
       properties:
         file:
@@ -27407,6 +25164,45 @@ components:
       required:
       - file
       title: Body_replace_presentation_api_v1_presentations__presentation_id__replace_post
+    Body_submit_assignment_api_v1_newcomer_training_activities__activity_id__assignments_post:
+      properties:
+        client_token:
+          type: string
+          title: Client Token
+        text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Text
+        file:
+          anyOf:
+          - type: string
+            contentMediaType: application/octet-stream
+          - type: 'null'
+          title: File
+      type: object
+      required:
+      - client_token
+      title: Body_submit_assignment_api_v1_newcomer_training_activities__activity_id__assignments_post
+    Body_submit_audio_api_v1_newcomer_training_activities__activity_id__audio_submissions_post:
+      properties:
+        client_token:
+          type: string
+          title: Client Token
+        confirmed_material_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confirmed Material Version Id
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - client_token
+      - file
+      title: Body_submit_audio_api_v1_newcomer_training_activities__activity_id__audio_submissions_post
     Body_upload_audio_file_api_v1_sales_trainer_audio_submissions_upload_post:
       properties:
         unit_id:
@@ -27494,616 +25290,6 @@ components:
       - title
       - file
       title: Body_upload_presentation_api_v1_presentations_post
-    BusinessEtiquetteCapabilityActionRequest:
-      properties:
-        training_pack_key:
-          anyOf:
-          - type: string
-            maxLength: 80
-            minLength: 1
-          - type: 'null'
-          title: Training Pack Key
-        reason:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Reason
-      additionalProperties: false
-      type: object
-      title: BusinessEtiquetteCapabilityActionRequest
-    BusinessEtiquetteCapabilityConfig:
-      properties:
-        capability_key:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Capability Key
-        display_name:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Display Name
-        description:
-          anyOf:
-          - type: string
-            maxLength: 1000
-          - type: 'null'
-          title: Description
-        mastery_levels:
-          items:
-            $ref: '#/components/schemas/BusinessEtiquetteMasteryLevelConfig'
-          type: array
-          title: Mastery Levels
-        default_threshold:
-          type: number
-          maximum: 100.0
-          minimum: 0.0
-          title: Default Threshold
-        evidence_rules:
-          items:
-            $ref: '#/components/schemas/BusinessEtiquetteEvidenceRuleConfig'
-          type: array
-          title: Evidence Rules
-        owner_scope:
-          type: string
-          const: business_etiquette_training_pack
-          title: Owner Scope
-          default: business_etiquette_training_pack
-        status:
-          type: string
-          enum:
-          - draft
-          - published
-          - archived
-          title: Status
-          default: draft
-      additionalProperties: false
-      type: object
-      required:
-      - capability_key
-      - display_name
-      - default_threshold
-      title: BusinessEtiquetteCapabilityConfig
-    BusinessEtiquetteCapabilitySnapshotSaveRequest:
-      properties:
-        training_pack_key:
-          anyOf:
-          - type: string
-            maxLength: 80
-            minLength: 1
-          - type: 'null'
-          title: Training Pack Key
-        capabilities:
-          items:
-            $ref: '#/components/schemas/BusinessEtiquetteCapabilityConfig'
-          type: array
-          title: Capabilities
-        chapter_bindings:
-          items:
-            $ref: '#/components/schemas/BusinessEtiquetteChapterCapabilityBinding'
-          type: array
-          title: Chapter Bindings
-        reason:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Reason
-      additionalProperties: false
-      type: object
-      title: BusinessEtiquetteCapabilitySnapshotSaveRequest
-    BusinessEtiquetteChapterCapabilityBinding:
-      properties:
-        chapter_order:
-          type: integer
-          maximum: 100.0
-          minimum: 1.0
-          title: Chapter Order
-        capability_keys:
-          items:
-            type: string
-          type: array
-          title: Capability Keys
-      additionalProperties: false
-      type: object
-      required:
-      - chapter_order
-      title: BusinessEtiquetteChapterCapabilityBinding
-    BusinessEtiquetteEvidenceRuleConfig:
-      properties:
-        evidence_type:
-          type: string
-          enum:
-          - quiz_question
-          - ai_coach_card
-          - coach_feedback
-          - reading_progress
-          - manual_review
-          title: Evidence Type
-        weight:
-          type: number
-          maximum: 10.0
-          minimum: 0.0
-          title: Weight
-          default: 1.0
-        required:
-          type: boolean
-          title: Required
-          default: false
-        description:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Description
-      additionalProperties: false
-      type: object
-      required:
-      - evidence_type
-      title: BusinessEtiquetteEvidenceRuleConfig
-    BusinessEtiquetteMasteryLevelConfig:
-      properties:
-        level_key:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Level Key
-        display_name:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Display Name
-        min_score:
-          type: number
-          maximum: 100.0
-          minimum: 0.0
-          title: Min Score
-        description:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Description
-      additionalProperties: false
-      type: object
-      required:
-      - level_key
-      - display_name
-      - min_score
-      title: BusinessEtiquetteMasteryLevelConfig
-    BusinessEtiquetteQuestionDraftApproveRequest:
-      properties:
-        category_id:
-          type: string
-          maxLength: 36
-          minLength: 1
-          title: Category Id
-        review_notes:
-          anyOf:
-          - type: string
-            maxLength: 2000
-          - type: 'null'
-          title: Review Notes
-      additionalProperties: false
-      type: object
-      required:
-      - category_id
-      title: BusinessEtiquetteQuestionDraftApproveRequest
-    BusinessEtiquetteQuestionDraftGenerateRequest:
-      properties:
-        training_pack_key:
-          anyOf:
-          - type: string
-            maxLength: 80
-            minLength: 1
-          - type: 'null'
-          title: Training Pack Key
-        chapter_order:
-          type: integer
-          maximum: 100.0
-          minimum: 1.0
-          title: Chapter Order
-        prompt_template_id:
-          type: string
-          maxLength: 36
-          minLength: 1
-          title: Prompt Template Id
-        question_types:
-          items:
-            type: string
-            enum:
-            - single_choice
-            - multiple_choice
-            - short_answer
-          type: array
-          title: Question Types
-        draft_count:
-          type: integer
-          maximum: 10.0
-          minimum: 1.0
-          title: Draft Count
-          default: 3
-        capability_keys:
-          items:
-            type: string
-          type: array
-          title: Capability Keys
-        model_config:
-          additionalProperties: true
-          type: object
-          title: Model Config
-        reason:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Reason
-      additionalProperties: false
-      type: object
-      required:
-      - chapter_order
-      - prompt_template_id
-      title: BusinessEtiquetteQuestionDraftGenerateRequest
-    BusinessEtiquetteQuestionDraftOption:
-      properties:
-        value:
-          type: string
-          maxLength: 20
-          minLength: 1
-          title: Value
-        label:
-          type: string
-          maxLength: 500
-          minLength: 1
-          title: Label
-      additionalProperties: false
-      type: object
-      required:
-      - value
-      - label
-      title: BusinessEtiquetteQuestionDraftOption
-    BusinessEtiquetteQuestionDraftRejectRequest:
-      properties:
-        review_notes:
-          type: string
-          maxLength: 2000
-          minLength: 1
-          title: Review Notes
-      additionalProperties: false
-      type: object
-      required:
-      - review_notes
-      title: BusinessEtiquetteQuestionDraftRejectRequest
-    BusinessEtiquetteQuestionDraftUpdateRequest:
-      properties:
-        title:
-          anyOf:
-          - type: string
-            maxLength: 200
-            minLength: 1
-          - type: 'null'
-          title: Title
-        stem:
-          anyOf:
-          - type: string
-            minLength: 1
-          - type: 'null'
-          title: Stem
-        question_type:
-          anyOf:
-          - type: string
-            enum:
-            - single_choice
-            - multiple_choice
-            - short_answer
-          - type: 'null'
-          title: Question Type
-        options:
-          anyOf:
-          - items:
-              $ref: '#/components/schemas/BusinessEtiquetteQuestionDraftOption'
-            type: array
-          - type: 'null'
-          title: Options
-        correct_answer:
-          anyOf:
-          - type: string
-            maxLength: 20
-            minLength: 1
-          - type: 'null'
-          title: Correct Answer
-        correct_answers:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
-          title: Correct Answers
-        reference_answer:
-          anyOf:
-          - type: string
-            maxLength: 8000
-            minLength: 1
-          - type: 'null'
-          title: Reference Answer
-        explanation:
-          anyOf:
-          - type: string
-            maxLength: 4000
-          - type: 'null'
-          title: Explanation
-        difficulty:
-          anyOf:
-          - type: string
-            enum:
-            - easy
-            - medium
-            - hard
-          - type: 'null'
-          title: Difficulty
-        capability_keys:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
-          title: Capability Keys
-        source_excerpt:
-          anyOf:
-          - type: string
-            maxLength: 4000
-          - type: 'null'
-          title: Source Excerpt
-        review_notes:
-          anyOf:
-          - type: string
-            maxLength: 2000
-          - type: 'null'
-          title: Review Notes
-      additionalProperties: false
-      type: object
-      title: BusinessEtiquetteQuestionDraftUpdateRequest
-    BusinessEtiquetteQuizAnswerSubmit:
-      properties:
-        question_id:
-          type: string
-          maxLength: 36
-          minLength: 1
-          title: Question Id
-        answer_payload:
-          title: Answer Payload
-      additionalProperties: false
-      type: object
-      required:
-      - question_id
-      - answer_payload
-      title: BusinessEtiquetteQuizAnswerSubmit
-    BusinessEtiquetteReleasePublishRequest:
-      properties:
-        training_pack_key:
-          anyOf:
-          - type: string
-            maxLength: 80
-            minLength: 1
-          - type: 'null'
-          title: Training Pack Key
-        strategy:
-          type: string
-          enum:
-          - future_learners_only
-          - allow_voluntary_switch
-          - assign_retraining
-          title: Strategy
-          default: future_learners_only
-        assigned_user_ids:
-          items:
-            type: string
-          type: array
-          maxItems: 100
-          title: Assigned User Ids
-        reason:
-          type: string
-          maxLength: 500
-          minLength: 1
-          title: Reason
-      additionalProperties: false
-      type: object
-      required:
-      - reason
-      title: BusinessEtiquetteReleasePublishRequest
-    BusinessEtiquetteRetrainingAssignmentRequest:
-      properties:
-        training_pack_key:
-          anyOf:
-          - type: string
-            maxLength: 80
-            minLength: 1
-          - type: 'null'
-          title: Training Pack Key
-        user_ids:
-          items:
-            type: string
-          type: array
-          maxItems: 100
-          minItems: 1
-          title: User Ids
-        reason:
-          type: string
-          maxLength: 500
-          minLength: 1
-          title: Reason
-      additionalProperties: false
-      type: object
-      required:
-      - user_ids
-      - reason
-      title: BusinessEtiquetteRetrainingAssignmentRequest
-    BusinessEtiquetteRetrainingStartRequest:
-      properties:
-        reason:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Reason
-      additionalProperties: false
-      type: object
-      title: BusinessEtiquetteRetrainingStartRequest
-    BusinessEtiquetteTrainingUnitConfig:
-      properties:
-        unit_key:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Unit Key
-        title:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Title
-        description:
-          anyOf:
-          - type: string
-            maxLength: 1000
-          - type: 'null'
-          title: Description
-        order_index:
-          type: integer
-          minimum: 1.0
-          title: Order Index
-          default: 1
-        enabled:
-          type: boolean
-          title: Enabled
-          default: true
-        source_chapter_orders:
-          items:
-            type: integer
-          type: array
-          title: Source Chapter Orders
-        source_card_keys:
-          items:
-            type: string
-          type: array
-          title: Source Card Keys
-        capability_keys:
-          items:
-            type: string
-          type: array
-          title: Capability Keys
-        unlock_after_unit_keys:
-          items:
-            type: string
-          type: array
-          title: Unlock After Unit Keys
-        require_reading:
-          type: boolean
-          title: Require Reading
-          default: true
-        require_quiz:
-          type: boolean
-          title: Require Quiz
-          default: true
-        require_ai_coach:
-          type: boolean
-          title: Require Ai Coach
-          default: true
-        ai_coach_required_capability_keys:
-          items:
-            type: string
-          type: array
-          title: Ai Coach Required Capability Keys
-        ai_coach_pass_mastery_level_key:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Ai Coach Pass Mastery Level Key
-          default: basic_mastery
-        ai_coach_ready_mastery_level_key:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Ai Coach Ready Mastery Level Key
-          default: field_ready
-        ai_coach_max_remediation_attempts:
-          type: integer
-          maximum: 20.0
-          minimum: 1.0
-          title: Ai Coach Max Remediation Attempts
-          default: 3
-        ai_coach_manual_review_after_max_attempts:
-          type: boolean
-          title: Ai Coach Manual Review After Max Attempts
-          default: true
-        ai_coach_block_next_until_passed:
-          type: boolean
-          title: Ai Coach Block Next Until Passed
-          default: true
-        ai_coach_remediation_chapter_orders:
-          items:
-            type: integer
-          type: array
-          title: Ai Coach Remediation Chapter Orders
-        quiz_question_count:
-          type: integer
-          maximum: 50.0
-          minimum: 1.0
-          title: Quiz Question Count
-          default: 5
-        quiz_pass_threshold:
-          anyOf:
-          - type: number
-            maximum: 100.0
-            minimum: 0.0
-          - type: 'null'
-          title: Quiz Pass Threshold
-        quiz_allow_retake:
-          type: boolean
-          title: Quiz Allow Retake
-          default: true
-        quiz_max_attempts:
-          anyOf:
-          - type: integer
-            maximum: 100.0
-            minimum: 1.0
-          - type: 'null'
-          title: Quiz Max Attempts
-        quiz_question_type_weights:
-          additionalProperties:
-            type: number
-          type: object
-          title: Quiz Question Type Weights
-        allow_skip_reading:
-          type: boolean
-          title: Allow Skip Reading
-          default: false
-        block_next_until_complete:
-          type: boolean
-          title: Block Next Until Complete
-          default: true
-        empty_state_message:
-          anyOf:
-          - type: string
-            maxLength: 300
-          - type: 'null'
-          title: Empty State Message
-      additionalProperties: false
-      type: object
-      required:
-      - unit_key
-      - title
-      title: BusinessEtiquetteTrainingUnitConfig
-    BusinessEtiquetteUnitQuizAttemptCreate:
-      properties:
-        answers:
-          items:
-            $ref: '#/components/schemas/BusinessEtiquetteQuizAnswerSubmit'
-          type: array
-          title: Answers
-      additionalProperties: false
-      type: object
-      title: BusinessEtiquetteUnitQuizAttemptCreate
     BusinessRuleDeleteDraftRequest:
       properties:
         reason:
@@ -28329,6 +25515,44 @@ components:
           title: Enabled
       type: object
       title: ChunkingPresetUpdateRequest
+    ClientTokenRequest:
+      properties:
+        client_token:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Client Token
+      additionalProperties: false
+      type: object
+      required:
+      - client_token
+      title: ClientTokenRequest
+    CompletionPolicy:
+      properties:
+        mode:
+          type: string
+          enum:
+          - all_required
+          - at_least_count
+          title: Mode
+        activity_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 200
+          title: Activity Ids
+        count:
+          anyOf:
+          - type: integer
+            maximum: 200.0
+            minimum: 1.0
+          - type: 'null'
+          title: Count
+      additionalProperties: false
+      type: object
+      required:
+      - mode
+      title: CompletionPolicy
     ComprehensiveReportDimensionScore:
       properties:
         name:
@@ -29572,237 +26796,6 @@ components:
       - hash
       - snapshot_label
       title: CurriculumVersionRef
-    CustomerFaqCard:
-      properties:
-        card_key:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Card Key
-        source_question_number:
-          anyOf:
-          - type: integer
-            maximum: 1000.0
-            minimum: 1.0
-          - type: 'null'
-          title: Source Question Number
-        question:
-          type: string
-          maxLength: 500
-          minLength: 1
-          title: Question
-        short_answer:
-          type: string
-          maxLength: 1000
-          minLength: 1
-          title: Short Answer
-        detailed_answer:
-          type: string
-          maxLength: 5000
-          minLength: 1
-          title: Detailed Answer
-        scenario:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Scenario
-        category:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Category
-        customer_intent:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Customer Intent
-        key_points:
-          items:
-            type: string
-          type: array
-          maxItems: 20
-          title: Key Points
-        evidence_cases:
-          items:
-            type: string
-          type: array
-          maxItems: 20
-          title: Evidence Cases
-        forbidden_claims:
-          items:
-            type: string
-          type: array
-          maxItems: 20
-          title: Forbidden Claims
-        escalation_required:
-          type: boolean
-          title: Escalation Required
-          default: false
-        difficulty_level:
-          type: string
-          enum:
-          - newcomer
-          - advanced
-          - high_risk
-          title: Difficulty Level
-          default: newcomer
-        tags:
-          items:
-            type: string
-          type: array
-          maxItems: 30
-          title: Tags
-        duplicate_group_key:
-          anyOf:
-          - type: string
-            maxLength: 120
-            minLength: 1
-          - type: 'null'
-          title: Duplicate Group Key
-        status:
-          type: string
-          enum:
-          - draft
-          - published
-          - archived
-          title: Status
-          default: published
-      additionalProperties: false
-      type: object
-      required:
-      - card_key
-      - question
-      - short_answer
-      - detailed_answer
-      - scenario
-      - category
-      title: CustomerFaqCard
-    CustomerFaqDuplicateGroup:
-      properties:
-        group_key:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Group Key
-        title:
-          type: string
-          maxLength: 200
-          minLength: 1
-          title: Title
-        card_keys:
-          items:
-            type: string
-          type: array
-          maxItems: 20
-          minItems: 2
-          title: Card Keys
-        reason:
-          type: string
-          maxLength: 500
-          minLength: 1
-          title: Reason
-      additionalProperties: false
-      type: object
-      required:
-      - group_key
-      - title
-      - reason
-      title: CustomerFaqDuplicateGroup
-    CustomerFaqEvidenceCase:
-      properties:
-        case_key:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Case Key
-        title:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Title
-        summary:
-          anyOf:
-          - type: string
-            maxLength: 1000
-          - type: 'null'
-          title: Summary
-        source_question_numbers:
-          items:
-            type: integer
-          type: array
-          maxItems: 20
-          title: Source Question Numbers
-      additionalProperties: false
-      type: object
-      required:
-      - case_key
-      - title
-      title: CustomerFaqEvidenceCase
-    CustomerFaqGenerateDraftRequest:
-      properties:
-        raw_text:
-          type: string
-          maxLength: 300000
-          minLength: 1
-          title: Raw Text
-        overwrite_working:
-          type: boolean
-          title: Overwrite Working
-          default: false
-        reason:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Reason
-      additionalProperties: false
-      type: object
-      required:
-      - raw_text
-      title: CustomerFaqGenerateDraftRequest
-    CustomerFaqImportParseRequest:
-      properties:
-        raw_text:
-          type: string
-          maxLength: 300000
-          minLength: 1
-          title: Raw Text
-      additionalProperties: false
-      type: object
-      required:
-      - raw_text
-      title: CustomerFaqImportParseRequest
-    CustomerFaqShortAnswerSubmit:
-      properties:
-        card_key:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Card Key
-        answer_text:
-          type: string
-          maxLength: 5000
-          minLength: 1
-          title: Answer Text
-      additionalProperties: false
-      type: object
-      required:
-      - card_key
-      - answer_text
-      title: CustomerFaqShortAnswerSubmit
-    CustomerFaqShortAnswerSubmitRequest:
-      properties:
-        answers:
-          items:
-            $ref: '#/components/schemas/CustomerFaqShortAnswerSubmit'
-          type: array
-          maxItems: 10
-          minItems: 1
-          title: Answers
-      additionalProperties: false
-      type: object
-      title: CustomerFaqShortAnswerSubmitRequest
     DebugTriggerRequest:
       properties:
         query:
@@ -29826,6 +26819,21 @@ components:
       required:
       - query
       title: DebugTriggerRequest
+    DraftRequest:
+      properties:
+        payload:
+          $ref: '#/components/schemas/TrainingPathPayload'
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+      additionalProperties: false
+      type: object
+      required:
+      - payload
+      - reason
+      title: DraftRequest
     EntityAliasCreateRequest:
       properties:
         canonical_entity:
@@ -29915,7 +26923,7 @@ components:
           maxLength: 80
           minLength: 1
           title: Module Key
-          default: business_skills
+          default: configurable
         pass_threshold:
           anyOf:
           - type: number
@@ -31177,6 +28185,79 @@ components:
       additionalProperties: false
       type: object
       title: LearningContentUpdate
+    LessonActivity:
+      properties:
+        activity_id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Activity Id
+        title:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Title
+        description:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Description
+        order_index:
+          type: integer
+          minimum: 1.0
+          title: Order Index
+        required:
+          type: boolean
+          title: Required
+          default: true
+        estimated_minutes:
+          anyOf:
+          - type: integer
+            maximum: 1440.0
+            minimum: 1.0
+          - type: 'null'
+          title: Estimated Minutes
+        prerequisites:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Prerequisites
+        type:
+          type: string
+          const: lesson
+          title: Type
+        config:
+          $ref: '#/components/schemas/LessonConfig'
+      additionalProperties: false
+      type: object
+      required:
+      - activity_id
+      - title
+      - order_index
+      - type
+      - config
+      title: LessonActivity
+    LessonConfig:
+      properties:
+        learning_content_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Learning Content Id
+        completion_mode:
+          type: string
+          enum:
+          - all_chapters
+          - learner_confirmed
+          title: Completion Mode
+          default: all_chapters
+      additionalProperties: false
+      type: object
+      required:
+      - learning_content_id
+      title: LessonConfig
     LinkedAssetChangeReference:
       properties:
         asset_type:
@@ -31557,87 +28638,18 @@ components:
       - tts
       title: ModelType
       description: AI model types
-    NewcomerArticleBindingUpdate:
+    ModuleConfig:
       properties:
-        learning_content_id:
-          type: string
-          maxLength: 36
-          minLength: 1
-          title: Learning Content Id
-        path_key:
+        module_id:
           type: string
           maxLength: 80
           minLength: 1
-          title: Path Key
-          default: newcomer_training_path_v1
-        reason:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Reason
-      additionalProperties: false
-      type: object
-      required:
-      - learning_content_id
-      title: NewcomerArticleBindingUpdate
-    NewcomerArticleProgressRequest:
-      properties:
-        chapter_id:
-          type: string
-          maxLength: 36
-          minLength: 1
-          title: Chapter Id
-        learning_content_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Learning Content Id
-      additionalProperties: false
-      type: object
-      required:
-      - chapter_id
-      title: NewcomerArticleProgressRequest
-    NewcomerLearningTopicConfig:
-      properties:
-        topic_key:
-          type: string
-          enum:
-          - business_etiquette
-          - customer_faq
-          title: Topic Key
-          default: business_etiquette
-        source_module_key:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Source Module Key
-          default: business_skills
-        content_kind:
-          type: string
-          enum:
-          - article
-          - faq_cards
-          title: Content Kind
-          default: article
-        enabled:
-          type: boolean
-          title: Enabled
-          default: true
-        disabled_reason:
-          anyOf:
-          - type: string
-            maxLength: 300
-          - type: 'null'
-          title: Disabled Reason
+          title: Module Id
         title:
           type: string
           maxLength: 120
           minLength: 1
           title: Title
-          default: 商务礼仪规范
         description:
           anyOf:
           - type: string
@@ -31648,578 +28660,56 @@ components:
           type: integer
           minimum: 1.0
           title: Order Index
-          default: 1
-        learning_content_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Learning Content Id
-        faq_cards:
-          items:
-            $ref: '#/components/schemas/CustomerFaqCard'
-          type: array
-          title: Faq Cards
-        duplicate_groups:
-          items:
-            $ref: '#/components/schemas/CustomerFaqDuplicateGroup'
-          type: array
-          title: Duplicate Groups
-        evidence_cases:
-          items:
-            $ref: '#/components/schemas/CustomerFaqEvidenceCase'
-          type: array
-          title: Evidence Cases
-        audio_scenario_key:
-          anyOf:
-          - type: string
-            maxLength: 80
-            minLength: 1
-          - type: 'null'
-          title: Audio Scenario Key
-        quiz_paper_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Quiz Paper Id
-        learning_units:
-          items:
-            $ref: '#/components/schemas/BusinessEtiquetteTrainingUnitConfig'
-          type: array
-          title: Learning Units
-        ai_coach:
-          anyOf:
-          - $ref: '#/components/schemas/AiCoachConfig'
-          - type: 'null'
         required:
           type: boolean
-          const: false
           title: Required
-          default: false
-        blocks_next:
-          type: boolean
-          const: false
-          title: Blocks Next
-          default: false
-        score_display_policy:
-          type: string
-          const: quiz_attempt_score
-          title: Score Display Policy
-          default: quiz_attempt_score
-      additionalProperties: false
-      type: object
-      title: NewcomerLearningTopicConfig
-    NewcomerLearningTopicsActionRequest:
-      properties:
-        reason:
-          type: string
-          maxLength: 500
-          minLength: 1
-          title: Reason
-        revision_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Revision Id
-      additionalProperties: false
-      type: object
-      required:
-      - reason
-      title: NewcomerLearningTopicsActionRequest
-    NewcomerLearningTopicsGenerateDraftRequest:
-      properties:
-        overwrite_working:
-          type: boolean
-          title: Overwrite Working
-          default: false
-        reason:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Reason
-      additionalProperties: false
-      type: object
-      title: NewcomerLearningTopicsGenerateDraftRequest
-    NewcomerLearningTopicsRollbackPreviewRequest:
-      properties:
-        revision_id:
-          type: string
-          maxLength: 36
-          minLength: 1
-          title: Revision Id
-      additionalProperties: false
-      type: object
-      required:
-      - revision_id
-      title: NewcomerLearningTopicsRollbackPreviewRequest
-    NewcomerLearningTopicsSaveRequest:
-      properties:
-        schema_version:
-          type: string
-          const: newcomer_learning_topics_v1
-          title: Schema Version
-          default: newcomer_learning_topics_v1
-        topics:
-          items:
-            $ref: '#/components/schemas/NewcomerLearningTopicConfig'
-          type: array
-          title: Topics
-        reason:
-          anyOf:
-          - type: string
-            maxLength: 500
-          - type: 'null'
-          title: Reason
-      additionalProperties: false
-      type: object
-      title: NewcomerLearningTopicsSaveRequest
-    NewcomerPathConfigActionRequest:
-      properties:
-        reason:
-          type: string
-          maxLength: 500
-          minLength: 1
-          title: Reason
-        revision_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Revision Id
-      additionalProperties: false
-      type: object
-      required:
-      - reason
-      title: NewcomerPathConfigActionRequest
-    NewcomerPathConfigSaveRequest:
-      properties:
-        path_key:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Path Key
-          default: newcomer_training_path_v1
-        title:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Title
-          default: 新人训练路径
-        goal_title:
-          anyOf:
-          - type: string
-            maxLength: 200
-          - type: 'null'
-          title: Goal Title
-        description:
-          anyOf:
-          - type: string
-            maxLength: 1000
-          - type: 'null'
-          title: Description
-        enabled:
-          type: boolean
-          title: Enabled
           default: true
-        modules:
-          items:
-            $ref: '#/components/schemas/NewcomerPathModuleConfig'
-          type: array
-          title: Modules
-        reason:
+        estimated_minutes:
           anyOf:
-          - type: string
-            maxLength: 500
+          - type: integer
+            maximum: 10080.0
+            minimum: 1.0
           - type: 'null'
-          title: Reason
-      additionalProperties: false
-      type: object
-      title: NewcomerPathConfigSaveRequest
-    NewcomerPathDurationOptionConfig:
-      properties:
-        option_key:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Option Key
-        display_name:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Display Name
-        duration_minutes:
-          type: integer
-          exclusiveMinimum: 0.0
-          title: Duration Minutes
-        target_unit_id:
-          type: string
-          maxLength: 36
-          minLength: 1
-          title: Target Unit Id
-        order_index:
-          type: integer
-          minimum: 1.0
-          title: Order Index
-          default: 1
-      additionalProperties: false
-      type: object
-      required:
-      - option_key
-      - display_name
-      - duration_minutes
-      - target_unit_id
-      title: NewcomerPathDurationOptionConfig
-    NewcomerPathModuleConfig:
-      properties:
-        module_key:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Module Key
-        scenario_key:
-          anyOf:
-          - type: string
-            maxLength: 80
-            minLength: 1
-          - type: 'null'
-          title: Scenario Key
-        module_type:
-          type: string
-          enum:
-          - audio_scoring
-          - article_exam
-          - audio_scoring_group
-          - realtime_roleplay
-          - realtime_placeholder
-          title: Module Type
-          default: audio_scoring
-        enabled:
-          type: boolean
-          title: Enabled
-          default: true
-        order_index:
-          type: integer
-          minimum: 1.0
-          title: Order Index
-          default: 1
-        title:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Title
-        description:
-          anyOf:
-          - type: string
-            maxLength: 1000
-          - type: 'null'
-          title: Description
-        target_unit_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Target Unit Id
-        learning_content_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Learning Content Id
-        exam_paper_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Exam Paper Id
-        material_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Material Id
-        material_version_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Material Version Id
-        scoring_prompt_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Scoring Prompt Id
-        disabled_reason:
-          anyOf:
-          - type: string
-            maxLength: 300
-          - type: 'null'
-          title: Disabled Reason
-        unlock_after_unit_ids:
+          title: Estimated Minutes
+        audience_rule:
+          $ref: '#/components/schemas/AudienceRule'
+        prerequisites:
           items:
             type: string
           type: array
-          title: Unlock After Unit Ids
-        capability_keys:
+          maxItems: 50
+          title: Prerequisites
+        completion_policy:
+          $ref: '#/components/schemas/CompletionPolicy'
+        activities:
           items:
-            type: string
+            oneOf:
+            - $ref: '#/components/schemas/LessonActivity'
+            - $ref: '#/components/schemas/QuizActivity'
+            - $ref: '#/components/schemas/AudioAssessmentActivity'
+            - $ref: '#/components/schemas/RealtimeRoleplayActivity'
+            - $ref: '#/components/schemas/AiCoachActivity'
+            - $ref: '#/components/schemas/AssignmentActivity'
+            discriminator:
+              propertyName: type
+              mapping:
+                ai_coach: '#/components/schemas/AiCoachActivity'
+                assignment: '#/components/schemas/AssignmentActivity'
+                audio_assessment: '#/components/schemas/AudioAssessmentActivity'
+                lesson: '#/components/schemas/LessonActivity'
+                quiz: '#/components/schemas/QuizActivity'
+                realtime_roleplay: '#/components/schemas/RealtimeRoleplayActivity'
           type: array
-          title: Capability Keys
-        learner_level_required:
-          items:
-            type: string
-          type: array
-          title: Learner Level Required
-        completion_rule:
-          type: string
-          enum:
-          - passed
-          - scored
-          - submitted
-          title: Completion Rule
-          default: passed
-        primary_action_label:
-          anyOf:
-          - type: string
-            maxLength: 40
-          - type: 'null'
-          title: Primary Action Label
-        retry_action_label:
-          anyOf:
-          - type: string
-            maxLength: 40
-          - type: 'null'
-          title: Retry Action Label
-        review_action_label:
-          anyOf:
-          - type: string
-            maxLength: 40
-          - type: 'null'
-          title: Review Action Label
-        guidance_templates:
-          additionalProperties:
-            type: string
-          type: object
-          title: Guidance Templates
-        ai_coach:
-          anyOf:
-          - $ref: '#/components/schemas/AiCoachConfig'
-          - type: 'null'
-        runtime_binding:
-          anyOf:
-          - $ref: '#/components/schemas/NewcomerRealtimeRuntimeBinding'
-          - type: 'null'
-        learning_units:
-          items:
-            $ref: '#/components/schemas/BusinessEtiquetteTrainingUnitConfig'
-          type: array
-          title: Learning Units
-        duration_options:
-          items:
-            $ref: '#/components/schemas/NewcomerPathDurationOptionConfig'
-          type: array
-          title: Duration Options
+          maxItems: 200
+          title: Activities
       additionalProperties: false
       type: object
       required:
-      - module_key
+      - module_id
       - title
-      title: NewcomerPathModuleConfig
-    NewcomerPathRollbackPreviewRequest:
-      properties:
-        revision_id:
-          type: string
-          maxLength: 36
-          minLength: 1
-          title: Revision Id
-      additionalProperties: false
-      type: object
-      required:
-      - revision_id
-      title: NewcomerPathRollbackPreviewRequest
-    NewcomerRealtimeFailurePolicy:
-      properties:
-        terminal_codes:
-          items:
-            type: string
-          type: array
-          maxItems: 50
-          title: Terminal Codes
-        transient_codes:
-          items:
-            type: string
-          type: array
-          maxItems: 50
-          title: Transient Codes
-        voluntary_codes:
-          items:
-            type: string
-          type: array
-          maxItems: 50
-          title: Voluntary Codes
-        terminal_retry_allowed:
-          type: boolean
-          const: false
-          title: Terminal Retry Allowed
-          default: false
-      additionalProperties: false
-      type: object
-      title: NewcomerRealtimeFailurePolicy
-    NewcomerRealtimePermissionPolicy:
-      properties:
-        learner_enter:
-          type: string
-          const: sales_trainer.enter_realtime
-          title: Learner Enter
-          default: sales_trainer.enter_realtime
-        admin_configure:
-          type: string
-          const: sales_trainer.manage_modules
-          title: Admin Configure
-          default: sales_trainer.manage_modules
-        admin_provider_health:
-          type: string
-          const: sales_trainer.view_settings
-          title: Admin Provider Health
-          default: sales_trainer.view_settings
-      additionalProperties: false
-      type: object
-      title: NewcomerRealtimePermissionPolicy
-    NewcomerRealtimeProviderReadinessSnapshot:
-      properties:
-        provider:
-          type: string
-          enum:
-          - stepfun_realtime
-          - legacy
-          - mock
-          title: Provider
-        ready:
-          type: boolean
-          title: Ready
-        checked_at:
-          type: string
-          maxLength: 80
-          minLength: 1
-          title: Checked At
-        config_revision_id:
-          anyOf:
-          - type: string
-            maxLength: 120
-            minLength: 1
-          - type: 'null'
-          title: Config Revision Id
-        failure_code:
-          anyOf:
-          - type: string
-            maxLength: 120
-            minLength: 1
-          - type: 'null'
-          title: Failure Code
-        failure_message:
-          anyOf:
-          - type: string
-            maxLength: 500
-            minLength: 1
-          - type: 'null'
-          title: Failure Message
-      additionalProperties: false
-      type: object
-      required:
-      - provider
-      - ready
-      - checked_at
-      title: NewcomerRealtimeProviderReadinessSnapshot
-    NewcomerRealtimeRollbackPolicy:
-      properties:
-        rollback_via_active_revision:
-          type: boolean
-          const: true
-          title: Rollback Via Active Revision
-          default: true
-        disable_module_on_invalid_binding:
-          type: boolean
-          const: true
-          title: Disable Module On Invalid Binding
-          default: true
-        fallback_to_placeholder:
-          type: boolean
-          const: false
-          title: Fallback To Placeholder
-          default: false
-      additionalProperties: false
-      type: object
-      title: NewcomerRealtimeRollbackPolicy
-    NewcomerRealtimeRuntimeBinding:
-      properties:
-        binding_key:
-          type: string
-          const: newcomer_realtime_roleplay_v1
-          title: Binding Key
-        runtime_owner:
-          type: string
-          const: training_runtime
-          title: Runtime Owner
-        runtime_descriptor_id:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Runtime Descriptor Id
-        scenario_key:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Scenario Key
-        practice_template_id:
-          anyOf:
-          - type: string
-            maxLength: 36
-            minLength: 1
-          - type: 'null'
-          title: Practice Template Id
-        runtime_config_revision_id:
-          type: string
-          maxLength: 120
-          minLength: 1
-          title: Runtime Config Revision Id
-        roleplay_contract_revision_id:
-          anyOf:
-          - type: string
-            maxLength: 120
-            minLength: 1
-          - type: 'null'
-          title: Roleplay Contract Revision Id
-        provider_readiness_snapshot:
-          $ref: '#/components/schemas/NewcomerRealtimeProviderReadinessSnapshot'
-        permission_policy:
-          $ref: '#/components/schemas/NewcomerRealtimePermissionPolicy'
-        failure_policy:
-          $ref: '#/components/schemas/NewcomerRealtimeFailurePolicy'
-        rollback_policy:
-          $ref: '#/components/schemas/NewcomerRealtimeRollbackPolicy'
-      additionalProperties: false
-      type: object
-      required:
-      - binding_key
-      - runtime_owner
-      - runtime_descriptor_id
-      - scenario_key
-      - runtime_config_revision_id
-      - provider_readiness_snapshot
-      title: NewcomerRealtimeRuntimeBinding
+      - order_index
+      - completion_policy
+      title: ModuleConfig
     PageResponse:
       properties:
         page_number:
@@ -32322,6 +28812,45 @@ components:
       - target_revision_id
       - reason
       title: PaperRollbackRequest
+    PhaseConfig:
+      properties:
+        phase_id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Phase Id
+        title:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Title
+        description:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Description
+        order_index:
+          type: integer
+          minimum: 1.0
+          title: Order Index
+        required:
+          type: boolean
+          title: Required
+          default: true
+        modules:
+          items:
+            $ref: '#/components/schemas/ModuleConfig'
+          type: array
+          maxItems: 100
+          title: Modules
+      additionalProperties: false
+      type: object
+      required:
+      - phase_id
+      - title
+      - order_index
+      title: PhaseConfig
     PolicyPreviewPayload:
       properties:
         scope_type:
@@ -33907,6 +30436,60 @@ components:
       additionalProperties: false
       type: object
       title: QuestionItemUpdate
+    QuizActivity:
+      properties:
+        activity_id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Activity Id
+        title:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Title
+        description:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Description
+        order_index:
+          type: integer
+          minimum: 1.0
+          title: Order Index
+        required:
+          type: boolean
+          title: Required
+          default: true
+        estimated_minutes:
+          anyOf:
+          - type: integer
+            maximum: 1440.0
+            minimum: 1.0
+          - type: 'null'
+          title: Estimated Minutes
+        prerequisites:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Prerequisites
+        type:
+          type: string
+          const: quiz
+          title: Type
+        config:
+          $ref: '#/components/schemas/QuizConfig'
+      additionalProperties: false
+      type: object
+      required:
+      - activity_id
+      - title
+      - order_index
+      - type
+      - config
+      title: QuizActivity
     QuizAnswerSubmit:
       properties:
         question_id:
@@ -33948,6 +30531,50 @@ components:
       - unit_id
       - answers
       title: QuizAttemptCreate
+    QuizAttemptRequest:
+      properties:
+        client_token:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Client Token
+        answers:
+          items:
+            $ref: '#/components/schemas/QuizAnswerSubmit'
+          type: array
+          minItems: 1
+          title: Answers
+      additionalProperties: false
+      type: object
+      required:
+      - client_token
+      - answers
+      title: QuizAttemptRequest
+    QuizConfig:
+      properties:
+        exam_paper_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Exam Paper Id
+        pass_score:
+          type: number
+          maximum: 100.0
+          minimum: 0.0
+          title: Pass Score
+        max_attempts:
+          anyOf:
+          - type: integer
+            maximum: 100.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Attempts
+      additionalProperties: false
+      type: object
+      required:
+      - exam_paper_id
+      - pass_score
+      title: QuizConfig
     RankingProfileCreateRequest:
       properties:
         profile_key:
@@ -34102,38 +30729,38 @@ components:
           title: Enabled
       type: object
       title: RankingProfileUpdateRequest
-    ReadinessDossierReviewActionCreate:
+    ReadinessReviewRequest:
       properties:
         decision:
           type: string
           enum:
           - approve
-          - require_retraining
-          - mark_manual_follow_up
+          - reject
+          - retrain
           title: Decision
         reason:
           type: string
-          maxLength: 1000
+          maxLength: 500
           minLength: 1
           title: Reason
         capability_keys:
           items:
             type: string
           type: array
-          maxItems: 20
+          maxItems: 50
           title: Capability Keys
         source_evidence_ids:
           items:
             type: string
           type: array
-          maxItems: 50
+          maxItems: 100
           title: Source Evidence Ids
       additionalProperties: false
       type: object
       required:
       - decision
       - reason
-      title: ReadinessDossierReviewActionCreate
+      title: ReadinessReviewRequest
     RealtimeEvaluationFeedback:
       properties:
         stage_number:
@@ -34168,16 +30795,97 @@ components:
       - stage_number
       - timestamp
       title: RealtimeEvaluationFeedback
-    RealtimeRoleplayStartRequest:
+    RealtimeRoleplayActivity:
       properties:
-        module_key:
+        activity_id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Activity Id
+        title:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Title
+        description:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Description
+        order_index:
+          type: integer
+          minimum: 1.0
+          title: Order Index
+        required:
+          type: boolean
+          title: Required
+          default: true
+        estimated_minutes:
+          anyOf:
+          - type: integer
+            maximum: 1440.0
+            minimum: 1.0
+          - type: 'null'
+          title: Estimated Minutes
+        prerequisites:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Prerequisites
+        type:
           type: string
           const: realtime_roleplay
-          title: Module Key
-          default: realtime_roleplay
+          title: Type
+        config:
+          $ref: '#/components/schemas/RealtimeRoleplayConfig'
       additionalProperties: false
       type: object
-      title: RealtimeRoleplayStartRequest
+      required:
+      - activity_id
+      - title
+      - order_index
+      - type
+      - config
+      title: RealtimeRoleplayActivity
+    RealtimeRoleplayConfig:
+      properties:
+        practice_template_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Practice Template Id
+        runtime_profile_id:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Runtime Profile Id
+        completion_mode:
+          type: string
+          enum:
+          - session_completed
+          - scored
+          title: Completion Mode
+          default: session_completed
+      additionalProperties: false
+      type: object
+      required:
+      - practice_template_id
+      - runtime_profile_id
+      title: RealtimeRoleplayConfig
+    ReasonRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      title: ReasonRequest
     RegradePreviewRequest:
       properties:
         target_revision_id:
@@ -34713,6 +31421,63 @@ components:
       - content_type
       - voice_sample_url
       title: RoleProfileVoiceCloneRequest
+    RubricCreateRequest:
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        pass_score:
+          type: number
+          maximum: 100.0
+          minimum: 0.0
+          title: Pass Score
+        dimensions:
+          items:
+            $ref: '#/components/schemas/RubricDimensionRequest'
+          type: array
+          maxItems: 20
+          minItems: 1
+          title: Dimensions
+      additionalProperties: false
+      type: object
+      required:
+      - title
+      - pass_score
+      - dimensions
+      title: RubricCreateRequest
+    RubricDimensionRequest:
+      properties:
+        key:
+          type: string
+          maxLength: 80
+          minLength: 1
+          pattern: ^[a-z][a-z0-9_]*$
+          title: Key
+        label:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Label
+        description:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Description
+        weight:
+          type: number
+          maximum: 100.0
+          exclusiveMinimum: 0.0
+          title: Weight
+      additionalProperties: false
+      type: object
+      required:
+      - key
+      - label
+      - weight
+      title: RubricDimensionRequest
     RulesetRollupContribution:
       properties:
         rollup_id:
@@ -36978,6 +33743,35 @@ components:
       - message_id
       title: TimelineMarkerSchema
       description: Timeline marker for replay visualization - R10
+    TrainingPathPayload:
+      properties:
+        schema_version:
+          type: string
+          const: newcomer_training_orchestration_v1
+          title: Schema Version
+          default: newcomer_training_orchestration_v1
+        title:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Title
+        description:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Description
+        phases:
+          items:
+            $ref: '#/components/schemas/PhaseConfig'
+          type: array
+          maxItems: 50
+          title: Phases
+      additionalProperties: false
+      type: object
+      required:
+      - title
+      title: TrainingPathPayload
     TrainingTaskBatchAssignRequest:
       properties:
         user_ids:

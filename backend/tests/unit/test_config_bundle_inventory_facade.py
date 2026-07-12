@@ -29,7 +29,6 @@ async def test_config_bundle_inventory_includes_governed_surfaces(test_db) -> No
 
     assert {
         "sales_trainer.newcomer_path_config",
-        "sales_trainer.ai_coach_config",
         ROLEPLAY_SITUATION_PACKS_KEY,
         SCORING_RULESETS_BUNDLE_KEY,
         "prompt_templates",

@@ -101,4 +101,15 @@
 - 新增运行时代码边界测试，输出精确违规文件和词项；固定模块键与旧路径权威不可回归。
 - 聚焦前端 16 项测试通过，TypeScript 通过；后端管理员 Journey API 集成测试 6 项通过，Ruff/Mypy 通过。
 - 偏差：聚焦 pytest 默认覆盖率门槛会因只运行单文件而失败；已记录该非功能性失败并用 `--no-cov` 验证聚焦用例，最终 Task 15 仍运行完整测试门禁覆盖率。
-- 提交：`1f37db14 refactor(newcomer): remove fixed frontend path`。
+- 提交：`9f7aed1e refactor(newcomer): remove fixed frontend path`。
+
+## 2026-07-12 Task 15
+
+- E2E 直接覆盖 canonical 管理端、学员端与 revision/enrollment 闭环；本地 smoke 启动改为 Alembic 先于应用 bootstrap，seed 使用脚本真实签名。Playwright `4 passed`。
+- 首次 E2E 暴露两个真实问题：前端试卷路径使用不存在的 `exam-papers`，以及 GET Journey 创建 enrollment 后未显式提交。现改为 canonical `/papers` 合同，并在 learner/admin journey 事务边界提交；重复请求保持同一 enrollment。
+- 原型 reset 在隔离 SQLite 完成 dry-run/apply，影响计数一致（active revision 1、revision 1）；seed 首次 verify 成功，二次运行 `created_resources=0`，证明幂等。
+- Alembic PostgreSQL 当前为 `20260712_1300_092 (head)`；OpenAPI `--check` 当前。
+- 后端：Ruff `src tests scripts` 全通过；Mypy 644 source files 全通过；integration `530 passed, 21 skipped`，覆盖率 52.69%；contract marker `111 passed, 64 deselected`；unit 全量修正后 `2890 passed, 1 skipped`，先前覆盖率运行仅因 compatibility 精确基线由 192 降为 191 失败，覆盖率仍为 73.89%。
+- 前端：Vitest `169 files / 1072 passed / 6 skipped`；TypeScript、ESLint、Next production build（85 routes）全通过；Playwright `4 passed`。
+- 结构闭环：运行时代码不再含 `NewcomerPathModuleConfig`、旧 path-config 权威和固定 PPT/Demo 模块键；后端六类 Handler 与前端六类 `ACTIVITY_RUNNERS` 均为封闭注册表；学员首页只渲染一个 `data-primary-action`。
+- 文档同步：API、架构、ADR、测试、AI 治理与 Trellis 可执行 code-spec 已改为活动编排合同；删除已失效的固定录音场景 spec。

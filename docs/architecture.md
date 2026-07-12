@@ -192,8 +192,8 @@
 | `/api/v1/admin/users` | 用户管理 |
 | `/api/v1/admin/training-records` | 训练记录 |
 | `/api/v1/admin/curriculum-practice` | 课程考核管理 |
-| `/api/v1/admin/sales-trainer` | 新人训练路径管理 (admin) |
-| `/api/v1/sales-trainer` | 新人训练路径 (learner: 单元/文章/试卷/录音/评分) |
+| `/api/v1/admin/newcomer-training` | 新人训练活动编排、团队 Journey 与达标管理 |
+| `/api/v1/newcomer-training` | 学员固定 revision 的 Journey 与六类活动执行 |
 | `/api/v1/admin/supervisor-training` | 主管复训/培训管理 |
 | `/api/v1/admin/learning-contents` | 学习内容管理 |
 | `/api/v1/admin/test-bank` | 题库管理 |
@@ -1136,3 +1136,8 @@ Next.js (端口 3445)
 | `docs/agents/` | Agent 工作指南（issue-tracker、triage-labels、domain） |
 | `CLAUDE.md` | 项目概览、开发命令和约束 |
 | `AGENTS.md` | Agent 协作行为准则 |
+## 新人训练活动编排
+
+新人训练是模块化单体中的独立领域模块。声明式路径聚合为 `TrainingPath → Phase → Module → Activity`，发布 revision 不可变；Enrollment 固定学员所见 revision，ActivityAttempt 冻结活动、资源和结果快照。
+
+六类活动由后端封闭 Handler 注册表和前端封闭 Renderer 注册表执行。LearningContent、ExamPaper、材料版本、录音评分、AI Coach、StepAudio、审计与达标能力通过端口复用，业务配置不得引用代码、组件或 URL。新增产品和课程只增加配置；新增执行能力才修改代码并补契约测试。

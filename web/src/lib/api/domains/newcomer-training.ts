@@ -49,7 +49,7 @@ export function createNewcomerTrainingDomain({
             activityPath(activityId),
         ),
         getExamPaper: (paperId: string) => request<NewcomerExamPaper>(
-            `/newcomer-training/exam-papers/${encodeURIComponent(paperId)}`,
+            `/newcomer-training/papers/${encodeURIComponent(paperId)}`,
         ),
         completeLessonChapter: (activityId: string, chapterId: string, clientToken: string) =>
             request<ActivityDetailResponse>(

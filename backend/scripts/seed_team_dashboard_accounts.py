@@ -106,7 +106,7 @@ async def upsert_account(db, account: dict[str, str | None]) -> tuple[User, bool
         return user, True
 
     # 已存在则更新关键字段（保持 user_id 不变）
-    update_result = await db.execute(
+    await db.execute(
         User.__table__.update()
         .where(User.__table__.c.email == email)
         .values(

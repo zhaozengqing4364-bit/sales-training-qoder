@@ -1375,9 +1375,9 @@ async def admin_get_realtime_roleplay_observations(
 ) -> ApiResponse:
     if error := _require_records_viewer(current_user):
         return error
-    record = await TrainingRecordService(db).get_record_for_viewer(
-        "realtime_roleplay_session",
-        session_id,
+    record = await TrainingRecordService(db).get_record_by_evidence_for_viewer(
+        evidence_type="realtime_roleplay_session",
+        evidence_id=session_id,
         viewer=current_user,
         team_department=_team_scope(current_user),
     )

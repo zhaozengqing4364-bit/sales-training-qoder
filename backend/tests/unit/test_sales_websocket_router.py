@@ -349,7 +349,7 @@ def _roleplay_observation_session(
 ) -> PracticeSession:
     voice_policy_snapshot: dict[str, Any] = {
         "external_binding": {
-            "owner": "sales_trainer",
+            "owner": "newcomer_training",
             "path_key": "newcomer_training_path_v1",
             "path_revision_id": "path-rev-1",
             "path_revision_no": 1,

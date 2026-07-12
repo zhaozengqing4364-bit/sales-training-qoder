@@ -2105,7 +2105,7 @@ git commit -m "refactor(newcomer): remove fixed frontend path"
 - Consumes: completed backend/frontend implementation.
 - Produces: executable product proof, canonical documentation, clean prototype database.
 
-- [ ] **Step 1: Write the new closed-loop E2E before deleting old assertions**
+- [x] **Step 1: Write the new closed-loop E2E before deleting old assertions**
 
 The admin spec must prove through UI:
 
@@ -2129,7 +2129,7 @@ test("admin creates and publishes product A, B, and C without source-specific fo
 
 The learner spec must prove one primary next action, lesson → quiz → audio unlock, pinned revision, failed audio retry, optional activity non-blocking, and clear realtime unavailable state. Use fake/local providers in ordinary CI; keep real StepAudio coverage behind the existing explicit real-provider gate.
 
-- [ ] **Step 2: Run reset dry-run, apply, and seed verification**
+- [x] **Step 2: Run reset dry-run, apply, and seed verification**
 
 Run:
 
@@ -2142,11 +2142,11 @@ cd backend
 
 Expected: dry-run and apply counts match; seed reports verified active revision, three phases, representative six activity types, and no skipped required binding.
 
-- [ ] **Step 3: Update canonical documentation**
+- [x] **Step 3: Update canonical documentation**
 
 Rewrite the newcomer path sections of `sales-trainer.md` around activity IDs/types and the new API. Remove fixed module/topic matrices and compatibility notes. Add the ADR decision: direct replacement, revision aggregate, closed handler registry, pinned enrollment, no arbitrary executable config, and explicit rejection of V1/V2 dual track. Update architecture and test commands.
 
-- [ ] **Step 4: Run backend quality gates**
+- [x] **Step 4: Run backend quality gates**
 
 Run:
 
@@ -2162,7 +2162,7 @@ cd backend
 
 Expected: all commands pass; Alembic current is `20260712_1300_092`.
 
-- [ ] **Step 5: Run frontend quality gates**
+- [x] **Step 5: Run frontend quality gates**
 
 Run:
 
@@ -2177,7 +2177,7 @@ npx playwright test tests/e2e/newcomer-training-admin.spec.ts tests/e2e/newcomer
 
 Expected: type-check, lint, unit tests, build, and all newcomer E2E tests pass.
 
-- [ ] **Step 6: Run structural closure checks**
+- [x] **Step 6: Run structural closure checks**
 
 Run:
 
@@ -2190,7 +2190,7 @@ git status --short
 
 Expected: first two searches return no runtime route/business authority matches; only intentionally retained historical documentation may mention old terms. `git diff --check` is clean; status contains only this implementation plus pre-existing unrelated user changes.
 
-- [ ] **Step 7: Commit final contracts and verification**
+- [x] **Step 7: Commit final contracts and verification**
 
 ```bash
 git add web/tests/e2e docs/api-contract/sales-trainer.md docs/architecture.md docs/adr/2026-07-12-newcomer-training-activity-orchestration.md docs/testing.md docs/ai-governance.md

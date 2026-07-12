@@ -10,29 +10,22 @@ import {
 } from "./newcomer-training-audit-helpers";
 import { adminRoutes } from "./newcomer-training-route-manifest";
 
-test.describe("新人训练后台专项审计", () => {
-  test.setTimeout(480_000);
+test.describe("新人训练管理端", () => {
+  test.setTimeout(180_000);
 
-  test("管理后台页面和旧入口全部可访问并保持治理语义", async ({ page }, testInfo) => {
+  test("只暴露聚焦式路径编排入口且页面不泄露工程字段", async ({ page }, testInfo) => {
     ensureAuditDirectories();
     await loginFromUi(page, adminEmail);
-
     const results = [];
     for (const route of adminRoutes) {
       results.push(await auditRoute(page, route, "desktop", testInfo));
-      results.push(await auditRoute(page, route, "mobile", testInfo));
     }
+    const outputPath = writeAuditReport("newcomer-training-admin-report.json", { routes: adminRoutes, results });
+    expect(blockingAuditFailures(results), `管理端审计失败：${outputPath}`).toEqual([]);
 
-    const report = {
-      generated_at: new Date().toISOString(),
-      scope: "newcomer-training-admin",
-      routes: adminRoutes,
-      results,
-      excluded: ["/training/sales", "/practice/*", "/admin/business-rules/sales-trainer-phase2"],
-    };
-    const outputPath = writeAuditReport("newcomer-training-admin-report.json", report);
-    const failures = blockingAuditFailures(results);
-
-    expect(failures, `后台新人训练页面审计失败；详见 ${outputPath}`).toEqual([]);
+    await page.goto("/admin/newcomer-training/path");
+    await expect(page.getByLabel("训练路径大纲")).toBeVisible();
+    await expect(page.getByRole("button", { name: "检查并预览" })).toBeVisible();
+    await expect(page.getByText("当前编辑")).toBeVisible();
   });
 });

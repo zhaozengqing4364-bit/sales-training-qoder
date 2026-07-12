@@ -13,13 +13,6 @@ from common.db.session import get_db
 from curriculum_practice.schemas import LearningChapterCreate, LearningContentCreate
 from curriculum_practice.services.learning_contents import LearningContentService
 from main import app
-from sales_trainer.services.asset_revision_service import (
-    SalesTrainerAssetRevisionService,
-)
-from sales_trainer.services.path_config_models import (
-    NEWCOMER_PATH_LOGICAL_ID,
-    NEWCOMER_PATH_RESOURCE_TYPE,
-)
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -84,59 +77,6 @@ def _content_payload() -> dict[str, object]:
         "summary": "面向售前顾问的基础训练讲义",
         "owner": "training-ops",
         "source": "manual-import-2026-05",
-    }
-
-
-def _newcomer_path_payload(learning_content_id: str) -> dict[str, object]:
-    return {
-        "path_key": NEWCOMER_PATH_LOGICAL_ID,
-        "title": "新人训练路径",
-        "goal_title": "完成商务礼仪训练",
-        "description": None,
-        "enabled": True,
-        "modules": [
-            {
-                "module_key": "business_skills",
-                "module_type": "article_exam",
-                "enabled": True,
-                "order_index": 1,
-                "title": "商务技巧",
-                "description": "按小单元完成阅读、小测和 AI 教练训练。",
-                "target_unit_id": None,
-                "learning_content_id": learning_content_id,
-                "exam_paper_id": None,
-                "material_id": None,
-                "material_version_id": None,
-                "scoring_prompt_id": None,
-                "disabled_reason": None,
-                "unlock_after_unit_ids": [],
-                "completion_rule": "passed",
-                "primary_action_label": "开始训练",
-                "retry_action_label": None,
-                "review_action_label": None,
-                "guidance_templates": {},
-                "ai_coach": None,
-                "learning_units": [
-                    {
-                        "unit_key": "trust-base",
-                        "title": "职业信任底座",
-                        "description": "商务礼仪训练第一单元。",
-                        "order_index": 1,
-                        "enabled": True,
-                        "source_chapter_orders": [1],
-                        "capability_keys": ["first_impression"],
-                        "unlock_after_unit_keys": [],
-                        "require_reading": True,
-                        "require_quiz": True,
-                        "require_ai_coach": True,
-                        "ai_coach_remediation_chapter_orders": [2],
-                        "allow_skip_reading": False,
-                        "block_next_until_complete": True,
-                        "empty_state_message": None,
-                    }
-                ],
-            }
-        ],
     }
 
 
@@ -403,73 +343,6 @@ async def test_should_enforce_learning_content_publish_gates(
     published = publish_valid_response.json()["data"]
     assert published["status"] == "published"
     assert published["content_hash"].startswith("sha256:")
-
-
-@pytest.mark.asyncio
-async def test_should_report_binding_impact_and_block_archive_for_bound_content(
-    async_client: AsyncClient,
-    admin_headers: dict[str, str],
-    admin_user: User,
-    db_session: AsyncSession,
-) -> None:
-    create_response = await async_client.post(
-        "/api/v1/curriculum/learning-contents",
-        headers=admin_headers,
-        json=_content_payload() | {"title": "商务礼仪讲义"},
-    )
-    assert create_response.status_code == 200, create_response.json()
-    content_id = create_response.json()["data"]["learning_content_id"]
-    for index in (1, 2):
-        chapter_response = await async_client.post(
-            f"/api/v1/curriculum/learning-contents/{content_id}/chapters",
-            headers=admin_headers,
-            json={
-                "title": f"第 {index} 章",
-                "content": f"商务礼仪章节 {index}",
-                "order_index": index,
-            },
-        )
-        assert chapter_response.status_code == 200, chapter_response.json()
-    publish_response = await async_client.post(
-        f"/api/v1/curriculum/learning-contents/{content_id}/publish",
-        headers=admin_headers,
-    )
-    assert publish_response.status_code == 200, publish_response.json()
-
-    await SalesTrainerAssetRevisionService(db_session).create_published_revision(
-        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-        logical_id=NEWCOMER_PATH_LOGICAL_ID,
-        payload=_newcomer_path_payload(content_id),
-        actor=admin_user,
-        change_class="binding",
-        reason="绑定商务礼仪学习内容",
-    )
-    await db_session.commit()
-
-    impact_response = await async_client.get(
-        f"/api/v1/admin/newcomer-training/learning-contents/{content_id}/binding-impact",
-        headers=admin_headers,
-    )
-    assert impact_response.status_code == 200, impact_response.json()
-    impact = impact_response.json()["data"]
-    assert impact["has_active_binding"] is True
-    assert impact["has_working_binding"] is False
-    assert impact["is_bound_to_business_skills"] is True
-    assert impact["can_archive"] is False
-    assert impact["archive_block_reason"]
-    assert impact["active_bindings"][0]["module_key"] == "business_skills"
-    assert impact["active_bindings"][0]["impacted_chapter_orders"] == [1, 2]
-    assert (
-        impact["active_bindings"][0]["learning_units"][0]["title"]
-        == "职业信任底座"
-    )
-
-    archive_response = await async_client.post(
-        f"/api/v1/curriculum/learning-contents/{content_id}/archive",
-        headers=admin_headers,
-    )
-    assert archive_response.status_code == 409, archive_response.json()
-    assert archive_response.json()["error"] == "[LEARNING_CONTENT_BOUND_TO_NEWCOMER_PATH]"
 
 
 def _reason_codes(response) -> list[str]:

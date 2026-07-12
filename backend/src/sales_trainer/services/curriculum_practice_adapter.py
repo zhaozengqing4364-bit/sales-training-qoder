@@ -16,6 +16,7 @@ from curriculum_practice.models import (
 from curriculum_practice.models import (
     LearningContent as _LearningContent,
 )
+from curriculum_practice.models import PracticeTemplate as _PracticeTemplate
 from curriculum_practice.models import (
     QuestionItem as _QuestionItem,
 )
@@ -216,6 +217,45 @@ class LearningProgressAdapter:
             content_id=content_id,
             chapter_id=chapter_id,
         )
+
+
+async def published_learning_content_ids(
+    db: AsyncSession, values: set[str]
+) -> set[str]:
+    if not values:
+        return set()
+    rows = await db.execute(
+        select(_LearningContent.learning_content_id)
+        .join(
+            _LearningChapter,
+            _LearningChapter.learning_content_id
+            == _LearningContent.learning_content_id,
+        )
+        .where(
+            _LearningContent.learning_content_id.in_(values),
+            _LearningContent.status == "published",
+        )
+        .group_by(_LearningContent.learning_content_id)
+    )
+    return {str(value) for value in rows.scalars()}
+
+
+async def published_practice_template_ids(
+    db: AsyncSession, values: set[str]
+) -> set[str]:
+    if not values:
+        return set()
+    rows = await db.scalars(
+        select(_PracticeTemplate.template_id).where(
+            _PracticeTemplate.template_id.in_(values),
+            _PracticeTemplate.status == "published",
+        )
+    )
+    return {str(value) for value in rows}
+
+
+async def get_practice_template(db: AsyncSession, template_id: str) -> Any:
+    return await db.get(_PracticeTemplate, template_id)
 
 
 def create_test_bank_service(db: AsyncSession) -> Any:

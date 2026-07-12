@@ -9,7 +9,6 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.models import VoiceRuntimeProfile
 from common.business_rules.defaults import SALES_TRAINER_REALTIME_PROVIDER_REGISTRY_KEY
 from common.business_rules.service import (
     BusinessRuleConfigService,
@@ -21,14 +20,15 @@ from common.services.external_session_start import (
     ExternalSessionStartError,
     ExternalSessionStartService,
 )
-from curriculum_practice.models import PracticeTemplate
 from sales_trainer.orchestration.activities.base import (
     ActivityExecutionContext,
     activity_snapshot,
 )
 from sales_trainer.orchestration.contracts import RealtimeRoleplayConfig
 from sales_trainer.orchestration.repository import AttemptRepository
+from sales_trainer.services.curriculum_practice_adapter import get_practice_template
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.voice_runtime_adapter import get_voice_runtime_profile
 
 
 class RealtimeRoleplayStartError(Exception):
@@ -79,14 +79,14 @@ class RealtimeRoleplayStartService:
             )
         config = execution_context.activity.config
         assert isinstance(config, RealtimeRoleplayConfig)
-        template = await self._db.get(PracticeTemplate, config.practice_template_id)
+        template = await get_practice_template(self._db, config.practice_template_id)
         if template is None or str(template.status) != "published":
             raise RealtimeRoleplayStartError(
                 "[NEWCOMER_REALTIME_TEMPLATE_NOT_PUBLISHED]",
                 "实时对练模板尚未发布。",
                 409,
             )
-        runtime = await self._db.get(VoiceRuntimeProfile, config.runtime_profile_id)
+        runtime = await get_voice_runtime_profile(self._db, config.runtime_profile_id)
         if (
             runtime is None
             or runtime.is_active is not True

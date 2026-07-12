@@ -13,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import agent.models  # noqa: E402,F401
+import curriculum_practice.models  # noqa: E402,F401
+import sales_trainer.models  # noqa: E402,F401
 from common.db.session import AsyncSessionLocal  # noqa: E402
 from sales_trainer.models import (  # noqa: E402
     NewcomerTrainingActivityAttempt,

@@ -355,6 +355,7 @@ async def learner_journey(
         journey = await NewcomerJourneyService(db).get_or_create_for_learner(
             learner=learner
         )
+        await db.commit()
     except NewcomerOrchestrationError as exc:
         return _error(exc)
     return success_response(journey.model_dump())
@@ -412,6 +413,7 @@ async def learner_journeys(
                 "journey": journey.model_dump(),
             }
         )
+    await db.commit()
     return success_response({"items": items, "total": total})
 
 

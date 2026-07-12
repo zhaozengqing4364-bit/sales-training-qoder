@@ -25,7 +25,7 @@ from sales_trainer.services.roleplay_observation_evaluator import (
     sanitize_observation_payload,
 )
 
-ROLEPLAY_OBSERVATION_SALES_TRAINER_OWNER = "sales_trainer"
+ROLEPLAY_OBSERVATION_SALES_TRAINER_OWNER = "newcomer_training"
 ROLEPLAY_OBSERVATION_FAILURE_CODE = "[ROLEPLAY_OBSERVATION_STORE_FAILED]"
 ROLEPLAY_OBSERVATION_POLICY_SNAPSHOT_KEY = "roleplay_observation_policy"
 

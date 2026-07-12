@@ -9,19 +9,17 @@ Run: python scripts/migrate_prompts.py
 import asyncio
 import os
 import sys
+from datetime import UTC, datetime
 from uuid import uuid4
-from datetime import datetime, timezone
 
 # Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from common.db.models import PromptTemplate
-from prompt_templates.models import PromptType
-
 
 # 14 system prompts migrated from hardcoded locations
 DEFAULT_PROMPTS = [
@@ -289,7 +287,9 @@ PPT信息：
 async def migrate_prompts():
     """Migrate hardcoded prompts to database."""
     # Get database URL from environment
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:password@localhost/dbname")
+    db_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://user:password@localhost/dbname"
+    )
 
     engine = create_async_engine(db_url, echo=True)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -320,8 +320,8 @@ async def migrate_prompts():
                 is_active=True,
                 is_default=prompt_data.get("is_default", False),
                 is_system=True,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
 
             session.add(template)

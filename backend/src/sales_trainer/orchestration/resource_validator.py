@@ -8,12 +8,6 @@ from typing import cast
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.models import VoiceRuntimeProfile
-from curriculum_practice.models import (
-    LearningChapter,
-    LearningContent,
-    PracticeTemplate,
-)
 from sales_trainer.models import (
     SalesTrainerAssetActiveRevision,
     SalesTrainerAssetRevision,
@@ -30,6 +24,11 @@ from sales_trainer.orchestration.contracts import (
     TrainingPathPayload,
 )
 from sales_trainer.orchestration.graph import PathIssue
+from sales_trainer.services.curriculum_practice_adapter import (
+    published_learning_content_ids,
+    published_practice_template_ids,
+)
+from sales_trainer.services.voice_runtime_adapter import active_voice_runtime_ids
 
 
 class PathResourceValidator:
@@ -65,11 +64,11 @@ class PathResourceValidator:
                 config = cast(AiCoachActivityConfig, config)
                 ids["coach"].add(config.coach_profile_id)
 
-        valid_lessons = await self._published_lessons(ids["lesson"])
+        valid_lessons = await published_learning_content_ids(self._db, ids["lesson"])
         valid_quizzes = await self._published_quizzes(ids["quiz"])
         valid_materials = await self._published_materials(ids["material"])
-        valid_templates = await self._published_templates(ids["template"])
-        valid_runtimes = await self._active_runtimes(ids["runtime"])
+        valid_templates = await published_practice_template_ids(self._db, ids["template"])
+        valid_runtimes = await active_voice_runtime_ids(self._db, ids["runtime"])
         valid_rubrics = await self._active_assets("audio_scoring_rubric", ids["rubric"])
         valid_coaches = await self._active_assets("ai_coach_profile", ids["coach"])
 
@@ -156,25 +155,6 @@ class PathResourceValidator:
                     )
         return tuple(sorted(issues, key=lambda item: (item.field_path, item.code)))
 
-    async def _published_lessons(self, values: set[str]) -> set[str]:
-        if not values:
-            return set()
-        rows = await self._db.execute(
-            select(LearningContent.learning_content_id)
-            .join(
-                LearningChapter,
-                LearningChapter.learning_content_id
-                == LearningContent.learning_content_id,
-            )
-            .where(
-                LearningContent.learning_content_id.in_(values),
-                LearningContent.status == "published",
-            )
-            .group_by(LearningContent.learning_content_id)
-            .having(func.count(LearningChapter.chapter_id) > 0)
-        )
-        return {str(value) for value in rows.scalars()}
-
     async def _published_quizzes(self, values: set[str]) -> set[str]:
         if not values:
             return set()
@@ -201,28 +181,6 @@ class PathResourceValidator:
                 SalesTrainerMaterial.material_id.in_(values),
                 SalesTrainerMaterial.status == "published",
                 SalesTrainerMaterial.current_version_id.is_not(None),
-            )
-        )
-        return {str(value) for value in rows}
-
-    async def _published_templates(self, values: set[str]) -> set[str]:
-        if not values:
-            return set()
-        rows = await self._db.scalars(
-            select(PracticeTemplate.template_id).where(
-                PracticeTemplate.template_id.in_(values),
-                PracticeTemplate.status == "published",
-            )
-        )
-        return {str(value) for value in rows}
-
-    async def _active_runtimes(self, values: set[str]) -> set[str]:
-        if not values:
-            return set()
-        rows = await self._db.scalars(
-            select(VoiceRuntimeProfile.id).where(
-                VoiceRuntimeProfile.id.in_(values),
-                VoiceRuntimeProfile.is_active.is_(True),
             )
         )
         return {str(value) for value in rows}

@@ -201,7 +201,7 @@ bootstrap_newcomer_training_seed() {
   (
     cd "${ROOT_DIR}/backend"
     DATABASE_URL="${EFFECTIVE_DATABASE_URL}" "${python_bin}" \
-      "${ROOT_DIR}/backend/scripts/seed_newcomer_training_path.py" --apply
+      "${ROOT_DIR}/backend/scripts/seed_newcomer_training_path.py"
   )
 }
 
@@ -244,9 +244,8 @@ main() {
   record_prior_state
 
   log "使用 smoke 启动约定拉起本地全栈环境"
-  start_local_stack
-
   run_alembic_upgrade_head
+  start_local_stack
 
   wait_for_url "http://localhost:${BACKEND_PORT}/health" 45 || die "Backend health 检查失败"
   wait_for_url "http://localhost:${FRONTEND_PORT}/login" 60 || die "Frontend login 页面未就绪"

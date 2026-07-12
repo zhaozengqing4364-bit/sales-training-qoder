@@ -10,11 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from admin.config_bundles.adapters import ConfigBundleSnapshot, ConfigVersionSnapshot
 from common.db.models import PromptTemplate as PromptTemplateRow
 from sales_trainer.models import SalesTrainerAssetRevision
+from sales_trainer.orchestration.contracts import TrainingPathPayload
+from sales_trainer.orchestration.revision_service import (
+    PATH_LOGICAL_ID,
+    PATH_RESOURCE_TYPE,
+)
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
-from sales_trainer.orchestration.contracts import TrainingPathPayload
-from sales_trainer.orchestration.revision_service import PATH_LOGICAL_ID, PATH_RESOURCE_TYPE
 
 NEWCOMER_PATH_CONFIG_BUNDLE_KEY = "sales_trainer.newcomer_path_config"
 PROMPT_TEMPLATES_BUNDLE_KEY = "prompt_templates"
@@ -125,7 +128,9 @@ def _path_overview(
         "backing_store": "SalesTrainerAssetRevision",
         "active_revision_id": str(active.revision_id) if active is not None else None,
         "active_revision_no": active.revision_no if active is not None else None,
-        "working_revision_id": str(working.revision_id) if working is not None else None,
+        "working_revision_id": str(working.revision_id)
+        if working is not None
+        else None,
         "working_revision_no": working.revision_no if working is not None else None,
         "phase_count": len(active_payload.phases) if active_payload is not None else 0,
         "module_count": sum(len(phase.modules) for phase in active_payload.phases)
@@ -166,7 +171,9 @@ def _prompt_template_overview(
     return {
         "backing_store": "PromptTemplate",
         "template_count": len(versions),
-        "active_template_count": sum(1 for item in versions if item.status == "published"),
+        "active_template_count": sum(
+            1 for item in versions if item.status == "published"
+        ),
         "default_template_count": sum(
             1 for item in versions if item.snapshot.get("is_default") is True
         ),

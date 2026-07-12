@@ -43,9 +43,6 @@ from sales_trainer.schemas import (
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
-from sales_trainer.services.audio_evaluation_scenarios import (
-    resolve_audio_evaluation_scenario_from_config,
-)
 from sales_trainer.services.material_metadata_update import (
     material_metadata_snapshot,
     record_material_metadata_update,
@@ -953,20 +950,6 @@ def validate_unit_material_and_brief_config(config: dict[str, Any]) -> None:
                 "训练任务简报配置不合法。",
                 status_code=422,
             ) from exc
-    scenario = resolve_audio_evaluation_scenario_from_config(config)
-    if scenario is not None and scenario.requires_confirmed_material:
-        materials = _validate_materials_config(config)
-        required_bindings = [
-            binding
-            for binding in materials.bindings
-            if binding.required and binding.confirmation_required
-        ]
-        if not required_bindings:
-            raise MaterialServiceError(
-                scenario.material_error_code,
-                f"{scenario.display_name}任务必须绑定至少一个需要学员确认的训练材料。",
-                status_code=422,
-            )
 
 
 def serialize_material_version(version: SalesTrainerMaterialVersion) -> dict[str, Any]:

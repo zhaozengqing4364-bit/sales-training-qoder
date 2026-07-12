@@ -33,9 +33,6 @@ from sales_trainer.models import (
 from sales_trainer.permissions import can_learn_newcomer_training_path
 from sales_trainer.rules import resolve_audio_pass_threshold
 from sales_trainer.schemas import AudioSubmissionCreate
-from sales_trainer.services.audio_evaluation_scenarios import (
-    resolve_audio_evaluation_scenario_from_config,
-)
 from sales_trainer.services.audio_submission_lineage import (
     freeze_submission_context,
     submission_lineage_fields,
@@ -294,11 +291,6 @@ class AudioSubmissionService:
                     status_code=403,
                 )
             try:
-                self._require_material_binding_for_audio_scenario(
-                    unit,
-                    payload.purpose,
-                    config_override=effective.config,
-                )
                 snapshots = await self._materials.freeze_submission_snapshots(
                     unit,
                     confirmed_material_version_id=payload.confirmed_material_version_id,
@@ -720,46 +712,6 @@ class AudioSubmissionService:
             if score
             else None,
         }
-
-    def _require_material_binding_for_audio_scenario(
-        self,
-        unit: SalesTrainerUnit,
-        purpose: str,
-        *,
-        config_override: dict[str, Any] | None = None,
-    ) -> None:
-        config = config_override if config_override is not None else unit.config
-        scenario = resolve_audio_evaluation_scenario_from_config(
-            config if isinstance(config, dict) else None,
-            purpose_key=purpose,
-        )
-        if scenario is None or not scenario.requires_confirmed_material:
-            return
-        materials_config = (config or {}).get("materials")
-        bindings = (
-            materials_config.get("bindings")
-            if isinstance(materials_config, dict)
-            else None
-        )
-        required_bindings = (
-            [
-                binding
-                for binding in bindings
-                if (
-                    isinstance(binding, dict)
-                    and binding.get("required") is True
-                    and binding.get("confirmation_required") is True
-                )
-            ]
-            if isinstance(bindings, list)
-            else []
-        )
-        if not required_bindings:
-            raise AudioSubmissionServiceError(
-                scenario.material_error_code,
-                f"{scenario.display_name}任务必须先绑定已发布训练材料。",
-                status_code=409,
-            )
 
     async def serialize_score_result(
         self,

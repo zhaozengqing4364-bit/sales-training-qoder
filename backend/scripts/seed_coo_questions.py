@@ -25,14 +25,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from coo_question_prompts import resolve_short_answer_ai_scoring
+from sales_trainer.services.question_bank_adapter import QuestionBankAdapter
+
 import agent.models as _agent_models  # noqa: F401 - register ORM mappers
 import curriculum_practice.models as _curriculum_models  # noqa: F401 - register ORM mappers
 import sales_trainer.models as _sales_trainer_models  # noqa: F401 - register ORM mappers
 from common.db.models import User
 from common.db.session import AsyncSessionLocal
 from curriculum_practice.models import QuestionCategory, QuestionItem
-from coo_question_prompts import resolve_short_answer_ai_scoring
-from sales_trainer.services.question_bank_adapter import QuestionBankAdapter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / "docs/content/coo-series-manifest.yaml"
@@ -95,8 +96,7 @@ def _build_scoring_criteria(spec: dict[str, Any]) -> dict[str, Any]:
         return {
             "question_type": "single_choice",
             "options": [
-                {"value": value, "label": label}
-                for value, label in spec["options"]
+                {"value": value, "label": label} for value, label in spec["options"]
             ],
             "correct_answer": spec["correct"],
             "dimensions": [f"coo_series_{spec['series_index']:02d}"],
@@ -216,7 +216,9 @@ async def _upsert_question(
     question.scoring_criteria = scoring_criteria
     question.scoring_dimensions = [f"coo_series_{spec['series_index']:02d}"]
     question.tags = ["COO谈市场", f"系列{spec['series_index']}", natural_key]
-    question.difficulty = "easy" if spec["question_type"] != "short_answer" else "medium"
+    question.difficulty = (
+        "easy" if spec["question_type"] != "short_answer" else "medium"
+    )
     question.status = "published"
     question.safety_flagged = False
     question.department = DEPARTMENT
@@ -273,7 +275,9 @@ async def seed(db: AsyncSession) -> SeedSummary:
     return summary
 
 
-async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> SeedSummary:
+async def verify(
+    db: AsyncSession, *, summary: SeedSummary | None = None
+) -> SeedSummary:
     summary = summary or SeedSummary()
     manifest = load_manifest()
     specs = load_question_specs()
@@ -289,14 +293,18 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
         raise VerifyError("COO question category does not exist")
 
     questions = (
-        await db.execute(
-            select(QuestionItem).where(
-                QuestionItem.usage_scope == "sales_trainer",
-                QuestionItem.category_id == category.category_id,
-                QuestionItem.status == "published",
+        (
+            await db.execute(
+                select(QuestionItem).where(
+                    QuestionItem.usage_scope == "sales_trainer",
+                    QuestionItem.category_id == category.category_id,
+                    QuestionItem.status == "published",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     titles = {spec["title"] for spec in specs}
     found_titles = {question.title for question in questions}
     if not titles.issubset(found_titles):

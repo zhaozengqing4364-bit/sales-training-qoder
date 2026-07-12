@@ -47,7 +47,7 @@ def _session(learner: User, scenario: Scenario) -> PracticeSession:
         end_time=datetime(2026, 7, 2, 10, 12, tzinfo=UTC),
         voice_policy_snapshot={
             "external_binding": {
-                "owner": "sales_trainer",
+                "owner": "newcomer_training",
                 "path_key": "newcomer_training_path_v1",
                 "path_revision_id": "path-rev-001",
                 "path_revision_no": 1,

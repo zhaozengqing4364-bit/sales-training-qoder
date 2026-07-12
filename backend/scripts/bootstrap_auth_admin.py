@@ -19,7 +19,6 @@ from sqlalchemy import select
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import agent.models as _agent_models  # noqa: F401 - register Agent/Persona mappers for PracticeSession relationships
-
 from common.db.models import User
 from common.db.session import AsyncSessionLocal
 
@@ -39,7 +38,9 @@ async def bootstrap_user(
 ) -> None:
     async with AsyncSessionLocal() as db:
         normalized_email = email.strip().lower()
-        target_wechat_user_id = (wechat_user_id or _normalize_wechat_user_id(normalized_email)).strip()
+        target_wechat_user_id = (
+            wechat_user_id or _normalize_wechat_user_id(normalized_email)
+        ).strip()
 
         result = await db.execute(select(User).where(User.email == normalized_email))
         user = result.scalar_one_or_none()
@@ -77,7 +78,9 @@ async def bootstrap_user(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Bootstrap auth user for local environment")
+    parser = argparse.ArgumentParser(
+        description="Bootstrap auth user for local environment"
+    )
     parser.add_argument("--email", required=True, help="User email")
     parser.add_argument("--name", default="管理员", help="Display name")
     parser.add_argument(
@@ -87,7 +90,9 @@ def parse_args() -> argparse.Namespace:
         help="User role",
     )
     parser.add_argument("--department", default=None, help="Department")
-    parser.add_argument("--wechat-user-id", default=None, help="Optional explicit wechat_user_id")
+    parser.add_argument(
+        "--wechat-user-id", default=None, help="Optional explicit wechat_user_id"
+    )
     return parser.parse_args()
 
 

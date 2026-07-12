@@ -19,6 +19,7 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
 
 # Add src to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import agent.models  # noqa: E402,F401  # Register agent/voice-runtime tables on shared Base metadata.

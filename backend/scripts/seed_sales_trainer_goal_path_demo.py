@@ -25,6 +25,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from sales_trainer.services.path_service import SalesTrainerPathService
+from sales_trainer.services.question_bank_adapter import QuestionBankAdapter
+
 import agent.models as _agent_models  # noqa: F401 - register ORM mappers
 import curriculum_practice.models as _curriculum_models  # noqa: F401 - register ORM mappers
 import sales_trainer.models as _sales_trainer_models  # noqa: F401 - register ORM mappers
@@ -37,8 +40,6 @@ from sales_trainer.models import (
     SalesTrainerUnitQuestion,
 )
 from sales_trainer.schemas import SalesTrainerPathConfig, ShortAnswerAiScoringConfig
-from sales_trainer.services.path_service import SalesTrainerPathService
-from sales_trainer.services.question_bank_adapter import QuestionBankAdapter
 
 OWNER_EMAIL = "sales-trainer.goal.demo.admin@example.com"
 LEARNER_EMAIL = "sales-trainer.goal.demo.learner@example.com"
@@ -488,11 +489,15 @@ async def seed(db: AsyncSession) -> SeedSummary:
             ),
         },
     )
-    await _replace_unit_questions(db, str(quiz_unit.unit_id), [
-        single_choice,
-        multiple_choice,
-        true_false,
-    ])
+    await _replace_unit_questions(
+        db,
+        str(quiz_unit.unit_id),
+        [
+            single_choice,
+            multiple_choice,
+            true_false,
+        ],
+    )
 
     summary.quiz_unit_id = str(quiz_unit.unit_id)
     summary.audio_unit_id = str(audio_unit.unit_id)
@@ -502,7 +507,9 @@ async def seed(db: AsyncSession) -> SeedSummary:
     return summary
 
 
-async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> SeedSummary:
+async def verify(
+    db: AsyncSession, *, summary: SeedSummary | None = None
+) -> SeedSummary:
     summary = summary or SeedSummary()
     learner = await _first(db, select(User).where(User.email == LEARNER_EMAIL))
     if learner is None:
@@ -520,14 +527,18 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
         raise VerifyError("demo sales-trainer category does not exist")
 
     questions = (
-        await db.execute(
-            select(QuestionItem).where(
-                QuestionItem.usage_scope == "sales_trainer",
-                QuestionItem.category_id == category.category_id,
-                QuestionItem.status == "published",
+        (
+            await db.execute(
+                select(QuestionItem).where(
+                    QuestionItem.usage_scope == "sales_trainer",
+                    QuestionItem.category_id == category.category_id,
+                    QuestionItem.status == "published",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     question_types = {
         str((question.scoring_criteria or {}).get("question_type"))
         for question in questions

@@ -25,9 +25,11 @@ vi.mock("@/lib/api/client", async () => {
 });
 
 function wrapper(queryClient: QueryClient) {
-    return ({ children }: { children: React.ReactNode }) => (
+    return function QueryWrapper({ children }: { children: React.ReactNode }) {
+        return (
         <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
+        );
+    };
 }
 
 const response = {

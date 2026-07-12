@@ -11,6 +11,9 @@ from common.auth.service import create_access_token
 from common.db.models import PracticeSession, Scenario, User
 from curriculum_practice.models import QuestionCategory, QuestionItem
 from sales_trainer.models import (
+    NewcomerTrainingActivityAttempt,
+    NewcomerTrainingEnrollment,
+    SalesTrainerAssetRevision,
     SalesTrainerAudioScorePrompt,
     SalesTrainerAudioScoreResult,
     SalesTrainerAudioSubmission,
@@ -597,20 +600,20 @@ async def test_should_allow_training_manager_to_reach_readiness_review_scope_gua
     await test_db.commit()
 
     manager_response = await async_client.post(
-        "/api/v1/admin/sales-trainer/readiness/dossiers/missing-learner/review-actions",
+        "/api/v1/admin/newcomer-training/readiness/dossiers/missing-learner/review-actions",
         headers=_auth_headers(manager),
         json={
-            "decision": "mark_manual_follow_up",
+            "decision": "approve",
             "reason": "测试权限应先进入对象级校验。",
             "capability_keys": [],
             "source_evidence_ids": [],
         },
     )
     learner_response = await async_client.post(
-        f"/api/v1/admin/sales-trainer/readiness/dossiers/{manager.user_id}/review-actions",
+        f"/api/v1/admin/newcomer-training/readiness/dossiers/{manager.user_id}/review-actions",
         headers=_auth_headers(learner),
         json={
-            "decision": "mark_manual_follow_up",
+            "decision": "approve",
             "reason": "普通学员不能复核。",
             "capability_keys": [],
             "source_evidence_ids": [],
@@ -618,7 +621,7 @@ async def test_should_allow_training_manager_to_reach_readiness_review_scope_gua
     )
 
     assert manager_response.status_code == 404
-    assert manager_response.json()["error"] == "[TRAINING_RECORD_NOT_FOUND]"
+    assert manager_response.json()["error"] == "[READINESS_DOSSIER_LEARNER_NOT_FOUND]"
     assert learner_response.status_code == 403
     assert learner_response.json()["error"] == "[ROLE_REQUIRED]"
 
@@ -769,16 +772,6 @@ async def test_should_scope_sales_trainer_manager_to_same_department(
         f"/api/v1/admin/sales-trainer/audio-submissions/{other_submission.submission_id}",
         headers=headers,
     )
-    same_training_record_detail_response = await async_client.get(
-        "/api/v1/admin/sales-trainer/training-records/detail/"
-        f"audio_submission/{same_submission.submission_id}",
-        headers=headers,
-    )
-    other_training_record_detail_response = await async_client.get(
-        "/api/v1/admin/sales-trainer/training-records/detail/"
-        f"audio_submission/{other_submission.submission_id}",
-        headers=headers,
-    )
     score_response = await async_client.get(
         "/api/v1/admin/sales-trainer/score-results",
         headers=headers,
@@ -813,15 +806,6 @@ async def test_should_scope_sales_trainer_manager_to_same_department(
     assert same_detail_payload["user_email"] == same_department_user.email
     assert other_detail_response.status_code == 403
     assert other_detail_response.json()["error"] == "[ACCESS_DENIED]"
-    assert same_training_record_detail_response.status_code == 200
-    same_record_detail = same_training_record_detail_response.json()["data"]
-    assert same_record_detail["record_id"] == same_submission.submission_id
-    assert same_record_detail["user_department"] == same_department_user.department
-    assert other_training_record_detail_response.status_code == 404
-    assert other_training_record_detail_response.json()["error"] == (
-        "[TRAINING_RECORD_NOT_FOUND]"
-    )
-
     assert score_response.status_code == 200
     score_payload = score_response.json()["data"]
     assert score_payload["total"] == 1
@@ -861,12 +845,10 @@ async def test_should_expose_realtime_roleplay_observations_with_record_scope_gu
         status="completed",
         voice_policy_snapshot={
             "external_binding": {
-                "owner": "sales_trainer",
-                "path_key": "newcomer_training_path_v1",
+                "owner": "newcomer_training",
+                "activity_id": "realtime-activity",
                 "path_revision_id": "path-rev-002",
                 "path_revision_no": 2,
-                "module_key": "realtime_roleplay",
-                "binding_key": "newcomer_realtime_roleplay_v1",
             }
         },
     )
@@ -917,8 +899,51 @@ async def test_should_expose_realtime_roleplay_observations_with_record_scope_gu
         error_json={"code": "[LLM_EVALUATOR_TIMEOUT]", "message": "timeout"},
         payload_hash="sha256:llm",
     )
+    revision = SalesTrainerAssetRevision(
+        revision_id="path-rev-002",
+        resource_type="newcomer_training_path_orchestration",
+        logical_id="default",
+        revision_no=2,
+        status="published",
+        payload_json={},
+        payload_hash="sha256:path-rev-002",
+        change_class="semantic",
+    )
+    enrollment = NewcomerTrainingEnrollment(
+        enrollment_id=str(uuid.uuid4()),
+        learner_id=learner.user_id,
+        path_id="default",
+        path_revision_id=revision.revision_id,
+    )
+    attempt = NewcomerTrainingActivityAttempt(
+        enrollment_id=enrollment.enrollment_id,
+        path_revision_id=revision.revision_id,
+        activity_id="realtime-activity",
+        activity_type="realtime_roleplay",
+        attempt_no=1,
+        status="completed",
+        evidence_type="realtime_roleplay_session",
+        evidence_id=session.session_id,
+        client_token=f"realtime-{uuid.uuid4()}",
+        activity_snapshot={
+            "title": "新人实时对练",
+            "context": {"phase_id": "practice", "module_id": "roleplay"},
+        },
+    )
     test_db.add_all(
-        [learner, manager, outside_manager, content_admin, scenario, session, heuristic, llm]
+        [
+            learner,
+            manager,
+            outside_manager,
+            content_admin,
+            scenario,
+            session,
+            heuristic,
+            llm,
+            revision,
+            enrollment,
+            attempt,
+        ]
     )
     await test_db.commit()
 

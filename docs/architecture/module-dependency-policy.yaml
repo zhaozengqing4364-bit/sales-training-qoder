@@ -124,9 +124,9 @@ temporary_edges:
     expires_on: 2026-10-31
 
   - source: sales_trainer
-    targets: [curriculum_practice]
+    targets: [agent, curriculum_practice]
     owner: sales-trainer
-    reason: Controlled legacy content adapter remains active.
+    reason: Controlled curriculum and voice-runtime profile adapters remain active.
     retire_when: >-
       Curriculum adapter retirement conditions in ADR 2026-06-20 are met.
     expires_on: 2026-10-31

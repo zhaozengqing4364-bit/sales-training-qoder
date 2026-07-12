@@ -82,6 +82,7 @@ async def journey(
         result = await NewcomerJourneyService(db).get_or_create_for_learner(
             learner=current_user
         )
+        await db.commit()
     except NewcomerOrchestrationError as exc:
         return _error(exc)
     return success_response(result.model_dump())
@@ -99,6 +100,7 @@ async def module_detail(
         result = await NewcomerJourneyService(db).module_detail(
             learner=current_user, module_id=module_id
         )
+        await db.commit()
     except NewcomerOrchestrationError as exc:
         return _error(exc)
     return success_response(result.model_dump())
@@ -113,7 +115,9 @@ async def activity_detail(
     if not can_learn_newcomer_training_path(current_user):
         return _forbidden()
     try:
-        return await _detail(db, current_user, activity_id)
+        result = await _detail(db, current_user, activity_id)
+        await db.commit()
+        return result
     except NewcomerOrchestrationError as exc:
         return _error(exc)
 

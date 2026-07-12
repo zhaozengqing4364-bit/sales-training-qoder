@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from sales_trainer.services.path_service import SalesTrainerPathService
+
 import agent.models as _agent_models  # noqa: F401 - register ORM mappers
 import curriculum_practice.models as _curriculum_models  # noqa: F401 - register ORM mappers
 import sales_trainer.models as _sales_trainer_models  # noqa: F401 - register ORM mappers
@@ -23,7 +25,6 @@ from common.db.models import User
 from common.db.session import AsyncSessionLocal
 from sales_trainer.models import SalesTrainerAudioScorePrompt, SalesTrainerUnit
 from sales_trainer.schemas import SalesTrainerPathConfig
-from sales_trainer.services.path_service import SalesTrainerPathService
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTENT_ID_PATH = (
@@ -252,10 +253,14 @@ async def _disable_orphan_module_path_units(
 ) -> int:
     """Disable path.enabled on published units tied to PATH_KEY but not in the canonical set."""
     units = (
-        await db.execute(
-            select(SalesTrainerUnit).where(SalesTrainerUnit.status == "published")
+        (
+            await db.execute(
+                select(SalesTrainerUnit).where(SalesTrainerUnit.status == "published")
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     disabled = 0
     for unit in units:
         if str(unit.unit_id) in keep_unit_ids:
@@ -279,10 +284,14 @@ async def _disable_legacy_goal_path_units(
     summary: SeedSummary,
 ) -> int:
     units = (
-        await db.execute(
-            select(SalesTrainerUnit).where(SalesTrainerUnit.status == "published")
+        (
+            await db.execute(
+                select(SalesTrainerUnit).where(SalesTrainerUnit.status == "published")
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     disabled = 0
     for unit in units:
         config = dict(unit.config or {})
@@ -474,7 +483,9 @@ async def seed(db: AsyncSession) -> SeedSummary:
     return summary
 
 
-async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> SeedSummary:
+async def verify(
+    db: AsyncSession, *, summary: SeedSummary | None = None
+) -> SeedSummary:
     summary = summary or SeedSummary()
     learner = await _first(db, select(User).where(User.email == LEARNER_EMAIL))
     if learner is None:
@@ -522,11 +533,7 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
     if any(level["locked"] for level in path["levels"]):
         raise VerifyError("module path levels must not be locked")
 
-    legacy_visible = [
-        item
-        for item in paths
-        if item["path_key"] == LEGACY_PATH_KEY
-    ]
+    legacy_visible = [item for item in paths if item["path_key"] == LEGACY_PATH_KEY]
     if legacy_visible:
         raise VerifyError(
             "legacy new_seller_goal_path still visible; run seed to disable path.enabled"

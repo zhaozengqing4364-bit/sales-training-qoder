@@ -29,6 +29,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from sales_trainer.services.path_service import SalesTrainerPathService
+
 import agent.models as _agent_models  # noqa: F401 - register ORM mappers
 import curriculum_practice.models as _curriculum_models  # noqa: F401 - register ORM mappers
 import sales_trainer.models as _sales_trainer_models  # noqa: F401 - register ORM mappers
@@ -37,7 +39,6 @@ from common.db.session import AsyncSessionLocal
 from curriculum_practice.models import QuestionItem
 from sales_trainer.models import SalesTrainerUnit, SalesTrainerUnitQuestion
 from sales_trainer.schemas import SalesTrainerPathConfig
-from sales_trainer.services.path_service import SalesTrainerPathService
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / "docs/content/coo-series-manifest.yaml"
@@ -258,13 +259,17 @@ async def seed(db: AsyncSession) -> SeedSummary:
             raise VerifyError(f"series {series_index} has no question bindings")
 
         questions = (
-            await db.execute(
-                select(QuestionItem).where(
-                    QuestionItem.question_id.in_(question_ids),
-                    QuestionItem.status == "published",
+            (
+                await db.execute(
+                    select(QuestionItem).where(
+                        QuestionItem.question_id.in_(question_ids),
+                        QuestionItem.status == "published",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         if len(questions) != len(question_ids):
             raise VerifyError(
                 f"series {series_index} published questions missing "
@@ -364,7 +369,9 @@ async def seed(db: AsyncSession) -> SeedSummary:
     return summary
 
 
-async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> SeedSummary:
+async def verify(
+    db: AsyncSession, *, summary: SeedSummary | None = None
+) -> SeedSummary:
     summary = summary or SeedSummary()
     manifest = load_manifest()
     content_id = read_content_id()
@@ -378,14 +385,18 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
 
     coo_unit_names = [item["quiz_unit_name"] for item in manifest["series"]]
     coo_units = (
-        await db.execute(
-            select(SalesTrainerUnit).where(
-                SalesTrainerUnit.name.in_(coo_unit_names),
-                SalesTrainerUnit.unit_type == "quiz",
-                SalesTrainerUnit.status == "published",
+        (
+            await db.execute(
+                select(SalesTrainerUnit).where(
+                    SalesTrainerUnit.name.in_(coo_unit_names),
+                    SalesTrainerUnit.unit_type == "quiz",
+                    SalesTrainerUnit.status == "published",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if len(coo_units) != COO_UNIT_COUNT:
         raise VerifyError(f"expected {COO_UNIT_COUNT} COO units, got {len(coo_units)}")
 
@@ -401,11 +412,11 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
 
     legacy_quiz = await _first(
         db,
-        select(SalesTrainerUnit).where(SalesTrainerUnit.name == LEGACY_QUIZ_UNIT_NAME)
+        select(SalesTrainerUnit).where(SalesTrainerUnit.name == LEGACY_QUIZ_UNIT_NAME),
     )
     legacy_audio = await _first(
         db,
-        select(SalesTrainerUnit).where(SalesTrainerUnit.name == LEGACY_AUDIO_UNIT_NAME)
+        select(SalesTrainerUnit).where(SalesTrainerUnit.name == LEGACY_AUDIO_UNIT_NAME),
     )
     if legacy_quiz is None or legacy_audio is None:
         raise VerifyError("legacy demo units missing")
@@ -413,12 +424,16 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
     quiz_order = ((legacy_quiz.config or {}).get("path") or {}).get("order_index")
     audio_order = ((legacy_audio.config or {}).get("path") or {}).get("order_index")
     if quiz_order != 16 or audio_order != 17:
-        raise VerifyError(f"legacy order mismatch: quiz={quiz_order} audio={audio_order}")
+        raise VerifyError(
+            f"legacy order mismatch: quiz={quiz_order} audio={audio_order}"
+        )
 
     paths = await SalesTrainerPathService(db).list_paths_for_user(str(learner.user_id))
     path = next((item for item in paths if item["path_key"] == PATH_KEY), None)
     if path is None:
-        raise VerifyError("new_seller_goal_path not returned by SalesTrainerPathService")
+        raise VerifyError(
+            "new_seller_goal_path not returned by SalesTrainerPathService"
+        )
     if path["total_levels"] != TOTAL_LEVELS:
         raise VerifyError(
             f"expected {TOTAL_LEVELS} path levels, got {path['total_levels']}"

@@ -8,13 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
 from common.error_handling.result import Result
-from curriculum_practice.models import LearningContent, QuestionCategory, QuestionItem
+from curriculum_practice.models import QuestionCategory, QuestionItem
 from sales_trainer.models import (
     SalesTrainerAudioScorePrompt,
     SalesTrainerAudioScoreResult,
     SalesTrainerAudioSubmission,
     SalesTrainerAudioTranscript,
-    SalesTrainerExamPaper,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
     SalesTrainerQuizAttempt,
@@ -22,12 +21,10 @@ from sales_trainer.models import (
 )
 from sales_trainer.schemas import (
     AudioSubmissionCreate,
-    NewcomerPathConfigSaveRequest,
     QuizAnswerSubmit,
     QuizAttemptCreate,
     SalesTrainerMaterialCreate,
     SalesTrainerMaterialVersionCreate,
-    SalesTrainerPathConfig,
     SalesTrainerUnitCreate,
     SalesTrainerUnitUpdate,
     UnitQuestionBinding,
@@ -43,12 +40,6 @@ from sales_trainer.services.deucate_scoring_service import (
 )
 from sales_trainer.services.material_service import SalesTrainerMaterialService
 from sales_trainer.services.operation_log_service import OperationLogService
-from sales_trainer.services.path_config_models import (
-    NEWCOMER_PATH_LOGICAL_ID,
-)
-from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
-from sales_trainer.services.path_progress_service import UnitProgress
-from sales_trainer.services.path_projection_payloads import build_path_payload
 from sales_trainer.services.question_bank import QuestionBankAdapter
 from sales_trainer.services.quiz_service import QuizService, QuizServiceError
 from sales_trainer.services.short_answer_scoring_service import (
@@ -256,112 +247,6 @@ def _user(role: str = "user") -> User:
     )
 
 
-async def _publish_audio_path_for_unit(
-    db: AsyncSession,
-    *,
-    actor: User,
-    unit: SalesTrainerUnit,
-    prompt: SalesTrainerAudioScorePrompt,
-    module_key: str,
-    scenario_key: str,
-    material: SalesTrainerMaterial | None = None,
-    material_version: SalesTrainerMaterialVersion | None = None,
-) -> None:
-    module: dict[str, object] = {
-        "module_key": module_key,
-        "scenario_key": scenario_key,
-        "module_type": "audio_scoring",
-        "order_index": 1,
-        "title": unit.name,
-        "description": unit.description,
-        "target_unit_id": unit.unit_id,
-        "scoring_prompt_id": prompt.prompt_id,
-        "completion_rule": "passed",
-    }
-    if material is not None:
-        module["material_id"] = material.material_id
-    if material_version is not None:
-        module["material_version_id"] = material_version.version_id
-    service = SalesTrainerPathConfigService(db)
-    await service.save_config(
-        NewcomerPathConfigSaveRequest.model_validate(
-            {
-                "path_key": "newcomer_training_path_v1",
-                "title": "新人训练路径",
-                "goal_title": "完成录音评测",
-                "reason": "测试录音任务 active revision",
-                "modules": [module],
-            }
-        ),
-        actor=actor,
-    )
-    await service.publish_config(
-        actor=actor,
-        reason="测试录音任务 active revision 生效",
-    )
-
-
-async def _publish_active_quiz_path_for_unit(
-    db: AsyncSession,
-    *,
-    actor: User,
-    unit: SalesTrainerUnit,
-) -> None:
-    """Authorize one published quiz through the canonical active path seam."""
-    content = LearningContent(
-        learning_content_id=str(uuid.uuid4()),
-        title=f"{unit.name} 学习内容",
-        summary="测试正式路径发布所需的最小已发布学习内容。",
-        owner="新人训练路径测试",
-        source="unit_test",
-        status="published",
-        created_by=str(actor.user_id),
-        updated_by=str(actor.user_id),
-    )
-    paper = SalesTrainerExamPaper(
-        paper_id=str(uuid.uuid4()),
-        paper_key=f"quiz-path-{uuid.uuid4().hex}",
-        title=f"{unit.name} 考卷",
-        module_key="business_skills",
-        unit_id=str(unit.unit_id),
-        pass_threshold=10,
-        status="published",
-        created_by=str(actor.user_id),
-        updated_by=str(actor.user_id),
-    )
-    db.add_all([content, paper])
-    await db.commit()
-
-    service = SalesTrainerPathConfigService(db)
-    await service.save_config(
-        NewcomerPathConfigSaveRequest.model_validate(
-            {
-                "path_key": NEWCOMER_PATH_LOGICAL_ID,
-                "title": "新人训练路径",
-                "reason": "测试 quiz active-path authorization",
-                "modules": [
-                    {
-                        "module_key": "business_skills",
-                        "module_type": "article_exam",
-                        "enabled": True,
-                        "order_index": 1,
-                        "title": unit.name,
-                        "target_unit_id": str(unit.unit_id),
-                        "learning_content_id": content.learning_content_id,
-                        "exam_paper_id": paper.paper_id,
-                        "completion_rule": "passed",
-                    }
-                ],
-            }
-        ),
-        actor=actor,
-    )
-    await service.publish_config(
-        actor=actor,
-        reason="测试 quiz active-path authorization 生效",
-    )
-
-
 @pytest.mark.asyncio
 async def test_should_process_audio_submission_without_fixed_duration_limit(
     test_db: AsyncSession,
@@ -421,16 +306,6 @@ async def test_should_process_audio_submission_without_fixed_duration_limit(
     material.current_version_id = version.version_id
     test_db.add_all([admin, learner, prompt, unit, material, version])
     await test_db.commit()
-    await _publish_audio_path_for_unit(
-        test_db,
-        actor=admin,
-        unit=unit,
-        prompt=prompt,
-        module_key="company_product_demo",
-        scenario_key="company_product_demo",
-        material=material,
-        material_version=version,
-    )
 
     service = AudioSubmissionService(
         test_db,
@@ -829,11 +704,6 @@ async def test_should_publish_quiz_unit_and_score_choice_answer(
         actor=test_user,
     )
     unit = await unit_service.publish_unit(unit, actor=test_user)
-    await _publish_active_quiz_path_for_unit(
-        test_db,
-        actor=test_user,
-        unit=unit,
-    )
 
     attempt = await QuizService(test_db).submit_attempt(
         QuizAttemptCreate(
@@ -912,11 +782,6 @@ async def test_should_reject_incomplete_quiz_attempt_before_creating_snapshot(
         actor=test_user,
     )
     unit = await unit_service.publish_unit(unit, actor=test_user)
-    await _publish_active_quiz_path_for_unit(
-        test_db,
-        actor=test_user,
-        unit=unit,
-    )
 
     with pytest.raises(QuizServiceError) as error:
         await QuizService(test_db).submit_attempt(
@@ -982,11 +847,6 @@ async def test_should_score_short_answer_with_ai_and_store_feedback_snapshot(
         actor=test_user,
     )
     unit = await unit_service.publish_unit(unit, actor=test_user)
-    await _publish_active_quiz_path_for_unit(
-        test_db,
-        actor=test_user,
-        unit=unit,
-    )
 
     quiz_service = QuizService(
         test_db,
@@ -1103,11 +963,6 @@ async def test_should_submit_short_answer_attempt_when_ai_scoring_provider_fails
         actor=test_user,
     )
     unit = await unit_service.publish_unit(unit, actor=test_user)
-    await _publish_active_quiz_path_for_unit(
-        test_db,
-        actor=test_user,
-        unit=unit,
-    )
     quiz_service = QuizService(
         test_db,
         short_answer_scoring_service=ShortAnswerScoringService(
@@ -1143,79 +998,6 @@ async def test_should_submit_short_answer_attempt_when_ai_scoring_provider_fails
     assert answer["score"] is None
     assert answer["normalized_score"] is None
     assert answer["scoring_feedback"] is None
-
-
-def test_should_project_sales_trainer_path_with_unlock_progress() -> None:
-    first_unit = SalesTrainerUnit(
-        unit_id="path-unit-1",
-        name="第一关：PPT 讲解",
-        unit_type="audio_scoring",
-        description="完成 PPT 讲解录音。",
-    )
-    second_unit = SalesTrainerUnit(
-        unit_id="path-unit-2",
-        name="第二关：电梯演讲",
-        unit_type="audio_scoring",
-        description="完成电梯演讲录音。",
-    )
-    first_config = SalesTrainerPathConfig(
-        enabled=True,
-        path_key=NEWCOMER_PATH_LOGICAL_ID,
-        module_key="ppt_explanation",
-        module_type="audio_scoring",
-        order_index=1,
-        level_title="第一关：PPT 讲解",
-        completion_rule="passed",
-    )
-    second_config = SalesTrainerPathConfig(
-        enabled=True,
-        path_key=NEWCOMER_PATH_LOGICAL_ID,
-        module_key="elevator_pitch",
-        module_type="audio_scoring_group",
-        order_index=2,
-        level_title="第二关：电梯演讲",
-        unlock_after_unit_ids=[first_unit.unit_id],
-        completion_rule="passed",
-    )
-    ordered_items = [
-        (first_unit, first_config),
-        (second_unit, second_config),
-    ]
-
-    path_before = build_path_payload(
-        path_key=NEWCOMER_PATH_LOGICAL_ID,
-        title="新人训练路径",
-        goal_title="掌握新人核心表达能力",
-        ordered_items=ordered_items,
-        quiz_progress={},
-        audio_progress={},
-    )
-
-    assert path_before["current_level_id"] == first_unit.unit_id
-    assert path_before["levels"][1]["status"] == "locked"
-
-    path_after = build_path_payload(
-        path_key=NEWCOMER_PATH_LOGICAL_ID,
-        title="新人训练路径",
-        goal_title="掌握新人核心表达能力",
-        ordered_items=ordered_items,
-        quiz_progress={},
-        audio_progress={
-            first_unit.unit_id: UnitProgress(
-                status="scored",
-                passed=True,
-                score=88,
-                max_score=100,
-                submitted_at=None,
-                result_id="ppt-result",
-                target_path="/sales-trainer/audio/result/ppt-result",
-            )
-        },
-    )
-
-    assert path_after["completed_levels"] == 1
-    assert path_after["current_level_id"] == second_unit.unit_id
-    assert path_after["levels"][1]["status"] == "available"
 
 
 @pytest.mark.asyncio
@@ -1705,16 +1487,6 @@ async def test_should_require_latest_material_confirmation_for_ppt_submission(
     )
     test_db.add_all([admin, learner, material, version, prompt, unit])
     await test_db.commit()
-    await _publish_audio_path_for_unit(
-        test_db,
-        actor=admin,
-        unit=unit,
-        prompt=prompt,
-        module_key="ppt_explanation",
-        scenario_key="ppt_explanation",
-        material=material,
-        material_version=version,
-    )
 
     service = AudioSubmissionService(
         test_db,
@@ -1835,16 +1607,6 @@ async def test_should_score_audio_with_submission_prompt_snapshot(
     material.current_version_id = version.version_id
     test_db.add_all([admin, learner, prompt, unit, material, version])
     await test_db.commit()
-    await _publish_audio_path_for_unit(
-        test_db,
-        actor=admin,
-        unit=unit,
-        prompt=prompt,
-        module_key="company_product_demo",
-        scenario_key="company_product_demo",
-        material=material,
-        material_version=version,
-    )
 
     service = AudioSubmissionService(
         test_db,

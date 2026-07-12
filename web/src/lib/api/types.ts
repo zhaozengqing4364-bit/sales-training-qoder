@@ -4047,109 +4047,6 @@ export interface NewcomerTrainingModuleValidation {
     illegal_behavior: string;
 }
 
-export interface NewcomerTrainingPathModuleConfig {
-    path_key: string;
-    module_key: string;
-    scenario_key?: string | null;
-    display_name: string;
-    description?: string | null;
-    order_index: number;
-    enabled: boolean;
-    module_type: NewcomerTrainingModuleType;
-    completion_rule: NewcomerTrainingCompletionRule;
-    target_unit_id?: string | null;
-    learning_content_id?: string | null;
-    exam_paper_id?: string | null;
-    disabled_reason?: string | null;
-    duration_options?: NewcomerTrainingDurationOption[];
-    admin_permissions: string[];
-    audit_events: NewcomerTrainingAuditEvents;
-    validation: NewcomerTrainingModuleValidation;
-}
-
-export interface NewcomerTrainingPathConfig {
-    path_key: string;
-    title: string;
-    modules: NewcomerTrainingPathModuleConfig[];
-    fallback_applied?: boolean;
-}
-
-export type NewcomerPathModuleType =
-    | "audio_scoring"
-    | "article_exam"
-    | "audio_scoring_group"
-    | "realtime_roleplay"
-    | "realtime_placeholder";
-
-export interface NewcomerRealtimeProviderReadinessSnapshot {
-    readonly ready: boolean;
-    readonly checked_at?: string | null;
-    readonly provider?: string | null;
-    readonly failure_code?: string | null;
-    readonly failure_message?: string | null;
-    readonly [key: string]: unknown;
-}
-
-export interface NewcomerRealtimePermissionPolicy {
-    readonly learner_enter: "sales_trainer.enter_realtime";
-    readonly admin_configure: "sales_trainer.manage_modules";
-    readonly admin_provider_health: "sales_trainer.view_settings";
-}
-
-export interface NewcomerRealtimeFailurePolicy {
-    readonly terminal_codes?: readonly string[];
-    readonly transient_codes?: readonly string[];
-    readonly voluntary_codes?: readonly string[];
-    readonly terminal_retry_allowed: false;
-}
-
-export interface NewcomerRealtimeRollbackPolicy {
-    readonly rollback_via_active_revision: true;
-    readonly disable_module_on_invalid_binding: true;
-    readonly fallback_to_placeholder: false;
-}
-
-export interface NewcomerRealtimeRuntimeBinding {
-    readonly binding_key: "newcomer_realtime_roleplay_v1";
-    readonly runtime_owner: "training_runtime";
-    readonly runtime_descriptor_id: string;
-    readonly scenario_key: string;
-    readonly practice_template_id?: string | null;
-    readonly runtime_config_revision_id: string;
-    readonly roleplay_contract_revision_id?: string | null;
-    readonly provider_readiness_snapshot: NewcomerRealtimeProviderReadinessSnapshot;
-    readonly permission_policy?: NewcomerRealtimePermissionPolicy;
-    readonly failure_policy?: NewcomerRealtimeFailurePolicy;
-    readonly rollback_policy?: NewcomerRealtimeRollbackPolicy;
-}
-
-export interface NewcomerPathModuleConfig {
-    readonly module_key: string;
-    readonly scenario_key?: string | null;
-    readonly module_type: NewcomerPathModuleType;
-    readonly enabled: boolean;
-    readonly order_index: number;
-    readonly title: string;
-    readonly description: string | null;
-    readonly target_unit_id: string | null;
-    readonly learning_content_id: string | null;
-    readonly exam_paper_id: string | null;
-    readonly material_id?: string | null;
-    readonly material_version_id?: string | null;
-    readonly scoring_prompt_id?: string | null;
-    readonly disabled_reason: string | null;
-    readonly unlock_after_unit_ids: readonly string[];
-    readonly capability_keys?: readonly string[];
-    readonly completion_rule: NewcomerPathCompletionRule;
-    readonly primary_action_label: string | null;
-    readonly retry_action_label: string | null;
-    readonly review_action_label: string | null;
-    readonly guidance_templates: Readonly<Record<string, string>>;
-    readonly runtime_binding?: NewcomerRealtimeRuntimeBinding | null;
-    readonly learning_units?: readonly BusinessEtiquetteTrainingUnitConfig[];
-    readonly duration_options?: readonly NewcomerTrainingDurationOption[];
-}
-
 export interface NewcomerArticleProgressResponse {
     module_key: string;
     learning_content_id: string;
@@ -4516,27 +4413,13 @@ export interface BusinessEtiquetteRetrainingAssignmentResponse {
     reason: string;
 }
 
-export interface NewcomerPathConfigPayload {
-    readonly path_key: string;
-    readonly title: string;
-    readonly goal_title: string | null;
-    readonly description: string | null;
-    readonly enabled: boolean;
-    readonly modules: readonly NewcomerPathModuleConfig[];
-}
-
-export interface NewcomerPathConfigSaveRequest extends NewcomerPathConfigPayload {
-    readonly reason?: string | null;
-}
-
-export interface NewcomerPathConfigActionRequest {
-    readonly reason: string;
-    readonly revision_id?: string | null;
-}
-
 export type NewcomerPathRevisionStatus = "working" | "published" | "archived";
 
-export type NewcomerPathChangeClass = "non_semantic" | "semantic" | "binding" | "scoring_high_risk";
+export type NewcomerPathChangeClass =
+    | "non_semantic"
+    | "semantic"
+    | "binding"
+    | "scoring_high_risk";
 
 export interface NewcomerPathRevisionSummary {
     readonly revision_id: string;
@@ -4555,73 +4438,6 @@ export interface NewcomerPathRevisionSummary {
     readonly published_by: string | null;
     readonly created_at: string;
     readonly published_at: string | null;
-}
-
-export interface NewcomerPathConfigPermissionPolicyDiagnostics {
-    readonly view: "sales_trainer.manage_modules";
-    readonly save: "sales_trainer.manage_modules";
-    readonly publish: "sales_trainer.manage_modules";
-    readonly rollback: "sales_trainer.manage_modules";
-    readonly high_risk_ai_coach: "sales_trainer.manage_prompts";
-    readonly regrade: "sales_trainer.regrade_history";
-}
-
-export interface NewcomerPathConfigHighRiskActionDiagnostics {
-    readonly requires_reason: true;
-    readonly requires_trace_id: true;
-    readonly audit_action: string;
-    readonly impact_scope: string;
-    readonly preview_endpoint?: string | null;
-    readonly history_overwrite?: boolean | null;
-}
-
-export interface NewcomerPathConfigHighRiskActionsDiagnostics {
-    readonly publish: NewcomerPathConfigHighRiskActionDiagnostics;
-    readonly rollback: NewcomerPathConfigHighRiskActionDiagnostics;
-    readonly regrade: NewcomerPathConfigHighRiskActionDiagnostics;
-}
-
-export interface NewcomerRealtimeProviderReadinessDiagnostics {
-    readonly module_key: "realtime_roleplay" | "realtime_roleplay_placeholder";
-    readonly module_type: "realtime_roleplay" | "realtime_placeholder";
-    readonly title: string;
-    readonly enabled: boolean;
-    readonly runtime_descriptor_id?: string | null;
-    readonly provider_readiness_snapshot?: NewcomerRealtimeProviderReadinessSnapshot | null;
-    readonly ready: boolean;
-    readonly failure_code?: string | null;
-    readonly failure_message?: string | null;
-}
-
-export interface NewcomerPathConfigDiagnostics {
-    readonly surface_key: "newcomer_training_path_v1";
-    readonly resource_type: "newcomer_training_path";
-    readonly source: "active_revision" | "legacy_migration_snapshot";
-    readonly legacy_snapshot_only: boolean;
-    readonly fallback_applied: boolean;
-    readonly fallback_reason?: "active_revision_missing" | null;
-    readonly realtime_provider_readiness: readonly NewcomerRealtimeProviderReadinessDiagnostics[];
-    readonly management_entry: "/admin/newcomer-training/path-config";
-    readonly permission_policy: NewcomerPathConfigPermissionPolicyDiagnostics;
-    readonly active_revision?: NewcomerPathRevisionSummary | null;
-    readonly working_revision?: NewcomerPathRevisionSummary | null;
-    readonly high_risk_actions: NewcomerPathConfigHighRiskActionsDiagnostics;
-}
-
-export interface NewcomerPathConfigResponse {
-    readonly source: "active_revision" | "legacy_migration_snapshot";
-    readonly fallback_reason?: string | null;
-    readonly legacy_snapshot_only: boolean;
-    readonly management_entry: "/admin/newcomer-training/path-config";
-    readonly permission: "sales_trainer.manage_modules";
-    readonly path: NewcomerPathConfigPayload;
-    readonly active_revision_id: string | null;
-    readonly active_revision_no: number | null;
-    readonly active_revision_snapshot?: Record<string, unknown> | null;
-    readonly working_revision_id: string | null;
-    readonly working_revision_no: number | null;
-    readonly has_unpublished_revision: boolean;
-    readonly diagnostics: NewcomerPathConfigDiagnostics;
 }
 
 export type NewcomerLearningTopicKey = "business_etiquette" | "customer_faq";

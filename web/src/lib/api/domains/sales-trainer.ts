@@ -471,12 +471,12 @@ export function createAdminSalesTrainerDomain({
         listExamPapers: async (params?: { include_archived?: boolean }) => {
             const query = buildQueryString({ include_archived: params?.include_archived });
             return request<NewcomerExamPaperListResponse>(
-                `/admin/newcomer-training/exam-papers${query}`,
+                `/admin/newcomer-training/papers${query}`,
             );
         },
 
         createExamPaper: async (payload: NewcomerExamPaperCreateRequest) => {
-            return request<NewcomerExamPaper>("/admin/newcomer-training/exam-papers", {
+            return request<NewcomerExamPaper>("/admin/newcomer-training/papers", {
                 method: "POST",
                 body: JSON.stringify(payload),
             });
@@ -484,7 +484,7 @@ export function createAdminSalesTrainerDomain({
 
         publishExamPaper: async (paperId: string) => {
             return request<NewcomerExamPaper>(
-                `/admin/newcomer-training/exam-papers/${encodeURIComponent(paperId)}/publish`,
+                `/admin/newcomer-training/papers/${encodeURIComponent(paperId)}/publish`,
                 { method: "POST" },
             );
         },
@@ -665,13 +665,13 @@ export function createAdminSalesTrainerDomain({
                 offset: params?.offset,
             });
             return request<ReadinessWorkbenchResponse>(
-                `/admin/sales-trainer/readiness/workbench${query}`,
+                `/admin/newcomer-training/readiness/workbench${query}`,
             );
         },
 
         getReadinessDossier: async (learnerId: string) => {
             return request<ReadinessDossier>(
-                `/admin/sales-trainer/readiness/dossiers/${encodeURIComponent(learnerId)}`,
+                `/admin/newcomer-training/readiness/dossiers/${encodeURIComponent(learnerId)}`,
             );
         },
 
@@ -680,7 +680,7 @@ export function createAdminSalesTrainerDomain({
             payload: ReadinessDossierReviewActionCreateRequest,
         ) => {
             return request<ReadinessDossierReviewAction>(
-                `/admin/sales-trainer/readiness/dossiers/${encodeURIComponent(learnerId)}/review-actions`,
+                `/admin/newcomer-training/readiness/dossiers/${encodeURIComponent(learnerId)}/review-actions`,
                 {
                     method: "POST",
                     body: JSON.stringify(payload),
