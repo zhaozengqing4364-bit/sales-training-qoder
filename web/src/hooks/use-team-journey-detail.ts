@@ -3,14 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { teamDetailQueryOptions } from "@/lib/query/team-detail";
-import type { TrainingJourneyResponse } from "@/lib/api/types/training-journey";
+import type { JourneyResponse } from "@/lib/api/types/newcomer-training";
 
 export interface UseTeamJourneyDetailParams {
     learnerId: string;
 }
 
 export interface UseTeamJourneyDetailResult {
-    journey: TrainingJourneyResponse | undefined;
+    journey: JourneyResponse | undefined;
     isLoading: boolean;
     isError: boolean;
     error: Error | null;

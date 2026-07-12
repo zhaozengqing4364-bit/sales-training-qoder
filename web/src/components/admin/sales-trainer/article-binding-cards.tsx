@@ -71,7 +71,7 @@ export function PendingArticleBindingCard({
                     </p>
                 </div>
                 <Button asChild className="rounded-full bg-emerald-700 text-white hover:bg-emerald-800">
-                    <Link href="/admin/sales-trainer/paths">去路径配置中心发布</Link>
+                    <Link href="/admin/newcomer-training/path">去路径编辑器发布</Link>
                 </Button>
             </div>
         </GlassCard>

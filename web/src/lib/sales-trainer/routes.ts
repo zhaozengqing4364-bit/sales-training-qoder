@@ -45,7 +45,7 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
         key: "workbench",
         label: "工作台",
         icon: LayoutDashboard,
-        href: "/admin/sales-trainer",
+        href: "/admin/newcomer-training/path",
     },
     audioManagement: {
         key: "audioManagement",
@@ -109,9 +109,9 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
     },
     paths: {
         key: "paths",
-        label: "路径与达标",
+        label: "路径编排",
         icon: Milestone,
-        href: "/admin/sales-trainer/paths",
+        href: "/admin/newcomer-training/path",
     },
     aiCoach: {
         key: "aiCoach",
@@ -194,9 +194,6 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
 } as const satisfies Record<string, SalesTrainerAdminRouteItem>;
 
 export const SALES_TRAINER_ADMIN_CONTENT_NAV_ITEMS = [
-    SALES_TRAINER_ADMIN_ROUTES.workbench,
-    SALES_TRAINER_ADMIN_ROUTES.audioManagement,
-    SALES_TRAINER_ADMIN_ROUTES.learningTopics,
     SALES_TRAINER_ADMIN_ROUTES.paths,
 ] as const satisfies readonly SalesTrainerAdminRouteItem[];
 
@@ -226,33 +223,24 @@ export const SALES_TRAINER_ADMIN_CAPABILITY_NAV = [
     {
         capability: "manage_content",
         items: [
-            SALES_TRAINER_ADMIN_ROUTES.workbench,
-            SALES_TRAINER_ADMIN_ROUTES.audioManagement,
-            SALES_TRAINER_ADMIN_ROUTES.learningTopics,
+            SALES_TRAINER_ADMIN_ROUTES.paths,
         ],
     },
     {
         capability: "manage_modules",
         items: [
-            SALES_TRAINER_ADMIN_ROUTES.audioManagement,
-            SALES_TRAINER_ADMIN_ROUTES.learningTopics,
             SALES_TRAINER_ADMIN_ROUTES.paths,
         ],
     },
     {
         capability: "manage_prompts",
         items: [
-            SALES_TRAINER_ADMIN_ROUTES.audioManagement,
             SALES_TRAINER_ADMIN_ROUTES.paths,
         ],
     },
     {
         capability: "manage_questions",
-        items: [{
-            ...SALES_TRAINER_ADMIN_ROUTES.learningTopicQuestions,
-            label: "学习专题",
-            icon: BookOpen,
-        }],
+        items: [SALES_TRAINER_ADMIN_ROUTES.paths],
     },
     {
         capability: "view_records",
@@ -291,7 +279,7 @@ const SALES_TRAINER_ADMIN_CAPABILITY_ACCESS_ROOTS = [
             "/admin/sales-trainer/audio",
             "/admin/sales-trainer/training-tasks",
             "/admin/sales-trainer/units",
-            "/admin/sales-trainer/paths",
+            "/admin/newcomer-training/path",
             "/admin/sales-trainer/ai-coach",
             "/admin/sales-trainer/learning-topics",
             "/admin/sales-trainer/articles",
@@ -453,10 +441,10 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
         ],
     },
     {
-        root: "/admin/sales-trainer/paths",
+        root: "/admin/newcomer-training/path",
         label: "路径与达标",
         roots: [
-            "/admin/sales-trainer/paths",
+            "/admin/newcomer-training/path",
             "/admin/sales-trainer/units",
             "/admin/sales-trainer/ai-coach",
             "/admin/sales-trainer/readiness",

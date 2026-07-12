@@ -8,7 +8,6 @@ import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layou
 import { AdminLoadErrorCard } from "@/components/admin/sales-trainer/admin-load-error-card";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { GlassCard } from "@/components/ui/glass-card";
-import { AUDIO_EVALUATION_SCENARIOS } from "@/lib/sales-trainer/audio-evaluation-scenarios";
 import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 
 const AUDIO_MANAGEMENT_SECTIONS = [
@@ -69,37 +68,9 @@ export default function SalesTrainerAudioManagementPage() {
                 <>
                     <section className="space-y-3">
                         <div>
-                            <h2 className="text-base font-bold text-slate-900">录音任务</h2>
-                            <p className="text-sm text-slate-500">
-                                每个任务都在同一处管理单元、材料、评分标准和发布状态，主流程不再要求跨页面补配置。
-                            </p>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-3">
-                            {AUDIO_EVALUATION_SCENARIOS.map((scenario) => (
-                                <Link key={scenario.scenarioKey} href={`/admin/sales-trainer/audio/${scenario.slug}`}>
-                                    <GlassCard className="h-full p-5 transition hover:border-slate-300 hover:bg-white">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <p className="text-sm font-semibold text-slate-500">{scenario.orderLabel}</p>
-                                                <h3 className="mt-1 text-lg font-black text-slate-950">{scenario.title}</h3>
-                                            </div>
-                                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                                                {scenario.materialRequired ? "材料必选" : "材料选配"}
-                                            </span>
-                                        </div>
-                                        <p className="mt-3 text-sm leading-6 text-slate-600">{scenario.description}</p>
-                                        <p className="mt-4 text-sm font-semibold text-blue-700">进入录音任务</p>
-                                    </GlassCard>
-                                </Link>
-                            ))}
-                        </div>
-                    </section>
-
-                    <section className="space-y-3">
-                        <div>
                             <h2 className="text-base font-bold text-slate-900">高级管理与查看全部</h2>
                             <p className="text-sm text-slate-500">
-                                这些入口保留给批量治理、历史检索和旧书签兼容；配置单个录音任务时优先回到任务页就地完成。
+                                这些入口用于批量治理和历史检索；配置单个录音活动时优先在路径编辑器内就地完成。
                             </p>
                         </div>
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

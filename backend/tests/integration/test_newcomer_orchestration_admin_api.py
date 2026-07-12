@@ -167,6 +167,19 @@ async def test_admin_journey_uses_activity_identity(
     assert activity["activity_id"] == "assignment-1"
     assert "module_key" not in activity
 
+    listed = await async_client.get(
+        "/api/v1/admin/newcomer-training/journeys", headers=auth_headers
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["data"]["total"] == 1
+    assert listed.json()["data"]["items"][0]["learner_id"] == str(test_user.user_id)
+    assert (
+        listed.json()["data"]["items"][0]["journey"]["phases"][0]["modules"][0][
+            "module_id"
+        ]
+        == "product-a"
+    )
+
     dossier = await async_client.get(
         f"/api/v1/admin/newcomer-training/readiness/dossiers/{test_user.user_id}",
         headers=auth_headers,

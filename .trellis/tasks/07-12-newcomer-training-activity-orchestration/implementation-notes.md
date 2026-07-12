@@ -88,3 +88,17 @@
 - Task 13：六类活动由封闭 `ACTIVITY_RUNNERS` 注册表分发；lesson 读取章节并保存进度，quiz 逐题作答，audio 确认冻结材料版本后上传并轮询，realtime 使用受信任 session ID 进入现有练习页，assignment 支持文字/文件，AI Coach 支持幂等多轮反馈。
 - Task 13：Activity detail 增加服务端从 pinned revision 投影的类型化 runner descriptor；不接受配置中的组件名、路由或 URL。Realtime/AI start 返回服务端 session identity。
 - Task 13 验证：前端 learner/API focused `11 passed`、TypeScript、ESLint 通过；后端 newcomer unit/integration `82 passed`，orchestration/AI Ruff、Mypy 通过。
+## 2026-07-12 Task 13
+
+- 学员下一步旅程、六类受信任活动 Runner、AI Coach SSE、多轮幂等与实时对练启动已完成。
+- 聚焦前后端测试、Ruff、Mypy、TypeScript 与 ESLint 通过。
+- 提交：`4804b2f5 feat(newcomer): build next-action learner journey`。
+
+## 2026-07-12 Task 14
+
+- 导航统一到 `/newcomer-training` 与 `/admin/newcomer-training/path`；团队列表和详情改为读取固定发布修订的阶段/模块/活动投影。
+- 删除固定模块路径、旧配置中心、固定录音场景及其组件/测试；资源管理保留为通用治理能力。
+- 新增运行时代码边界测试，输出精确违规文件和词项；固定模块键与旧路径权威不可回归。
+- 聚焦前端 16 项测试通过，TypeScript 通过；后端管理员 Journey API 集成测试 6 项通过，Ruff/Mypy 通过。
+- 偏差：聚焦 pytest 默认覆盖率门槛会因只运行单文件而失败；已记录该非功能性失败并用 `--no-cov` 验证聚焦用例，最终 Task 15 仍运行完整测试门禁覆盖率。
+- 提交：`1f37db14 refactor(newcomer): remove fixed frontend path`。

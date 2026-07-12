@@ -1993,7 +1993,7 @@ npx tsc --noEmit
 
 Expected: tests and type-check pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add web/src/app/\(dashboard\)/newcomer-training web/src/components/newcomer-training
@@ -2034,7 +2034,7 @@ git commit -m "feat(newcomer): build next-action learner journey"
 - Consumes: new routes/components.
 - Produces: one canonical user/admin entry and no fixed frontend path authority.
 
-- [ ] **Step 1: Write failing navigation and legacy-boundary tests**
+- [x] **Step 1: Write failing navigation and legacy-boundary tests**
 
 ```typescript
 it("links learner and admin navigation to canonical newcomer routes", () => {
@@ -2052,11 +2052,11 @@ it("contains no fixed newcomer module keys in runtime frontend source", () => {
 });
 ```
 
-- [ ] **Step 2: Switch all entry links and team projections**
+- [x] **Step 2: Switch all entry links and team projections**
 
 Use `/newcomer-training` and `/admin/newcomer-training/path` everywhere. Team views consume phase/module/activity projections and use activity titles/types for filtering; they do not reconstruct old module cards.
 
-- [ ] **Step 3: Delete fixed frontend authority**
+- [x] **Step 3: Delete fixed frontend authority**
 
 Run before deletion:
 
@@ -2066,7 +2066,7 @@ rg -l "module-path|config-center|ppt_explanation|business_skills|customer_faq" w
 
 Move reusable recorder/result/quiz/coach UI into the new activity runners, update every caller, then delete the listed old pages/libs/components and their superseded tests. Do not add redirects.
 
-- [ ] **Step 4: Run frontend unit boundary and full type checks**
+- [x] **Step 4: Run frontend unit boundary and full type checks**
 
 Run:
 
@@ -2079,7 +2079,7 @@ npx eslint . --quiet
 
 Expected: all pass; the runtime-source boundary test finds no fixed module authority.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A web/src

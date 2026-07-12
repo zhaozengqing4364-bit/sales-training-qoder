@@ -107,7 +107,7 @@ describe("SidebarContent learner seams", () => {
         render(<SidebarContent currentUser={learnerUser} />);
 
         const salesTrainerLink = screen.getByRole("menuitem", { name: "新人训练路径" }) as HTMLAnchorElement;
-        expect(salesTrainerLink.getAttribute("href")).toBe("/sales-trainer");
+        expect(salesTrainerLink.getAttribute("href")).toBe("/newcomer-training");
     });
 
     it("keeps the profile affordance reachable on the expanded learner user menu", async () => {

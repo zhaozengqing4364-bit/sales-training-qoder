@@ -28,7 +28,7 @@ export function OperationalDiagnosticsPanel({
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <Button asChild variant="outline" className="rounded-full">
-                        <Link href="/admin/sales-trainer/paths">打开配置中心</Link>
+                        <Link href="/admin/newcomer-training/path">打开路径编辑器</Link>
                     </Button>
                     <Button asChild variant="outline" className="rounded-full">
                         <Link href="/support/runtime">查看运行时健康</Link>

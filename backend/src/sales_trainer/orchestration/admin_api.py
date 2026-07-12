@@ -8,7 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.response import error_response, success_response
@@ -16,6 +16,7 @@ from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
 from sales_trainer.models import (
+    NewcomerTrainingEnrollment,
     SalesTrainerAssetActiveRevision,
     SalesTrainerAssetRevision,
 )
@@ -25,7 +26,10 @@ from sales_trainer.orchestration.errors import (
     PathValidationError,
 )
 from sales_trainer.orchestration.journey_service import NewcomerJourneyService
-from sales_trainer.orchestration.revision_service import TrainingPathRevisionService
+from sales_trainer.orchestration.revision_service import (
+    PATH_LOGICAL_ID,
+    TrainingPathRevisionService,
+)
 from sales_trainer.permissions import (
     can_manage_newcomer_training_path,
     can_publish_newcomer_training_path,
@@ -354,6 +358,61 @@ async def learner_journey(
     except NewcomerOrchestrationError as exc:
         return _error(exc)
     return success_response(journey.model_dump())
+
+
+@admin_journey_router.get("/journeys", response_model=None)
+async def learner_journeys(
+    department: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if not can_view_sales_trainer_records(current_user):
+        return _forbidden()
+    department_scope = team_scope_department(current_user)
+    if department_scope is not None and department and department != department_scope:
+        return success_response({"items": [], "total": 0})
+    effective_department = department_scope or department
+    filters = [NewcomerTrainingEnrollment.path_id == PATH_LOGICAL_ID]
+    if effective_department:
+        filters.append(User.department == effective_department)
+    total = int(
+        await db.scalar(
+            select(func.count())
+            .select_from(NewcomerTrainingEnrollment)
+            .join(User, User.user_id == NewcomerTrainingEnrollment.learner_id)
+            .where(*filters)
+        )
+        or 0
+    )
+    rows = (
+        await db.execute(
+            select(User)
+            .join(
+                NewcomerTrainingEnrollment,
+                NewcomerTrainingEnrollment.learner_id == User.user_id,
+            )
+            .where(*filters)
+            .order_by(User.name, User.user_id)
+            .offset(offset)
+            .limit(limit)
+        )
+    ).scalars()
+    items = []
+    for learner in rows:
+        journey = await NewcomerJourneyService(db).get_or_create_for_learner(
+            learner=learner
+        )
+        items.append(
+            {
+                "learner_id": str(learner.user_id),
+                "learner_name": str(learner.name or ""),
+                "department": str(learner.department or ""),
+                "journey": journey.model_dump(),
+            }
+        )
+    return success_response({"items": items, "total": total})
 
 
 @admin_journey_router.get("/readiness/workbench", response_model=None)

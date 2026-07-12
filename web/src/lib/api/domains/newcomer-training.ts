@@ -1,5 +1,6 @@
 import type {
     ActivityDetailResponse,
+    AdminJourneyListResponse,
     ActivityTypeDescriptor,
     CoachProfileOption,
     ScoringRubricCreateRequest,
@@ -140,5 +141,15 @@ export function createAdminNewcomerTrainingDomain({
                 method: "POST",
                 body: JSON.stringify(payload),
             }),
+        listJourneys: (params?: { department?: string; limit?: number; offset?: number }) => {
+            const search = new URLSearchParams();
+            if (params?.department) search.set("department", params.department);
+            if (params?.limit !== undefined) search.set("limit", String(params.limit));
+            if (params?.offset !== undefined) search.set("offset", String(params.offset));
+            return request<AdminJourneyListResponse>(`/admin/newcomer-training/journeys${search.size ? `?${search}` : ""}`);
+        },
+        getLearnerJourney: (learnerId: string) => request<JourneyResponse>(
+            `/admin/newcomer-training/journeys/${encodeURIComponent(learnerId)}`,
+        ),
     };
 }

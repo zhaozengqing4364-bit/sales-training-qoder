@@ -23,14 +23,6 @@ import type {
     TrainingJourneyAnalyticsResponse,
 } from "@/lib/api/types";
 
-const MODULE_FILTER_OPTIONS = [
-    { value: "ppt_explanation", label: "PPT 讲解录音" },
-    { value: "business_skills", label: "商务技巧" },
-    { value: "ai_coach", label: "AI 教练" },
-    { value: "elevator_pitch", label: "金字塔演讲" },
-    { value: "realtime_roleplay", label: "实时对练" },
-] as const;
-
 const TRAINING_STAGE_FILTER_OPTIONS = [
     { value: "not_started", label: "未开始" },
     { value: "in_progress", label: "进行中" },
@@ -328,11 +320,7 @@ export default function SalesTrainerTrainingRecordsPage() {
                 value: String(record.module_key),
                 label: record.unit_name || String(record.module_key),
             }));
-        return mergeFilterOptions(
-            MODULE_FILTER_OPTIONS,
-            [...analyticsOptions, ...recordOptions],
-            moduleKey,
-        );
+        return mergeFilterOptions([], [...analyticsOptions, ...recordOptions], moduleKey);
     }, [filterMetadata?.module_summaries, items, moduleKey]);
 
     const learnerLevelOptions = useMemo(() => {

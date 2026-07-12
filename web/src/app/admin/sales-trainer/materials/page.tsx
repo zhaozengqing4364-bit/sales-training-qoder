@@ -15,7 +15,6 @@ import {
     firstSelectedMaterial,
     type VersionDraft,
 } from "@/components/admin/sales-trainer/material-page-model";
-import { MaterialSetupGuide } from "@/components/admin/sales-trainer/material-setup-guide";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
@@ -23,7 +22,6 @@ import type {
     SalesTrainerMaterial,
     SalesTrainerMaterialCreateRequest,
 } from "@/lib/api/types";
-import { audioEvaluationScenarioForSlug } from "@/lib/sales-trainer/audio-evaluation-scenarios";
 import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 
 export default function SalesTrainerMaterialsPage() {
@@ -33,9 +31,7 @@ export default function SalesTrainerMaterialsPage() {
     const toast = useToast();
     const toastError = toast.error;
     const toastSuccess = toast.success;
-    const scenario = audioEvaluationScenarioForSlug(searchParams.get("scenario"));
-    const moduleKey = scenario?.moduleKey ?? searchParams.get("module");
-    const purposeFromQuery = scenario?.purposeKey ?? searchParams.get("purpose");
+    const purposeFromQuery = searchParams.get("purpose");
     const [items, setItems] = useState<SalesTrainerMaterial[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -199,9 +195,7 @@ export default function SalesTrainerMaterialsPage() {
                     retryLabel="重新检查权限"
                     onRetry={routeAccess.reloadCapabilities}
                 />
-            ) : (
-                <MaterialSetupGuide moduleKey={moduleKey} />
-            )}
+            ) : null}
             {!routeAccess.denialMessage && loadError ? (
                 <AdminLoadErrorCard
                     title="材料库加载失败"

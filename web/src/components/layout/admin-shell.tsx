@@ -19,7 +19,7 @@ import {
 } from "@/lib/auth/current-user";
 
 const SALES_TRAINER_ADMIN_PREFIX = "/admin/sales-trainer";
-const SALES_TRAINER_MANAGER_ENTRY = "/admin/sales-trainer";
+const SALES_TRAINER_MANAGER_ENTRY = "/admin/newcomer-training/path";
 
 function canUseAdminShell(role: string): boolean {
     return canUseAdminConsoleRole(role);
@@ -58,6 +58,7 @@ export function AdminShell({
         if (
             isSalesTrainerManagerRole(effectiveUser.role)
             && !pathname.startsWith(SALES_TRAINER_ADMIN_PREFIX)
+            && !pathname.startsWith("/admin/newcomer-training")
         ) {
             router.replace(SALES_TRAINER_MANAGER_ENTRY);
         }

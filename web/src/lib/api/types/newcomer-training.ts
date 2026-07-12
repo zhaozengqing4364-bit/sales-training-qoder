@@ -267,6 +267,18 @@ export interface JourneyResponse {
     primary_next_action: JourneyNextAction | null;
 }
 
+export interface AdminJourneyItem {
+    learner_id: string;
+    learner_name: string;
+    department: string;
+    journey: JourneyResponse;
+}
+
+export interface AdminJourneyListResponse {
+    items: AdminJourneyItem[];
+    total: number;
+}
+
 export interface ModuleDetailResponse {
     enrollment_id: string;
     path_revision_id: string;

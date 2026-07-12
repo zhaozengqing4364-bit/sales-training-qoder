@@ -83,8 +83,8 @@ export function UnitPathConfigSection({
                         路径结构请优先到“新人训练路径配置中心”维护；这里仅保留高级兼容配置。
                     </p>
                 </div>
-                <Link href="/admin/sales-trainer/paths" className="text-sm font-semibold text-slate-900 underline">
-                    打开新人训练路径配置中心
+                <Link href="/admin/newcomer-training/path" className="text-sm font-semibold text-slate-900 underline">
+                    打开新人训练路径编辑器
                 </Link>
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-700">

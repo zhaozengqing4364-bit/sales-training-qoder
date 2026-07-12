@@ -2,7 +2,6 @@ import type {
     SalesTrainerUnitQuestionBinding,
     SalesTrainerUnitType,
 } from "@/lib/api/types";
-import { audioEvaluationScenarioForPurpose } from "@/lib/sales-trainer/audio-evaluation-scenarios";
 
 interface ValidateUnitFormInput {
     readonly audioPurpose: string;
@@ -29,10 +28,6 @@ export function validateUnitForm(input: ValidateUnitFormInput): string | null {
     }
     if (input.unitType === "audio_scoring" && !input.audioPurpose.trim()) {
         return "录音用途不能为空。";
-    }
-    const scenario = audioEvaluationScenarioForPurpose(input.audioPurpose.trim());
-    if (input.unitType === "audio_scoring" && scenario?.materialRequired && !input.materialId) {
-        return `${scenario.title}任务必须绑定已发布训练材料。`;
     }
     return null;
 }

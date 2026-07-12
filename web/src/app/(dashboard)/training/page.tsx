@@ -251,7 +251,7 @@ export default function TrainingCategoriesPage() {
                         独立完成做题、上传语音作业、AI 评分与结果查看。该入口不依赖训练分类接口配置。
                     </p>
                 </div>
-                <Link href="/sales-trainer">
+                <Link href="/newcomer-training">
                     <Button className="rounded-full bg-slate-900 text-white">
                         进入销售训练
                         <ArrowRight className="ml-2 h-4 w-4" />

@@ -5,7 +5,6 @@ import type {
     SalesTrainerUnit,
     SalesTrainerUnitType,
 } from "@/lib/api/types";
-import { AUDIO_EVALUATION_SCENARIOS } from "./audio-evaluation-scenarios";
 
 const LIFECYCLE_STATUS_LABELS = {
     draft: "草稿",
@@ -41,24 +40,13 @@ const UNIT_TYPE_LABELS = {
 >;
 
 export const TRAINING_PURPOSE_OPTIONS = [
-    ...AUDIO_EVALUATION_SCENARIOS.map((scenario) => ({
-        value: scenario.purposeKey,
-        label: scenario.title,
-    })),
     { value: "general_audio_scoring", label: "通用录音评分" },
-    { value: "business_skills", label: "学习专题" },
 ] as const;
 
 const TRAINING_PURPOSE_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
     TRAINING_PURPOSE_OPTIONS.map((option) => [option.value, option.label]),
 );
 
-const LEGACY_BUSINESS_SKILLS_UNIT_NAME = "模块二：拜访前商务";
-const LEGACY_BUSINESS_SKILLS_DESCRIPTION_TOKEN = "COO 谈市场十五讲";
-const BUSINESS_SKILLS_UNIT_NAME = "模块二：商务技巧";
-const BUSINESS_SKILLS_UNIT_DESCRIPTION = "阅读见客户前商务礼仪学习内容，并完成商务技巧考卷。";
-const CURRENT_NEWCOMER_PATH_KEY = "newcomer_training_path_v1";
-const LEGACY_THREE_MODULE_PATH_KEY = "new_seller_modules_v1";
 
 export interface TrainingTaskDisplay {
     readonly title: string;
@@ -146,31 +134,9 @@ export function formatTrainingTaskDisplay(
 }
 
 export function normalizeNewcomerUnitDisplay(unit: SalesTrainerUnit): SalesTrainerUnit {
-    const isBusinessSkillsUnit =
-        unit.config.path?.module_key === "business_skills" ||
-        unit.name === LEGACY_BUSINESS_SKILLS_UNIT_NAME ||
-        unit.description?.includes(LEGACY_BUSINESS_SKILLS_DESCRIPTION_TOKEN) === true;
-    if (!isBusinessSkillsUnit) {
-        return unit;
-    }
-    return {
-        ...unit,
-        name:
-            unit.name === LEGACY_BUSINESS_SKILLS_UNIT_NAME ? BUSINESS_SKILLS_UNIT_NAME : unit.name,
-        description: unit.description?.includes(LEGACY_BUSINESS_SKILLS_DESCRIPTION_TOKEN)
-            ? BUSINESS_SKILLS_UNIT_DESCRIPTION
-            : unit.description,
-    };
+    return unit;
 }
 
 export function filterNewcomerAdminUnits(units: readonly SalesTrainerUnit[]): SalesTrainerUnit[] {
-    const currentUnits = units.filter(
-        (unit) => unit.config.path?.path_key === CURRENT_NEWCOMER_PATH_KEY,
-    );
-    if (currentUnits.length > 0) {
-        return currentUnits.map(normalizeNewcomerUnitDisplay);
-    }
-    return units
-        .filter((unit) => unit.config.path?.path_key === LEGACY_THREE_MODULE_PATH_KEY)
-        .map(normalizeNewcomerUnitDisplay);
+    return units.map(normalizeNewcomerUnitDisplay);
 }
