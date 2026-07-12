@@ -635,3 +635,47 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: 模块化单体 2.0 Gate 5 训练闭环与 Locality
+
+**Date**: 2026-07-12
+**Task**: 模块化单体 2.0 Gate 5 训练闭环与 Locality
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+完成统一 ORM model registry、Journey/Readiness projection、前端领域 DTO/transport 与 report/readiness ViewModel/action locality；Brooks 100/100、Trellis blocker=0，clean-start canonical gate 全绿并归档。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6ba51592` | (see git log) |
+| `ec11ed73` | (see git log) |
+| `28d078fc` | (see git log) |
+| `2fe89f80` | (see git log) |
+| `88d3cad5` | (see git log) |
+| `4e307209` | (see git log) |
+| `546f8164` | (see git log) |
+| `7a07f9fb` | (see git log) |
+| `62297556` | (see git log) |
+| `3925c8e8` | (see git log) |
+| `79ada6db` | (see git log) |
+| `85914260` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
