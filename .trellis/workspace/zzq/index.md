@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 20
+- **Total Sessions**: 21
 - **Last Active**: 2026-07-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~756 | Active |
+| `journal-1.md` | ~805 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 21 | 2026-07-12 | 新人训练活动编排系统闭环 | `ac0b9298`, `b7e11c1b`, `32143c43`, `4575c5b1`, `78b19b29`, `40c1728d`, `1f86b96c`, `3f4bad37`, `03336571`, `d2f3d87c`, `bcdb7cae`, `673d6b0c`, `a0651a75`, `0590e01d`, `4804b2f5`, `9f7aed1e`, `408650d8` | `codex/newcomer-training-v0-9-closure` |
 | 20 | 2026-07-12 | StepAudio 2.5 Realtime 生产配置闭环 | `5fe2866c`, `55c3ba56` | `codex/newcomer-training-v0-9-closure` |
 | 19 | 2026-07-12 | 模块化单体 2.0 Gate 6 全部闭环 | `463117de`, `1fe72f72`, `4f8f892b`, `71571d0e`, `4d143f3e`, `bd5cd0cb`, `004b191b`, `d3f58ec7`, `99af364a` | `codex/newcomer-training-v0-9-closure` |
 | 18 | 2026-07-12 | 模块化单体 2.0 Gate 5 训练闭环与 Locality | `6ba51592`, `ec11ed73`, `28d078fc`, `2fe89f80`, `88d3cad5`, `4e307209`, `546f8164`, `7a07f9fb`, `62297556`, `3925c8e8`, `79ada6db`, `85914260` | `codex/newcomer-training-v0-9-closure` |

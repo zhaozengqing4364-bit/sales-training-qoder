@@ -754,3 +754,52 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: 新人训练活动编排系统闭环
+
+**Date**: 2026-07-12
+**Task**: 新人训练活动编排系统闭环
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+完成 TrainingPath→Phase→Module→Activity 直接替换、六类活动执行与渲染、聚焦式管理端、唯一下一步学员旅程、revision 固定、原型 reset/seed、文档合同和全量质量门禁。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ac0b9298` | (see git log) |
+| `b7e11c1b` | (see git log) |
+| `32143c43` | (see git log) |
+| `4575c5b1` | (see git log) |
+| `78b19b29` | (see git log) |
+| `40c1728d` | (see git log) |
+| `1f86b96c` | (see git log) |
+| `3f4bad37` | (see git log) |
+| `03336571` | (see git log) |
+| `d2f3d87c` | (see git log) |
+| `bcdb7cae` | (see git log) |
+| `673d6b0c` | (see git log) |
+| `a0651a75` | (see git log) |
+| `0590e01d` | (see git log) |
+| `4804b2f5` | (see git log) |
+| `9f7aed1e` | (see git log) |
+| `408650d8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
