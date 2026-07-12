@@ -720,3 +720,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: StepAudio 2.5 Realtime 生产配置闭环
+
+**Date**: 2026-07-12
+**Task**: StepAudio 2.5 Realtime 生产配置闭环
+**Branch**: `codex/newcomer-training-v0-9-closure`
+
+### Summary
+
+安全注入本地 StepFun credential，固定官方 StepAudio 2.5 Realtime 合同；真实 Provider 门禁定位并修复 manual commit 与 pending transcript 兼容问题，完成脱敏验证、规范沉淀和任务归档。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5fe2866c` | (see git log) |
+| `55c3ba56` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
