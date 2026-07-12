@@ -445,7 +445,7 @@ git commit -m "feat(newcomer): define activity orchestration contract"
 - Consumes: `ActivityConfig` from Task 1.
 - Produces: `NewcomerTrainingEnrollment`, `NewcomerTrainingActivityAttempt`, `EnrollmentRepository`, `AttemptRepository`.
 
-- [ ] **Step 1: Write failing repository tests**
+- [x] **Step 1: Write failing repository tests**
 
 ```python
 @pytest.mark.asyncio
@@ -492,13 +492,13 @@ async def test_should_make_attempt_creation_idempotent(test_db, enrollment):
     assert second.attempt_id == first.attempt_id
 ```
 
-- [ ] **Step 2: Run repository tests and verify RED**
+- [x] **Step 2: Run repository tests and verify RED**
 
 Run: `cd backend && ./.venv/bin/pytest tests/unit/test_newcomer_orchestration_repository.py -q`
 
 Expected: import fails for the new models/repositories.
 
-- [ ] **Step 3: Add ORM models and migration**
+- [x] **Step 3: Add ORM models and migration**
 
 Add ORM columns matching these contracts:
 
@@ -543,7 +543,7 @@ class NewcomerTrainingActivityAttempt(Base):
 
 The migration must create check constraints for the six activity types, attempt statuses, and enrollment statuses; unique indexes for `(learner_id, path_id, status)` active enrollment, `(enrollment_id, activity_id, attempt_no)`, and `client_token`; and an index for `(evidence_type, evidence_id)`.
 
-- [ ] **Step 4: Implement repositories**
+- [x] **Step 4: Implement repositories**
 
 ```python
 class EnrollmentRepository:
@@ -653,7 +653,7 @@ class AttemptRepository:
 
 Use `select()` and `with_for_update()` where supported. Catch unique-key races, rollback only the failed savepoint, and return the already-created row for the same client token.
 
-- [ ] **Step 5: Run migration and persistence tests**
+- [x] **Step 5: Run migration and persistence tests**
 
 Run:
 
@@ -665,7 +665,7 @@ cd backend
 
 Expected: migration reaches `20260712_1300_092`; all focused tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/src/sales_trainer/models.py backend/src/sales_trainer/orchestration/repository.py backend/alembic/versions/20260712_1300_092_newcomer_activity_orchestration.py backend/tests/unit/test_newcomer_orchestration_repository.py backend/tests/integration/test_newcomer_orchestration_migration.py

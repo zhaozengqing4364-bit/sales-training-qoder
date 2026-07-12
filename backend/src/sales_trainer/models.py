@@ -229,6 +229,101 @@ class SalesTrainerAssetActiveRevision(Base):
     )
 
 
+class NewcomerTrainingEnrollment(Base):
+    __tablename__ = "newcomer_training_enrollments"
+
+    enrollment_id = Column(String(36), primary_key=True, default=_uuid)
+    learner_id = Column(
+        String(36), ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    path_id = Column(String(80), nullable=False, default="default")
+    path_revision_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_asset_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(String(20), nullable=False, default="active", index=True)
+    started_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'completed', 'cancelled')",
+            name="ck_newcomer_training_enrollment_status",
+        ),
+        Index(
+            "uq_newcomer_training_active_enrollment",
+            "learner_id",
+            "path_id",
+            unique=True,
+            sqlite_where=text("status = 'active'"),
+            postgresql_where=text("status = 'active'"),
+        ),
+    )
+
+
+class NewcomerTrainingActivityAttempt(Base):
+    __tablename__ = "newcomer_training_activity_attempts"
+
+    attempt_id = Column(String(36), primary_key=True, default=_uuid)
+    enrollment_id = Column(
+        String(36),
+        ForeignKey("newcomer_training_enrollments.enrollment_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    path_revision_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_asset_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    activity_id = Column(String(80), nullable=False, index=True)
+    activity_type = Column(String(40), nullable=False, index=True)
+    attempt_no = Column(Integer, nullable=False)
+    status = Column(String(30), nullable=False, default="not_started", index=True)
+    score = Column(Numeric(8, 2), nullable=True)
+    max_score = Column(Numeric(8, 2), nullable=True)
+    passed = Column(Boolean, nullable=True)
+    evidence_type = Column(String(50), nullable=True)
+    evidence_id = Column(String(120), nullable=True)
+    client_token = Column(String(100), nullable=False)
+    activity_snapshot = Column(JSON, nullable=False)
+    result_snapshot = Column(JSON, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "activity_type IN ('lesson', 'quiz', 'audio_assessment', "
+            "'realtime_roleplay', 'ai_coach', 'assignment')",
+            name="ck_newcomer_training_activity_type",
+        ),
+        CheckConstraint(
+            "status IN ('not_started', 'in_progress', 'submitted', 'completed', 'failed')",
+            name="ck_newcomer_training_attempt_status",
+        ),
+        CheckConstraint("attempt_no >= 1", name="ck_newcomer_training_attempt_no"),
+        UniqueConstraint(
+            "enrollment_id",
+            "activity_id",
+            "attempt_no",
+            name="uq_newcomer_training_activity_attempt_no",
+        ),
+        Index(
+            "uq_newcomer_training_attempt_client_token", "client_token", unique=True
+        ),
+        Index(
+            "idx_newcomer_training_attempt_evidence", "evidence_type", "evidence_id"
+        ),
+    )
+
+
 class SalesTrainerBusinessEtiquetteQuestionDraft(Base):
     __tablename__ = "sales_trainer_business_etiquette_question_drafts"
 

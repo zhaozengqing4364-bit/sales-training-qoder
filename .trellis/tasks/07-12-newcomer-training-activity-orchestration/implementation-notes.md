@@ -12,7 +12,10 @@
 
 ## Deviations
 
-- 暂无架构偏差。
+- Task 2：默认 SQLite 开发库从空库执行完整 Alembic 历史链时，既有 `001` 迁移因
+  `practice_sessions` 不存在而失败，尚未运行到本次 `092`。本次以 ORM 元数据真实建表、
+  SQLite schema 反射、迁移脚本静态契约和专项测试验证 `092`；完整迁移链问题保留到
+  Task 15 reset/seed 闭环，不静默忽略。
 
 ## Verification Evidence
 
@@ -22,3 +25,9 @@
 - Task 1 Ruff：`All checks passed!`。
 - Task 1 Mypy：`Success: no issues found in 4 source files`。
 - CodeGraph 尚未索引新文件，`impact` 无法识别；新包当前只有新增测试调用，无既有共享调用者。
+- Task 2 RED：repository 模块不存在，collection error，符合功能缺失预期。
+- Task 2 GREEN：repository + schema 反射 `4 passed`。
+- Task 2 Ruff：`All checks passed!`。
+- Task 2 Mypy：`Success: no issues found in 1 source file`。
+- Task 2 Alembic：默认空 SQLite 的既有历史链在 `001` 失败，未触达 `092`；错误为
+  `no such table: practice_sessions`，已纳入最终 reset/seed 验证项。
