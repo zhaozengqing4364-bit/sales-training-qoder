@@ -12,13 +12,8 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { SalesTrainerSettings } from "@/lib/api/types";
-import {
-    buildNewcomerOperationalDiagnostics,
-    type NewcomerOperationalDiagnostics,
-} from "@/lib/sales-trainer/operational-diagnostics";
 import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 
-import { OperationalDiagnosticsPanel } from "./operational-diagnostics-panel";
 
 function StatusBadge({ ok }: { ok: boolean }) {
     return (
@@ -35,7 +30,6 @@ function policyValue(value: unknown): string {
 export default function SalesTrainerSettingsPage() {
     const pathname = usePathname();
     const [settings, setSettings] = useState<SalesTrainerSettings | null>(null);
-    const [diagnostics, setDiagnostics] = useState<NewcomerOperationalDiagnostics | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const routeAccess = useSalesTrainerAdminRouteAccess(pathname);
@@ -44,29 +38,10 @@ export default function SalesTrainerSettingsPage() {
         setIsLoading(true);
         setError(null);
         try {
-            const [
-                loadedSettings,
-                pathConfig,
-                pathRevisions,
-                audioSubmissions,
-                scoreResults,
-            ] = await Promise.all([
-                api.admin.salesTrainer.getSettings(),
-                api.admin.newcomerTraining.getPathConfig(),
-                api.admin.newcomerTraining.listPathConfigRevisions(),
-                api.admin.salesTrainer.listAudioSubmissions({ limit: 100 }),
-                api.admin.salesTrainer.listScoreResults({ limit: 100 }),
-            ]);
+            const loadedSettings = await api.admin.salesTrainer.getSettings();
             setSettings(loadedSettings);
-            setDiagnostics(buildNewcomerOperationalDiagnostics({
-                audioSubmissions: audioSubmissions.items,
-                scoreResults: scoreResults.items,
-                pathConfig,
-                pathRevisions: pathRevisions.items,
-            }));
         } catch (loadError) {
             setSettings(null);
-            setDiagnostics(null);
             setError(getApiErrorMessage(loadError));
         } finally {
             setIsLoading(false);
@@ -79,7 +54,6 @@ export default function SalesTrainerSettingsPage() {
         }
         if (!routeAccess.canAccess) {
             setSettings(null);
-            setDiagnostics(null);
             setError(null);
             setIsLoading(false);
             return;
@@ -175,7 +149,6 @@ export default function SalesTrainerSettingsPage() {
                             <div><span className="block text-slate-500">兜底原因</span><span className="font-medium">{policyValue(settings.phase2_policy?.fallback_reason)}</span></div>
                         </div>
                     </GlassCard>
-                    {diagnostics ? <OperationalDiagnosticsPanel diagnostics={diagnostics} /> : null}
                 </div>
             ) : null}
         </AdminIndexShell>

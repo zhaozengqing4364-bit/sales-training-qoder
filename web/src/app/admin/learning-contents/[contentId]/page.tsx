@@ -23,14 +23,12 @@ import type {
     LearningChapter,
     LearningContent,
     LearningContentBindingImpactResponse,
-    LearningContentBindingUnitImpact,
 } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { debug } from "@/lib/debug";
 import { markdownComponents } from "@/components/sales-trainer/coo-markdown-components";
-import { BusinessEtiquetteQuestionDraftPanel } from "./question-generation-panel";
 
 const STATUS_LABELS: Record<string, string> = {
     draft: "草稿",
@@ -92,11 +90,11 @@ function revisionLabel(id: string | null | undefined, no: number | null | undefi
 
 function bindingStatusLabel(impact: LearningContentBindingImpactResponse | null): string {
     if (!impact) return "检查中";
-    if (impact.has_active_binding && impact.has_working_binding) {
+    if (impact.active_bindings.length > 0 && impact.working_bindings.length > 0) {
         return "学员端生效 + 待发布路径修订";
     }
-    if (impact.has_active_binding) return "学员端正在使用";
-    if (impact.has_working_binding) return "待发布路径修订引用";
+    if (impact.active_bindings.length > 0) return "学员端正在使用";
+    if (impact.working_bindings.length > 0) return "待发布路径修订引用";
     return "未绑定新人训练路径";
 }
 
@@ -160,7 +158,7 @@ export default function AdminLearningContentDetailPage() {
             setActionError(null);
             setPublishGateErrors(null);
             try {
-                const impact = await api.admin.newcomerTraining.getLearningContentBindingImpact(contentId);
+                const impact = await api.learningContents.getBindingImpact(contentId);
                 setBindingImpact(impact);
             } catch (impactError) {
                 debug.error("Failed to load learning content binding impact:", impactError);
@@ -459,32 +457,16 @@ export default function AdminLearningContentDetailPage() {
         && bindingImpact
         && bindingImpact.can_archive,
     );
-    const allBindingUnits = [
+    const allBindings = [
         ...(bindingImpact?.active_bindings ?? []),
         ...(bindingImpact?.working_bindings ?? []),
-    ].flatMap((binding) => binding.learning_units);
-    const impactUnitsForOrders = (orders: number[]) => {
-        const orderSet = new Set(orders);
-        const seen = new Set<string>();
-        const units: LearningContentBindingUnitImpact[] = [];
-        for (const unit of allBindingUnits) {
-            const references = [
-                ...unit.source_chapter_orders,
-                ...unit.ai_coach_remediation_chapter_orders,
-            ];
-            if (!references.some((order) => orderSet.has(order)) || seen.has(unit.unit_key)) {
-                continue;
-            }
-            seen.add(unit.unit_key);
-            units.push(unit);
-        }
-        return units;
-    };
+    ];
+    const impactUnitsForOrders = (_orders: number[]) => allBindings;
     const confirmImpactUnits = confirmAction && "affectedOrders" in confirmAction
         ? impactUnitsForOrders(confirmAction.affectedOrders)
         : [];
     const impactDescription = confirmImpactUnits.length
-        ? `会影响小单元：${confirmImpactUnits.map((unit) => `${unit.title}（章节 ${unit.source_chapter_orders.join("、") || "--"}）`).join("；")}。`
+        ? `会影响训练活动：${confirmImpactUnits.map((binding) => binding.activity_title).join("；")}。`
         : "";
     const confirmTitle = confirmAction?.type === "delete-chapter"
         ? "删除学习章节"
@@ -494,9 +476,9 @@ export default function AdminLearningContentDetailPage() {
             ? "归档学习内容"
             : "发布学习内容";
     const confirmDescription = confirmAction?.type === "delete-chapter"
-        ? `确定要删除「${confirmAction.chapter.title}」吗？删除后该章节无法恢复。${impactDescription ? ` ${impactDescription} 当前绑定按章节序号工作，请确认已同步调整路径配置。` : ""}`
+        ? `确定要删除「${confirmAction.chapter.title}」吗？删除后该章节无法恢复。${impactDescription ? ` ${impactDescription} 请确认相关活动仍符合学习目标。` : ""}`
         : confirmAction?.type === "reorder-chapter"
-          ? `确定要${confirmAction.direction === "up" ? "上移" : "下移"}当前章节吗？${impactDescription ? ` ${impactDescription} 当前绑定按章节序号工作，请确认已同步调整路径配置。` : ""}`
+          ? `确定要${confirmAction.direction === "up" ? "上移" : "下移"}当前章节吗？${impactDescription ? ` ${impactDescription} 请确认相关活动仍符合学习目标。` : ""}`
           : confirmAction?.type === "archive"
             ? bindingImpact?.archive_block_reason
                 ?? `确定要归档「${content?.title ?? "当前学习内容"}」吗？归档后学员将不能继续访问该内容。`
@@ -641,11 +623,7 @@ export default function AdminLearningContentDetailPage() {
                             </div>
                         ) : null}
                         <div className="mt-4 flex flex-wrap gap-2">
-                            <Link href="/admin/sales-trainer/learning-topics" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                                商务技巧文章绑定
-                                <ExternalLink className="h-3.5 w-3.5" />
-                            </Link>
-                            <Link href="/admin/sales-trainer/paths" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                            <Link href="/admin/newcomer-training/path" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
                                 路径配置
                                 <ExternalLink className="h-3.5 w-3.5" />
                             </Link>
@@ -955,19 +933,6 @@ export default function AdminLearningContentDetailPage() {
                                                             ) : (
                                                                 <p className="text-sm text-slate-500">暂无正文</p>
                                                             )}
-                                                        </div>
-                                                        <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-                                                            <div className="mb-3">
-                                                                <h3 className="text-sm font-bold text-slate-900">
-                                                                    商务礼仪 AI 出题
-                                                                </h3>
-                                                                <p className="mt-1 text-xs leading-5 text-slate-500">
-                                                                    只生成商务礼仪待审核草稿，不会直接入库、发布或绑定给学员。
-                                                                </p>
-                                                            </div>
-                                                            <BusinessEtiquetteQuestionDraftPanel
-                                                                chapterOrder={selectedChapter.order_index}
-                                                            />
                                                         </div>
                                                     </div>
                                                 )

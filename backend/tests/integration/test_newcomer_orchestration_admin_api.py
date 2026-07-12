@@ -112,3 +112,22 @@ async def test_admin_journey_uses_activity_identity(
     )
     assert dossier.status_code == 200, dossier.text
     assert dossier.json()["data"]["status"] == "in_training"
+
+
+@pytest.mark.asyncio
+async def test_learning_content_binding_impact_uses_activity_identity(
+    async_client, auth_headers
+):
+    response = await async_client.get(
+        "/api/v1/curriculum/learning-contents/content-unbound/binding-impact",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"] == {
+        "learning_content_id": "content-unbound",
+        "active_bindings": [],
+        "working_bindings": [],
+        "can_archive": True,
+        "archive_block_reason": None,
+    }

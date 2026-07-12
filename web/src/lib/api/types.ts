@@ -4904,38 +4904,22 @@ export interface NewcomerArticleBindingUpdateRequest {
     reason?: string;
 }
 
-export interface LearningContentBindingUnitImpact {
-    unit_key: string;
-    title: string;
-    source_chapter_orders: number[];
-    ai_coach_remediation_chapter_orders: number[];
-    capability_keys: string[];
-    require_quiz: boolean;
-    require_ai_coach: boolean;
-}
-
-export interface LearningContentPathBindingImpact {
+export interface LearningContentActivityBindingImpact {
     source: "active_revision" | "working_revision";
-    path_key: string;
-    module_key: string;
-    module_title: string;
     revision_id: string;
     revision_no: number;
-    learner_effective: boolean;
-    learning_units: LearningContentBindingUnitImpact[];
-    impacted_chapter_orders: number[];
+    phase_id: string;
+    module_id: string;
+    activity_id: string;
+    activity_title: string;
 }
 
 export interface LearningContentBindingImpactResponse {
     learning_content_id: string;
-    active_bindings: LearningContentPathBindingImpact[];
-    working_bindings: LearningContentPathBindingImpact[];
-    has_active_binding: boolean;
-    has_working_binding: boolean;
-    is_bound_to_business_skills: boolean;
+    active_bindings: LearningContentActivityBindingImpact[];
+    working_bindings: LearningContentActivityBindingImpact[];
     can_archive: boolean;
     archive_block_reason: string | null;
-    management_entries: Record<string, string>;
 }
 
 export interface NewcomerExamPaperQuestion {

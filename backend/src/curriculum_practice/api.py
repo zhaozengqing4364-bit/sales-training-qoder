@@ -1111,6 +1111,52 @@ async def get_learning_content(
     return _success(serialized_result.value)
 
 
+@learning_content_router.get("/{content_id}/binding-impact", response_model=None)
+async def get_learning_content_binding_impact(
+    content_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    from sales_trainer.services.learning_content_binding_impact_service import (
+        LearningContentBindingImpactService,
+        LearningContentBindingImpactServiceError,
+    )
+
+    try:
+        impact = await LearningContentBindingImpactService(db).get_impact(content_id)
+    except LearningContentBindingImpactServiceError as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=error_response(exc.code, message=exc.message),
+        )
+
+    def binding_payload(binding: Any) -> dict[str, Any]:
+        return {
+            "source": binding.source,
+            "revision_id": binding.revision_id,
+            "revision_no": binding.revision_no,
+            "phase_id": binding.phase_id,
+            "module_id": binding.module_id,
+            "activity_id": binding.activity_id,
+            "activity_title": binding.activity_title,
+        }
+
+    return _success(
+        {
+            "learning_content_id": impact.learning_content_id,
+            "active_bindings": [binding_payload(item) for item in impact.active_bindings],
+            "working_bindings": [
+                binding_payload(item) for item in impact.working_bindings
+            ],
+            "can_archive": impact.can_archive,
+            "archive_block_reason": impact.archive_block_reason,
+        }
+    )
+
+
 @learning_content_router.put("/{content_id}", response_model=None)
 async def update_learning_content(
     content_id: str,

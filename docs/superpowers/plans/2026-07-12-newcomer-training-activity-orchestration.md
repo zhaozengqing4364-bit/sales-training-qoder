@@ -1656,7 +1656,7 @@ git commit -m "refactor(newcomer): remove fixed path prototype"
 - Consumes: canonical backend DTOs from Task 8.
 - Produces: typed `api.newcomerTraining` and `api.admin.newcomerTraining`, immutable editor-state operations.
 
-- [ ] **Step 1: Write failing editor-state tests**
+- [x] **Step 1: Write failing editor-state tests**
 
 ```typescript
 it("duplicates a product module with new stable IDs and unchanged activity types", () => {
@@ -1678,17 +1678,17 @@ it("reorders siblings and normalizes order indexes", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `cd web && npx vitest run src/lib/newcomer-training/editor-state.test.ts src/lib/api/newcomer-training-orchestration.test.ts`
 
 Expected: modules/types are missing.
 
-- [ ] **Step 3: Replace transport types**
+- [x] **Step 3: Replace transport types**
 
 Define a discriminated `ActivityConfig` union matching backend field names exactly. Export `TrainingPathPayload`, `TrainingPathConfigResponse`, `PathValidationResponse`, `JourneyResponse`, `ModuleDetailResponse`, `ActivityDetailResponse`, and activity action request/response types from `types/newcomer-training.ts`. Remove fixed topic/module-key exports.
 
-- [ ] **Step 4: Replace API domain methods**
+- [x] **Step 4: Replace API domain methods**
 
 Expose exactly:
 
@@ -1714,11 +1714,11 @@ api.admin.newcomerTraining.restoreRevision(revisionId, reason)
 api.admin.newcomerTraining.listActivityTypes()
 ```
 
-- [ ] **Step 5: Implement pure editor operations**
+- [x] **Step 5: Implement pure editor operations**
 
 Export immutable operations for add/duplicate/delete/move phase/module/activity, update selected object, normalize sibling order indexes, and collect selected IDs. Use `crypto.randomUUID()` only through an injected `IdFactory` so tests remain deterministic.
 
-- [ ] **Step 6: Run tests and type-check focused surfaces**
+- [x] **Step 6: Run tests and type-check focused surfaces**
 
 Run:
 

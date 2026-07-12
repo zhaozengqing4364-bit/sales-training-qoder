@@ -61,7 +61,6 @@ import type {
 } from "../types/training-journey";
 import type { ApiRequest, ApiUpload } from "./shared";
 import { buildQueryString } from "./shared";
-import { createAdminNewcomerTrainingDomain } from "./newcomer-training";
 
 type SalesTrainerDomainDependencies = {
     request: ApiRequest;
@@ -291,11 +290,6 @@ export function createAdminSalesTrainerDomain({
     upload,
     resolveApiBaseUrl,
 }: AdminSalesTrainerDomainDependencies) {
-    const adminNewcomerTrainingDomain = createAdminNewcomerTrainingDomain({
-        request,
-        upload,
-    });
-
     return {
         getCapabilities: async () => {
             return request<SalesTrainerAdminCapabilities>("/admin/sales-trainer/capabilities");
@@ -415,37 +409,6 @@ export function createAdminSalesTrainerDomain({
                 signal,
             );
         },
-
-        importBusinessEtiquetteMarkdown:
-            adminNewcomerTrainingDomain.importBusinessEtiquetteMarkdown,
-        getBusinessEtiquetteReleaseImpact:
-            adminNewcomerTrainingDomain.getBusinessEtiquetteReleaseImpact,
-        publishBusinessEtiquetteRelease:
-            adminNewcomerTrainingDomain.publishBusinessEtiquetteRelease,
-        assignBusinessEtiquetteRetraining:
-            adminNewcomerTrainingDomain.assignBusinessEtiquetteRetraining,
-        getBusinessEtiquetteCapabilities:
-            adminNewcomerTrainingDomain.getBusinessEtiquetteCapabilities,
-        getBusinessEtiquetteLearningUnits:
-            adminNewcomerTrainingDomain.getBusinessEtiquetteLearningUnits,
-        saveBusinessEtiquetteCapabilities:
-            adminNewcomerTrainingDomain.saveBusinessEtiquetteCapabilities,
-        publishBusinessEtiquetteCapability:
-            adminNewcomerTrainingDomain.publishBusinessEtiquetteCapability,
-        archiveBusinessEtiquetteCapability:
-            adminNewcomerTrainingDomain.archiveBusinessEtiquetteCapability,
-        generateBusinessEtiquetteQuestionDrafts:
-            adminNewcomerTrainingDomain.generateBusinessEtiquetteQuestionDrafts,
-        listBusinessEtiquetteQuestionDrafts:
-            adminNewcomerTrainingDomain.listBusinessEtiquetteQuestionDrafts,
-        updateBusinessEtiquetteQuestionDraft:
-            adminNewcomerTrainingDomain.updateBusinessEtiquetteQuestionDraft,
-        approveBusinessEtiquetteQuestionDraft:
-            adminNewcomerTrainingDomain.approveBusinessEtiquetteQuestionDraft,
-        rejectBusinessEtiquetteQuestionDraft:
-            adminNewcomerTrainingDomain.rejectBusinessEtiquetteQuestionDraft,
-        getBusinessEtiquetteUnitQuizPreview:
-            adminNewcomerTrainingDomain.getBusinessEtiquetteUnitQuizPreview,
 
         publishMaterialVersion: async (versionId: string) => {
             return request<SalesTrainerMaterialVersion>(

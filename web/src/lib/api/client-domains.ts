@@ -39,6 +39,7 @@ import type {
     LearningChapter,
     LearningChapterCreateRequest,
     LearningChapterUpdateRequest,
+    LearningContentBindingImpactResponse,
     FeatureFlags,
     LearnerStudyContent,
     LearnerStudyChapterCompletionResponse,
@@ -218,6 +219,12 @@ export function createLearningContentsDomain({ request }: LearningContentsDomain
 
         get: async (contentId: string) => {
             return request<LearningContent>(`/curriculum/learning-contents/${encodeURIComponent(contentId)}`);
+        },
+
+        getBindingImpact: async (contentId: string) => {
+            return request<LearningContentBindingImpactResponse>(
+                `/curriculum/learning-contents/${encodeURIComponent(contentId)}/binding-impact`,
+            );
         },
 
         update: async (contentId: string, payload: LearningContentUpdateRequest) => {

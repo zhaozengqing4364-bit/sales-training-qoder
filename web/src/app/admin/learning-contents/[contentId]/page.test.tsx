@@ -76,6 +76,7 @@ vi.mock("@/lib/api/client", async () => {
                 create: vi.fn(),
                 get: getMock,
                 update: updateMock,
+                getBindingImpact: bindingImpactMock,
                 addChapter: addChapterMock,
                 updateChapter: updateChapterMock,
                 deleteChapter: deleteChapterMock,
@@ -83,13 +84,7 @@ vi.mock("@/lib/api/client", async () => {
                 publish: publishMock,
                 archive: archiveMock,
             },
-            admin: {
-                ...actual.api.admin,
-                newcomerTraining: {
-                    ...actual.api.admin.newcomerTraining,
-                    getLearningContentBindingImpact: bindingImpactMock,
-                },
-            },
+            admin: actual.api.admin,
         },
     };
 });
@@ -158,16 +153,8 @@ function makeBindingImpact(
         learning_content_id: MOCK_CONTENT_ID,
         active_bindings: [],
         working_bindings: [],
-        has_active_binding: false,
-        has_working_binding: false,
-        is_bound_to_business_skills: false,
         can_archive: true,
         archive_block_reason: null,
-        management_entries: {
-            article_binding: "/admin/sales-trainer/learning-topics",
-            path_config: "/admin/sales-trainer/paths",
-            question_drafts: "/admin/sales-trainer/questions/drafts",
-        },
         ...overrides,
     };
 }
@@ -240,8 +227,15 @@ describe("AdminLearningContentDetailPage", () => {
         );
         bindingImpactMock.mockResolvedValue(
             makeBindingImpact({
-                has_active_binding: true,
-                is_bound_to_business_skills: true,
+                active_bindings: [{
+                    source: "active_revision",
+                    revision_id: "revision-1",
+                    revision_no: 1,
+                    phase_id: "phase-1",
+                    module_id: "module-1",
+                    activity_id: "activity-1",
+                    activity_title: "内容学习",
+                }],
             }),
         );
 
@@ -272,28 +266,6 @@ describe("AdminLearningContentDetailPage", () => {
         });
     });
 
-    it("renders one business etiquette draft workspace for the selected chapter", async () => {
-        getMock.mockResolvedValue(
-            makeContent({
-                chapters: [
-                    makeChapter({ chapter_id: "c1", title: "第一章", order_index: 0 }),
-                    makeChapter({ chapter_id: "c2", title: "第二章", order_index: 1 }),
-                ],
-            }),
-        );
-
-        render(<AdminLearningContentDetailPage />);
-
-        await waitFor(() => {
-            expect(screen.getAllByRole("button", { name: /生成商务礼仪题目草稿/ })).toHaveLength(1);
-        });
-
-        fireEvent.click(screen.getByRole("button", { name: /第二章/ }));
-
-        expect(screen.getAllByRole("button", { name: /生成商务礼仪题目草稿/ })).toHaveLength(1);
-        expectTextVisible(/当前章节 · 第 2 章/);
-    });
-
     it("renders markdown preview for chapter content", async () => {
         getMock.mockResolvedValue(
             makeContent({
@@ -321,7 +293,15 @@ describe("AdminLearningContentDetailPage", () => {
         getMock.mockResolvedValue(makeContent({ status: "published" }));
         bindingImpactMock.mockResolvedValue(
             makeBindingImpact({
-                has_active_binding: true,
+                active_bindings: [{
+                    source: "active_revision",
+                    revision_id: "revision-1",
+                    revision_no: 1,
+                    phase_id: "phase-1",
+                    module_id: "module-1",
+                    activity_id: "activity-1",
+                    activity_title: "内容学习",
+                }],
                 can_archive: false,
                 archive_block_reason: blockReason,
             }),
@@ -603,28 +583,15 @@ describe("AdminLearningContentDetailPage", () => {
             .mockResolvedValueOnce(makeContent({ chapters: [c2, c1] }));
         bindingImpactMock.mockResolvedValue(
             makeBindingImpact({
-                has_active_binding: true,
                 active_bindings: [
                     {
                         source: "active_revision",
-                        path_key: "default_newcomer_path",
-                        module_key: "business_skills",
-                        module_title: "商务技巧",
                         revision_id: "path-revision-1",
                         revision_no: 1,
-                        learner_effective: true,
-                        impacted_chapter_orders: [0],
-                        learning_units: [
-                            {
-                                unit_key: "trust-base",
-                                title: "职业信任底座",
-                                source_chapter_orders: [0],
-                                ai_coach_remediation_chapter_orders: [1],
-                                capability_keys: ["first_impression"],
-                                require_quiz: true,
-                                require_ai_coach: true,
-                            },
-                        ],
+                        phase_id: "phase-1",
+                        module_id: "module-1",
+                        activity_id: "activity-1",
+                        activity_title: "客户沟通基础学习",
                     },
                 ],
             }),
@@ -639,8 +606,8 @@ describe("AdminLearningContentDetailPage", () => {
 
         fireEvent.click(screen.getAllByTitle("下移")[0]);
         expect(reorderChaptersMock).not.toHaveBeenCalled();
-        expect(screen.getByText(/职业信任底座/)).toBeTruthy();
-        expect(screen.getByText(/当前绑定按章节序号工作/)).toBeTruthy();
+        expect(screen.getByText(/客户沟通基础学习/)).toBeTruthy();
+        expect(screen.getByText(/相关活动仍符合学习目标/)).toBeTruthy();
 
         fireEvent.click(screen.getByRole("button", { name: "确认调整" }));
 

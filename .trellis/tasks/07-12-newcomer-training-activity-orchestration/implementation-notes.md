@@ -65,3 +65,9 @@
 - Task 9 结构检查：`CANONICAL_NEWCOMER_MODULE_KEYS|business_etiquette|customer_faq|company_product_demo|business_skills` 在 `backend/src/sales_trainer` 运行时代码中零命中；应用 composition root 可导入。
 - Task 9 后端新人回归：`84 passed`；Ruff 全通过；Mypy `Success: no issues found in 116 source files`。
 - Task 9 commit：`bcdb7cae refactor(newcomer): remove fixed path prototype`。
+- Task 10 RED：editor-state 模块不存在；旧 domain 没有 canonical journey/path 方法，聚焦测试按预期失败。
+- Task 10：前端 transport 改为严格六类 activity discriminated union，learner/admin API facade 只暴露计划规定的 canonical orchestration 方法。
+- Task 10：editor-state 提供 phase/module/activity 的 add/duplicate/delete/move/update、顺序归一化与 ID 收集；复制模块会重映射内部 activity ID 与依赖。
+- Task 10：为保持直接替换与全量 type-check，提前删除已失去后端权威的固定 learner/topic/path 页面和过期 API 测试；未添加兼容方法。
+- Task 10：LearningContent 绑定影响改为 activity identity，并增加 canonical `/curriculum/learning-contents/{id}/binding-impact` 读取端点。
+- Task 10 验证：focused/API/learning-content `37 passed`；ESLint focused 通过；`npx tsc --noEmit` 通过；后端 binding-impact 专项、Ruff、Mypy 通过。
