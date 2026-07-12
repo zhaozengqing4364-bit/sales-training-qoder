@@ -21,6 +21,7 @@ def _payload(title: str) -> TrainingPathPayload:
                             "module_id": "product-a",
                             "title": "产品 A",
                             "order_index": 1,
+                            "estimated_minutes": 35,
                             "completion_policy": {"mode": "all_required"},
                             "activities": [
                                 {
@@ -28,6 +29,7 @@ def _payload(title: str) -> TrainingPathPayload:
                                     "type": "assignment",
                                     "title": "总结产品 A",
                                     "order_index": 1,
+                                    "estimated_minutes": 15,
                                     "config": {
                                         "submission_type": "text",
                                         "review_mode": "automatic_complete",
@@ -71,6 +73,8 @@ async def test_should_pin_revision_and_return_one_primary_next_action(
 
     assert journey.path_revision_id == published.revision_id
     assert journey.primary_next_action.activity_id == "activity-product-a-assignment"
+    assert journey.phases[0].modules[0].estimated_minutes == 35
+    assert journey.phases[0].modules[0].activities[0].estimated_minutes == 15
     assert (
         sum(
             activity.is_primary_next_action

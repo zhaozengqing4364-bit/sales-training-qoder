@@ -64,6 +64,59 @@ async def test_admin_can_save_validate_and_publish_activity_path(
 
 
 @pytest.mark.asyncio
+async def test_admin_can_validate_and_publish_unsaved_candidate(
+    async_client, auth_headers
+):
+    candidate = await async_client.post(
+        "/api/v1/admin/newcomer-training/path/validate-candidate",
+        headers=auth_headers,
+        json={"payload": _payload()},
+    )
+    assert candidate.status_code == 200, candidate.text
+    assert candidate.json()["data"] == {"can_publish": True, "issues": []}
+
+    before_publish = await async_client.get(
+        "/api/v1/admin/newcomer-training/path/", headers=auth_headers
+    )
+    assert before_publish.json()["data"]["working_revision_id"] is None
+
+    published = await async_client.post(
+        "/api/v1/admin/newcomer-training/path/publish-candidate",
+        headers=auth_headers,
+        json={
+            "payload": _payload(),
+            "reason": "直接发布已检查候选",
+            "expected_revision_id": None,
+        },
+    )
+    assert published.status_code == 200, published.text
+    assert published.json()["data"]["status"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_admin_returns_409_for_stale_path_revision(async_client, auth_headers):
+    saved = await async_client.put(
+        "/api/v1/admin/newcomer-training/path/draft",
+        headers=auth_headers,
+        json={"payload": _payload(), "reason": "先保存一次"},
+    )
+    assert saved.status_code == 200
+
+    conflict = await async_client.put(
+        "/api/v1/admin/newcomer-training/path/draft",
+        headers=auth_headers,
+        json={
+            "payload": {**_payload(), "title": "陈旧编辑"},
+            "reason": "尝试覆盖",
+            "expected_revision_id": "stale-revision",
+        },
+    )
+
+    assert conflict.status_code == 409
+    assert conflict.json()["error"] == "[NEWCOMER_PATH_REVISION_CONFLICT]"
+
+
+@pytest.mark.asyncio
 async def test_admin_activity_type_catalog_has_exact_six_types(
     async_client, auth_headers
 ):

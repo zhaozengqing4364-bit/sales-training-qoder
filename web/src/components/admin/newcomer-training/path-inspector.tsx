@@ -10,6 +10,7 @@ import { LessonEditor } from "./activity-editors/lesson-editor";
 import { QuizEditor } from "./activity-editors/quiz-editor";
 import { RealtimeRoleplayEditor } from "./activity-editors/realtime-roleplay-editor";
 import type { ActivityEditorResources, QuickCreateKind } from "./activity-editors/types";
+import { PathRuleEditor } from "./path-rule-editor";
 
 interface PathInspectorProps {
     path: TrainingPathPayload;
@@ -69,9 +70,10 @@ export function PathInspector({ path, selection, onPatch, resources, onActivityC
         <div className="mb-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">当前编辑</p><h2 className="mt-1 text-lg font-semibold text-slate-900">{selection.kind === "path" ? "路径设置" : selection.kind === "phase" ? "阶段设置" : selection.kind === "module" ? "模块设置" : "活动设置"}</h2></div>
         {selection.kind === "path" && <BaseForm name="路径设置" title={(selected as TrainingPathPayload).title} description={(selected as TrainingPathPayload).description} onPatch={onPatch} />}
         {selection.kind === "phase" && <BaseForm name="阶段设置" title={(selected as PhaseConfig).title} description={(selected as PhaseConfig).description} required={(selected as PhaseConfig).required} onPatch={onPatch} />}
-        {selection.kind === "module" && <BaseForm name="模块设置" title={(selected as ModuleConfig).title} description={(selected as ModuleConfig).description} required={(selected as ModuleConfig).required} estimatedMinutes={(selected as ModuleConfig).estimated_minutes} onPatch={onPatch} />}
+        {selection.kind === "module" && <BaseForm name="模块设置" title={(selected as ModuleConfig).title} description={(selected as ModuleConfig).description} required={(selected as ModuleConfig).required} estimatedMinutes={(selected as ModuleConfig).estimated_minutes} onPatch={onPatch}><PathRuleEditor path={path} value={selected as ModuleConfig} onPatch={onPatch} /></BaseForm>}
         {selection.kind === "activity" && <BaseForm name="活动设置" title={(selected as ActivityConfig).title} description={(selected as ActivityConfig).description} required={(selected as ActivityConfig).required} estimatedMinutes={(selected as ActivityConfig).estimated_minutes} onPatch={onPatch}>
             <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">活动类型：{ACTIVITY_PRESENTATIONS[(selected as ActivityConfig).type].label}</p>
+            <PathRuleEditor path={path} value={selected as ActivityConfig} onPatch={onPatch} />
             {editor}
         </BaseForm>}
     </section>;

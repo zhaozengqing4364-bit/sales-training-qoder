@@ -6,6 +6,7 @@ import pytest
 
 from common.db.models import User
 from sales_trainer.orchestration.contracts import TrainingPathPayload
+from sales_trainer.orchestration.errors import NewcomerOrchestrationError
 from sales_trainer.orchestration.graph import PathIssue
 from sales_trainer.orchestration.revision_service import TrainingPathRevisionService
 
@@ -109,7 +110,10 @@ async def test_should_restore_history_as_new_draft_not_move_active_pointer(test_
     await service.publish(actor=actor, reason="发布版本二")
 
     restored = await service.restore_as_draft(
-        revision_id=str(first_draft.revision_id), actor=actor, reason="恢复版本一"
+        revision_id=str(first_draft.revision_id),
+        actor=actor,
+        reason="恢复版本一",
+        expected_revision_id=str(second_draft.revision_id),
     )
     active = await service.active_revision()
 
@@ -117,3 +121,84 @@ async def test_should_restore_history_as_new_draft_not_move_active_pointer(test_
     assert active.revision_id == second_draft.revision_id
     assert restored.status == "working"
     assert restored.payload_json["title"] == "版本一"
+
+
+@pytest.mark.asyncio
+async def test_should_reject_stale_expected_revision_when_restoring(test_db):
+    actor = await _admin(test_db)
+    service = TrainingPathRevisionService(
+        test_db, resource_validator=_ResourceValidator()
+    )
+    source = await service.save_draft(
+        payload=_payload("历史版本"), actor=actor, reason="历史版本"
+    )
+    current = await service.publish(actor=actor, reason="发布历史版本")
+
+    with pytest.raises(NewcomerOrchestrationError) as error:
+        await service.restore_as_draft(
+            revision_id=str(source.revision_id),
+            actor=actor,
+            reason="陈旧页面恢复",
+            expected_revision_id="stale-revision",
+        )
+
+    assert error.value.code == "[NEWCOMER_PATH_REVISION_CONFLICT]"
+    assert (await service.active_revision()).revision_id == current.revision.revision_id
+
+
+@pytest.mark.asyncio
+async def test_should_validate_candidate_without_creating_a_revision(test_db):
+    service = TrainingPathRevisionService(
+        test_db, resource_validator=_ResourceValidator()
+    )
+
+    result = await service.validate_candidate(_payload("仅检查，不保存"))
+
+    assert result.can_publish is True
+    assert await service.working_revision() is None
+    assert await service.active_revision() is None
+
+
+@pytest.mark.asyncio
+async def test_should_reject_stale_expected_revision_when_saving(test_db):
+    actor = await _admin(test_db)
+    service = TrainingPathRevisionService(
+        test_db, resource_validator=_ResourceValidator()
+    )
+    first = await service.save_draft(
+        payload=_payload("版本一"), actor=actor, reason="版本一"
+    )
+
+    with pytest.raises(NewcomerOrchestrationError) as error:
+        await service.save_draft(
+            payload=_payload("陈旧编辑"),
+            actor=actor,
+            reason="陈旧编辑",
+            expected_revision_id="stale-revision",
+        )
+
+    assert error.value.code == "[NEWCOMER_PATH_REVISION_CONFLICT]"
+    assert (await service.working_revision()).revision_id == first.revision_id
+
+
+@pytest.mark.asyncio
+async def test_should_publish_candidate_atomically_after_validation(test_db):
+    actor = await _admin(test_db)
+    service = TrainingPathRevisionService(
+        test_db, resource_validator=_ResourceValidator()
+    )
+    initial = await service.save_draft(
+        payload=_payload("待替换草稿"), actor=actor, reason="初始草稿"
+    )
+
+    result = await service.publish_candidate(
+        payload=_payload("直接发布候选"),
+        expected_revision_id=str(initial.revision_id),
+        actor=actor,
+        reason="确认发布候选",
+    )
+
+    assert result.revision.status == "published"
+    assert result.revision.payload_json["title"] == "直接发布候选"
+    assert await service.working_revision() is None
+    assert (await service.active_revision()).revision_id == result.revision.revision_id

@@ -111,10 +111,10 @@ export function createAdminNewcomerTrainingDomain({
     const base = "/admin/newcomer-training/path";
     return {
         getPath: () => request<TrainingPathConfigResponse>(`${base}/`),
-        saveDraft: (payload: TrainingPathPayload, reason: string) =>
+        saveDraft: (payload: TrainingPathPayload, reason: string, expectedRevisionId?: string | null) =>
             request<AssetRevisionSummary>(`${base}/draft`, {
                 method: "PUT",
-                body: JSON.stringify({ payload, reason }),
+                body: JSON.stringify({ payload, reason, expected_revision_id: expectedRevisionId ?? null }),
             }),
         deleteDraft: (reason: string) => request<{ deleted: boolean }>(`${base}/draft`, {
             method: "DELETE",
@@ -123,15 +123,24 @@ export function createAdminNewcomerTrainingDomain({
         validateDraft: () => request<PathValidationResponse>(`${base}/validate`, {
             method: "POST",
         }),
+        validateCandidate: (payload: TrainingPathPayload) => request<PathValidationResponse>(`${base}/validate-candidate`, {
+            method: "POST",
+            body: JSON.stringify({ payload }),
+        }),
         publish: (reason: string) => request<AssetRevisionSummary>(`${base}/publish`, {
             method: "POST",
             body: JSON.stringify({ reason }),
         }),
+        publishCandidate: (payload: TrainingPathPayload, reason: string, expectedRevisionId?: string | null) =>
+            request<AssetRevisionSummary>(`${base}/publish-candidate`, {
+                method: "POST",
+                body: JSON.stringify({ payload, reason, expected_revision_id: expectedRevisionId ?? null }),
+            }),
         listRevisions: () => request<AssetRevisionSummary[]>(`${base}/revisions`),
-        restoreRevision: (revisionId: string, reason: string) =>
+        restoreRevision: (revisionId: string, reason: string, expectedRevisionId?: string | null) =>
             request<AssetRevisionSummary>(
                 `${base}/revisions/${encodeURIComponent(revisionId)}/restore`,
-                { method: "POST", body: JSON.stringify({ reason }) },
+                { method: "POST", body: JSON.stringify({ reason, expected_revision_id: expectedRevisionId ?? null }) },
             ),
         listActivityTypes: () => request<ActivityTypeDescriptor[]>(`${base}/activity-types`),
         listCoachProfiles: () => request<CoachProfileOption[]>(`${base}/coach-profiles`),

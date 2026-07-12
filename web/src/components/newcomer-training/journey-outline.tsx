@@ -7,12 +7,13 @@ import { CheckCircle2, ChevronDown, Lock } from "lucide-react";
 import type { JourneyPhaseProgress } from "@/lib/api/types/newcomer-training";
 import { activityStatusLabel, progressLabel } from "@/lib/newcomer-training/presentation";
 
-export function JourneyOutline({ phases }: { phases: JourneyPhaseProgress[] }) {
-    const [expanded, setExpanded] = useState<Record<string, boolean>>(() => Object.fromEntries(phases.map((phase) => [phase.phase_id, !phase.completed && !phase.locked])));
+export function JourneyOutline({ phases, currentPhaseId }: { phases: JourneyPhaseProgress[]; currentPhaseId?: string | null }) {
+    const resolvedCurrentPhaseId = currentPhaseId ?? phases.find((phase) => !phase.completed && !phase.locked)?.phase_id ?? null;
+    const [expanded, setExpanded] = useState<Record<string, boolean>>(() => Object.fromEntries(phases.map((phase) => [phase.phase_id, phase.phase_id === resolvedCurrentPhaseId])));
     return <section aria-label="训练路径进度" className="space-y-3">
         {phases.map((phase) => {
             const open = expanded[phase.phase_id] ?? false;
-            const stateLabel = phase.completed ? "已完成" : phase.locked ? "未解锁" : "当前";
+            const stateLabel = phase.completed ? "已完成" : phase.locked ? "未解锁" : phase.phase_id === resolvedCurrentPhaseId ? "当前" : "待开始";
             return <div key={phase.phase_id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <button type="button" aria-expanded={open} aria-label={`${phase.title} ${stateLabel}`} onClick={() => setExpanded((current) => ({ ...current, [phase.phase_id]: !open }))} className="flex w-full items-center gap-3 px-5 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500">
                     {phase.completed ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : phase.locked ? <Lock className="h-5 w-5 text-slate-400" /> : <span className="h-3 w-3 rounded-full bg-blue-600 ring-4 ring-blue-100" />}

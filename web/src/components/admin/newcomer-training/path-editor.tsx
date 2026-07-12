@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Save, Send } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
-import type { ActivityConfig, ActivityType, ModuleConfig, PathIssue, PathValidationResponse, PhaseConfig, TrainingPathConfigResponse, TrainingPathPayload } from "@/lib/api/types/newcomer-training";
+import type { ActivityConfig, ActivityType, AssetRevisionSummary, ModuleConfig, PathIssue, PathValidationResponse, PhaseConfig, TrainingPathConfigResponse, TrainingPathPayload } from "@/lib/api/types/newcomer-training";
 import { ACTIVITY_PRESENTATIONS } from "@/lib/newcomer-training/activity-registry";
 import { addActivity, addModule, addPhase, deleteActivity, deleteModule, deletePhase, duplicateActivity, duplicateModule, duplicatePhase, moveActivity, moveModule, movePhase, updateSelectedObject, type EditorSelection } from "@/lib/newcomer-training/editor-state";
 import { PathInspector } from "./path-inspector";
@@ -14,8 +14,9 @@ import { PathPreview } from "./path-preview";
 import { PathValidationPanel } from "./path-validation-panel";
 import { ResourcePickerDrawer, type ResourcePickerKind } from "./resource-picker-drawer";
 import type { ActivityEditorResources, ResourceOption } from "./activity-editors/types";
+import { PathRevisionHistory } from "./path-revision-history";
 
-type Mutation = (path: TrainingPathPayload, reason: string) => Promise<void> | void;
+type Mutation = (path: TrainingPathPayload, reason: string, expectedRevisionId: string | null) => Promise<AssetRevisionSummary | void> | AssetRevisionSummary | void;
 
 export interface PathEditorProps {
     initialModel: TrainingPathConfigResponse;
@@ -57,6 +58,14 @@ export function PathEditor({ initialModel, onSave, onValidate, onPublish, resour
     const [deleteTarget, setDeleteTarget] = useState<{ kind: "phase" | "module" | "activity"; id: string; title: string } | null>(null);
     const [resources, setResources] = useState(initialResources);
     const [quickCreate, setQuickCreate] = useState<ResourcePickerKind | null>(null);
+    const [revisionId, setRevisionId] = useState(initialModel.working_revision_id ?? initialModel.active_revision_id);
+    const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+
+    useEffect(() => {
+        const beforeUnload = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = ""; } };
+        window.addEventListener("beforeunload", beforeUnload);
+        return () => window.removeEventListener("beforeunload", beforeUnload);
+    }, [dirty]);
 
     const mutate = (transform: (path: TrainingPathPayload) => TrainingPathPayload) => { setDraft((current) => transform(current)); setDirty(true); setValidation(null); };
     const findSibling = (kind: "phase" | "module" | "activity", id: string, direction: "up" | "down") => {
@@ -82,9 +91,9 @@ export function PathEditor({ initialModel, onSave, onValidate, onPublish, resour
         if ((action === "save" || action === "publish") && !reason.trim()) { setError("请填写本次修改说明。"); return; }
         setPending(action); setError(null);
         try {
-            if (action === "save") { await onSave?.(draft, reason.trim()); setDirty(false); }
-            if (action === "validate") { setValidation(await onValidate?.(draft) ?? { can_publish: true, issues: [] }); setDirty(false); }
-            if (action === "publish") { await onPublish?.(draft, reason.trim()); setDirty(false); }
+            if (action === "save") { const saved = await onSave?.(draft, reason.trim(), revisionId); if (saved) setRevisionId(saved.revision_id); setDirty(false); }
+            if (action === "validate") { setValidation(await onValidate?.(draft) ?? { can_publish: true, issues: [] }); }
+            if (action === "publish") { const published = await onPublish?.(draft, reason.trim(), revisionId); if (published) setRevisionId(published.revision_id); setDirty(false); setPublishConfirmOpen(false); }
         } catch (cause) { setError(cause instanceof Error ? cause.message : "操作失败，请稍后重试。"); }
         finally { setPending(null); }
     };
@@ -102,10 +111,11 @@ export function PathEditor({ initialModel, onSave, onValidate, onPublish, resour
                 onAddModule={(phaseId, type) => { const moduleConfig = defaultModule(type); mutate((path) => addModule(path, phaseId, moduleConfig)); setSelection({ kind: "module", module_id: moduleConfig.module_id }); }}
                 onAddActivity={(moduleId, type) => { const activity = defaultActivity(type); mutate((path) => addActivity(path, moduleId, activity)); setSelection({ kind: "activity", activity_id: activity.activity_id }); }} />
             <PathInspector path={draft} selection={selection} resources={resources} onQuickCreate={setQuickCreate} onPatch={(patch) => mutate((path) => updateSelectedObject(path, selection, patch))} onActivityChange={(activity) => mutate((path) => updateSelectedObject(path, selection, activity as unknown as Record<string, unknown>))} />
-            <div className="space-y-4"><PathPreview path={draft} /><PathValidationPanel validation={validation} onFocusIssue={focusIssue} /></div>
+            <div className="space-y-4"><PathPreview path={draft} /><PathValidationPanel validation={validation} onFocusIssue={focusIssue} /><PathRevisionHistory currentRevisionId={revisionId} onRestored={(restored) => { setDraft(restored.payload); setRevisionId(restored.revision_id); setDirty(false); setValidation(null); setSelection({ kind: "path" }); }} /></div>
         </div>
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur"><div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-end gap-3"><label className="mr-auto min-w-[260px] text-xs font-medium text-slate-600">修改说明<input aria-label="修改说明" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="例如：增加产品 A 训练模块" className="ml-2 w-72 rounded-full border border-slate-200 px-3 py-2 text-sm" /></label><Button variant="secondary" isLoading={pending === "save"} onClick={() => void run("save")}><Save className="mr-2 h-4 w-4" />保存草稿</Button><Button variant="outline" isLoading={pending === "validate"} onClick={() => void run("validate")}><CheckCircle2 className="mr-2 h-4 w-4" />检查并预览</Button><Button isLoading={pending === "publish"} onClick={() => void run("publish")}><Send className="mr-2 h-4 w-4" />发布</Button></div></div>
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur"><div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-end gap-3"><label className="mr-auto min-w-[260px] text-xs font-medium text-slate-600">修改说明<input aria-label="修改说明" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="例如：增加产品 A 训练模块" className="ml-2 w-72 rounded-full border border-slate-200 px-3 py-2 text-sm" /></label><Button variant="secondary" isLoading={pending === "save"} onClick={() => void run("save")}><Save className="mr-2 h-4 w-4" />保存草稿</Button><Button variant="outline" isLoading={pending === "validate"} onClick={() => void run("validate")}><CheckCircle2 className="mr-2 h-4 w-4" />检查并预览</Button><Button isLoading={pending === "publish"} onClick={() => { if (!reason.trim()) { setError("请填写本次修改说明。"); return; } setPublishConfirmOpen(true); }}><Send className="mr-2 h-4 w-4" />发布</Button></div></div>
         <ConfirmDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }} title={`删除${deleteTarget?.title ?? "对象"}`} description="删除后，其下级内容也会从当前草稿移除。保存前仍可刷新页面放弃修改。" confirmText="删除" variant="danger" onConfirm={() => { if (!deleteTarget) return; const target = deleteTarget; mutate((path) => target.kind === "phase" ? deletePhase(path, target.id) : target.kind === "module" ? deleteModule(path, target.id) : deleteActivity(path, target.id)); setSelection({ kind: "path" }); setDeleteTarget(null); }} />
+        <ConfirmDialog open={publishConfirmOpen} onOpenChange={setPublishConfirmOpen} title="确认发布训练路径" description="发布后只影响新进入训练的学员" confirmText="确认发布" isLoading={pending === "publish"} onConfirm={() => void run("publish")} />
         {quickCreate && <ResourcePickerDrawer kind={quickCreate} open onOpenChange={(open) => { if (!open) setQuickCreate(null); }} onCreated={(resource: ResourceOption) => {
             const key = quickCreate === "learning_content" ? "learning_contents" : quickCreate === "exam_paper" ? "exam_papers" : quickCreate === "material" ? "materials" : "scoring_rubrics";
             setResources((current) => ({ ...current, [key]: [...current[key], resource] }));

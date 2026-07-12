@@ -35,18 +35,29 @@ describe("newcomer training orchestration API", () => {
         const domain = createAdminNewcomerTrainingDomain({ request });
 
         await domain.getPath();
-        await domain.publish("允许新人开始学习");
-        await domain.restoreRevision("revision-2", "恢复上一版");
+        const candidate = { schema_version: "newcomer_training_orchestration_v1" as const, title: "新人训练", description: null, phases: [] };
+        await domain.saveDraft(candidate, "保存", "revision-1");
+        await domain.validateCandidate(candidate);
+        await domain.publishCandidate(candidate, "允许新人开始学习", "revision-2");
+        await domain.restoreRevision("revision-2", "恢复上一版", "revision-current");
 
         expect(request).toHaveBeenNthCalledWith(1, "/admin/newcomer-training/path/");
-        expect(request).toHaveBeenNthCalledWith(2, "/admin/newcomer-training/path/publish", {
+        expect(request).toHaveBeenNthCalledWith(2, "/admin/newcomer-training/path/draft", {
+            method: "PUT",
+            body: JSON.stringify({ payload: candidate, reason: "保存", expected_revision_id: "revision-1" }),
+        });
+        expect(request).toHaveBeenNthCalledWith(3, "/admin/newcomer-training/path/validate-candidate", {
             method: "POST",
-            body: JSON.stringify({ reason: "允许新人开始学习" }),
+            body: JSON.stringify({ payload: candidate }),
+        });
+        expect(request).toHaveBeenNthCalledWith(4, "/admin/newcomer-training/path/publish-candidate", {
+            method: "POST",
+            body: JSON.stringify({ payload: candidate, reason: "允许新人开始学习", expected_revision_id: "revision-2" }),
         });
         expect(request).toHaveBeenNthCalledWith(
-            3,
+            5,
             "/admin/newcomer-training/path/revisions/revision-2/restore",
-            { method: "POST", body: JSON.stringify({ reason: "恢复上一版" }) },
+            { method: "POST", body: JSON.stringify({ reason: "恢复上一版", expected_revision_id: "revision-current" }) },
         );
     });
 });

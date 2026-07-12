@@ -275,6 +275,7 @@ class NewcomerJourneyService:
                             title=activity.title,
                             description=activity.description,
                             required=activity.required,
+                            estimated_minutes=activity.estimated_minutes,
                             status=projection.status,
                             completed=projection.completed,
                             passed=projection.passed,
@@ -296,6 +297,7 @@ class NewcomerJourneyService:
                         title=module.title,
                         description=module.description,
                         required=module.required,
+                        estimated_minutes=module.estimated_minutes,
                         status="completed"
                         if aggregate.completed
                         else "locked"

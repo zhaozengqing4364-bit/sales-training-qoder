@@ -19,7 +19,10 @@ Use this contract whenever newcomer training paths, activities, enrollment progr
 - Draft save, validate, publish, restore, and high-risk resource creation require backend permission checks and audit records.
 - Publish validates every referenced resource against the responsible module through adapters.
 - A learner's first journey read may create an enrollment; the API transaction must explicitly commit it because `get_db()` never auto-commits.
-- Admin resource pickers use existing engines (`LearningContent`, papers, materials, rubrics, practice templates, runtime profiles, coach profiles) and support in-flow creation.
+- Admin resource pickers use existing engines (`LearningContent`, papers, materials, rubrics, practice templates, runtime profiles, coach profiles). Content, papers, materials, and rubrics support safe in-flow creation; governed execution profiles are selectable here but must never be fabricated from placeholder defaults.
+- Candidate validation is read-only. Candidate publish saves and activates one immutable revision in the same request transaction.
+- Draft save and candidate publish accept `expected_revision_id`; a mismatch returns `[NEWCOMER_PATH_REVISION_CONFLICT]` with HTTP 409 and never overwrites the newer revision.
+- Journey module/activity projections carry configured `estimated_minutes`; only one activity is marked as the primary next action.
 - Alembic runs before application startup; `create_all` is bootstrap-only and must not precede pending migrations.
 
 ## 4. Validation & Error Matrix

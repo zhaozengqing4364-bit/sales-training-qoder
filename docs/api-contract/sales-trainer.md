@@ -21,12 +21,14 @@
 | 方法 | 路径 | 语义 |
 |---|---|---|
 | GET | `/` | 返回工作草稿、当前发布 revision、校验结果和资源选项 |
-| PUT | `/draft` | 保存完整声明式草稿；请求含 `payload`、`reason` |
+| PUT | `/draft` | 保存完整声明式草稿；请求含 `payload`、`reason`、`expected_revision_id` |
 | DELETE | `/draft` | 放弃工作草稿 |
 | POST | `/validate` | 校验图结构、依赖、资源发布状态和闭环条件 |
+| POST | `/validate-candidate` | 只读校验当前未保存候选，不创建 revision |
 | POST | `/publish` | 以不可变 revision 发布；请求含变更说明 |
+| POST | `/publish-candidate` | 带期望 revision 原子创建并发布当前候选 |
 | GET | `/revisions` | 查询历史 revision |
-| POST | `/revisions/{revision_id}/restore` | 从历史快照生成新工作草稿 |
+| POST | `/revisions/{revision_id}/restore` | 从历史快照生成新工作草稿；可传 `expected_revision_id` 防止覆盖其他管理员的新版本 |
 | GET | `/activity-types` | 返回六类活动的受信任描述符 |
 | GET | `/coach-profiles` | 返回可绑定的已治理 AI Coach Profile |
 | GET/POST | `/scoring-rubrics` | 查询或就地创建录音评分标准 |
@@ -41,6 +43,8 @@
 | GET | `/readiness/dossiers/{learner_id}` | 达标档案 |
 
 资源快速新建复用现有 LearningContent、ExamPaper、材料版本和审计 API。创建后必须发布并自动绑定当前活动，不要求管理员离开编辑器。
+
+候选检查不得隐式保存。管理端保存和候选发布必须回传当前编辑所基于的 `expected_revision_id`；服务端发现工作草稿或已发布指针已变化时返回 HTTP 409 与 `[NEWCOMER_PATH_REVISION_CONFLICT]`，客户端保留本地内容供人工合并。
 
 ## 学员端
 
@@ -60,6 +64,8 @@
 | POST | `/activities/{activity_id}/ai-coach/sessions/{session_id}/turns` | 提交幂等对话轮次 |
 | POST | `/activities/{activity_id}/ai-coach/sessions/{session_id}/turns/stream` | SSE 流式返回对话轮次 |
 | POST | `/activities/{activity_id}/assignments` | 提交文本或文件作业 |
+
+Journey 的模块与活动投影包含 `estimated_minutes`。`primary_next_action` 仍只返回一个权威活动；动作按钮文案由前端封闭活动类型映射生成，不使用内容标题冒充动作。
 
 ## 错误与安全
 

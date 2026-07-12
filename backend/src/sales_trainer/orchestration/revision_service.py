@@ -16,6 +16,7 @@ from sales_trainer.orchestration.contracts import (
 )
 from sales_trainer.orchestration.errors import (
     NewcomerOrchestrationError,
+    PathRevisionConflictError,
     PathValidationError,
 )
 from sales_trainer.orchestration.graph import PathIssue, validate_path_graph
@@ -79,7 +80,9 @@ class TrainingPathRevisionService:
         actor: User,
         reason: str,
         trace_id: str | None = None,
+        expected_revision_id: str | None = None,
     ) -> SalesTrainerAssetRevision:
+        await self._assert_expected_revision(expected_revision_id)
         issues = validate_path_graph(payload)
         if issues:
             raise PathValidationError(issues)
@@ -102,6 +105,12 @@ class TrainingPathRevisionService:
         )
         return revision
 
+    async def validate_candidate(
+        self, payload: TrainingPathPayload
+    ) -> PathValidationResponse:
+        issues = await self._collect_issues(payload)
+        return self._validation_response(issues)
+
     async def validate_draft(self) -> PathValidationResponse:
         working = await self.working_revision()
         if working is None:
@@ -109,23 +118,40 @@ class TrainingPathRevisionService:
                 "[NEWCOMER_PATH_DRAFT_MISSING]", "当前没有可检查的草稿。", 404
             )
         payload = TrainingPathPayload.model_validate(working.payload_json)
-        issues = (
-            *validate_path_graph(payload),
-            *await self._resources.validate(payload),
+        return await self.validate_candidate(payload)
+
+    async def publish_candidate(
+        self,
+        *,
+        payload: TrainingPathPayload,
+        actor: User,
+        reason: str,
+        expected_revision_id: str | None,
+        trace_id: str | None = None,
+    ) -> AssetPublishResult:
+        issues = await self._collect_issues(payload)
+        if issues:
+            raise PathValidationError(issues)
+        await self._assert_expected_revision(expected_revision_id)
+        revision = await self.save_draft(
+            payload=payload,
+            actor=actor,
+            reason=reason,
+            trace_id=trace_id,
+            expected_revision_id=expected_revision_id,
         )
-        return PathValidationResponse(
-            can_publish=not issues,
-            issues=[
-                PathIssueResponse(
-                    code=issue.code,
-                    message=issue.message,
-                    object_id=issue.object_id,
-                    field_path=issue.field_path,
-                    severity=issue.severity,
-                )
-                for issue in issues
-            ],
+        result = await self._revisions.publish_working_revision(
+            revision, actor=actor, reason=reason, trace_id=trace_id
         )
+        await self._operations.record(
+            actor=actor,
+            action="newcomer_path.published",
+            target_type="newcomer_training_path",
+            target_id=str(result.revision.revision_id),
+            request_id=trace_id,
+            metadata={"reason": reason, "candidate_publish": True},
+        )
+        return result
 
     async def publish(
         self, *, actor: User, reason: str, trace_id: str | None = None
@@ -162,6 +188,7 @@ class TrainingPathRevisionService:
         actor: User,
         reason: str,
         trace_id: str | None = None,
+        expected_revision_id: str | None = None,
     ) -> SalesTrainerAssetRevision:
         source = await self._revisions.revision_by_id(revision_id)
         if (
@@ -177,6 +204,7 @@ class TrainingPathRevisionService:
             actor=actor,
             reason=reason,
             trace_id=trace_id,
+            expected_revision_id=expected_revision_id,
         )
         await self._operations.record(
             actor=actor,
@@ -205,6 +233,41 @@ class TrainingPathRevisionService:
             target_type="newcomer_training_path",
             target_id=str(working.revision_id),
             request_id=trace_id,
+        )
+
+    async def _assert_expected_revision(
+        self, expected_revision_id: str | None
+    ) -> None:
+        if expected_revision_id is None:
+            return
+        working = await self.working_revision()
+        active = await self.active_revision()
+        current = working or active
+        if current is None or str(current.revision_id) != expected_revision_id:
+            raise PathRevisionConflictError()
+
+    async def _collect_issues(
+        self, payload: TrainingPathPayload
+    ) -> tuple[PathIssue, ...]:
+        return (
+            *validate_path_graph(payload),
+            *await self._resources.validate(payload),
+        )
+
+    @staticmethod
+    def _validation_response(issues: tuple[PathIssue, ...]) -> PathValidationResponse:
+        return PathValidationResponse(
+            can_publish=not issues,
+            issues=[
+                PathIssueResponse(
+                    code=issue.code,
+                    message=issue.message,
+                    object_id=issue.object_id,
+                    field_path=issue.field_path,
+                    severity=issue.severity,
+                )
+                for issue in issues
+            ],
         )
 
 

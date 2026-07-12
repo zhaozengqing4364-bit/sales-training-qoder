@@ -29,5 +29,6 @@ test.describe("新人训练学员端", () => {
     const primaryActions = page.locator('[data-primary-action="true"]');
     await expect(primaryActions).toHaveCount(1);
     await expect(page.getByText(/当前阶段/)).toBeVisible();
+    await expect(primaryActions.first()).toHaveText(/开始内容学习|开始做题|开始录音讲解|开始实时对练|开始 AI 辅导|开始完成作业/);
   });
 });

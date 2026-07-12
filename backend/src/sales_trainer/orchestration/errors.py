@@ -25,3 +25,12 @@ class PathValidationError(NewcomerOrchestrationError):
             "训练路径还有需要处理的配置问题。",
             422,
         )
+
+
+class PathRevisionConflictError(NewcomerOrchestrationError):
+    def __init__(self) -> None:
+        super().__init__(
+            "[NEWCOMER_PATH_REVISION_CONFLICT]",
+            "训练路径已被其他人更新，请保留当前内容并重新载入最新版本后再保存。",
+            409,
+        )

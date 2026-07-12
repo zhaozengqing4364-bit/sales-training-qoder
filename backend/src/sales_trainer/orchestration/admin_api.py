@@ -52,10 +52,23 @@ admin_journey_router = APIRouter(prefix="/admin/newcomer-training")
 class DraftRequest(StrictModel):
     payload: TrainingPathPayload
     reason: str = Field(min_length=1, max_length=500)
+    expected_revision_id: str | None = Field(default=None, min_length=1, max_length=36)
+
+
+class CandidateRequest(StrictModel):
+    payload: TrainingPathPayload
+
+
+class PublishCandidateRequest(DraftRequest):
+    pass
 
 
 class ReasonRequest(StrictModel):
     reason: str = Field(min_length=1, max_length=500)
+
+
+class RestoreRequest(ReasonRequest):
+    expected_revision_id: str | None = Field(default=None, min_length=1, max_length=36)
 
 
 class ReadinessReviewRequest(StrictModel):
@@ -136,6 +149,7 @@ async def save_draft(
             actor=current_user,
             reason=payload.reason,
             trace_id=_trace_id(request),
+            expected_revision_id=payload.expected_revision_id,
         )
         await db.commit()
     except NewcomerOrchestrationError as exc:
@@ -171,6 +185,18 @@ async def validate_draft(
     return success_response(result.model_dump())
 
 
+@admin_router.post("/validate-candidate", response_model=None)
+async def validate_candidate(
+    payload: CandidateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if not can_manage_newcomer_training_path(current_user):
+        return _forbidden()
+    result = await TrainingPathRevisionService(db).validate_candidate(payload.payload)
+    return success_response(result.model_dump())
+
+
 @admin_router.post("/publish", response_model=None)
 async def publish(
     payload: ReasonRequest,
@@ -190,6 +216,30 @@ async def publish(
     return success_response(SalesTrainerAssetRevisionService.snapshot(result.revision))
 
 
+@admin_router.post("/publish-candidate", response_model=None)
+async def publish_candidate(
+    payload: PublishCandidateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if not can_publish_newcomer_training_path(current_user):
+        return _forbidden()
+    try:
+        result = await TrainingPathRevisionService(db).publish_candidate(
+            payload=payload.payload,
+            actor=current_user,
+            reason=payload.reason,
+            expected_revision_id=payload.expected_revision_id,
+            trace_id=_trace_id(request),
+        )
+        await db.commit()
+    except NewcomerOrchestrationError as exc:
+        await db.rollback()
+        return _error(exc)
+    return success_response(SalesTrainerAssetRevisionService.snapshot(result.revision))
+
+
 @admin_router.get("/revisions", response_model=None)
 async def revisions(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
@@ -205,7 +255,7 @@ async def revisions(
 @admin_router.post("/revisions/{revision_id}/restore", response_model=None)
 async def restore(
     revision_id: str,
-    payload: ReasonRequest,
+    payload: RestoreRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -218,6 +268,7 @@ async def restore(
             actor=current_user,
             reason=payload.reason,
             trace_id=_trace_id(request),
+            expected_revision_id=payload.expected_revision_id,
         )
         await db.commit()
     except NewcomerOrchestrationError as exc:

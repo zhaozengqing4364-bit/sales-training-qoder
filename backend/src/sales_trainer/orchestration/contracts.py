@@ -187,6 +187,7 @@ class JourneyActivityProgress(StrictModel):
     title: str
     description: str | None = None
     required: bool
+    estimated_minutes: int | None = None
     status: str
     completed: bool
     passed: bool | None = None
@@ -203,6 +204,7 @@ class JourneyModuleProgress(StrictModel):
     title: str
     description: str | None = None
     required: bool
+    estimated_minutes: int | None = None
     status: str
     completed: bool
     completed_count: int

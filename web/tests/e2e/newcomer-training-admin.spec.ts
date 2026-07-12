@@ -27,5 +27,28 @@ test.describe("新人训练管理端", () => {
     await expect(page.getByLabel("训练路径大纲")).toBeVisible();
     await expect(page.getByRole("button", { name: "检查并预览" })).toBeVisible();
     await expect(page.getByText("当前编辑")).toBeVisible();
+    await expect(page.getByRole("searchbox", { name: "搜索路径大纲" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /折叠阶段|新增阶段/ }).first()).toBeVisible();
+
+    await page.route("**/api/v1/admin/newcomer-training/papers*", (route) => route.abort());
+    await page.reload();
+    await expect(page.getByText("试卷目录暂不可用")).toBeVisible();
+    await expect(page.getByRole("tree", { name: "训练路径大纲" })).toBeVisible();
+    await page.unroute("**/api/v1/admin/newcomer-training/papers*");
+    await page.getByRole("button", { name: "重新加载试卷目录" }).click();
+    await expect(page.getByText("试卷目录暂不可用")).toHaveCount(0);
+
+    await page.getByLabel("修改说明").fill("验证发布影响提示");
+    await page.getByRole("button", { name: "发布", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "确认发布训练路径" })).toBeVisible();
+    await expect(page.getByText("发布后只影响新进入训练的学员")).toBeVisible();
+    await page.getByRole("button", { name: "取消" }).click();
+
+    await page.goto("/admin/newcomer-training/learners");
+    await expect(page.getByRole("heading", { name: "学员进度" })).toBeVisible();
+    await expect(page.getByLabel("部门筛选")).toBeVisible();
+    await page.getByRole("link", { name: /查看训练详情/ }).first().click();
+    await expect(page.getByText("学员训练详情")).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "相关训练记录" })).toBeVisible();
   });
 });

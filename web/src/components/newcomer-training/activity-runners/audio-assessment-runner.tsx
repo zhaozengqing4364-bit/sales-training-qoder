@@ -1,8 +1,56 @@
 "use client";
+
 import { useState } from "react";
+import { FileAudio, Mic, RotateCcw, Square } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { ActivityRunnerProps } from "./types";
-export function AudioAssessmentRunner({ detail, onRefresh }: ActivityRunnerProps) { const runner = detail.runner.type === "audio_assessment" ? detail.runner : null; const [file, setFile] = useState<File | null>(null); const [confirmed, setConfirmed] = useState(false); const [pending, setPending] = useState(false); const [error, setError] = useState<string | null>(null); return <form className="space-y-4" onSubmit={async (event) => { event.preventDefault(); if (!file) { setError("请先选择录音文件。"); return; } if (runner?.material_id && (!runner.material_version_id || !confirmed)) { setError("请先确认本次讲解使用的材料版本。"); return; } setPending(true); setError(null); try { onRefresh?.(await api.newcomerTraining.submitAudio(detail.activity.activity_id, { file, client_token: crypto.randomUUID(), confirmed_material_version_id: runner?.material_version_id })); } catch (cause) { setError(getApiErrorMessage(cause)); } finally { setPending(false); } }}>
-    {runner?.material_id && <label className="flex items-start gap-2 rounded-xl bg-blue-50 p-3 text-sm text-blue-900"><input type="checkbox" className="mt-0.5" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>我已查看并确认使用「{runner.material_title ?? "当前讲解材料"}」的已发布版本。</span></label>}
-    <label className="block text-sm font-medium text-slate-700">讲解录音<input type="file" accept="audio/*" className="mt-2 block w-full text-sm" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<Button type="submit" isLoading={pending}>上传讲解录音</Button></form>; }
+import { useBrowserAudioRecorder } from "./use-browser-audio-recorder";
+
+function durationLabel(seconds: number): string {
+    return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+export function AudioAssessmentRunner({ detail, onRefresh }: ActivityRunnerProps) {
+    const runner = detail.runner.type === "audio_assessment" ? detail.runner : null;
+    const recorder = useBrowserAudioRecorder();
+    const [fallbackFile, setFallbackFile] = useState<File | null>(null);
+    const [confirmed, setConfirmed] = useState(false);
+    const [pending, setPending] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const file = recorder.audioFile ?? fallbackFile;
+    const materialUrl = runner?.material_version_id
+        ? api.salesTrainer.getMaterialVersionFileUrl(runner.material_version_id, { disposition: "inline" })
+        : null;
+
+    async function submit() {
+        if (!file) { setError("请先完成录音，或选择已有录音文件。"); return; }
+        if (runner?.material_id && (!runner.material_version_id || !confirmed)) { setError("请先查看并确认本次讲解使用的材料版本。"); return; }
+        setPending(true);
+        setError(null);
+        try {
+            const updated = await api.newcomerTraining.submitAudio(detail.activity.activity_id, {
+                file,
+                client_token: crypto.randomUUID(),
+                confirmed_material_version_id: runner?.material_version_id,
+            });
+            onRefresh?.(updated);
+        } catch (cause) {
+            setError(getApiErrorMessage(cause));
+        } finally {
+            setPending(false);
+        }
+    }
+
+    return <div className="space-y-5">
+        {runner?.material_id ? <section className="rounded-2xl border border-blue-100 bg-blue-50 p-4"><p className="font-medium text-blue-950">讲解材料：{runner.material_title ?? "当前已发布材料"}</p>{materialUrl ? <a href={materialUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-sm font-medium text-blue-700 underline underline-offset-4">打开材料预览</a> : <p className="mt-2 text-sm text-amber-800">材料版本暂不可预览，请联系管理员检查发布状态。</p>}<label className="mt-3 flex items-start gap-2 text-sm text-blue-900"><input type="checkbox" className="mt-0.5" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>我已查看并确认使用这个已发布版本完成讲解。</span></label></section> : null}
+
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center">
+            {recorder.state === "recording" ? <><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-700"><Mic className="h-7 w-7 animate-pulse" /></div><p className="mt-3 font-semibold text-slate-900">正在录音 {durationLabel(recorder.durationSeconds)}</p><Button type="button" className="mt-4" onClick={recorder.stop}><Square className="mr-2 h-4 w-4" />结束录音</Button></> : recorder.audioUrl ? <><audio className="w-full" controls src={recorder.audioUrl}>你的浏览器不支持录音试听。</audio><div className="mt-4 flex justify-center gap-2"><Button type="button" variant="outline" onClick={recorder.reset}><RotateCcw className="mr-2 h-4 w-4" />重新录音</Button><Button type="button" onClick={() => void submit()} isLoading={pending}>提交录音评分</Button></div></> : <><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-blue-700"><Mic className="h-7 w-7" /></div><h2 className="mt-3 font-semibold text-slate-900">准备好后，直接在这里录音</h2><p className="mt-1 text-sm text-slate-500">录完可先试听，不满意可以重录。</p><Button type="button" className="mt-4" onClick={() => void recorder.start()} isLoading={recorder.state === "requesting"}>开始录音</Button></>}
+        </section>
+
+        <details className="rounded-xl border border-slate-200 bg-white p-4"><summary className="cursor-pointer text-sm font-medium text-slate-700">无法使用麦克风？上传已有录音</summary><label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 px-3 text-sm text-slate-600"><FileAudio className="h-4 w-4" /><span>{fallbackFile?.name ?? "选择录音文件"}</span><input type="file" accept="audio/*" className="sr-only" onChange={(event) => setFallbackFile(event.target.files?.[0] ?? null)} /></label>{fallbackFile && !recorder.audioFile ? <Button type="button" className="mt-3" onClick={() => void submit()} isLoading={pending}>提交录音评分</Button> : null}</details>
+        {(recorder.error || error) ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error ?? recorder.error}</p> : null}
+    </div>;
+}

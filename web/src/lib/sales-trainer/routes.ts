@@ -18,6 +18,7 @@ import {
     SlidersHorizontal,
     Target,
     UploadCloud,
+    Users,
     type LucideIcon,
 } from "lucide-react";
 
@@ -113,6 +114,12 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
         icon: Milestone,
         href: "/admin/newcomer-training/path",
     },
+    learnerProgress: {
+        key: "learnerProgress",
+        label: "学员进度",
+        icon: Users,
+        href: "/admin/newcomer-training/learners",
+    },
     aiCoach: {
         key: "aiCoach",
         label: "AI 教练配置",
@@ -198,6 +205,7 @@ export const SALES_TRAINER_ADMIN_CONTENT_NAV_ITEMS = [
 ] as const satisfies readonly SalesTrainerAdminRouteItem[];
 
 export const SALES_TRAINER_ADMIN_RECORD_NAV_ITEMS = [
+    SALES_TRAINER_ADMIN_ROUTES.learnerProgress,
     SALES_TRAINER_ADMIN_ROUTES.readiness,
     SALES_TRAINER_ADMIN_ROUTES.trainingRecords,
     SALES_TRAINER_ADMIN_ROUTES.analytics,
@@ -304,6 +312,7 @@ const SALES_TRAINER_ADMIN_CAPABILITY_ACCESS_ROOTS = [
     {
         capability: "view_records",
         roots: [
+            "/admin/newcomer-training/learners",
             "/admin/sales-trainer/audio/submissions",
             "/admin/sales-trainer/audio/results",
             "/admin/sales-trainer/audio-submissions",
@@ -445,6 +454,7 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
         label: "路径与达标",
         roots: [
             "/admin/newcomer-training/path",
+            "/admin/newcomer-training/learners",
             "/admin/sales-trainer/units",
             "/admin/sales-trainer/ai-coach",
             "/admin/sales-trainer/readiness",
@@ -457,6 +467,7 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
                 label: "路径配置",
                 icon: Route,
             },
+            SALES_TRAINER_ADMIN_ROUTES.learnerProgress,
             SALES_TRAINER_ADMIN_ROUTES.units,
             SALES_TRAINER_ADMIN_ROUTES.aiCoach,
             SALES_TRAINER_ADMIN_ROUTES.readiness,

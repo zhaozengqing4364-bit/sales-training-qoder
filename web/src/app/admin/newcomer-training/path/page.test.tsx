@@ -1,9 +1,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import Page from "./page";
 
-const { getPath } = vi.hoisted(() => ({ getPath: vi.fn() }));
+const { getPath, listExamPapers } = vi.hoisted(() => ({ getPath: vi.fn(), listExamPapers: vi.fn() }));
 
 vi.mock("@/lib/api/client", () => ({
     api: {
@@ -11,7 +12,7 @@ vi.mock("@/lib/api/client", () => ({
         admin: {
             newcomerTraining: { getPath, listCoachProfiles: vi.fn().mockResolvedValue([]), listScoringRubrics: vi.fn().mockResolvedValue([]) },
             salesTrainer: {
-                listExamPapers: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+                listExamPapers,
                 listMaterials: vi.fn().mockResolvedValue({ items: [], total: 0 }),
             },
             listPracticeTemplates: vi.fn().mockResolvedValue({ items: [], total: 0 }),
@@ -27,6 +28,29 @@ vi.mock("@/components/ui/toast", () => ({
 describe("newcomer path page", () => {
     beforeEach(() => {
         getPath.mockReset();
+        listExamPapers.mockReset().mockResolvedValue({ items: [], total: 0 });
+    });
+
+    it("keeps the editor usable when one resource catalog fails", async () => {
+        const user = userEvent.setup();
+        getPath.mockResolvedValue({
+            active_revision_id: null, active_revision_no: null, working_revision_id: null,
+            payload: { schema_version: "newcomer_training_orchestration_v1", title: "新人训练路径", description: null, phases: [] },
+            validation: null,
+        });
+        listExamPapers.mockRejectedValue(new Error("paper catalog unavailable"));
+
+        render(<Page />);
+
+        await waitFor(() => expect(screen.getByRole("tree", { name: "训练路径大纲" })).toBeTruthy());
+        expect(screen.getByRole("alert").textContent).toContain("试卷目录暂不可用");
+        expect(screen.getByRole("button", { name: "重新加载试卷目录" })).toBeTruthy();
+
+        listExamPapers.mockResolvedValue({ items: [], total: 0 });
+        await user.click(screen.getByRole("button", { name: "重新加载试卷目录" }));
+        await waitFor(() => expect(screen.queryByText("试卷目录暂不可用")).toBeNull());
+        expect(getPath).toHaveBeenCalledTimes(1);
+        expect(listExamPapers).toHaveBeenCalledTimes(2);
     });
 
     it("loads the focused editor from the canonical API", async () => {

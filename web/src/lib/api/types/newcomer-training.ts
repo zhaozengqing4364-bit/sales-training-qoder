@@ -210,6 +210,7 @@ export interface JourneyActivityProgress {
     title: string;
     description: string | null;
     required: boolean;
+    estimated_minutes: number | null;
     status: string;
     completed: boolean;
     passed: boolean | null;
@@ -226,6 +227,7 @@ export interface JourneyModuleProgress {
     title: string;
     description: string | null;
     required: boolean;
+    estimated_minutes: number | null;
     status: string;
     completed: boolean;
     completed_count: number;
