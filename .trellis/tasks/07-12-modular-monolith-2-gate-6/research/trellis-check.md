@@ -7,8 +7,8 @@
 Blocking finding：**0**。
 
 检查范围为 Gate 5 closure `13cdfd6a` 之后的 44 个 Gate 6 文件；用户未提交的 readiness plan 排除。
-实现与 PRD、七段式 Trellis spec、依赖政策和 authority docs 一致。最终 clean-start canonical gate
-仍是独立的下一步骤，本报告不提前把它记为通过。
+实现与 PRD、七段式 Trellis spec、依赖政策和 authority docs 一致。随后执行的唯一 clean-start
+canonical gate 自然输出 `Critical quality gate passed`。
 
 ## Spec compliance
 
@@ -72,3 +72,9 @@ TrainingRuntimeDescriptor
   独立消费者/发布证据，不在 Gate 6 伪装完成。
 - 82 个 ESLint warnings 属既有全仓 warning baseline，不在无前端改动的 Gate 6 顺手修复；canonical
   对其当前政策是 0 error。该事实不构成 Gate 6 blocking finding。
+
+## Final canonical
+
+backend `3322 passed, 1 skipped`；Vitest 213 files / `1345 passed, 6 skipped`；Playwright
+generic/smoke/newcomer/presentation/sales `3/9/11/2/1 passed`；selected backend `598 passed,
+21 skipped`；changed coverage 7326/8048（91.03%），violations 为空。最终 blocking finding 保持 0。

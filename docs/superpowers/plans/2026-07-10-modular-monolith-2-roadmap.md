@@ -22,7 +22,7 @@ ADR：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 | 3 | Completed（2026-07-11） | Provider Port/StepFun codec/Fake contract 与单 Grounding authority 已闭环；Brooks/Trellis review finding=0；canonical gate backend 3271、Vitest 1329、selected backend 598、changed coverage 88.96% 全绿 |
 | 4 | Completed（2026-07-11） | Roleplay、Config Governance、Evaluation ports 与中立 realtime helpers 已闭环；5 条反向边清零，SCC 从 12 包缩至 7 包；Brooks 100/100、Trellis blocker=0；canonical backend 3287、Vitest 1329、selected backend 598、changed coverage 88.75% 全绿 |
 | 5 | Completed（2026-07-12） | Model registry、Journey/Readiness projections、领域 DTO/transport 与 report/readiness ViewModel/action 已闭环；Brooks 100/100、Trellis blocker=0；canonical backend 3315、Vitest 1345、selected backend 598、changed coverage 90.92% 全绿 |
-| 6 | Implementation complete；closure pending | 闭集 factory、root composition、Roleplay façade 退役已完成；51 条边、七包 SCC；等待 Brooks/Trellis/canonical 最终证据 |
+| 6 | Completed（2026-07-12） | 闭集 factory、root composition、Roleplay façade 退役；51 条边、七包 SCC；Brooks 100/100、Trellis blocker=0；canonical backend 3322、Vitest 1345、selected backend 598、changed coverage 91.03% 全绿 |
 
 Gate 0A 的实现和归档证据见其详细计划。此表表达的是迁移进度，不把已批准的目标
 设计或已完成的单个基础设施 Gate 误写成模块化单体 2.0 整体完成。
@@ -262,9 +262,12 @@ missing line 或 floor 回退，最终输出 `Critical quality gate passed`。Br
 - [x] 删除 `common.roleplay_contracts`，保留仍由 business-rule defaults 产生的 Common-to-Roleplay edge；
 - [x] 重跑 CodeGraph impact、Git 共变和关键文件 fan-in，形成可比收益报告；
 - [x] 每项兼容面标记 retired、retained 或 follow-up，并写明 owner/reason/retire_when；
-- [ ] Brooks audit、Trellis check、clean-start canonical gate 和 Trellis archive 最终闭环。
+- [x] Brooks audit、Trellis check、clean-start canonical gate 和 Trellis archive 最终闭环。
 
-验收：架构收益由依赖图、affected tests、共变半径和关键路径验证时间证明。
+验收：**通过**。治理图 52→51 条边，Presentation-to-Sales 边为 0，七包 SCC 未扩大；Brooks
+100/100、Trellis blocker=0。最终 canonical gate 为 backend `3322 passed, 1 skipped`、Vitest
+`1345 passed, 6 skipped`、Playwright `3/9/11/2/1 passed`、selected backend `598 passed, 21 skipped`、
+changed coverage 7326/8048（91.03%），自然输出 `Critical quality gate passed`。
 
 ## Gate 之间的硬依赖
 

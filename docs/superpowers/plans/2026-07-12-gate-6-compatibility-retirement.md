@@ -186,17 +186,17 @@ with the retained StepFun transport base. Compatibility with active consumers st
 **Interfaces:**
 - Produces: zero findings, one clean-start canonical result, work commits, task archive and journal.
 
-- [ ] **Step 1: Run Brooks whole-branch audit to 100/100 and zero findings**
+- [x] **Step 1: Run Brooks whole-branch audit to 100/100 and zero findings**
 
   Recheck depth, deletion test, dynamic dispatch, root composition, hidden mixin interface, retained compatibility,
   dependency direction and testability; fix and repeat.
 
-- [ ] **Step 2: Run Trellis check to blocking finding 0**
+- [x] **Step 2: Run Trellis check to blocking finding 0**
 
   Verify PRD/spec/data flow/reuse, Ruff, full mypy, architecture, OpenAPI, TypeScript/ESLint/Vitest, affected backend
   and relevant Playwright paths.
 
-- [ ] **Step 3: Run one clean-start canonical gate**
+- [x] **Step 3: Run one clean-start canonical gate**
 
   Run `bash scripts/critical-quality-gate.sh` from the repository root and wait for natural exit. The required final
   line is `Critical quality gate passed`; no skip/assertion weakening is accepted.

@@ -1,7 +1,7 @@
 # 模块化单体 2.0 架构设计
 
 日期：2026-07-10
-状态：已批准，Gate 0A–5 已闭环；Gate 6 实现完成、最终审计与 canonical closure 待完成
+状态：已实现（Gate 0A、0B、0C、1A、1B、2、3、4、5、6 全部闭环）
 决策记录：`docs/adr/2026-07-10-modular-monolith-2-ai-native-governance.md`
 
 实施证据：Gate 0A 已在 2026-07-10 完成并归档，恢复了路由、OpenAPI、contributor
@@ -42,8 +42,11 @@ Brooks architecture audit 100/100、独立 Trellis check blocking finding=0。Ga
 选择收敛为四个闭集 factory key，删除无消费者 `ScenarioPluginEntrypoint` 和 Common Roleplay 转发门面，
 并在应用根组合 Presentation behavior 与 retained StepFun transport；实际依赖图从 52 条边降为 51 条，
 `presentation_coach -> sales_bot` 消失、七包 SCC 未扩大。仍有真实消费者或 rollout 价值的模型/前端
-façade、Legacy Grounding cache/adapter 和三项 rollback flag 明确保留。最终 Brooks/Trellis/canonical
-closure 尚未完成，因此不把整个 Gate 6 预先标记闭环。
+façade、Legacy Grounding cache/adapter 和三项 rollback flag 明确保留。Gate 6 最终 Brooks audit
+100/100、Trellis blocking finding=0；clean-start canonical gate 为 backend `3322 passed, 1 skipped`、
+Vitest 213 files / `1345 passed, 6 skipped`、五组 Playwright `3/9/11/2/1 passed`、selected backend
+`598 passed, 21 skipped`、changed coverage 7326/8048（91.03%），末行
+`Critical quality gate passed`。模块化单体 2.0 全部 Gate 已闭环。
 
 ## 1. 背景
 

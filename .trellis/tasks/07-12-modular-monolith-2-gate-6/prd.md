@@ -56,19 +56,19 @@
 
 ## Acceptance Criteria
 
-- [ ] 生产代码不存在 plugin runtime module/attribute executable strings 或动态 import handler path。
-- [ ] `ScenarioPluginEntrypoint` 及无消费者 lifecycle/evidence/report descriptor surface 删除，diagnostics
+- [x] 生产代码不存在 plugin runtime module/attribute executable strings 或动态 import handler path。
+- [x] `ScenarioPluginEntrypoint` 及无消费者 lifecycle/evidence/report descriptor surface 删除，diagnostics
       和 scenario dispatch 保持可用。
-- [ ] `presentation_coach -> sales_bot` 实际边和对应 policy target 消失；依赖边不增加，SCC 不扩大。
-- [ ] Presentation default/rollback、Sales StepFun、wire/snapshot/persistence/reconnect/evaluation differential
+- [x] `presentation_coach -> sales_bot` 实际边和对应 policy target 消失；依赖边不增加，SCC 不扩大。
+- [x] Presentation default/rollback、Sales StepFun、wire/snapshot/persistence/reconnect/evaluation differential
       全绿，未知 factory key fail closed。
-- [ ] `common.roleplay_contracts` forwarding module 删除；`common -> roleplay` 的 remaining source 仅为明确
+- [x] `common.roleplay_contracts` forwarding module 删除；`common -> roleplay` 的 remaining source 仅为明确
       retained 的 business-rule registry（若仍存在）。
-- [ ] Model/frontend/flag/Legacy cache 逐项 consumer proof 与 retain/retire 决策写入 ADR/spec，无过度删除。
-- [ ] CodeGraph impact、依赖图、fan-in、共变与关键路径验证时间形成 before/after 收益报告。
-- [ ] Ruff、full mypy、architecture guard、OpenAPI、后端 affected、Vitest/TypeScript/ESLint、相关 Playwright
+- [x] Model/frontend/flag/Legacy cache 逐项 consumer proof 与 retain/retire 决策写入 ADR/spec，无过度删除。
+- [x] CodeGraph impact、依赖图、fan-in、共变与关键路径验证时间形成 before/after 收益报告。
+- [x] Ruff、full mypy、architecture guard、OpenAPI、后端 affected、Vitest/TypeScript/ESLint、相关 Playwright
       与 changed coverage 满足唯一 clean-start canonical gate。
-- [ ] Brooks audit 100/100 且 Critical/Warning/Suggestion=0；Trellis blocking finding=0。
+- [x] Brooks audit 100/100 且 Critical/Warning/Suggestion=0；Trellis blocking finding=0。
 
 ## Definition of Done
 

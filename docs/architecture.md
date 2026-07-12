@@ -385,6 +385,13 @@ consumer scan 证明 `common.db.models` 仍有 222 个生产 importer、前端 g
 源码 importer；它们与 Legacy Grounding cache/adapter、三项 rollout flag 明确保留，待发布窗口、
 遥测和 consumer migration 满足各自 `retire_when`，不因文件体积而强删。
 
+Gate 6 已于 2026-07-12 完成兼容层退役与收益复核：runtime plugin 从可执行字符串收敛为闭集 key，
+无消费者 descriptor surface 与 Common Roleplay forwarding façade 删除；应用根组合 Presentation
+behavior 与 retained transport。Brooks audit 100/100、Trellis blocking finding=0；最终 clean-start
+canonical gate 为 backend `3322 passed, 1 skipped`、Vitest 213 files / `1345 passed, 6 skipped`、
+Playwright `3/9/11/2/1 passed`、selected backend `598 passed, 21 skipped`、changed coverage
+7326/8048（91.03%），最终输出 `Critical quality gate passed`。模块化单体 2.0 Gate 0A–6 全部闭环。
+
 Gate 2 完整验收（2026-07-11 UTC）从 clean start 自然 exit 0：backend unit+contract
 `2903 passed, 1 skipped`；Vitest 209 files / `1329 passed, 6 skipped`；Playwright
 generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（newcomer 仅保留 1 个既有
@@ -1112,7 +1119,7 @@ Next.js (端口 3445)
 | `2026-05-11-architecture-boundary-domain-contract` | 领域边界与契约锁定（PRD #23） |
 | `2026-05-11-curriculum-practice-boundary-contract` | 课程考核模块边界契约 |
 | `2026-05-12-case-item-role-profile-pilot-contract` | 案例/角色/画像试点契约 |
-| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 Gate 治理；Gate 2–5 已闭环，Gate 6 实现完成、最终门禁待闭环 |
+| `2026-07-10-modular-monolith-2-ai-native-governance` | 模块化单体 2.0 已实现；Gate 0A–6 全部闭环，保留面按 owner/retire_when 持续治理 |
 
 详见 `docs/adr/`。
 

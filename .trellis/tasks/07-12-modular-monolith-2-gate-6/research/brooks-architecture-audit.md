@@ -124,4 +124,6 @@ backward-compatibility 复核。可证收益是 52→51 条边、0 Presentation-
 - Gate 6 聚焦矩阵：`161 passed`（pytest 39.39s；shell 48.129s）。
 - Gate 6 + architecture contract：`28 passed`；dependency policy satisfied。
 - Ruff passed；full mypy passed（677 source files）。
-- 最终 clean-start canonical gate 尚待 Task 6 后续步骤，报告不提前引用其结果。
+- 最终 clean-start canonical gate：backend `3322 passed, 1 skipped`；Vitest 213 files / `1345 passed,
+  6 skipped`；Playwright `3/9/11/2/1 passed`；selected backend `598 passed, 21 skipped`；changed coverage
+  7326/8048（91.03%）；末行 `Critical quality gate passed`。

@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted。目标设计已由用户批准；代码迁移按 Gate 逐步实施。Gate 0A–5 已闭环；Gate 6 实现完成，
-最终 Brooks/Trellis/canonical closure 待完成。本文区分已实现事实、明确保留面和后续退役条件。
+Implemented。Gate 0A、0B、0C、1A、1B、2、3、4、5、6 全部闭环。本文区分已实现事实、明确
+保留面和后续退役条件。
 
 ## 背景
 
@@ -201,7 +201,12 @@ Presentation behavior 通过中立 `StepFunRuntimeAdapterPort` 显式声明 reta
 | Presentation Engine / Provider / Grounding flags | retained / Realtime platform | 三项 constructor-time rollback 仍有效 | 分别满足 release evidence、Golden 与 ADR deprecation 条件 |
 | `common -> roleplay` defaults edge | follow-up / Business rules owner | `common/business_rules/defaults.py` 活跃 registry import | defaults authority 迁移且历史 hash/snapshot parity 通过 |
 
-Gate 6 最终 Brooks/Trellis/canonical 证据写入前，ADR 状态保持 closure pending。
+Gate 6 closure 证据（2026-07-12 UTC）：Brooks architecture audit 100/100、
+Critical/Warning/Suggestion=0；Trellis blocking finding=0。唯一 clean-start canonical gate 自然 exit 0：
+backend `3322 passed, 1 skipped`、Vitest 213 files / `1345 passed, 6 skipped`、Playwright
+generic/smoke/newcomer/presentation/sales `3/9/11/2/1 passed`（一个既有真实收费 Provider 条件 skip）、
+selected backend `598 passed, 21 skipped`、changed coverage 7326/8048（91.03%），最终输出
+`Critical quality gate passed`。
 
 ### 8. 使用可验证变更包衡量进度
 

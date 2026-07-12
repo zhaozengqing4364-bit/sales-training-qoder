@@ -54,3 +54,11 @@ Gate 6 没有修改前端文件，因此没有继续增加这两组共变；但�
 Gate 6 的可证收益是：少一条真实跨域边、闭集工厂替代可执行字符串、删除两个无消费者浅表面、
 把隐藏的 MRO 要求显式化，并保持 SCC、协议、写入权威和 rollback 不恶化。它没有完成历史七包 SCC、
 模型 façade 或前端 façade 的后续迁移，也不把这些工作伪报为闭环。
+
+## Final canonical evidence
+
+唯一 clean-start canonical gate 于 2026-07-12 03:08:56–03:50:03 UTC 自然 exit 0：backend
+`3322 passed, 1 skipped`、Vitest 213 files / `1345 passed, 6 skipped`、Playwright
+generic/smoke/newcomer/presentation/sales 为 `3/9/11/2/1 passed`（一个既有真实收费 Provider 条件
+skip）、selected backend `598 passed, 21 skipped`、changed executable lines 7326/8048（91.03%），
+violations 为空，末行 `Critical quality gate passed`。
