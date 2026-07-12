@@ -71,3 +71,4 @@
 - Task 10：为保持直接替换与全量 type-check，提前删除已失去后端权威的固定 learner/topic/path 页面和过期 API 测试；未添加兼容方法。
 - Task 10：LearningContent 绑定影响改为 activity identity，并增加 canonical `/curriculum/learning-contents/{id}/binding-impact` 读取端点。
 - Task 10 验证：focused/API/learning-content `37 passed`；ESLint focused 通过；`npx tsc --noEmit` 通过；后端 binding-impact 专项、Ruff、Mypy 通过。
+- Task 10 commit：`673d6b0c feat(newcomer): add orchestration frontend contract`。

@@ -1730,7 +1730,7 @@ npx tsc --noEmit
 
 Expected: tests and type-check pass after all old consumers compile or are temporarily updated in the same task to the new type exports.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add web/src/lib/api web/src/lib/newcomer-training
