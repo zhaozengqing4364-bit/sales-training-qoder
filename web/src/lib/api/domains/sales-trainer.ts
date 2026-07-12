@@ -10,10 +10,6 @@ import type {
     SalesTrainerAudioSubmissionListResponse,
     SalesTrainerAudioUploadUrlRequest,
     SalesTrainerAudioUploadUrlResponse,
-    ReadinessDossier,
-    ReadinessDossierReviewAction,
-    ReadinessDossierReviewActionCreateRequest,
-    ReadinessWorkbenchResponse,
     SalesTrainerManagerDashboard,
     SalesTrainerMaterial,
     SalesTrainerMaterialCreateRequest,
@@ -51,6 +47,10 @@ import type {
     SalesTrainerUnitUpdateRequest,
 } from "../types/sales-trainer";
 import type {
+    ReadinessDossier,
+    ReadinessDossierReviewAction,
+    ReadinessDossierReviewActionCreateRequest,
+    ReadinessWorkbenchResponse,
     RealtimeRoleplayStartRequest,
     RealtimeRoleplayStartResponse,
     TrainingJourneyAnalyticsQuery,
@@ -58,7 +58,7 @@ import type {
     TrainingJourneyListQuery,
     TrainingJourneyListResponse,
     TrainingJourneyResponse,
-} from "../types";
+} from "../types/training-journey";
 import type { ApiRequest, ApiUpload } from "./shared";
 import { buildQueryString } from "./shared";
 import { createAdminNewcomerTrainingDomain } from "./newcomer-training";

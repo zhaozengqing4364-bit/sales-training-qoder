@@ -10,6 +10,7 @@ import {
     createNewcomerTrainingDomain,
     createPracticeDomain,
     createSalesTrainerDomain,
+    createSessionsDomain,
     createSupportRuntimeDomain,
 } from "./client-domains";
 
@@ -25,6 +26,27 @@ function collectSourceFiles(directory: string): string[] {
 }
 
 describe("client domain factories", () => {
+    it("keeps session report and replay reads behind the extracted session domain", async () => {
+        const request = vi.fn().mockResolvedValue({ session_id: "session-1" });
+        const sessions = createSessionsDomain({
+            request,
+            resolveApiBaseUrl: () => "http://localhost:3444/api/v1",
+            createHeaders: () => new Headers(),
+            fetchWithLoopbackRetry: vi.fn(),
+            createApiError: (status) => new Error(`HTTP ${status}`),
+            createNetworkError: (error) => new Error(String(error)),
+        });
+
+        await sessions.getReport("session-1");
+        await sessions.getReplay("session-1");
+
+        expect(request).toHaveBeenNthCalledWith(
+            1,
+            "/practice/sessions/session-1/report",
+        );
+        expect(request).toHaveBeenNthCalledWith(2, "/sessions/session-1/replay");
+    });
+
     it("keeps auth login on the shared request seam with session-expiry handling disabled", async () => {
         const request = vi.fn().mockResolvedValue({ token: "token-1" });
         const auth = createAuthDomain({ request });

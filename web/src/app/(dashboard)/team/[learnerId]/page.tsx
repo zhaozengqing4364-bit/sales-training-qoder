@@ -28,7 +28,7 @@ import type {
     TrainingJourneyModuleKind,
     TrainingJourneyModuleProgress,
     TrainingJourneyResponse,
-} from "@/lib/api/types";
+} from "@/lib/api/types/training-journey";
 import {
     getStageLabel,
     formatRiskReasons,

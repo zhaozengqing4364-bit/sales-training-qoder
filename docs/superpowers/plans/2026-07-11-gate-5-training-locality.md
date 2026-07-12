@@ -255,28 +255,28 @@
 - Consumes: unchanged backend snake_case contracts and shared `ApiRequest`/upload/stream seams.
 - Produces: real domain type authorities and `createSessionsDomain`; global barrels remain compatibility exports.
 
-- [ ] **Step 1: Move complete type dependency closures**
+- [x] **Step 1: Move complete type dependency closures**
 
   Move Journey/Readiness types together so no domain type file imports the global barrel. Move session report,
   replay, highlights, trends, supervisor and related nested types as one closure. `types.ts` explicitly re-exports
   those symbols for compatibility and does not redeclare them.
 
-- [ ] **Step 2: Extract the sessions domain builder**
+- [x] **Step 2: Extract the sessions domain builder**
 
   Move get report/replay/history/highlight/media methods from `client-domains.ts` to `domains/sessions.ts` without
   changing path, timeout, headers, loopback retry or error normalization. `client-domains.ts` re-exports the builder.
 
-- [ ] **Step 3: Migrate Gate 5 consumers to domain type imports**
+- [x] **Step 3: Migrate Gate 5 consumers to domain type imports**
 
   Journey/Readiness/report pages, hooks, ViewModels and tests import from the two new domain type Modules. Pages
   continue calling `api` from `client.ts`; direct domain-builder imports in UI remain forbidden.
 
-- [ ] **Step 4: Prove compatibility and locality**
+- [x] **Step 4: Prove compatibility and locality**
 
   Run type-identity compile fixtures for both old/new import paths, domain request contract tests, strict typecheck,
   target ESLint and focused Vitest. The Task 1 locality Red tests must turn Green.
 
-- [ ] **Step 5: Commit frontend domain authority**
+- [x] **Step 5: Commit frontend domain authority**
 
   Commit as `refactor(web): localize journey and report contracts`.
 

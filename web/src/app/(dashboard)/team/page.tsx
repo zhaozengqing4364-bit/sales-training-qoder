@@ -23,7 +23,7 @@ import type {
     TrainingJourneyResponse,
     TrainingJourneyStage,
     TrainingJourneyAnalyticsResponse,
-} from "@/lib/api/types";
+} from "@/lib/api/types/training-journey";
 import {
     getStageLabel,
     getStageToneClass,

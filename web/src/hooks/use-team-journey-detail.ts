@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { teamDetailQueryOptions } from "@/lib/query/team-detail";
-import type { TrainingJourneyResponse } from "@/lib/api/types";
+import type { TrainingJourneyResponse } from "@/lib/api/types/training-journey";
 
 export interface UseTeamJourneyDetailParams {
     learnerId: string;

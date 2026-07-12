@@ -29,7 +29,7 @@ import type {
     TrainingJourneyModuleType,
     TrainingJourneyResponse,
     TrainingJourneyStage,
-} from "@/lib/api/types";
+} from "@/lib/api/types/training-journey";
 import { cn } from "@/lib/utils";
 import {
     getJourneyStageBadgeVariant,

@@ -18,7 +18,7 @@ import type {
     ReadinessDossierRetrainingTask,
     ReadinessDossierReviewAction,
     ReadinessReviewDecision,
-} from "@/lib/api/types";
+} from "@/lib/api/types/training-journey";
 import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 
 const DECISION_OPTIONS: Array<{

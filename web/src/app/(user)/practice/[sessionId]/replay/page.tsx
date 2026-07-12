@@ -20,7 +20,15 @@ import { SlideViewer } from "@/components/practice/presentation/SlideViewer";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { HighlightItem, PracticeSessionReport, ReplayAnchorStatus, ReplayData, ReplayHighlightContext, ReplayLearningEvidence, ReplayTimelineMarker } from "@/lib/api/types";
+import type {
+  HighlightItem,
+  PracticeSessionReport,
+  ReplayAnchorStatus,
+  ReplayData,
+  ReplayHighlightContext,
+  ReplayLearningEvidence,
+  ReplayTimelineMarker,
+} from "@/lib/api/types/session-report";
 import { debug } from "@/lib/debug";
 import {
   extractSessionClaimTruth,

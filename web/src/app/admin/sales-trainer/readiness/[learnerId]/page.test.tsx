@@ -6,7 +6,7 @@ import type {
     ReadinessDossier,
     ReadinessDossierRetrainingTask,
     ReadinessDossierReviewAction,
-} from "@/lib/api/types";
+} from "@/lib/api/types/training-journey";
 
 const { createReadinessReviewActionMock, getReadinessDossierMock } = vi.hoisted(() => ({
     createReadinessReviewActionMock: vi.fn(),

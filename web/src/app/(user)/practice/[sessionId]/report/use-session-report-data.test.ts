@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useSessionReportData } from "./use-session-report-data";
-import type { PracticeSessionReport } from "@/lib/api/types";
+import type { PracticeSessionReport } from "@/lib/api/types/session-report";
 
 const getReportMock = vi.hoisted(() => vi.fn());
 

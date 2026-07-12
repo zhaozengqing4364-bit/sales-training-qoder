@@ -1,7 +1,7 @@
 import type {
     TrainingJourneyResponse,
     TrainingJourneyStage,
-} from "@/lib/api/types";
+} from "@/lib/api/types/training-journey";
 
 /**
  * 团队看板与学员详情页共用的 ViewModel 映射。

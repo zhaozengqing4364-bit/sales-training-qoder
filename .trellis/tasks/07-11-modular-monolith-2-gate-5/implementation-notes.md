@@ -65,3 +65,14 @@
 - Task 4 differential evidence passed: pure projection `3/3`, Dossier/phase2/locality `28/28`, and Journey
   API/RBAC/audit/lineage/Journey/Dossier/phase2 `64/64`. Full focused Ruff/mypy and the architecture dependency
   guard passed. All backend Gate 5 locality contracts and new port/projection tests are Green `14/14`.
+- Task 5 moved Journey/Readiness/realtime-entry/analytics contracts into `types/training-journey.ts` and the
+  session evidence/report/replay/highlight/diagnostic/supervisor closure into `types/session-report.ts`. The
+  global barrel remains a type-only compatibility surface and fell from 8,459 to about 7,000 lines; domain
+  type files do not import that barrel. Structural local dependencies avoid a circular type authority.
+- `createSessionsDomain` moved from the aggregation file into `domains/sessions.ts`; `client-domains.ts` now
+  re-exports it and fell from 657 to 519 lines. The outward `api.sessions` façade, request/error/auth seams and
+  URLs are unchanged. A new transport test proves report and replay requests still use their exact endpoints.
+- The React/Next performance guidance kept pages on the outward façade and moved only erased type imports plus
+  transport code, so no new client runtime barrel, component render dependency or async waterfall was added.
+  TypeScript and changed-file ESLint passed; the Gate 5/domain and report/replay/readiness/team consumer matrix
+  passed 10 files / `137 passed`.

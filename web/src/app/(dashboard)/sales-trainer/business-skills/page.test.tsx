@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiRequestError } from "@/lib/api/client";
-import type { TrainingJourneyResponse } from "@/lib/api/types";
+import type { TrainingJourneyResponse } from "@/lib/api/types/training-journey";
 
 import { chapterNavigationLabel } from "./config";
 import BusinessSkillsPage from "./page";

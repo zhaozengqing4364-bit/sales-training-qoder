@@ -17,7 +17,7 @@ import type {
     ReadinessWorkbenchGroupKey,
     ReadinessWorkbenchItem,
     ReadinessWorkbenchResponse,
-} from "@/lib/api/types";
+} from "@/lib/api/types/training-journey";
 import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 
 const GROUP_ORDER: ReadinessWorkbenchGroupKey[] = [

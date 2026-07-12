@@ -21,20 +21,22 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { api, ApiRequestError, getApiErrorMessage } from "@/lib/api/client";
-import {
-    ComprehensiveReport,
+import type {
+    HighlightItem,
     HighlightReviewResponse,
     HighlightReviewShareSummary,
-    HighlightItem,
     HighlightsResponse,
     KnowledgeCheckDiagnostics,
     PracticeSessionReport,
     PresentationReview,
-    ReadinessStatus,
-    Recommendation,
     ReplayAnchor,
     ReplayData,
     ReportTrendsResponse,
+} from "@/lib/api/types/session-report";
+import {
+    ComprehensiveReport,
+    ReadinessStatus,
+    Recommendation,
     CalibrationLabel,
     SupervisorDecision,
     SupervisorReview,

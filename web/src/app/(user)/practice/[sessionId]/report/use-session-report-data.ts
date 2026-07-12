@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { PracticeSessionReport } from "@/lib/api/types";
+import type { PracticeSessionReport } from "@/lib/api/types/session-report";
 import { debug } from "@/lib/debug";
 
 export interface SessionReportDataState {

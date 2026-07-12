@@ -7,7 +7,10 @@ import { ArrowRight, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { TrainingJourneyModuleProgress, TrainingJourneyResponse } from "@/lib/api/types";
+import type {
+    TrainingJourneyModuleProgress,
+    TrainingJourneyResponse,
+} from "@/lib/api/types/training-journey";
 
 interface JourneyNextStepRecommendation {
     title: string;
