@@ -74,7 +74,7 @@ class ReadinessDossierService:
                 raise ReadinessDossierError(
                     exc.code, exc.message, exc.status_code
                 ) from exc
-            journey = self._projection._blocked_journey(
+            journey = self._projection.blocked_journey(
                 learner,
                 code=exc.code,
                 message=exc.message,
@@ -89,7 +89,7 @@ class ReadinessDossierService:
             offset=0,
         )
         review_actions = await self._review_actions(learner_id)
-        return self._projection._dossier_payload(
+        return self._projection.dossier_payload(
             journey,
             records=records,
             review_actions=review_actions,
@@ -115,7 +115,7 @@ class ReadinessDossierService:
                 offset=offset,
             )
             journeys = [
-                self._projection._dossier_payload(
+                self._projection.dossier_payload(
                     journey,
                     records=[],
                     review_actions=await self._review_actions(
@@ -139,8 +139,8 @@ class ReadinessDossierService:
                 offset=offset,
             )
             journeys = [
-                self._projection._dossier_payload(
-                    self._projection._blocked_journey(
+                self._projection.dossier_payload(
+                    self._projection.blocked_journey(
                         learner,
                         code=exc.code,
                         message=exc.message,
@@ -154,7 +154,7 @@ class ReadinessDossierService:
                 for learner in learners
             ]
 
-        groups = self._projection._workbench_groups(journeys)
+        groups = self._projection.workbench_groups(journeys)
         return {
             "contract_version": READINESS_CONTRACT_VERSION,
             "generated_at": generated_at,
@@ -219,11 +219,11 @@ class ReadinessDossierService:
                 details={"unknown_evidence_ids": unknown_evidence_ids},
             )
         if decision == "approve":
-            self._projection._ensure_dossier_can_be_approved(dossier)
+            self._projection.validate_dossier_approval(dossier)
         if not evidence_ids:
-            evidence_ids = self._projection._default_review_evidence_ids(dossier)
+            evidence_ids = self._projection.default_review_evidence_ids(dossier)
         if not normalized_capabilities:
-            normalized_capabilities = self._projection._default_review_capability_keys(
+            normalized_capabilities = self._projection.default_review_capability_keys(
                 dossier
             )
 

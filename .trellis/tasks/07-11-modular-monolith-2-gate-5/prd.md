@@ -92,7 +92,7 @@
       不扩大任何跨包边或 SCC。
 - [ ] Backend focused/affected、frontend focused/affected、OpenAPI、architecture、Ruff、mypy、typecheck、
       lint、Vitest、selected E2E 和 changed coverage 满足 canonical gate。
-- [ ] Brooks audit 与 Trellis check blocking finding=0；文档、ADR、roadmap、Trellis、代码事实一致。
+- [x] Brooks audit 与 Trellis check blocking finding=0；文档、ADR、roadmap、Trellis、代码事实一致。
 
 ## Definition of Done
 
@@ -137,7 +137,7 @@ class JourneyReadRepository(Protocol):
     ) -> tuple[JourneyRoleplaySessionProjection, ...]: ...
 
 class ReadinessDossierProjection:
-    def _dossier_payload(
+    def dossier_payload(
         self,
         journey: dict[str, Any],
         *,
@@ -146,7 +146,7 @@ class ReadinessDossierProjection:
         generated_at: datetime,
         evidence_limit: int | None = None,
     ) -> dict[str, Any]: ...
-    def _workbench_groups(
+    def workbench_groups(
         self,
         dossiers: list[dict[str, Any]],
     ) -> dict[WorkbenchGroupKey, dict[str, Any]]: ...

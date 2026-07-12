@@ -84,6 +84,7 @@ import {
     buildPresentationPageReplayPath,
     buildReplayDeepLink,
     buildRetrySessionPath,
+    buildSessionReportPath,
     getRetryFallbackPath,
     HIGHLIGHT_REVIEW_LIMIT,
     isHighlightReviewItem,
@@ -694,11 +695,7 @@ export default function ComprehensiveReportPage() {
 
         setReadinessStatus(latestSupervisorReview.readiness_status);
         setReviewComment(latestSupervisorReview.comment ?? "");
-    }, [
-        latestSupervisorReview?.comment,
-        latestSupervisorReview?.readiness_status,
-        latestSupervisorReview?.review_id,
-    ]);
+    }, [latestSupervisorReview]);
 
     useEffect(() => {
         const dimensions = trainingReportView?.dimension_scores ?? [];
@@ -1914,7 +1911,7 @@ export default function ComprehensiveReportPage() {
                             </div>
                             {nextRecommendation.source_session_id ? (
                                 <Link
-                                    href={`/practice/${nextRecommendation.source_session_id}/report`}
+                                    href={buildSessionReportPath(nextRecommendation.source_session_id)}
                                     className="inline-block mt-3 text-sm font-medium text-blue-600 hover:text-blue-700"
                                 >
                                     查看来源报告

@@ -173,6 +173,18 @@ def _imported_names(path: Path, module_name: str) -> set[str]:
     }
 
 
+def _private_projection_calls(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    return {
+        node.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and node.attr.startswith("_")
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "_projection"
+    }
+
+
 def test_common_model_registry_preserves_public_class_inventory() -> None:
     actual = {
         name
@@ -261,3 +273,10 @@ def test_readiness_projection_module_exists() -> None:
     assert (
         BACKEND_SRC / "sales_trainer" / "services" / "readiness_dossier_projection.py"
     ).is_file()
+
+
+def test_application_services_use_explicit_projection_interfaces() -> None:
+    service_dir = BACKEND_SRC / "sales_trainer" / "services"
+
+    assert not _private_projection_calls(service_dir / "training_journey_service.py")
+    assert not _private_projection_calls(service_dir / "readiness_dossier_service.py")

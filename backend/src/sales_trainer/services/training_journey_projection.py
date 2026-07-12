@@ -862,6 +862,30 @@ class TrainingJourneyProjection:
     def _float_or_none(value: Any) -> float | None:
         return float(value) if value is not None else None
 
+    # Explicit application-facing projection interface. The underscored methods
+    # remain implementation details so their internal composition can evolve.
+    module_stage = _module_stage
+    completion_satisfied = _completion_satisfied
+    next_action = _next_action
+    overall_progress = _overall_progress
+    journey_stage = _journey_stage
+    journey_diagnostics = _journey_diagnostics
+    journeys_with_module_scope = _journeys_with_module_scope
+    analytics_summary = _analytics_summary
+    analytics_funnel = _analytics_funnel
+    analytics_modules = _analytics_modules
+    analytics_learning_topics = _analytics_learning_topics
+    analytics_weakness_heatmap = _analytics_weakness_heatmap
+    analytics_trend = _analytics_trend
+    analytics_group_counts = _analytics_group_counts
+    analytics_risk_learners = _analytics_risk_learners
+    default_learner_level_policy = _default_learner_level_policy
+    default_role_level_policy = _default_role_level_policy
+    learner_level_payload = _learner_level_payload
+    match_learner_level = _match_learner_level
+    diagnostic = _diagnostic
+    float_or_none = _float_or_none
+
 
 def _module_practice_path(module: JourneyModule) -> str | None:
     target_unit_id = module.target_unit_id or next(iter(module.target_unit_ids), None)

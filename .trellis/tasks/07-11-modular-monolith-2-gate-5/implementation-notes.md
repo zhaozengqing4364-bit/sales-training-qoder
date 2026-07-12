@@ -100,3 +100,15 @@
 - The added corrupt-highlight-storage/three-item-limit regression passed `4/4`; strict TypeScript,
   changed-file ESLint, architecture policy and `git diff --check` passed. Authority documents remain truthful:
   implementation is complete while independent audit, canonical gate and archival belong only to Task 8.
+- Task 8 Brooks pass 1 found two residual interface-leakage symptoms: application services called underscored
+  projection helpers as a de facto hidden API, and the report root still interpolated one historical session ID.
+  Characterization tests reproduced both issues before remediation. Projection modules now expose an explicit
+  non-underscored application interface, the architecture contract rejects future private-method coupling, and
+  `buildSessionReportPath` owns the final report URL with reserved-ID encoding. Focused Red → Green evidence is
+  `1 failed → 4 passed` for backend projection-interface contracts and `1 failed → 4 passed` for report actions;
+  strict TypeScript, focused mypy/Ruff and changed-file ESLint errors-only pass.
+- Brooks final rerun is 100/100 with Critical/Warning/Suggestion `0/0/0`. Independent Trellis check reports
+  blocking finding=0: Gate 5 backend differential/contracts `58 passed`, OpenAPI/model parity `18 passed`, full
+  Ruff, mypy for 675 source files, architecture policy, strict TypeScript, report/Readiness `55 passed`, task
+  JSONL and artifact hygiene all pass. Full frontend lint exits 0 with 82 pre-existing repository warnings and
+  none in changed Gate 5 files; no warning was suppressed to obtain closure.

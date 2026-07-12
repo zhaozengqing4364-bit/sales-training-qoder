@@ -5,6 +5,7 @@ import {
     buildPresentationPageReplayPath,
     buildReplayDeepLink,
     buildRetrySessionPath,
+    buildSessionReportPath,
     getRetryFallbackPath,
     persistHighlightReviewItems,
     readHighlightReviewItems,
@@ -16,6 +17,9 @@ describe("report actions", () => {
     });
 
     it("encodes route identifiers and query intent", () => {
+        expect(buildSessionReportPath("source/a?b")).toBe(
+            "/practice/source%2Fa%3Fb/report",
+        );
         expect(buildPresentationPageReplayPath("session/a?b", 3)).toBe(
             "/practice/session%2Fa%3Fb/replay?focus=presentation_page&page=3&page_anchor_status=resolved",
         );

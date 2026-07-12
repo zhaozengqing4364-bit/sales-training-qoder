@@ -64,7 +64,7 @@ def test_readiness_projection_is_deterministic_and_does_not_mutate_sources() -> 
     original = deepcopy(journey)
     generated_at = datetime(2026, 7, 11, 9, 30, tzinfo=UTC)
 
-    dossier = projection._dossier_payload(
+    dossier = projection.dossier_payload(
         journey,  # type: ignore[arg-type]
         records=[],
         review_actions=[],
@@ -83,11 +83,11 @@ def test_readiness_projection_approval_is_fail_closed() -> None:
     projection = ReadinessDossierProjection()
 
     with pytest.raises(ReadinessDossierError) as blocked:
-        projection._ensure_dossier_can_be_approved(
+        projection.validate_dossier_approval(
             {"status": "blocked_by_config", "summary": {"evidence_count": 1}}
         )
     with pytest.raises(ReadinessDossierError) as missing_evidence:
-        projection._ensure_dossier_can_be_approved(
+        projection.validate_dossier_approval(
             {"status": "pending_review", "summary": {"evidence_count": 0}}
         )
 
@@ -117,7 +117,7 @@ def test_readiness_projection_groups_workbench_by_review_state() -> None:
         },
     ]
 
-    groups = projection._workbench_groups(dossiers)
+    groups = projection.workbench_groups(dossiers)
 
     assert groups["pending_review"]["count"] == 1
     assert groups["approved"]["count"] == 1

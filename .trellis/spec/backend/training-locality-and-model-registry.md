@@ -55,6 +55,24 @@ class ReadinessDossierService:
         read_repository: JourneyReadRepository | None = None,
         projection: ReadinessDossierProjection | None = None,
     ) -> None: ...
+
+class TrainingJourneyProjection:
+    def module_stage(self, module: JourneyModule, latest: dict[str, Any] | None) -> TrainingStage: ...
+    def overall_progress(self, modules: list[dict[str, Any]]) -> dict[str, int]: ...
+    def journey_stage(self, modules: list[dict[str, Any]], path_enabled: bool) -> TrainingStage: ...
+
+class ReadinessDossierProjection:
+    def dossier_payload(
+        self,
+        journey: dict[str, Any],
+        *,
+        records: list[dict[str, Any]],
+        review_actions: list[dict[str, Any]],
+        generated_at: datetime,
+        evidence_limit: int | None = None,
+    ) -> dict[str, Any]: ...
+    def workbench_groups(self, dossiers: list[dict[str, Any]]) -> dict[WorkbenchGroupKey, dict[str, Any]]: ...
+    def validate_dossier_approval(self, dossier: dict[str, Any]) -> None: ...
 ```
 
 Registry identity is part of the compatibility signature:
@@ -101,6 +119,8 @@ assert models.User.__module__ == "common.db.models"
   retraining comparison, realtime gate, next actions, workbench grouping, and blocked snapshots.
 - Projection time is supplied by application orchestration (`generated_at`); a projection must not read the clock,
   database, environment, FastAPI request, or operation log.
+- Application services call only the projection's explicit non-underscored interface. Private projection helpers
+  are not a cross-class API; this keeps the seam discoverable and prevents hidden-interface coupling.
 - Public REST/WS payloads, RuntimeGate, snapshots, scoring/report single writers, and audit semantics are unchanged.
 
 ## 4. Validation & Error Matrix
@@ -153,6 +173,7 @@ Assertion points:
 - complete Journey/Dossier payloads remain differential-equivalent;
 - review writes validate before one commit and continue to emit the same audit log fields;
 - application modules contain no `common.db.models` `User`/`PracticeSession` import.
+- application services contain no calls to private (`_...`) projection methods.
 
 ## 7. Wrong vs Correct
 

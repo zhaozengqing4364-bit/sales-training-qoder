@@ -373,12 +373,12 @@ authority evidence and Trellis closure.
 - Consumes: all Gate 5 slices and unique canonical quality gate.
 - Produces: finding=0, clean-start gate evidence, commits, archive and journal.
 
-- [ ] **Step 1: Run whole-branch Brooks Architecture Audit**
+- [x] **Step 1: Run whole-branch Brooks Architecture Audit**
 
   Re-evaluate Depth, deletion test, dependency direction, compatibility registries, hidden ORM leakage, frontend
   locality, testability and remaining SCC. Fix all findings and rerun until Critical/Warning/Suggestion=0.
 
-- [ ] **Step 2: Run independent Trellis check**
+- [x] **Step 2: Run independent Trellis check**
 
   Verify PRD/spec/data flow/reuse, metadata/schema parity, OpenAPI, Ruff, full mypy, typecheck, lint, focused and
   affected tests. Fix/repeat until blocking finding=0.

@@ -37,6 +37,8 @@ export function buildRetrySessionPath(
     extra?: Record<string, string>,
 ): string;
 
+export function buildSessionReportPath(sessionId: string): string;
+
 // Pure mapping
 export function readinessDisplayMessage(message: string | null | undefined): string;
 export function formatReplayAnchorHint(anchor?: ReplayAnchor | null): string;
@@ -123,6 +125,7 @@ Assertion points:
 - exact endpoint path/options are unchanged;
 - ViewModels cover score/status/evidence/degradation/unknown-value language;
 - action tests cover reserved identifiers, anchor fallbacks, retry query order, corrupt storage, and limits;
+- source-report navigation uses `buildSessionReportPath`; route roots do not interpolate session identifiers;
 - route tests retain loading/error/permission/submitting/retry behavior.
 
 ## 7. Wrong vs Correct

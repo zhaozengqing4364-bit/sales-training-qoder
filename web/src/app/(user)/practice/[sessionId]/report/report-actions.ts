@@ -28,6 +28,10 @@ type HighlightReviewStoragePayload = {
 
 export type ReplayDeepLinkFocus = "main_issue" | "next_goal" | "learning_evidence";
 
+export function buildSessionReportPath(sessionId: string): string {
+    return `/practice/${encodeURIComponent(sessionId)}/report`;
+}
+
 export function buildPresentationPageReplayPath(
     sessionId: string,
     pageNumber: number,

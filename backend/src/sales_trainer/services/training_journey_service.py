@@ -257,7 +257,7 @@ class TrainingJourneyService:
             else raw_total
         )
         loaded_journeys = journeys
-        module_scoped_journeys = self._projection._journeys_with_module_scope(
+        module_scoped_journeys = self._projection.journeys_with_module_scope(
             loaded_journeys,
             module_key,
         )
@@ -267,33 +267,33 @@ class TrainingJourneyService:
         )
         return {
             "generated_at": datetime.now(UTC),
-            "summary": self._projection._analytics_summary(
+            "summary": self._projection.analytics_summary(
                 loaded_journeys, filtered_total
             ),
-            "funnel": self._projection._analytics_funnel(loaded_journeys),
-            "module_summaries": self._projection._analytics_modules(
+            "funnel": self._projection.analytics_funnel(loaded_journeys),
+            "module_summaries": self._projection.analytics_modules(
                 module_scoped_journeys
             ),
-            "learning_topic_summaries": self._projection._analytics_learning_topics(
+            "learning_topic_summaries": self._projection.analytics_learning_topics(
                 loaded_journeys
             ),
-            "weakness_heatmap": self._projection._analytics_weakness_heatmap(
+            "weakness_heatmap": self._projection.analytics_weakness_heatmap(
                 module_scoped_journeys
             ),
-            "trend_data": self._projection._analytics_trend(module_scoped_journeys),
-            "learner_level_summaries": self._projection._analytics_group_counts(
+            "trend_data": self._projection.analytics_trend(module_scoped_journeys),
+            "learner_level_summaries": self._projection.analytics_group_counts(
                 loaded_journeys,
                 key_fn=lambda journey: str(journey["learner_level"]["level_key"]),
                 label_fn=lambda journey: str(journey["learner_level"]["label"]),
                 source_fn=lambda journey: str(journey["learner_level"]["source"]),
             ),
-            "role_level_summaries": self._projection._analytics_group_counts(
+            "role_level_summaries": self._projection.analytics_group_counts(
                 loaded_journeys,
                 key_fn=lambda journey: str(journey["role_level"]["level_key"]),
                 label_fn=lambda journey: str(journey["role_level"]["label"]),
                 source_fn=lambda journey: str(journey["role_level"]["source"]),
             ),
-            "risk_learners": self._projection._analytics_risk_learners(
+            "risk_learners": self._projection.analytics_risk_learners(
                 module_scoped_journeys
             ),
             "additive_observation": additive_observation,
@@ -389,8 +389,8 @@ class TrainingJourneyService:
             )
             for module in modules
         ]
-        initial_overall = self._projection._overall_progress(initial_module_payloads)
-        initial_training_stage = self._projection._journey_stage(
+        initial_overall = self._projection.overall_progress(initial_module_payloads)
+        initial_training_stage = self._projection.journey_stage(
             initial_module_payloads,
             path_payload.enabled,
         )
@@ -411,11 +411,11 @@ class TrainingJourneyService:
             )
             for module in modules
         ]
-        overall = self._projection._overall_progress(module_payloads)
-        diagnostics = self._projection._journey_diagnostics(
+        overall = self._projection.overall_progress(module_payloads)
+        diagnostics = self._projection.journey_diagnostics(
             path_payload.enabled, modules
         )
-        training_stage = self._projection._journey_stage(
+        training_stage = self._projection.journey_stage(
             module_payloads, path_payload.enabled
         )
         retraining_requests = await self._retraining_requests(
@@ -500,7 +500,7 @@ class TrainingJourneyService:
             lock_status = "disabled"
             block_reason = module.disabled_reason or "实时对练运行时尚未接入。"
             diagnostics.append(
-                self._projection._diagnostic(
+                self._projection.diagnostic(
                     "[NEWCOMER_REALTIME_BINDING_INVALID]",
                     "实时对练缺少受治理的 runtime binding，当前只返回 unsupported 状态。",
                     terminal=True,
@@ -515,7 +515,7 @@ class TrainingJourneyService:
                 block_reason = "实时对练缺少 runtime binding。"
                 lock_status = "error_terminal"
                 diagnostics.append(
-                    self._projection._diagnostic(
+                    self._projection.diagnostic(
                         "[NEWCOMER_REALTIME_BINDING_INVALID]",
                         "active path revision 中该模块缺少受治理的 runtime binding。",
                         terminal=True,
@@ -525,7 +525,7 @@ class TrainingJourneyService:
                 block_reason = "实时对练 provider readiness 未通过。"
                 lock_status = "error_terminal"
                 diagnostics.append(
-                    self._projection._diagnostic(
+                    self._projection.diagnostic(
                         "[NEWCOMER_REALTIME_PROVIDER_NOT_READY]",
                         "实时对练 provider readiness 未通过，learner 不得进入运行时。",
                         terminal=True,
@@ -540,7 +540,7 @@ class TrainingJourneyService:
             block_reason = "模块缺少 target_unit_id 绑定。"
             lock_status = "error_terminal"
             diagnostics.append(
-                self._projection._diagnostic(
+                self._projection.diagnostic(
                     "[NEWCOMER_MODULE_BINDING_MISSING]",
                     "active path revision 中该模块缺少目标训练单元绑定。",
                     terminal=True,
@@ -587,7 +587,7 @@ class TrainingJourneyService:
             locked = True
             block_reason = "AI Coach 配置非法。"
             diagnostics.append(
-                self._projection._diagnostic(
+                self._projection.diagnostic(
                     "[AI_COACH_PROMPT_CONFIG_INVALID]",
                     "AI Coach 配置非法，不能作为已完成训练。",
                     terminal=True,
@@ -601,7 +601,7 @@ class TrainingJourneyService:
             locked = True
             block_reason = "AI Coach 缺少生成 Prompt 绑定。"
             diagnostics.append(
-                self._projection._diagnostic(
+                self._projection.diagnostic(
                     "[AI_COACH_PROMPT_TEMPLATE_MISSING]",
                     "AI Coach 已启用但缺少生成 Prompt 绑定。",
                     terminal=True,
@@ -649,7 +649,7 @@ class TrainingJourneyService:
             module.lock_status = "disabled"
             module.block_reason = "当前学员等级暂不可进入该模块。"
             module.diagnostics.append(
-                self._projection._diagnostic(
+                self._projection.diagnostic(
                     "[NEWCOMER_LEARNER_LEVEL_NOT_ALLOWED]",
                     "当前学员等级不满足 active path revision 的模块开放条件。",
                     severity="warning",
@@ -1124,8 +1124,8 @@ class TrainingJourneyService:
             "module_type": module.module_type,
             "kind": module.kind,
             "status": status,
-            "score": self._projection._float_or_none(after_snapshot.get("total_score")),
-            "max_score": self._projection._float_or_none(
+            "score": self._projection.float_or_none(after_snapshot.get("total_score")),
+            "max_score": self._projection.float_or_none(
                 after_snapshot.get("max_score")
             ),
             "passed": passed,
@@ -1175,8 +1175,8 @@ class TrainingJourneyService:
             "module_type": module.module_type,
             "kind": module.kind,
             "status": status,
-            "score": self._projection._float_or_none(score),
-            "max_score": self._projection._float_or_none(max_score),
+            "score": self._projection.float_or_none(score),
+            "max_score": self._projection.float_or_none(max_score),
             "passed": passed,
             "failure_type": failure_type,
             "failure_code": failure_code,
@@ -1203,12 +1203,12 @@ class TrainingJourneyService:
         active: Any,
     ) -> dict[str, Any]:
         latest = history[0] if history else None
-        status = self._projection._module_stage(module, latest)
-        completion_satisfied = self._projection._completion_satisfied(module, latest)
+        status = self._projection.module_stage(module, latest)
+        completion_satisfied = self._projection.completion_satisfied(module, latest)
         diagnostics = list(module.diagnostics)
         if module.kind == "ai_coach" and latest and latest.get("passed") is False:
             diagnostics.append(
-                self._projection._diagnostic(
+                self._projection.diagnostic(
                     "[AI_COACH_NOT_MASTERED]",
                     "AI Coach 尚未达标，需要继续训练或补救。",
                     severity="warning",
@@ -1247,7 +1247,7 @@ class TrainingJourneyService:
             "outcome_history": history,
             "unmet_reasons": diagnostics,
             "diagnostics": diagnostics,
-            "next_action": self._projection._next_action(module, status),
+            "next_action": self._projection.next_action(module, status),
         }
 
     @staticmethod
@@ -1681,9 +1681,9 @@ class TrainingJourneyService:
         )
         policy = resolution.value
         if policy.get("enabled") is False or resolution.source == "database_disabled":
-            return self._projection._learner_level_payload(
-                policy=self._projection._default_learner_level_policy(),
-                level=self._projection._default_learner_level_policy()["default_level"],
+            return self._projection.learner_level_payload(
+                policy=self._projection.default_learner_level_policy(),
+                level=self._projection.default_learner_level_policy()["default_level"],
                 source="training_projection",
                 config_revision_id=None,
                 fallback_applied=True,
@@ -1692,7 +1692,7 @@ class TrainingJourneyService:
                 management_entry="/admin/business-rules/sales-trainer-learner-level",
             )
 
-        matched_level = self._projection._match_learner_level(
+        matched_level = self._projection.match_learner_level(
             policy=policy,
             learner=learner,
             training_stage=training_stage,
@@ -1702,7 +1702,7 @@ class TrainingJourneyService:
             "org_rule" if resolution.source == "database" else "training_projection"
         )
         fallback_applied = resolution.fallback_reason is not None
-        return self._projection._learner_level_payload(
+        return self._projection.learner_level_payload(
             policy=policy,
             level=matched_level,
             source=source,
@@ -1727,8 +1727,8 @@ class TrainingJourneyService:
         )
         policy = resolution.value
         if policy.get("enabled") is False or resolution.source == "database_disabled":
-            default_policy = self._projection._default_role_level_policy()
-            return self._projection._learner_level_payload(
+            default_policy = self._projection.default_role_level_policy()
+            return self._projection.learner_level_payload(
                 policy=default_policy,
                 level=default_policy["default_level"],
                 source="training_projection",
@@ -1739,7 +1739,7 @@ class TrainingJourneyService:
                 management_entry="/admin/business-rules/sales-trainer-role-level",
             )
 
-        matched_level = self._projection._match_learner_level(
+        matched_level = self._projection.match_learner_level(
             policy=policy,
             learner=learner,
             training_stage=training_stage,
@@ -1749,7 +1749,7 @@ class TrainingJourneyService:
             "org_rule" if resolution.source == "database" else "training_projection"
         )
         fallback_applied = resolution.fallback_reason is not None
-        return self._projection._learner_level_payload(
+        return self._projection.learner_level_payload(
             policy=policy,
             level=matched_level,
             source=source,

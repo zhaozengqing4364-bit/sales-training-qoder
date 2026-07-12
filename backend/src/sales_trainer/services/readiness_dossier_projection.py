@@ -817,6 +817,15 @@ class ReadinessDossierProjection:
             "generated_at": generated_at,
         }
 
+    # Explicit application-facing projection interface. Helpers that compose
+    # these operations stay private to this deterministic policy module.
+    validate_dossier_approval = _ensure_dossier_can_be_approved
+    dossier_payload = _dossier_payload
+    workbench_groups = _workbench_groups
+    default_review_evidence_ids = _default_review_evidence_ids
+    default_review_capability_keys = _default_review_capability_keys
+    blocked_journey = _blocked_journey
+
 
 def _provider_readiness(module: dict[str, Any]) -> dict[str, Any] | None:
     source = module.get("source")
