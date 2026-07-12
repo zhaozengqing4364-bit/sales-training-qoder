@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,6 +56,10 @@ from sales_trainer.services.quiz_attempt_context_update import (
     attach_attempt_context_to_answers,
 )
 from sales_trainer.services.quiz_service import QuizService, QuizServiceError
+
+if TYPE_CHECKING:
+    from sales_trainer.orchestration.activities.base import ActivityExecutionContext
+    from sales_trainer.services.path_attempt_context_service import PathAttemptContext
 
 
 class ExamPaperService:
@@ -164,12 +170,25 @@ class ExamPaperService:
         payload: PaperAttemptCreate,
         *,
         actor: User,
+        execution_context: ActivityExecutionContext | None = None,
     ) -> SalesTrainerQuizAttempt:
         paper = await self.get_published_paper(payload.paper_id)
-        await ArticleExamPrerequisiteService(self._db).require_article_completed(
-            paper,
-            actor=actor,
-        )
+        if execution_context is not None:
+            if (
+                execution_context.activity.type != "quiz"
+                or execution_context.activity.config.exam_paper_id != payload.paper_id
+                or execution_context.learner_id != str(actor.user_id)
+            ):
+                raise ExamPaperServiceError(
+                    "[NEWCOMER_QUIZ_CONTEXT_MISMATCH]",
+                    "当前考试与训练活动不匹配。",
+                    409,
+                )
+        else:
+            await ArticleExamPrerequisiteService(self._db).require_article_completed(
+                paper,
+                actor=actor,
+            )
         revision = await SalesTrainerAssetRevisionService(self._db).active_revision(
             resource_type=PAPER_RESOURCE_TYPE,
             logical_id=orm_scalar(paper.paper_id, str),
@@ -180,8 +199,10 @@ class ExamPaperService:
             and isinstance(revision_payload, dict)
             and paper_revision_has_question_snapshots(revision_payload)
         ):
-            path_context = await PathAttemptContextService(self._db).resolve_for_paper(
-                paper
+            path_context = (
+                _activity_attempt_context(execution_context)
+                if execution_context is not None
+                else await PathAttemptContextService(self._db).resolve_for_paper(paper)
             )
             try:
                 return await PaperSnapshotAttemptService(self._db).submit_attempt(
@@ -213,8 +234,10 @@ class ExamPaperService:
             raise ExamPaperServiceError(exc.code, exc.message, exc.status_code) from exc
         if revision is not None:
             attempt.paper_revision_id = revision.revision_id
-            path_context = await PathAttemptContextService(self._db).resolve_for_paper(
-                paper
+            path_context = (
+                _activity_attempt_context(execution_context)
+                if execution_context is not None
+                else await PathAttemptContextService(self._db).resolve_for_paper(paper)
             )
             await attach_attempt_context_to_answers(
                 self._db,
@@ -234,3 +257,16 @@ class ExamPaperService:
 
     async def serialize_paper(self, paper: SalesTrainerExamPaper) -> dict[str, object]:
         return await serialize_exam_paper(self._db, paper)
+
+
+def _activity_attempt_context(context: ActivityExecutionContext) -> PathAttemptContext:
+    from sales_trainer.services.path_attempt_context_service import PathAttemptContext
+
+    return PathAttemptContext(
+        path_key="newcomer_training_path_orchestration",
+        path_revision_id=context.path_revision_id,
+        path_revision_no=None,
+        module_key=context.module_id,
+        module_type="activity_orchestrated",
+        legacy_snapshot_only=False,
+    )

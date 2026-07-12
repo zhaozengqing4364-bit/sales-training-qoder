@@ -198,6 +198,12 @@ class LearningProgressAdapter:
             chapters=list(chapters),
         )
 
+    async def study_content(self, *, user_id: str, content_id: str) -> Any:
+        return await self._service.get_study_content(
+            user_id=user_id,
+            content_id=content_id,
+        )
+
     async def complete_chapter(
         self,
         *,

@@ -1032,7 +1032,7 @@ git commit -m "feat(newcomer): add activity handler registry"
 - Consumes: `ActivityHandler`, repositories, LearningProgress adapter, ExamPaper service.
 - Produces: `LessonActivityHandler`, `QuizActivityHandler`, activity-aware paper submission.
 
-- [ ] **Step 1: Write failing lesson and quiz tests**
+- [x] **Step 1: Write failing lesson and quiz tests**
 
 ```python
 @pytest.mark.asyncio
@@ -1061,13 +1061,13 @@ async def test_should_submit_quiz_from_activity_without_business_module_key(test
     assert attempt.activity_snapshot["activity_id"] == quiz_context.activity.activity_id
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `cd backend && ./.venv/bin/pytest tests/unit/test_newcomer_lesson_activity.py tests/unit/test_newcomer_quiz_activity.py -q`
 
 Expected: handlers do not exist.
 
-- [ ] **Step 3: Implement lesson handler**
+- [x] **Step 3: Implement lesson handler**
 
 The handler must load the published LearningContent through `LearningProgressAdapter`, reject archived/draft content, expose chapter progress, and create/update one unified attempt when completion is reached.
 
@@ -1101,7 +1101,7 @@ class LessonActivityHandler:
 
 For `learner_confirmed`, expose a confirm action and complete the attempt idempotently without writing chapter progress.
 
-- [ ] **Step 4: Refactor quiz submission around activity context**
+- [x] **Step 4: Refactor quiz submission around activity context**
 
 Add an optional execution context to the paper service:
 
@@ -1117,7 +1117,7 @@ async def submit_paper_attempt(
 
 When context is present, validate the paper ID and prerequisites against the pinned activity revision, skip `ArticleExamPrerequisiteService`, freeze the activity context into the answer attempt context, then attach the resulting quiz evidence to the unified attempt. Keep non-newcomer callers functional without reading old newcomer path config.
 
-- [ ] **Step 5: Run focused and affected tests**
+- [x] **Step 5: Run focused and affected tests**
 
 Run:
 
@@ -1128,7 +1128,7 @@ cd backend
 
 Expected: activity tests pass; generic paper tests remain green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/src/sales_trainer/orchestration/activities/lesson.py backend/src/sales_trainer/orchestration/activities/quiz.py backend/src/sales_trainer/services/exam_paper_service.py backend/src/sales_trainer/services/curriculum_practice_adapter.py backend/tests/unit/test_newcomer_lesson_activity.py backend/tests/unit/test_newcomer_quiz_activity.py
