@@ -33,19 +33,19 @@ with the retained StepFun transport base. Compatibility with active consumers st
 - Consumes: `RuntimeHandlerFactoryKey`, dependency policy and current source tree.
 - Produces: AST/import/consumer contracts that fail against the pre-Gate-6 structure.
 
-- [ ] **Step 1: Add Red contracts**
+- [x] **Step 1: Add Red contracts**
 
   Assert runtime selections have no `handler_factory_path/name`, plugins expose no executable descriptor API,
   Presentation source imports no `sales_bot`, `common.roleplay_contracts` is absent, root factories are exhaustive,
   unknown keys fail closed, model/frontend retain floors do not shrink accidentally, and the graph has at most 51
   edges with no `presentation_coach -> sales_bot`.
 
-- [ ] **Step 2: Run Red and record exact failures**
+- [x] **Step 2: Run Red and record exact failures**
 
   Run `backend/.venv/bin/python -m pytest backend/tests/unit/test_gate6_compatibility_retirement.py --no-cov -q`.
   Expected failures are the old string fields, inherited import, forwarding module and 52-edge baseline only.
 
-- [ ] **Step 3: Save CodeGraph impact and commit**
+- [x] **Step 3: Save CodeGraph impact and commit**
 
   Record callers/affected tests for `ScenarioRuntimeHandlerSelection`, `LegacyPresentationStepFunRealtimeHandler`,
   `dispatch_scenario_plugin` and `common.roleplay_contracts`. Commit as

@@ -50,3 +50,12 @@ Date: 2026-07-12 UTC
   Presentation Engine flag-false rollback.
 - The application-root composition must not be hidden in a domain package or exempted from tests.
 - No database schema, migration, external provider call, deployment or production data mutation is in scope.
+
+## CodeGraph impact selection
+
+- `ScenarioRuntimeHandlerSelection`: 10 affected symbols across plugin selection, both roots and their tests.
+- `dispatch_scenario_plugin`: 13 affected symbols including both WebSocket entry paths.
+- `LegacyPresentationStepFunRealtimeHandler`: 129 affected symbols; required coverage includes Presentation
+  adapter/Engine, StepFun shared handler/upstream, payload snapshots and practice evidence.
+- `common.roleplay_contracts`: 6 affected imports; one production Curriculum consumer and five compatibility-test
+  imports/locations.
