@@ -1495,7 +1495,7 @@ POST /activities/{activity_id}/assignments
 
 Every write accepts or derives a client token, repeats object-level access checks, and returns the updated activity projection.
 
-- [ ] **Step 5: Adapt readiness, records, and admin journey consumers**
+- [x] **Step 5: Adapt readiness, records, and admin journey consumers**
 
 Replace `module_key + kind` evidence identity with stable `activity_id + activity_type`. Readiness competencies derive from activity snapshots and configured rubric/quiz capability metadata, not product names. Training records expose phase/module/activity titles from frozen snapshots. Admin list/analytics filter by `activity_id`, `activity_type`, phase, and module.
 
@@ -1554,7 +1554,7 @@ git commit -m "feat(newcomer): project activity-based journeys"
 - Consumes: orchestration admin/revision APIs and shared asset services.
 - Produces: idempotent representative seed and bounded dry-run/apply reset.
 
-- [ ] **Step 1: Write failing reset and seed tests**
+- [x] **Step 1: Write failing reset and seed tests**
 
 ```python
 @pytest.mark.asyncio
@@ -1583,17 +1583,17 @@ async def test_should_report_without_mutating_in_dry_run(test_db):
     assert after == before
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `cd backend && ./.venv/bin/pytest tests/integration/test_newcomer_orchestration_seed.py tests/scripts/test_reset_newcomer_training_prototype.py -q`
 
 Expected: new seed/reset contract is absent.
 
-- [ ] **Step 3: Replace the seed with orchestration data**
+- [x] **Step 3: Replace the seed with orchestration data**
 
 Seed one path with phases `入门认知`, `产品能力`, `实战演练`; include PPT lesson/audio, product A/B lesson/quiz/audio, standard Demo audio, technical lesson/quiz, optional AI Coach, assignment, and StepAudio realtime when the published runtime profile is ready. Use existing asset services to create and publish content, papers, rubrics, materials, and templates. Publish via `TrainingPathRevisionService`, then verify journey projection for the seed learner.
 
-- [ ] **Step 4: Implement bounded reset**
+- [x] **Step 4: Implement bounded reset**
 
 CLI:
 
@@ -1605,7 +1605,7 @@ cd backend
 
 Delete only orchestration/path resource types, legacy newcomer path/topic revisions, newcomer enrollments/attempts, and known newcomer seed records. Never delete shared LearningContent, papers, materials, prompts, PracticeTemplates, users, or runtime profiles if another domain references them. Print per-table affected counts and rollback the transaction on any failure.
 
-- [ ] **Step 5: Remove fixed backend authority**
+- [x] **Step 5: Remove fixed backend authority**
 
 Before deleting, run:
 
@@ -1617,7 +1617,7 @@ rg -n "CANONICAL_NEWCOMER_MODULE_KEYS|business_etiquette|customer_faq|company_pr
 
 Update every remaining consumer to orchestration contracts, then delete the listed fixed-path files and remove their router registrations. Keep generic asset, scoring, record, revision, and runtime services.
 
-- [ ] **Step 6: Run backend newcomer suite**
+- [x] **Step 6: Run backend newcomer suite**
 
 Run:
 

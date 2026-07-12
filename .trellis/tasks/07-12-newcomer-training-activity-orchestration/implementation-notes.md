@@ -57,3 +57,10 @@
 - Task 8：统一 attempt 快照补齐 enrollment/path revision/phase/module 上下文；TrainingRecordService 支持 activity_id/type/phase/module 过滤和冻结标题投影。
 - Task 8 focused + readiness regression + activity records 共 `15 passed`；Ruff、Mypy 通过。
 - Task 8 未关闭项：ReadinessDossier 与旧 admin journey 仍引用将在 Task 9 删除的 TrainingJourneyService；Step 5 保持未勾选，必须在固定后端权威删除时改为 orchestration projection 后再关闭。
+- Task 9：seed 直接生成三阶段、产品 A/B/标准 Demo 与六类代表活动，默认执行幂等 seed，`--verify-only` 只读验证；专项 `3 passed`。
+- Task 9：reset 仅作用于新人编排 enrollment/attempt 与三种新人路径 revision resource type，支持 dry-run、确认词与异常回滚；专项 `2 passed`。
+- Task 9：Readiness 与 TrainingRecord 统一使用冻结的 `activity_id/activity_type/phase/module` 身份；能力项从 attempt result snapshot 投影，复核决定追加审计记录且不覆盖 attempt。
+- Task 9：录音与考试重评通过统一 activity attempt 的 evidence 反查对象范围，历史重评继续追加 evidence，不恢复旧 record authority；受影响集成测试 `2 passed`。
+- Task 9：删除固定路径、专题、商务礼仪、旧 AI Coach chat 与旧 dashboard/journey authority 及其过期测试；保留 LearningContent、ExamPaper、材料、评分、revision、StepAudio 与统一 AI Coach session 引擎。
+- Task 9 结构检查：`CANONICAL_NEWCOMER_MODULE_KEYS|business_etiquette|customer_faq|company_product_demo|business_skills` 在 `backend/src/sales_trainer` 运行时代码中零命中；应用 composition root 可导入。
+- Task 9 后端新人回归：`84 passed`；Ruff 全通过；Mypy `Success: no issues found in 116 source files`。

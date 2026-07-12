@@ -240,9 +240,11 @@ class SalesTrainerAudioRegradeService:
         viewer: User,
         team_department: str | None,
     ) -> None:
-        record = await TrainingRecordService(self._db).get_record_for_viewer(
-            "audio_submission",
-            submission_id,
+        record = await TrainingRecordService(
+            self._db
+        ).get_record_by_evidence_for_viewer(
+            evidence_type="audio_submission",
+            evidence_id=submission_id,
             viewer=viewer,
             team_department=team_department,
         )

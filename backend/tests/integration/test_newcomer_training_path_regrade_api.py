@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.auth.service import create_access_token
 from common.db.models import User
 from curriculum_practice.models import QuestionCategory, QuestionItem
-from sales_trainer.models import SalesTrainerAssetRevision, SalesTrainerOperationLog
+from sales_trainer.models import (
+    NewcomerTrainingActivityAttempt,
+    NewcomerTrainingEnrollment,
+    SalesTrainerAssetRevision,
+    SalesTrainerOperationLog,
+)
 from sales_trainer.services.regrade_service import (
     SalesTrainerRegradeService,
     SalesTrainerRegradeServiceError,
@@ -52,6 +57,42 @@ def _question(question_id: str, *, category_id: str) -> QuestionItem:
         status="published",
         usage_scope="sales_trainer",
     )
+
+
+async def _link_activity_evidence(
+    db: AsyncSession, *, learner: User, evidence_id: str
+) -> None:
+    revision = SalesTrainerAssetRevision(
+        revision_id=str(uuid.uuid4()),
+        resource_type="newcomer_training_path_orchestration",
+        logical_id=f"quiz-regrade-{uuid.uuid4()}",
+        revision_no=1,
+        status="published",
+        payload_json={},
+        payload_hash=uuid.uuid4().hex,
+    )
+    enrollment = NewcomerTrainingEnrollment(
+        learner_id=str(learner.user_id),
+        path_id=revision.logical_id,
+        path_revision_id=str(revision.revision_id),
+    )
+    db.add_all([revision, enrollment])
+    await db.flush()
+    db.add(
+        NewcomerTrainingActivityAttempt(
+            enrollment_id=str(enrollment.enrollment_id),
+            path_revision_id=str(revision.revision_id),
+            activity_id="quiz-regrade-activity",
+            activity_type="quiz",
+            attempt_no=1,
+            status="completed",
+            client_token=f"quiz-regrade-{uuid.uuid4()}",
+            activity_snapshot={"activity_id": "quiz-regrade-activity"},
+            evidence_type="quiz_attempt",
+            evidence_id=evidence_id,
+        )
+    )
+    await db.commit()
 
 
 @pytest.mark.asyncio
@@ -120,6 +161,9 @@ async def test_should_regrade_quiz_attempt_as_explicit_high_risk_append_only_act
     assert attempt["paper_revision_id"] == first_revision.revision_id
     assert attempt["total_score"] == 10
     assert attempt["passed"] is True
+    await _link_activity_evidence(
+        test_db, learner=learner, evidence_id=str(attempt["attempt_id"])
+    )
 
     question.scoring_criteria = {
         **question.scoring_criteria,

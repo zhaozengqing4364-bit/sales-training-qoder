@@ -13,11 +13,17 @@ from common.db.models import User
 from common.monitoring.logger import get_trace_id
 from common.oss.signing import OssConfigError, get_oss_signing_service
 from sales_trainer.models import (
+    NewcomerTrainingEnrollment,
     SalesTrainerAssetRevision,
     SalesTrainerAudioSubmission,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
     SalesTrainerUnit,
+)
+from sales_trainer.orchestration.contracts import TrainingPathPayload
+from sales_trainer.orchestration.revision_service import (
+    PATH_LOGICAL_ID,
+    PATH_RESOURCE_TYPE,
 )
 from sales_trainer.permissions import (
     can_manage_sales_trainer,
@@ -31,7 +37,6 @@ from sales_trainer.schemas import (
     SalesTrainerMaterialCreate,
     SalesTrainerMaterialUpdate,
     SalesTrainerMaterialVersionCreate,
-    SalesTrainerPathConfig,
     SalesTrainerTaskBriefConfig,
     SalesTrainerUnitMaterialsConfig,
 )
@@ -40,9 +45,6 @@ from sales_trainer.services.asset_revision_service import (
 )
 from sales_trainer.services.audio_evaluation_scenarios import (
     resolve_audio_evaluation_scenario_from_config,
-)
-from sales_trainer.services.effective_audio_training_config import (
-    merge_audio_path_config,
 )
 from sales_trainer.services.material_metadata_update import (
     material_metadata_snapshot,
@@ -53,13 +55,6 @@ from sales_trainer.services.material_publish_workflow import (
     publish_material_version,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
-from sales_trainer.services.path_config_models import (
-    NEWCOMER_PATH_LOGICAL_ID,
-    NEWCOMER_PATH_RESOURCE_TYPE,
-    payload_from_revision,
-)
-from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
-from sales_trainer.services.path_service import SalesTrainerPathService
 
 DEFAULT_MATERIAL_FILE_URL_EXPIRES_SECONDS = 3600
 
@@ -700,48 +695,34 @@ class SalesTrainerMaterialService:
         actor: User,
         version: SalesTrainerMaterialVersion,
     ) -> bool:
-        projection = await SalesTrainerPathConfigService(self._db).active_projection()
-        if projection is None or not projection.items:
-            return False
-        learner_paths = await SalesTrainerPathService(self._db).list_paths_for_user(
-            str(actor.user_id)
-        )
-        accessible_unit_ids: set[str] = set()
-        active_revision_id = str(projection.revision_id)
-        for path in learner_paths:
-            if str(path.get("path_revision_id") or "") != active_revision_id:
-                continue
-            for level in path.get("levels") or []:
-                if bool(level.get("locked")):
-                    continue
-                unit_id = str(level.get("unit_id") or "").strip()
-                if unit_id:
-                    accessible_unit_ids.add(unit_id)
-        if not accessible_unit_ids:
-            return False
-
-        target_version_id = str(version.version_id)
-        for item in projection.items:
-            if str(item.unit.unit_id) not in accessible_unit_ids:
-                continue
-            config_override = merge_audio_path_config(
-                _unit_config(item.unit) or {},
-                cast(SalesTrainerPathConfig, item.path_config),
+        enrollment = await self._db.scalar(
+            select(NewcomerTrainingEnrollment).where(
+                NewcomerTrainingEnrollment.learner_id == str(actor.user_id),
+                NewcomerTrainingEnrollment.path_id == PATH_LOGICAL_ID,
+                NewcomerTrainingEnrollment.status == "active",
             )
-            try:
-                material_items = await self.resolve_unit_material_items(
-                    item.unit,
-                    learner_visible=True,
-                    config_override=config_override,
-                )
-            except MaterialServiceError:
-                continue
-            for material_item in material_items:
-                current_version = material_item.get("current_version")
-                if not isinstance(current_version, dict):
-                    continue
-                if str(current_version.get("version_id") or "") == target_version_id:
-                    return True
+        )
+        if enrollment is None:
+            return False
+        revision = await self._db.get(
+            SalesTrainerAssetRevision, str(enrollment.path_revision_id)
+        )
+        if revision is None:
+            return False
+        payload = TrainingPathPayload.model_validate(revision.payload_json)
+        target_version_id = str(version.version_id)
+        for phase in payload.phases:
+            for module in phase.modules:
+                for activity in module.activities:
+                    if activity.type != "audio_assessment":
+                        continue
+                    if activity.config.material_id != str(version.material_id):
+                        continue
+                    material = await self._db.get(
+                        SalesTrainerMaterial, str(version.material_id)
+                    )
+                    if material is not None and str(material.current_version_id) == target_version_id:
+                        return True
         return False
 
     async def _path_reference_blockers(
@@ -757,12 +738,12 @@ class SalesTrainerMaterialService:
         revisions: list[SalesTrainerAssetRevision] = []
         revisions_service = SalesTrainerAssetRevisionService(self._db)
         active = await revisions_service.active_revision(
-            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-            logical_id=NEWCOMER_PATH_LOGICAL_ID,
+            resource_type=PATH_RESOURCE_TYPE,
+            logical_id=PATH_LOGICAL_ID,
         )
         working = await revisions_service.latest_working_revision(
-            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-            logical_id=NEWCOMER_PATH_LOGICAL_ID,
+            resource_type=PATH_RESOURCE_TYPE,
+            logical_id=PATH_LOGICAL_ID,
         )
         for revision in (active, working):
             if revision is None:
@@ -772,24 +753,28 @@ class SalesTrainerMaterialService:
 
         blockers: list[dict[str, Any]] = []
         for revision in revisions:
-            payload = payload_from_revision(revision)
-            for module in payload.modules:
-                if module.material_id == material.material_id or (
-                    module.material_version_id is not None
-                    and module.material_version_id in version_ids
-                ):
-                    blockers.append(
-                        {
-                            "source": "active_revision"
-                            if revision is active
-                            else "working_revision",
-                            "revision_id": str(revision.revision_id),
-                            "revision_no": int(revision.revision_no),
-                            "module_key": module.module_key,
-                            "material_id": module.material_id,
-                            "material_version_id": module.material_version_id,
-                        }
-                    )
+            payload = TrainingPathPayload.model_validate(revision.payload_json)
+            for phase in payload.phases:
+                for module in phase.modules:
+                    for activity in module.activities:
+                        if activity.type != "audio_assessment":
+                            continue
+                        if activity.config.material_id != str(material.material_id):
+                            continue
+                        blockers.append(
+                            {
+                                "source": "active_revision"
+                                if revision is active
+                                else "working_revision",
+                                "revision_id": str(revision.revision_id),
+                                "revision_no": int(revision.revision_no),
+                                "phase_id": phase.phase_id,
+                                "module_id": module.module_id,
+                                "activity_id": activity.activity_id,
+                                "material_id": activity.config.material_id,
+                                "material_version_ids": sorted(version_ids),
+                            }
+                        )
         return blockers
 
     def _file_access_from_version(

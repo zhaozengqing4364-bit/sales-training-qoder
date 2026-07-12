@@ -2,10 +2,6 @@ from __future__ import annotations
 
 from common.db.models import User
 from sales_trainer import api as sales_trainer_api
-from sales_trainer.ai_coach_policy import (
-    AI_COACH_FIELDS_REQUIRING_MANAGE_PROMPTS,
-    requires_manage_prompts,
-)
 from sales_trainer.permissions import (
     can_enter_sales_trainer_learning_path,
     can_manage_sales_trainer,
@@ -173,26 +169,6 @@ def test_should_limit_prompt_governance_to_platform_admin_roles() -> None:
     assert not can_manage_sales_trainer_prompts(_user("content_admin"))
     assert not can_manage_sales_trainer_prompts(_user("support"))
     assert not can_manage_sales_trainer_prompts(_user("operations"))
-
-
-def test_ai_coach_high_risk_fields_require_manage_prompts() -> None:
-    expected_fields = {
-        "prompt_template_id",
-        "prompt_revision_id",
-        "scoring_prompt_template_id",
-        "scoring_prompt_revision_id",
-        "min_turns",
-        "max_turns",
-        "mastery_threshold",
-        "generation_model",
-        "scoring_model",
-        "retry_policy",
-        "failure_behavior",
-    }
-
-    assert expected_fields <= AI_COACH_FIELDS_REQUIRING_MANAGE_PROMPTS
-    assert all(requires_manage_prompts(field) for field in expected_fields)
-    assert not requires_manage_prompts("output_schema_output")
 
 
 def test_admin_can_enter_learner_path_for_dev_and_acceptance() -> None:

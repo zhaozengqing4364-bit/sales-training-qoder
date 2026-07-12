@@ -13,12 +13,9 @@ from sales_trainer.models import (
     SalesTrainerUnit,
     SalesTrainerUnitQuestion,
 )
+from sales_trainer.permissions import can_learn_newcomer_training_path
 from sales_trainer.rules import resolve_quiz_pass_threshold
 from sales_trainer.schemas import QuizAttemptCreate
-from sales_trainer.services.learner_unit_access import (
-    LearnerUnitAccessError,
-    require_learner_active_path_unit_access,
-)
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.question_bank import QuestionBankAdapter
 from sales_trainer.services.quiz_attempt_payloads import (
@@ -92,18 +89,12 @@ class QuizService:
                 "[SALES_TRAINER_UNIT_TYPE_MISMATCH]",
                 "该训练单元不是做题模块。",
             )
-        try:
-            await require_learner_active_path_unit_access(
-                self._db,
-                actor=actor,
-                unit_id=str(unit.unit_id),
-            )
-        except LearnerUnitAccessError as exc:
+        if not can_learn_newcomer_training_path(actor):
             raise QuizServiceError(
-                exc.code,
-                exc.message,
-                status_code=exc.status_code,
-            ) from exc
+                "[NEWCOMER_ACTIVITY_SCOPE_MISMATCH]",
+                "当前账号不能提交训练考试。",
+                status_code=403,
+            )
         unit_id = str(unit.unit_id)
         bindings = await self._load_bindings(unit_id)
         if not bindings:

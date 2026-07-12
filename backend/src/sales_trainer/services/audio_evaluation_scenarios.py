@@ -1,10 +1,11 @@
+"""Generic audio scenario metadata for non-orchestrated unit callers."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Final, Literal
+from typing import Any, Literal
 
 AudioMaterialPolicy = Literal["required_confirmed", "optional", "none"]
-AudioRuntimeShape = Literal["single_audio", "duration_option_group"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,7 +17,7 @@ class AudioEvaluationScenario:
     module_type: Literal["audio_scoring", "audio_scoring_group"]
     material_policy: AudioMaterialPolicy
     prompt_required: bool
-    runtime_shape: AudioRuntimeShape
+    runtime_shape: Literal["single_audio", "duration_option_group"]
     completion_rule: Literal["passed", "scored", "submitted"]
     primary_action_label: str
     default_order_index: int
@@ -32,119 +33,11 @@ class AudioEvaluationScenario:
         return self.material_policy == "required_confirmed"
 
 
-PPT_EXPLANATION_SCENARIO_KEY: Final = "ppt_explanation"
-COMPANY_PRODUCT_DEMO_SCENARIO_KEY: Final = "company_product_demo"
-ELEVATOR_PITCH_SCENARIO_KEY: Final = "elevator_pitch"
-CUSTOMER_FAQ_ORAL_DRILL_SCENARIO_KEY: Final = "customer_faq_oral_drill"
-
-
-AUDIO_EVALUATION_SCENARIOS: Final[dict[str, AudioEvaluationScenario]] = {
-    PPT_EXPLANATION_SCENARIO_KEY: AudioEvaluationScenario(
-        scenario_key=PPT_EXPLANATION_SCENARIO_KEY,
-        purpose_key="ppt_pitch",
-        module_key="ppt_explanation",
-        display_name="PPT 讲解",
-        module_type="audio_scoring",
-        material_policy="required_confirmed",
-        prompt_required=True,
-        runtime_shape="single_audio",
-        completion_rule="passed",
-        primary_action_label="上传讲解录音",
-        default_order_index=1,
-        capability_keys=(
-            "expression_clarity",
-            "structured_presentation",
-            "product_understanding",
-        ),
-        description="学习并讲解当前 PPT 材料，上传录音后由 AI 转写和评分。",
-        task_brief_title="PPT 讲解",
-        task_brief_purpose="让新人先掌握公司介绍、产品价值和客户沟通结构。",
-        task_brief_scenario="面向首次见客户前的内部演练，按最新 PPT 材料完成讲解。",
-        material_error_code="[PPT_MATERIAL_BINDING_REQUIRED]",
-    ),
-    COMPANY_PRODUCT_DEMO_SCENARIO_KEY: AudioEvaluationScenario(
-        scenario_key=COMPANY_PRODUCT_DEMO_SCENARIO_KEY,
-        purpose_key="company_product_demo",
-        module_key="company_product_demo",
-        display_name="公司产品 Demo",
-        module_type="audio_scoring",
-        material_policy="required_confirmed",
-        prompt_required=True,
-        runtime_shape="single_audio",
-        completion_rule="passed",
-        primary_action_label="上传 Demo 讲解录音",
-        default_order_index=2,
-        capability_keys=(
-            "expression_clarity",
-            "structured_presentation",
-            "product_understanding",
-        ),
-        description="围绕公司产品资料或 Demo 脚本完成讲解录音，由 AI 判断表达、结构和产品理解。",
-        task_brief_title="公司产品 Demo",
-        task_brief_purpose="训练新人把产品价值、关键功能和客户收益讲清楚。",
-        task_brief_scenario="面向客户产品演示前的内部演练，按后台绑定的产品资料或 Demo 脚本完成讲解。",
-    ),
-    ELEVATOR_PITCH_SCENARIO_KEY: AudioEvaluationScenario(
-        scenario_key=ELEVATOR_PITCH_SCENARIO_KEY,
-        purpose_key="elevator_pitch",
-        module_key="elevator_pitch",
-        display_name="金字塔演讲",
-        module_type="audio_scoring_group",
-        material_policy="optional",
-        prompt_required=True,
-        runtime_shape="duration_option_group",
-        completion_rule="passed",
-        primary_action_label="上传金字塔演讲录音",
-        default_order_index=3,
-        capability_keys=(
-            "expression_clarity",
-            "structured_presentation",
-            "customer_perspective",
-        ),
-        description="配置多个录音时长选项，学员选择时长后上传演讲录音。",
-        task_brief_title="金字塔演讲",
-        task_brief_purpose="训练新人用短时间讲清公司、产品价值和下一步邀约。",
-        task_brief_scenario="客户给你一段有限时间介绍机会，需要按金字塔结构完成清晰、有重点的价值说明。",
-    ),
-    CUSTOMER_FAQ_ORAL_DRILL_SCENARIO_KEY: AudioEvaluationScenario(
-        scenario_key=CUSTOMER_FAQ_ORAL_DRILL_SCENARIO_KEY,
-        purpose_key="customer_faq_oral_drill",
-        module_key="customer_faq_oral_drill",
-        display_name="客户问答口播演练",
-        module_type="audio_scoring",
-        material_policy="optional",
-        prompt_required=True,
-        runtime_shape="single_audio",
-        completion_rule="scored",
-        primary_action_label="上传问答录音",
-        default_order_index=4,
-        capability_keys=(
-            "customer_perspective",
-            "objection_handling",
-            "expression_clarity",
-        ),
-        description="抽取客户常见问题完成 60-120 秒口播回答，由 AI 评估事实准确、价值表达和边界意识。",
-        task_brief_title="客户问答口播演练",
-        task_brief_purpose="训练新人把客户常见问题讲准、讲短，并知道何时转售前确认。",
-        task_brief_scenario="客户现场追问产品、部署、案例或风险边界时，选择 1-3 个问题完成连续回答。",
-    ),
-}
-
-_SCENARIO_BY_MODULE_KEY: Final = {
-    scenario.module_key: scenario for scenario in AUDIO_EVALUATION_SCENARIOS.values()
-}
-_SCENARIO_BY_PURPOSE_KEY: Final = {
-    scenario.purpose_key: scenario for scenario in AUDIO_EVALUATION_SCENARIOS.values()
-}
-_LEGACY_PURPOSE_TO_SCENARIO: Final = {
-    "pyramid_speech": ELEVATOR_PITCH_SCENARIO_KEY,
-}
-
-
 def get_audio_evaluation_scenario(
     scenario_key: str | None,
 ) -> AudioEvaluationScenario | None:
-    return AUDIO_EVALUATION_SCENARIOS.get(str(scenario_key)) if scenario_key else None
+    del scenario_key
+    return None
 
 
 def resolve_audio_evaluation_scenario(
@@ -153,21 +46,7 @@ def resolve_audio_evaluation_scenario(
     module_key: str | None = None,
     purpose_key: str | None = None,
 ) -> AudioEvaluationScenario | None:
-    scenario = get_audio_evaluation_scenario(scenario_key)
-    if scenario is not None:
-        return scenario
-    if module_key:
-        scenario = _SCENARIO_BY_MODULE_KEY.get(str(module_key))
-        if scenario is not None:
-            return scenario
-    if purpose_key:
-        purpose = str(purpose_key)
-        scenario = _SCENARIO_BY_PURPOSE_KEY.get(purpose)
-        if scenario is not None:
-            return scenario
-        for prefix, legacy_scenario_key in _LEGACY_PURPOSE_TO_SCENARIO.items():
-            if purpose.startswith(prefix):
-                return AUDIO_EVALUATION_SCENARIOS[legacy_scenario_key]
+    del scenario_key, module_key, purpose_key
     return None
 
 
@@ -178,20 +57,46 @@ def resolve_audio_evaluation_scenario_from_config(
     module_key: str | None = None,
     purpose_key: str | None = None,
 ) -> AudioEvaluationScenario | None:
-    raw_config = config if isinstance(config, dict) else {}
-    audio = raw_config.get("audio")
-    path = raw_config.get("path")
-    config_scenario_key = (
-        audio.get("scenario_key") if isinstance(audio, dict) else None
-    ) or (path.get("scenario_key") if isinstance(path, dict) else None)
-    config_module_key = path.get("module_key") if isinstance(path, dict) else None
-    config_purpose_key = audio.get("purpose") if isinstance(audio, dict) else None
-    return resolve_audio_evaluation_scenario(
-        scenario_key=scenario_key or _string_or_none(config_scenario_key),
-        module_key=module_key or _string_or_none(config_module_key),
-        purpose_key=purpose_key or _string_or_none(config_purpose_key),
+    raw = config if isinstance(config, dict) else {}
+    metadata = raw.get("audio_evaluation")
+    if not isinstance(metadata, dict):
+        return None
+    key = _text(metadata.get("scenario_key")) or scenario_key
+    if not key:
+        return None
+    return AudioEvaluationScenario(
+        scenario_key=key,
+        purpose_key=_text(metadata.get("purpose_key")) or purpose_key or key,
+        module_key=_text(metadata.get("module_key")) or module_key or key,
+        display_name=_text(metadata.get("display_name")) or "录音训练",
+        module_type="audio_scoring",
+        material_policy=(
+            "required_confirmed"
+            if metadata.get("material_required") is True
+            else "optional"
+        ),
+        prompt_required=metadata.get("prompt_required") is not False,
+        runtime_shape="single_audio",
+        completion_rule="passed",
+        primary_action_label="上传录音",
+        default_order_index=1,
+        capability_keys=tuple(
+            str(item) for item in metadata.get("capability_keys", []) if str(item)
+        ),
+        description=_text(metadata.get("description")) or "完成录音并获取反馈。",
+        task_brief_title=_text(metadata.get("task_brief_title")) or "录音训练",
+        task_brief_purpose=_text(metadata.get("task_brief_purpose")) or "完成训练任务。",
+        task_brief_scenario=_text(metadata.get("task_brief_scenario")) or "按任务要求完成录音。",
     )
 
 
-def _string_or_none(value: Any) -> str | None:
-    return str(value) if isinstance(value, str) and value.strip() else None
+def _text(value: object) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+__all__ = [
+    "AudioEvaluationScenario",
+    "get_audio_evaluation_scenario",
+    "resolve_audio_evaluation_scenario",
+    "resolve_audio_evaluation_scenario_from_config",
+]

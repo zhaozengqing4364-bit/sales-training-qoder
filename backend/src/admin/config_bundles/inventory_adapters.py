@@ -13,14 +13,10 @@ from sales_trainer.models import SalesTrainerAssetRevision
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
-from sales_trainer.services.path_config_models import (
-    NEWCOMER_PATH_LOGICAL_ID,
-    NEWCOMER_PATH_RESOURCE_TYPE,
-    payload_from_revision,
-)
+from sales_trainer.orchestration.contracts import TrainingPathPayload
+from sales_trainer.orchestration.revision_service import PATH_LOGICAL_ID, PATH_RESOURCE_TYPE
 
 NEWCOMER_PATH_CONFIG_BUNDLE_KEY = "sales_trainer.newcomer_path_config"
-AI_COACH_CONFIG_BUNDLE_KEY = "sales_trainer.ai_coach_config"
 PROMPT_TEMPLATES_BUNDLE_KEY = "prompt_templates"
 
 
@@ -33,12 +29,12 @@ class SalesTrainerPathConfigBundleAdapter:
     async def bundle(self, db: AsyncSession) -> ConfigBundleSnapshot:
         service = SalesTrainerAssetRevisionService(db)
         active = await service.active_revision(
-            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-            logical_id=NEWCOMER_PATH_LOGICAL_ID,
+            resource_type=PATH_RESOURCE_TYPE,
+            logical_id=PATH_LOGICAL_ID,
         )
         working = await service.latest_working_revision(
-            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-            logical_id=NEWCOMER_PATH_LOGICAL_ID,
+            resource_type=PATH_RESOURCE_TYPE,
+            logical_id=PATH_LOGICAL_ID,
         )
         active_version = _path_version(active) if active is not None else None
         return ConfigBundleSnapshot(
@@ -47,8 +43,8 @@ class SalesTrainerPathConfigBundleAdapter:
             domain=self.domain,
             legacy_domain="sales_trainer_asset_revision",
             adapter_key=self.adapter_key,
-            read_path="/api/v1/admin/newcomer-training/path-config",
-            admin_entry="/admin/sales-trainer/paths",
+            read_path="/api/v1/admin/newcomer-training/path/",
+            admin_entry="/admin/newcomer-training/path",
             status=(
                 str(active.status)
                 if active is not None
@@ -62,54 +58,10 @@ class SalesTrainerPathConfigBundleAdapter:
 
     async def versions(self, db: AsyncSession) -> list[ConfigVersionSnapshot]:
         revisions = await SalesTrainerAssetRevisionService(db).list_revisions(
-            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-            logical_id=NEWCOMER_PATH_LOGICAL_ID,
+            resource_type=PATH_RESOURCE_TYPE,
+            logical_id=PATH_LOGICAL_ID,
         )
         return [_path_version(revision) for revision in revisions]
-
-
-class SalesTrainerAiCoachConfigBundleAdapter:
-    adapter_key = "sales_trainer_ai_coach_config"
-    bundle_key = AI_COACH_CONFIG_BUNDLE_KEY
-    display_name = "商务技巧 AI Coach 配置"
-    domain = "ai_analysis"
-
-    async def bundle(self, db: AsyncSession) -> ConfigBundleSnapshot:
-        service = SalesTrainerAssetRevisionService(db)
-        active = await service.active_revision(
-            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-            logical_id=NEWCOMER_PATH_LOGICAL_ID,
-        )
-        working = await service.latest_working_revision(
-            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-            logical_id=NEWCOMER_PATH_LOGICAL_ID,
-        )
-        active_version = _ai_coach_version(active) if active is not None else None
-        return ConfigBundleSnapshot(
-            bundle_key=self.bundle_key,
-            display_name=self.display_name,
-            domain=self.domain,
-            legacy_domain="sales_trainer_asset_revision.ai_coach",
-            adapter_key=self.adapter_key,
-            read_path="/api/v1/admin/newcomer-training/ai-coach/business_skills",
-            admin_entry="/admin/sales-trainer/ai-coach",
-            status=(
-                str(active.status)
-                if active is not None
-                else str(working.status)
-                if working is not None
-                else "default"
-            ),
-            overview=_ai_coach_overview(active=active, working=working),
-            active_version=active_version,
-        )
-
-    async def versions(self, db: AsyncSession) -> list[ConfigVersionSnapshot]:
-        revisions = await SalesTrainerAssetRevisionService(db).list_revisions(
-            resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
-            logical_id=NEWCOMER_PATH_LOGICAL_ID,
-        )
-        return [_ai_coach_version(revision) for revision in revisions]
 
 
 class PromptTemplatesConfigBundleAdapter:
@@ -145,7 +97,7 @@ class PromptTemplatesConfigBundleAdapter:
 
 
 def _path_version(revision: SalesTrainerAssetRevision) -> ConfigVersionSnapshot:
-    payload = payload_from_revision(revision)
+    payload = TrainingPathPayload.model_validate(revision.payload_json)
     return ConfigVersionSnapshot(
         source_config_id=str(revision.revision_id),
         version=int(revision.revision_no),
@@ -157,64 +109,29 @@ def _path_version(revision: SalesTrainerAssetRevision) -> ConfigVersionSnapshot:
     )
 
 
-def _ai_coach_version(revision: SalesTrainerAssetRevision) -> ConfigVersionSnapshot:
-    payload = payload_from_revision(revision)
-    return ConfigVersionSnapshot(
-        source_config_id=str(revision.revision_id),
-        version=int(revision.revision_no),
-        version_label=f"v{revision.revision_no}",
-        status=str(revision.status),
-        snapshot={
-            "path_key": payload.path_key,
-            "modules": [
-                {
-                    "module_key": module.module_key,
-                    "ai_coach": module.ai_coach.model_dump(mode="json")
-                    if module.ai_coach
-                    else None,
-                }
-                for module in payload.modules
-            ],
-        },
-        created_at=_datetime_or_none(revision.created_at),
-        updated_at=_datetime_or_none(revision.published_at),
-    )
-
-
 def _path_overview(
     *,
     active: SalesTrainerAssetRevision | None,
     working: SalesTrainerAssetRevision | None,
 ) -> dict[str, Any]:
-    active_payload = payload_from_revision(active) if active is not None else None
+    active_payload = (
+        TrainingPathPayload.model_validate(active.payload_json)
+        if active is not None
+        else None
+    )
     return {
-        "logical_id": NEWCOMER_PATH_LOGICAL_ID,
-        "resource_type": NEWCOMER_PATH_RESOURCE_TYPE,
+        "logical_id": PATH_LOGICAL_ID,
+        "resource_type": PATH_RESOURCE_TYPE,
         "backing_store": "SalesTrainerAssetRevision",
         "active_revision_id": str(active.revision_id) if active is not None else None,
         "active_revision_no": active.revision_no if active is not None else None,
         "working_revision_id": str(working.revision_id) if working is not None else None,
         "working_revision_no": working.revision_no if working is not None else None,
-        "module_count": len(active_payload.modules) if active_payload is not None else 0,
+        "phase_count": len(active_payload.phases) if active_payload is not None else 0,
+        "module_count": sum(len(phase.modules) for phase in active_payload.phases)
+        if active_payload is not None
+        else 0,
         "permission": "sales_trainer.manage_modules",
-        "audit_carrier": "SalesTrainerOperationLog",
-    }
-
-
-def _ai_coach_overview(
-    *,
-    active: SalesTrainerAssetRevision | None,
-    working: SalesTrainerAssetRevision | None,
-) -> dict[str, Any]:
-    active_payload = payload_from_revision(active) if active is not None else None
-    modules = active_payload.modules if active_payload is not None else []
-    return {
-        "logical_id": "business_skills_ai_coach",
-        "backing_store": "SalesTrainerAssetRevision.path.modules.ai_coach",
-        "active_revision_id": str(active.revision_id) if active is not None else None,
-        "working_revision_id": str(working.revision_id) if working is not None else None,
-        "configured_module_count": sum(1 for module in modules if module.ai_coach is not None),
-        "high_risk_permission": "sales_trainer.manage_prompts",
         "audit_carrier": "SalesTrainerOperationLog",
     }
 

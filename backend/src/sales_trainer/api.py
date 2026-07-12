@@ -10,7 +10,6 @@ from fastapi import (
     File,
     Form,
     Query,
-    Request,
     UploadFile,
 )
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -20,8 +19,8 @@ from common.api.response import error_response, success_response
 from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
-from common.monitoring.logger import get_trace_id
 from sales_trainer.permissions import (
+    can_learn_newcomer_training_path,
     can_manage_sales_trainer,
     can_manage_sales_trainer_questions,
     can_retry_sales_trainer_jobs,
@@ -55,11 +54,6 @@ from sales_trainer.schemas import (
     QuizAttemptCreate,
     QuizAttemptListResponse,
     QuizAttemptResponse,
-    ReadinessDossierResponse,
-    ReadinessDossierReviewAction,
-    ReadinessDossierReviewActionCreate,
-    ReadinessWorkbenchResponse,
-    SalesTrainerManagerDashboardResponse,
     SalesTrainerMaterialCreate,
     SalesTrainerMaterialListResponse,
     SalesTrainerMaterialResponse,
@@ -69,8 +63,6 @@ from sales_trainer.schemas import (
     SalesTrainerMaterialVersionRollbackPreviewRequest,
     SalesTrainerMaterialVersionRollbackPreviewResponse,
     SalesTrainerMaterialVersionRollbackRequest,
-    SalesTrainerPathListResponse,
-    SalesTrainerPathResponse,
     SalesTrainerQuestionCategoryCreate,
     SalesTrainerQuestionCategoryListResponse,
     SalesTrainerQuestionCategoryResponse,
@@ -83,27 +75,14 @@ from sales_trainer.schemas import (
     SalesTrainerSettingsResponse,
     SalesTrainerTrainingRecordListResponse,
     SalesTrainerTrainingRecordResponse,
-    SalesTrainerUnitBriefResponse,
     SalesTrainerUnitCreate,
     SalesTrainerUnitListResponse,
     SalesTrainerUnitResponse,
     SalesTrainerUnitUpdate,
-    TrainingJourneyAnalyticsResponse,
-    TrainingJourneyListResponse,
-    TrainingJourneyResponse,
 )
 from sales_trainer.services.audio_submission_service import (
     AudioSubmissionService,
     AudioSubmissionServiceError,
-)
-from sales_trainer.services.effective_audio_training_config import (
-    EffectiveAudioTrainingConfigError,
-    EffectiveAudioTrainingConfigResolver,
-)
-from sales_trainer.services.learner_unit_access import (
-    LearnerUnitAccessError,
-    require_learner_active_path_unit_access,
-    require_sales_trainer_learner,
 )
 from sales_trainer.services.material_service import (
     MaterialServiceError,
@@ -111,10 +90,6 @@ from sales_trainer.services.material_service import (
     serialize_material_version,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
-from sales_trainer.services.path_service import SalesTrainerPathService
-from sales_trainer.services.phase2_dashboard_service import (
-    SalesTrainerPhase2DashboardService,
-)
 from sales_trainer.services.phase2_policy import resolve_phase2_policy
 from sales_trainer.services.prompt_service import (
     AudioScorePromptService,
@@ -127,16 +102,8 @@ from sales_trainer.services.question_bank import (
     serialize_sales_trainer_question,
 )
 from sales_trainer.services.quiz_service import QuizService, QuizServiceError
-from sales_trainer.services.readiness_dossier_service import (
-    ReadinessDossierError,
-    ReadinessDossierService,
-)
 from sales_trainer.services.roleplay_observation_service import (
     RoleplayObservationService,
-)
-from sales_trainer.services.training_journey_service import (
-    TrainingJourneyError,
-    TrainingJourneyService,
 )
 from sales_trainer.services.training_record_service import TrainingRecordService
 from sales_trainer.services.unit_public_payloads import learner_safe_unit_payload
@@ -250,31 +217,6 @@ def _as_learner_unit_list_item(unit: Any) -> dict[str, Any]:
             "questions": [],
         }
     )
-
-
-async def _require_learner_unit_access_response(
-    db: AsyncSession,
-    *,
-    actor: User,
-    unit_id: str,
-) -> JSONResponse | None:
-    try:
-        await require_learner_active_path_unit_access(
-            db,
-            actor=actor,
-            unit_id=unit_id,
-        )
-    except LearnerUnitAccessError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return None
-
-
-def _require_learner_path_access_response(actor: User) -> JSONResponse | None:
-    try:
-        require_sales_trainer_learner(actor)
-    except LearnerUnitAccessError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return None
 
 
 def _as_operation_log_response(log: Any) -> OperationLogResponse:
@@ -395,141 +337,6 @@ async def admin_get_capabilities(
     return success_response(sales_trainer_admin_capability_projection(current_user))
 
 
-@router.get("/units", response_model=None)
-async def list_published_units(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    access_error = _require_learner_path_access_response(current_user)
-    if access_error is not None:
-        return access_error
-    try:
-        journey = await TrainingJourneyService(db).get_learner_journey(
-            str(current_user.user_id),
-            viewer=current_user,
-        )
-    except TrainingJourneyError as exc:
-        if exc.code == "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]":
-            return success_response(SalesTrainerUnitListResponse(items=[], total=0))
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    target_unit_ids: list[str] = []
-    for module in journey.get("modules") or []:
-        if not isinstance(module, dict) or bool(module.get("locked")):
-            continue
-        for value in module.get("target_unit_ids") or []:
-            unit_id = str(value or "")
-            if unit_id:
-                target_unit_ids.append(unit_id)
-        target_unit_id = str(module.get("target_unit_id") or "")
-        if target_unit_id:
-            target_unit_ids.append(target_unit_id)
-
-    service = UnitService(db)
-    payload: list[dict[str, Any]] = []
-    seen_unit_ids: set[str] = set()
-    for unit_id in target_unit_ids:
-        if unit_id in seen_unit_ids:
-            continue
-        seen_unit_ids.add(unit_id)
-        unit = await service.get_unit(unit_id)
-        if unit is None or unit.status != "published":
-            continue
-        payload.append(_as_learner_unit_list_item(unit))
-    return success_response(
-        SalesTrainerUnitListResponse(items=payload, total=len(payload))
-    )
-
-
-@router.get("/paths", response_model=None)
-async def list_training_paths(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    access_error = _require_learner_path_access_response(current_user)
-    if access_error is not None:
-        return access_error
-    paths = await SalesTrainerPathService(db).list_paths_for_user(
-        str(current_user.user_id)
-    )
-    payload = [
-        SalesTrainerPathResponse.model_validate(path).model_dump() for path in paths
-    ]
-    return success_response(
-        SalesTrainerPathListResponse(items=payload, total=len(payload))
-    )
-
-
-@router.get("/units/{unit_id}", response_model=None)
-async def get_published_unit(
-    unit_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    service = UnitService(db)
-    unit = await service.get_unit(unit_id)
-    if unit is None or unit.status != "published":
-        return _api_error(
-            "[SALES_TRAINER_UNIT_NOT_FOUND]",
-            status_code=404,
-            message="训练单元不存在或未发布。",
-        )
-    access_error = await _require_learner_unit_access_response(
-        db,
-        actor=current_user,
-        unit_id=unit_id,
-    )
-    if access_error is not None:
-        return access_error
-    return success_response(
-        _as_learner_unit_response(await service.serialize_unit(unit))
-    )
-
-
-@router.get("/units/{unit_id}/brief", response_model=None)
-async def get_published_unit_brief(
-    unit_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    service = UnitService(db)
-    unit = await service.get_unit(unit_id)
-    if unit is None or unit.status != "published":
-        return _api_error(
-            "[SALES_TRAINER_UNIT_NOT_FOUND]",
-            status_code=404,
-            message="训练单元不存在或未发布。",
-        )
-    access_error = await _require_learner_unit_access_response(
-        db,
-        actor=current_user,
-        unit_id=unit_id,
-    )
-    if access_error is not None:
-        return access_error
-    try:
-        effective = await EffectiveAudioTrainingConfigResolver(db).resolve_for_unit(
-            unit,
-            allow_legacy=False,
-        )
-        brief = await SalesTrainerMaterialService(db).resolve_unit_brief(
-            unit,
-            config_override=effective.config,
-        )
-    except EffectiveAudioTrainingConfigError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    except MaterialServiceError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    payload = {
-        "unit": _as_learner_unit_response(await service.serialize_unit(unit)),
-        "task_brief": brief["task_brief"],
-        "materials": brief["materials"],
-        "score_scheme": brief["score_scheme"],
-    }
-    return success_response(
-        SalesTrainerUnitBriefResponse.model_validate(payload).model_dump()
-    )
-
-
 @router.get("/materials/versions/{version_id}/file", response_model=None)
 async def get_sales_trainer_material_version_file(
     version_id: str,
@@ -537,9 +344,8 @@ async def get_sales_trainer_material_version_file(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> FileRouteResponse:
-    access_error = _require_learner_path_access_response(current_user)
-    if access_error is not None:
-        return access_error
+    if not can_learn_newcomer_training_path(current_user):
+        return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号无权访问训练材料。")
     try:
         access = await SalesTrainerMaterialService(db).resolve_file_access(
             version_id,
@@ -1069,13 +875,7 @@ async def admin_get_training_record_material_file(
 ) -> FileRouteResponse:
     if error := _require_records_viewer(current_user):
         return error
-    if record_type not in {
-        "audio_submission",
-        "quiz_attempt",
-        "ai_coach_session",
-        "business_etiquette_quiz_attempt",
-        "realtime_roleplay_session",
-    }:
+    if record_type != "newcomer_activity_attempt":
         return _api_error("[TRAINING_RECORD_TYPE_INVALID]", status_code=400)
     record = await TrainingRecordService(db).get_record_for_viewer(
         record_type,
@@ -1475,12 +1275,10 @@ async def admin_list_score_results(
 @admin_router.get("/training-records", response_model=None)
 async def admin_list_training_records(
     user_id: str | None = None,
-    unit_id: str | None = None,
-    material_version_id: str | None = None,
-    training_stage: str | None = Query(default=None),
-    module_key: str | None = Query(default=None),
-    learner_level: str | None = Query(default=None),
-    role_level: str | None = Query(default=None),
+    activity_id: str | None = Query(default=None),
+    activity_type: str | None = Query(default=None),
+    phase_id: str | None = Query(default=None),
+    module_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -1492,13 +1290,11 @@ async def admin_list_training_records(
     service = TrainingRecordService(db)
     records, total = await service.list_records(
         user_id=user_id,
-        unit_id=unit_id,
-        material_version_id=material_version_id,
         team_department=_team_scope(current_user),
-        training_stage=training_stage,
-        module_key=module_key,
-        learner_level=learner_level,
-        role_level=role_level,
+        activity_id=activity_id,
+        activity_type=activity_type,
+        phase_id=phase_id,
+        module_id=module_id,
         status=status,
         viewer=current_user,
         limit=limit,
@@ -1512,199 +1308,6 @@ async def admin_list_training_records(
             ],
             total=total,
         )
-    )
-
-
-@admin_router.get("/journeys", response_model=None)
-async def admin_list_training_journeys(
-    department: str | None = Query(default=None),
-    training_stage: str | None = Query(default=None),
-    module_key: str | None = Query(default=None),
-    learner_level: str | None = Query(default=None),
-    role_level: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    if error := _require_records_viewer(current_user):
-        return error
-    try:
-        payload = await TrainingJourneyService(db).list_admin_journeys(
-            viewer=current_user,
-            team_department=_team_scope(current_user),
-            department=department,
-            training_stage=training_stage,
-            module_key=module_key,
-            learner_level=learner_level,
-            role_level=role_level,
-            limit=limit,
-            offset=offset,
-        )
-    except TrainingJourneyError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(
-        TrainingJourneyListResponse.model_validate(payload).model_dump()
-    )
-
-
-@admin_router.get("/journeys/analytics", response_model=None)
-async def admin_get_training_journey_analytics(
-    department: str | None = Query(default=None),
-    training_stage: str | None = Query(default=None),
-    module_key: str | None = Query(default=None),
-    learner_level: str | None = Query(default=None),
-    role_level: str | None = Query(default=None),
-    limit: int = Query(default=500, ge=1, le=1000),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    if error := _require_records_viewer(current_user):
-        return error
-    try:
-        payload = await TrainingJourneyService(db).get_admin_analytics(
-            viewer=current_user,
-            team_department=_team_scope(current_user),
-            department=department,
-            training_stage=training_stage,
-            module_key=module_key,
-            learner_level=learner_level,
-            role_level=role_level,
-            limit=limit,
-        )
-    except TrainingJourneyError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(
-        TrainingJourneyAnalyticsResponse.model_validate(payload).model_dump()
-    )
-
-
-@admin_router.get("/journeys/{learner_id}", response_model=None)
-async def admin_get_training_journey(
-    learner_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    if error := _require_records_viewer(current_user):
-        return error
-    try:
-        journey = await TrainingJourneyService(db).get_admin_journey(
-            learner_id,
-            viewer=current_user,
-            team_department=_team_scope(current_user),
-        )
-    except TrainingJourneyError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(
-        TrainingJourneyResponse.model_validate(journey).model_dump()
-    )
-
-
-@admin_router.get("/manager-dashboard", response_model=None)
-async def admin_get_manager_dashboard(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    if error := _require_records_viewer(current_user):
-        return error
-    payload = await SalesTrainerPhase2DashboardService(db).get_dashboard(
-        team_department=_team_scope(current_user),
-    )
-    return success_response(
-        SalesTrainerManagerDashboardResponse.model_validate(payload).model_dump()
-    )
-
-
-@admin_router.get("/readiness/workbench", response_model=None)
-async def admin_get_readiness_workbench(
-    department: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    if error := _require_records_viewer(current_user):
-        return error
-    try:
-        payload = await ReadinessDossierService(db).list_workbench(
-            viewer=current_user,
-            team_department=_team_scope(current_user),
-            department=department,
-            limit=limit,
-            offset=offset,
-        )
-    except ReadinessDossierError as exc:
-        return _api_error(
-            exc.code,
-            status_code=exc.status_code,
-            message=exc.message,
-            details=exc.details,
-        )
-    return success_response(
-        ReadinessWorkbenchResponse.model_validate(payload).model_dump()
-    )
-
-
-@admin_router.get("/readiness/dossiers/{learner_id}", response_model=None)
-async def admin_get_readiness_dossier(
-    learner_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    if error := _require_records_viewer(current_user):
-        return error
-    try:
-        payload = await ReadinessDossierService(db).get_dossier(
-            learner_id,
-            viewer=current_user,
-            team_department=_team_scope(current_user),
-        )
-    except ReadinessDossierError as exc:
-        return _api_error(
-            exc.code,
-            status_code=exc.status_code,
-            message=exc.message,
-            details=exc.details,
-        )
-    return success_response(
-        ReadinessDossierResponse.model_validate(payload).model_dump()
-    )
-
-
-@admin_router.post(
-    "/readiness/dossiers/{learner_id}/review-actions", response_model=None
-)
-async def admin_create_readiness_review_action(
-    learner_id: str,
-    payload: ReadinessDossierReviewActionCreate,
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    if error := _require_records_viewer(current_user):
-        return error
-    try:
-        action = await ReadinessDossierService(db).create_review_action(
-            learner_id,
-            actor=current_user,
-            team_department=_team_scope(current_user),
-            decision=payload.decision,
-            reason=payload.reason,
-            capability_keys=payload.capability_keys,
-            source_evidence_ids=payload.source_evidence_ids,
-            request_id=get_trace_id(),
-            ip_address=request.client.host if request.client else None,
-            user_agent=request.headers.get("user-agent"),
-        )
-    except ReadinessDossierError as exc:
-        return _api_error(
-            exc.code,
-            status_code=exc.status_code,
-            message=exc.message,
-            details=exc.details,
-        )
-    return success_response(
-        ReadinessDossierReviewAction.model_validate(action).model_dump()
     )
 
 
@@ -1747,13 +1350,7 @@ async def admin_get_training_record_detail(
 ) -> ApiResponse:
     if error := _require_records_viewer(current_user):
         return error
-    if record_type not in {
-        "audio_submission",
-        "quiz_attempt",
-        "ai_coach_session",
-        "business_etiquette_quiz_attempt",
-        "realtime_roleplay_session",
-    }:
+    if record_type != "newcomer_activity_attempt":
         return _api_error("[TRAINING_RECORD_TYPE_INVALID]", status_code=400)
     record = await TrainingRecordService(db).get_record_for_viewer(
         record_type,

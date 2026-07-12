@@ -114,9 +114,11 @@ class SalesTrainerRegradeService:
         viewer: User,
         team_department: str | None,
     ) -> None:
-        record = await TrainingRecordService(self._db).get_record_for_viewer(
-            "quiz_attempt",
-            attempt_id,
+        record = await TrainingRecordService(
+            self._db
+        ).get_record_by_evidence_for_viewer(
+            evidence_type="quiz_attempt",
+            evidence_id=attempt_id,
             viewer=viewer,
             team_department=team_department,
         )

@@ -15,9 +15,6 @@ from sales_trainer.schemas import (
     PaperRollbackRequest,
     QuizAttemptCreate,
 )
-from sales_trainer.services.article_exam_prerequisite_service import (
-    ArticleExamPrerequisiteService,
-)
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
@@ -184,11 +181,6 @@ class ExamPaperService:
                     "当前考试与训练活动不匹配。",
                     409,
                 )
-        else:
-            await ArticleExamPrerequisiteService(self._db).require_article_completed(
-                paper,
-                actor=actor,
-            )
         revision = await SalesTrainerAssetRevisionService(self._db).active_revision(
             resource_type=PAPER_RESOURCE_TYPE,
             logical_id=orm_scalar(paper.paper_id, str),

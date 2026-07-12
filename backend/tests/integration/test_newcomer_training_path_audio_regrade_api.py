@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.auth.service import create_access_token
 from common.db.models import User
 from sales_trainer.models import (
+    NewcomerTrainingActivityAttempt,
+    NewcomerTrainingEnrollment,
     SalesTrainerAssetRevision,
     SalesTrainerAudioScorePrompt,
     SalesTrainerAudioScoreResult,
@@ -37,6 +39,42 @@ def _user(role: str, *, department: str | None = None) -> User:
         role=role,
         department=department,
     )
+
+
+async def _link_activity_evidence(
+    db: AsyncSession, *, learner: User, evidence_id: str
+) -> None:
+    revision = SalesTrainerAssetRevision(
+        revision_id=str(uuid.uuid4()),
+        resource_type="newcomer_training_path_orchestration",
+        logical_id=f"audio-regrade-{uuid.uuid4()}",
+        revision_no=1,
+        status="published",
+        payload_json={},
+        payload_hash=uuid.uuid4().hex,
+    )
+    enrollment = NewcomerTrainingEnrollment(
+        learner_id=str(learner.user_id),
+        path_id=revision.logical_id,
+        path_revision_id=str(revision.revision_id),
+    )
+    db.add_all([revision, enrollment])
+    await db.flush()
+    db.add(
+        NewcomerTrainingActivityAttempt(
+            enrollment_id=str(enrollment.enrollment_id),
+            path_revision_id=str(revision.revision_id),
+            activity_id="audio-regrade-activity",
+            activity_type="audio_assessment",
+            attempt_no=1,
+            status="completed",
+            client_token=f"audio-regrade-{uuid.uuid4()}",
+            activity_snapshot={"activity_id": "audio-regrade-activity"},
+            evidence_type="audio_submission",
+            evidence_id=evidence_id,
+        )
+    )
+    await db.commit()
 
 
 class _FakeAudioScoringService:
@@ -135,6 +173,9 @@ async def test_should_regrade_audio_submission_as_explicit_append_only_action(
     )
     test_db.add_all([submission, original_score])
     await test_db.commit()
+    await _link_activity_evidence(
+        test_db, learner=learner, evidence_id=str(submission.submission_id)
+    )
 
     update_response = await async_client.put(
         f"/api/v1/admin/sales-trainer/audio-score-prompts/{prompt_id}",

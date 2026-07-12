@@ -22,7 +22,10 @@ from common.services.external_session_start import (
     ExternalSessionStartService,
 )
 from curriculum_practice.models import PracticeTemplate
-from sales_trainer.orchestration.activities.base import ActivityExecutionContext, activity_snapshot
+from sales_trainer.orchestration.activities.base import (
+    ActivityExecutionContext,
+    activity_snapshot,
+)
 from sales_trainer.orchestration.contracts import RealtimeRoleplayConfig
 from sales_trainer.orchestration.repository import AttemptRepository
 from sales_trainer.services.operation_log_service import OperationLogService

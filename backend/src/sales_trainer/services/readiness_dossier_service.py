@@ -1,53 +1,41 @@
+"""Activity-native readiness projection without product/module-name authority."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Literal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sales_trainer.services.journey_read_repository import (
-    JourneyLearnerProjection,
-    JourneyReadRepository,
-    JourneyViewer,
-)
-from sales_trainer.services.journey_sqlalchemy_adapter import (
-    SqlAlchemyJourneyReadRepository,
-)
+from common.db.models import User
+from sales_trainer.orchestration.errors import NewcomerOrchestrationError
+from sales_trainer.orchestration.journey_service import NewcomerJourneyService
 from sales_trainer.services.operation_log_service import OperationLogService
-from sales_trainer.services.readiness_dossier_projection import (
-    ReadinessDecision,
-    ReadinessDossierError,
-    ReadinessDossierProjection,
-)
-from sales_trainer.services.readiness_state import (
-    CAPABILITY_KEYS,
-    READINESS_CONTRACT_VERSION,
-    READINESS_DOSSIER_TARGET_TYPE,
-    REVIEW_ACTION_CREATED,
-    decision_label,
-    unique_non_empty,
-)
-from sales_trainer.services.training_journey_service import (
-    TrainingJourneyError,
-    TrainingJourneyService,
-)
 from sales_trainer.services.training_record_service import TrainingRecordService
+
+ReadinessDecision = Literal["approve", "reject", "retrain"]
+
+
+class ReadinessDossierError(Exception):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        status_code: int = 400,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+        self.details = details
+        super().__init__(message)
 
 
 class ReadinessDossierService:
-    def __init__(
-        self,
-        db: AsyncSession,
-        *,
-        read_repository: JourneyReadRepository | None = None,
-        projection: ReadinessDossierProjection | None = None,
-    ) -> None:
+    def __init__(self, db: AsyncSession, **_: Any) -> None:
         self._db = db
-        self._read_repository = read_repository or SqlAlchemyJourneyReadRepository(db)
-        self._projection = projection or ReadinessDossierProjection()
-        self._journeys = TrainingJourneyService(
-            db, read_repository=self._read_repository
-        )
+        self._journeys = NewcomerJourneyService(db)
         self._records = TrainingRecordService(db)
         self._logs = OperationLogService(db)
 
@@ -55,132 +43,101 @@ class ReadinessDossierService:
         self,
         learner_id: str,
         *,
-        viewer: JourneyViewer,
+        viewer: User,
         team_department: str | None,
     ) -> dict[str, Any]:
-        generated_at = datetime.now(UTC)
-        learner = await self._learner_for_viewer(
-            learner_id,
-            team_department=team_department,
-        )
+        learner = await self._db.get(User, learner_id)
+        if learner is None or (
+            team_department is not None
+            and str(learner.department or "") != team_department
+        ):
+            raise ReadinessDossierError(
+                "[READINESS_DOSSIER_LEARNER_NOT_FOUND]", "学员不存在或不在管理范围内。", 404
+            )
         try:
-            journey = await self._journeys.get_admin_journey(
-                learner_id,
-                viewer=viewer,
-                team_department=team_department,
-            )
-        except TrainingJourneyError as exc:
-            if exc.code != "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]":
-                raise ReadinessDossierError(
-                    exc.code, exc.message, exc.status_code
-                ) from exc
-            journey = self._projection.blocked_journey(
-                learner,
-                code=exc.code,
-                message=exc.message,
-                generated_at=generated_at,
-            )
-
+            journey = await self._journeys.get_or_create_for_learner(learner=learner)
+        except NewcomerOrchestrationError as exc:
+            raise ReadinessDossierError(exc.code, exc.message, exc.status_code) from exc
         records, _ = await self._records.list_records(
             user_id=learner_id,
             team_department=team_department,
-            viewer=cast(Any, viewer),
-            limit=200,
-            offset=0,
+            viewer=viewer,
+            limit=500,
         )
+        activity_records = [
+            item
+            for item in records
+            if item.get("record_type") == "newcomer_activity_attempt"
+        ]
+        failed = [item for item in activity_records if item.get("status") == "failed"]
         review_actions = await self._review_actions(learner_id)
-        return self._projection.dossier_payload(
-            journey,
-            records=records,
-            review_actions=review_actions,
-            generated_at=generated_at,
+        latest_review_action = review_actions[0] if review_actions else None
+        base_status = (
+            "not_passed"
+            if failed
+            else "pending_review"
+            if journey.progress.completed
+            else "in_training"
         )
+        status = _reviewed_status(base_status, latest_review_action)
+        return {
+            "contract_version": "activity_readiness_v1",
+            "generated_at": datetime.now(UTC),
+            "learner": {
+                "learner_id": str(learner.user_id),
+                "name": learner.name,
+                "department": learner.department,
+            },
+            "status": status,
+            "journey": journey.model_dump(),
+            "evidence": activity_records,
+            "failed_activity_ids": [item.get("activity_id") for item in failed],
+            "competencies": _aggregate_competencies(activity_records),
+            "review_actions": review_actions,
+            "latest_review_action": latest_review_action,
+        }
 
     async def list_workbench(
         self,
         *,
-        viewer: JourneyViewer,
+        viewer: User,
         team_department: str | None,
         department: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> dict[str, Any]:
-        generated_at = datetime.now(UTC)
-        try:
-            payload = await self._journeys.list_admin_journeys(
+        effective_department = team_department or department
+        statement = select(User).where(User.is_active.is_(True))
+        if effective_department:
+            statement = statement.where(User.department == effective_department)
+        learners = list(
+            (
+                await self._db.scalars(
+                    statement.order_by(User.created_at.asc()).offset(offset).limit(limit)
+                )
+            ).all()
+        )
+        items = [
+            await self.get_dossier(
+                str(learner.user_id),
                 viewer=viewer,
                 team_department=team_department,
-                department=department,
-                limit=limit,
-                offset=offset,
             )
-            journeys = [
-                self._projection.dossier_payload(
-                    journey,
-                    records=[],
-                    review_actions=await self._review_actions(
-                        str(journey["learner_id"])
-                    ),
-                    evidence_limit=0,
-                    generated_at=generated_at,
-                )
-                for journey in payload.get("items", [])
-            ]
-            total = int(payload.get("total") or len(journeys))
-        except TrainingJourneyError as exc:
-            if exc.code != "[NEWCOMER_PATH_ACTIVE_REVISION_MISSING]":
-                raise ReadinessDossierError(
-                    exc.code, exc.message, exc.status_code
-                ) from exc
-            learners, total = await self._learners_for_workbench(
-                team_department=team_department,
-                department=department,
-                limit=limit,
-                offset=offset,
-            )
-            journeys = [
-                self._projection.dossier_payload(
-                    self._projection.blocked_journey(
-                        learner,
-                        code=exc.code,
-                        message=exc.message,
-                        generated_at=generated_at,
-                    ),
-                    records=[],
-                    review_actions=await self._review_actions(str(learner.user_id)),
-                    evidence_limit=0,
-                    generated_at=generated_at,
-                )
-                for learner in learners
-            ]
-
-        groups = self._projection.workbench_groups(journeys)
+            for learner in learners
+        ]
         return {
-            "contract_version": READINESS_CONTRACT_VERSION,
-            "generated_at": generated_at,
-            "groups": groups,
-            "summary": {
-                "learner_count": total,
-                "loaded_learner_count": len(journeys),
-                "pending_review_count": len(groups["pending_review"]["items"]),
-                "not_passed_count": len(groups["not_passed"]["items"]),
-                "needs_retraining_count": len(groups["needs_retraining"]["items"]),
-                "approved_count": len(groups["approved"]["items"]),
-                "config_exception_count": len(groups["config_exception"]["items"]),
-                "in_training_count": len(groups["in_training"]["items"]),
-            },
-            "filters": {
-                "department": team_department or department,
-                "limit": limit,
-                "offset": offset,
-            },
+            "contract_version": "activity_readiness_v1",
+            "generated_at": datetime.now(UTC),
+            "items": items,
+            "total": len(items),
+            "filters": {"department": effective_department, "limit": limit, "offset": offset},
         }
 
     async def create_review_action(
         self,
         learner_id: str,
         *,
-        actor: JourneyViewer,
+        actor: User,
         team_department: str | None,
         decision: ReadinessDecision,
         reason: str,
@@ -191,146 +148,90 @@ class ReadinessDossierService:
         user_agent: str | None = None,
     ) -> dict[str, Any]:
         dossier = await self.get_dossier(
-            learner_id,
-            viewer=actor,
-            team_department=team_department,
+            learner_id, viewer=actor, team_department=team_department
         )
-        normalized_capabilities = unique_non_empty(capability_keys or [])
-        unknown_capabilities = sorted(set(normalized_capabilities) - CAPABILITY_KEYS)
-        if unknown_capabilities:
+        if decision == "approve" and dossier["status"] != "pending_review":
             raise ReadinessDossierError(
-                "[READINESS_DOSSIER_CAPABILITY_INVALID]",
-                "复核动作包含系统未识别的能力项。",
-                400,
-                details={"unknown_capability_keys": unknown_capabilities},
+                "[READINESS_DOSSIER_NOT_READY]",
+                "必修活动全部完成后才能确认达标。",
+                409,
+                {"required_status": "pending_review"},
             )
-        evidence_ids = unique_non_empty(source_evidence_ids or [])
-        known_evidence_ids = {
+        known_ids = {
             str(item.get("evidence_id"))
-            for item in dossier.get("evidence", [])
+            for item in dossier["evidence"]
             if item.get("evidence_id")
         }
-        unknown_evidence_ids = sorted(set(evidence_ids) - known_evidence_ids)
-        if unknown_evidence_ids:
+        requested_ids = {str(value) for value in source_evidence_ids or []}
+        if not requested_ids.issubset(known_ids):
             raise ReadinessDossierError(
-                "[READINESS_DOSSIER_EVIDENCE_INVALID]",
-                "复核动作引用了不存在或无权访问的训练证据。",
-                400,
-                details={"unknown_evidence_ids": unknown_evidence_ids},
+                "[READINESS_DOSSIER_EVIDENCE_INVALID]", "复核引用了不存在的活动证据。", 400
             )
-        if decision == "approve":
-            self._projection.validate_dossier_approval(dossier)
-        if not evidence_ids:
-            evidence_ids = self._projection.default_review_evidence_ids(dossier)
-        if not normalized_capabilities:
-            normalized_capabilities = self._projection.default_review_capability_keys(
-                dossier
-            )
-
-        retraining_task = None
-        if decision == "require_retraining":
-            retraining_task = {
-                "task_id": f"retraining:{learner_id}:{datetime.now(UTC).timestamp()}",
-                "status": "pending",
-                "source": "operation_log",
-                "capability_keys": normalized_capabilities,
-                "source_evidence_ids": evidence_ids,
-                "target_learner_id": learner_id,
-            }
-
         log = await self._logs.record(
-            actor=cast(Any, actor),
-            action=REVIEW_ACTION_CREATED,
-            target_type=READINESS_DOSSIER_TARGET_TYPE,
+            actor=actor,
+            action="newcomer_activity.readiness_reviewed",
+            target_type="newcomer_activity_readiness",
             target_id=learner_id,
             request_id=request_id,
             ip_address=ip_address,
             user_agent=user_agent,
             metadata={
-                "contract_version": READINESS_CONTRACT_VERSION,
                 "decision": decision,
-                "decision_label": decision_label(decision),
-                "reason": reason.strip(),
-                "capability_keys": normalized_capabilities,
-                "source_evidence_ids": evidence_ids,
-                "retraining_task": retraining_task,
-                "state_storage": "operation_log",
+                "reason": reason,
+                "capability_keys": capability_keys or [],
+                "source_evidence_ids": sorted(requested_ids),
             },
         )
         await self._db.commit()
-        return self._review_action_payload(log)
-
-    async def _learner_for_viewer(
-        self,
-        learner_id: str,
-        *,
-        team_department: str | None,
-    ) -> JourneyLearnerProjection:
-        learner = await self._read_repository.learner(learner_id)
-        if learner is None:
-            raise ReadinessDossierError(
-                "[TRAINING_RECORD_NOT_FOUND]",
-                "学员训练记录不存在。",
-                404,
-            )
-        if (
-            team_department is not None
-            and str(learner.department or "") != team_department
-        ):
-            raise ReadinessDossierError(
-                "[TRAINING_RECORD_NOT_FOUND]",
-                "学员训练记录不存在。",
-                404,
-            )
-        return learner
-
-    async def _learners_for_workbench(
-        self,
-        *,
-        team_department: str | None,
-        department: str | None,
-        limit: int,
-        offset: int,
-    ) -> tuple[list[JourneyLearnerProjection], int]:
-        page = await self._read_repository.learners(
-            team_department=team_department,
-            department=department,
-            limit=limit,
-            offset=offset,
-            include_development_admin=False,
-        )
-        return list(page.items), page.total
+        return {
+            "action_id": str(log.log_id),
+            "decision": decision,
+            "reason": reason,
+            "source_evidence_ids": sorted(requested_ids),
+            "created_at": log.created_at,
+        }
 
     async def _review_actions(self, learner_id: str) -> list[dict[str, Any]]:
         logs, _ = await self._logs.list_logs(
-            target_type=READINESS_DOSSIER_TARGET_TYPE,
+            target_type="newcomer_activity_readiness",
             target_id=learner_id,
-            limit=50,
+            limit=100,
         )
         return [
-            self._review_action_payload(log)
-            for log in logs
-            if log.action == REVIEW_ACTION_CREATED
+            {
+                "action_id": str(item.log_id),
+                "actor_id": item.actor_id,
+                "created_at": item.created_at,
+                **dict(item.metadata_json or {}),
+            }
+            for item in logs
         ]
 
-    @staticmethod
-    def _review_action_payload(log: Any) -> dict[str, Any]:
-        metadata = log.metadata_json if isinstance(log.metadata_json, dict) else {}
-        decision = str(metadata.get("decision") or "mark_manual_follow_up")
-        return {
-            "action_id": str(log.log_id),
-            "audit_log_id": str(log.log_id),
-            "decision": decision,
-            "decision_label": metadata.get("decision_label")
-            or decision_label(decision),
-            "reason": metadata.get("reason"),
-            "capability_keys": unique_non_empty(metadata.get("capability_keys") or []),
-            "source_evidence_ids": unique_non_empty(
-                metadata.get("source_evidence_ids") or []
-            ),
-            "reviewer_id": str(log.actor_id) if log.actor_id else None,
-            "reviewer_role": log.actor_role,
-            "created_at": log.created_at,
-            "retraining_task": metadata.get("retraining_task"),
-            "state_storage": metadata.get("state_storage") or "operation_log",
-        }
+
+__all__ = ["ReadinessDossierError", "ReadinessDossierService"]
+
+
+def _aggregate_competencies(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    latest: dict[str, float] = {}
+    for record in reversed(records):
+        for item in record.get("capability_scores") or []:
+            key = str(item.get("capability_key") or "").strip()
+            score = item.get("score")
+            if key and isinstance(score, int | float):
+                latest[key] = float(score)
+    return [
+        {"capability_key": key, "score": latest[key]}
+        for key in sorted(latest)
+    ]
+
+
+def _reviewed_status(
+    base_status: str, latest_action: dict[str, Any] | None
+) -> str:
+    if base_status != "pending_review" or latest_action is None:
+        return base_status
+    return {
+        "approve": "approved",
+        "reject": "not_passed",
+        "retrain": "needs_retraining",
+    }.get(str(latest_action.get("decision")), base_status)

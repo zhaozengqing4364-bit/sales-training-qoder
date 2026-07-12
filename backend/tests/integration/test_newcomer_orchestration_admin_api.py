@@ -79,3 +79,36 @@ async def test_admin_activity_type_catalog_has_exact_six_types(
         "ai_coach",
         "assignment",
     ]
+
+
+@pytest.mark.asyncio
+async def test_admin_journey_uses_activity_identity(
+    async_client, auth_headers, test_user
+):
+    await async_client.put(
+        "/api/v1/admin/newcomer-training/path/draft",
+        headers=auth_headers,
+        json={"payload": _payload(), "reason": "配置活动身份"},
+    )
+    await async_client.post(
+        "/api/v1/admin/newcomer-training/path/publish",
+        headers=auth_headers,
+        json={"reason": "发布活动身份"},
+    )
+
+    response = await async_client.get(
+        f"/api/v1/admin/newcomer-training/journeys/{test_user.user_id}",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    activity = response.json()["data"]["phases"][0]["modules"][0]["activities"][0]
+    assert activity["activity_id"] == "assignment-1"
+    assert "module_key" not in activity
+
+    dossier = await async_client.get(
+        f"/api/v1/admin/newcomer-training/readiness/dossiers/{test_user.user_id}",
+        headers=auth_headers,
+    )
+    assert dossier.status_code == 200, dossier.text
+    assert dossier.json()["data"]["status"] == "in_training"

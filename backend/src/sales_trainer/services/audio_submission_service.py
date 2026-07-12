@@ -30,6 +30,7 @@ from sales_trainer.models import (
     SalesTrainerAudioTranscript,
     SalesTrainerUnit,
 )
+from sales_trainer.permissions import can_learn_newcomer_training_path
 from sales_trainer.rules import resolve_audio_pass_threshold
 from sales_trainer.schemas import AudioSubmissionCreate
 from sales_trainer.services.audio_evaluation_scenarios import (
@@ -43,10 +44,6 @@ from sales_trainer.services.deucate_scoring_service import DeucateScoringService
 from sales_trainer.services.effective_audio_training_config import (
     EffectiveAudioTrainingConfigError,
     EffectiveAudioTrainingConfigResolver,
-)
-from sales_trainer.services.learner_unit_access import (
-    LearnerUnitAccessError,
-    require_learner_active_path_unit_access,
 )
 from sales_trainer.services.material_service import (
     MaterialServiceError,
@@ -290,18 +287,12 @@ class AudioSubmissionService:
                     exc.message,
                     status_code=exc.status_code,
                 ) from exc
-            try:
-                await require_learner_active_path_unit_access(
-                    self._db,
-                    actor=actor,
-                    unit_id=str(unit.unit_id),
-                )
-            except LearnerUnitAccessError as exc:
+            if not can_learn_newcomer_training_path(actor):
                 raise AudioSubmissionServiceError(
-                    exc.code,
-                    exc.message,
-                    status_code=exc.status_code,
-                ) from exc
+                    "[NEWCOMER_ACTIVITY_SCOPE_MISMATCH]",
+                    "当前账号不能提交训练录音。",
+                    status_code=403,
+                )
             try:
                 self._require_material_binding_for_audio_scenario(
                     unit,

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,16 +18,24 @@ from sales_trainer.orchestration.errors import (
     NewcomerOrchestrationError,
     PathValidationError,
 )
+from sales_trainer.orchestration.journey_service import NewcomerJourneyService
 from sales_trainer.orchestration.revision_service import TrainingPathRevisionService
 from sales_trainer.permissions import (
     can_manage_newcomer_training_path,
     can_publish_newcomer_training_path,
+    can_view_sales_trainer_records,
+    team_scope_department,
 )
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
+from sales_trainer.services.readiness_dossier_service import (
+    ReadinessDossierError,
+    ReadinessDossierService,
+)
 
 admin_router = APIRouter(prefix="/admin/newcomer-training/path")
+admin_journey_router = APIRouter(prefix="/admin/newcomer-training")
 
 
 class DraftRequest(StrictModel):
@@ -37,6 +45,13 @@ class DraftRequest(StrictModel):
 
 class ReasonRequest(StrictModel):
     reason: str = Field(min_length=1, max_length=500)
+
+
+class ReadinessReviewRequest(StrictModel):
+    decision: Literal["approve", "reject", "retrain"]
+    reason: str = Field(min_length=1, max_length=500)
+    capability_keys: list[str] = Field(default_factory=list, max_length=50)
+    source_evidence_ids: list[str] = Field(default_factory=list, max_length=100)
 
 
 def _forbidden() -> JSONResponse:
@@ -207,4 +222,112 @@ async def activity_types(
     )
 
 
-__all__ = ["admin_router"]
+@admin_journey_router.get("/journeys/{learner_id}", response_model=None)
+async def learner_journey(
+    learner_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if not can_view_sales_trainer_records(current_user):
+        return _forbidden()
+    learner = await db.get(User, learner_id)
+    department_scope = team_scope_department(current_user)
+    if learner is None or (
+        department_scope is not None
+        and str(learner.department or "") != department_scope
+    ):
+        return JSONResponse(
+            status_code=404,
+            content=error_response(
+                "[NEWCOMER_LEARNER_NOT_FOUND]", message="学员不存在或不在管理范围内。"
+            ),
+        )
+    try:
+        journey = await NewcomerJourneyService(db).get_or_create_for_learner(
+            learner=learner
+        )
+    except NewcomerOrchestrationError as exc:
+        return _error(exc)
+    return success_response(journey.model_dump())
+
+
+@admin_journey_router.get("/readiness/workbench", response_model=None)
+async def readiness_workbench(
+    department: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if not can_view_sales_trainer_records(current_user):
+        return _forbidden()
+    try:
+        payload = await ReadinessDossierService(db).list_workbench(
+            viewer=current_user,
+            team_department=team_scope_department(current_user),
+            department=department,
+            limit=limit,
+            offset=offset,
+        )
+    except ReadinessDossierError as exc:
+        return _readiness_error(exc)
+    return success_response(payload)
+
+
+@admin_journey_router.get("/readiness/dossiers/{learner_id}", response_model=None)
+async def readiness_dossier(
+    learner_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if not can_view_sales_trainer_records(current_user):
+        return _forbidden()
+    try:
+        payload = await ReadinessDossierService(db).get_dossier(
+            learner_id,
+            viewer=current_user,
+            team_department=team_scope_department(current_user),
+        )
+    except ReadinessDossierError as exc:
+        return _readiness_error(exc)
+    return success_response(payload)
+
+
+@admin_journey_router.post(
+    "/readiness/dossiers/{learner_id}/review-actions", response_model=None
+)
+async def create_readiness_review(
+    learner_id: str,
+    payload: ReadinessReviewRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if not can_view_sales_trainer_records(current_user):
+        return _forbidden()
+    try:
+        action = await ReadinessDossierService(db).create_review_action(
+            learner_id,
+            actor=current_user,
+            team_department=team_scope_department(current_user),
+            decision=payload.decision,
+            reason=payload.reason,
+            capability_keys=payload.capability_keys,
+            source_evidence_ids=payload.source_evidence_ids,
+            request_id=_trace_id(request),
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except ReadinessDossierError as exc:
+        return _readiness_error(exc)
+    return success_response(action)
+
+
+def _readiness_error(exc: ReadinessDossierError) -> JSONResponse:
+    content = error_response(exc.code, message=exc.message)
+    if exc.details is not None:
+        content["details"] = exc.details
+    return JSONResponse(status_code=exc.status_code, content=content)
+
+
+__all__ = ["admin_journey_router", "admin_router"]
