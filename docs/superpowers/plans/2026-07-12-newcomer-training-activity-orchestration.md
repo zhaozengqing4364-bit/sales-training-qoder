@@ -122,7 +122,7 @@ web/src/app/(dashboard)/newcomer-training/activities/[activityId]/page.tsx
 - Produces: `TrainingPathPayload`, `PhaseConfig`, `ModuleConfig`, `ActivityConfig`, six typed activity configs, `PathIssue`, `validate_path_graph(payload) -> tuple[PathIssue, ...]`.
 - Consumes: no new application interfaces.
 
-- [ ] **Step 1: Write failing contract tests**
+- [x] **Step 1: Write failing contract tests**
 
 ```python
 from pydantic import ValidationError
@@ -193,13 +193,13 @@ def test_should_reject_unknown_activity_type() -> None:
         })
 ```
 
-- [ ] **Step 2: Run contract tests and verify RED**
+- [x] **Step 2: Run contract tests and verify RED**
 
 Run: `cd backend && ./.venv/bin/pytest tests/unit/test_newcomer_orchestration_contracts.py -q`
 
 Expected: collection fails with `ModuleNotFoundError: sales_trainer.orchestration`.
 
-- [ ] **Step 3: Implement the discriminated contract**
+- [x] **Step 3: Implement the discriminated contract**
 
 Add these exact public shapes in `contracts.py`:
 
@@ -359,7 +359,7 @@ class PathValidationError(NewcomerOrchestrationError):
         )
 ```
 
-- [ ] **Step 4: Write graph-validation tests**
+- [x] **Step 4: Write graph-validation tests**
 
 ```python
 from sales_trainer.orchestration.contracts import TrainingPathPayload
@@ -387,7 +387,7 @@ def test_should_require_at_least_count_membership() -> None:
     assert issues[0].field_path.endswith("completion_policy.activity_ids")
 ```
 
-- [ ] **Step 5: Implement deterministic graph validation**
+- [x] **Step 5: Implement deterministic graph validation**
 
 Add in `graph.py`:
 
@@ -417,13 +417,13 @@ def validate_path_graph(payload: TrainingPathPayload) -> tuple[PathIssue, ...]:
 
 Implement the body with explicit ID indexes and Kahn topological sorting; do not use recursion or infer dependencies from order alone.
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Run: `cd backend && ./.venv/bin/pytest tests/unit/test_newcomer_orchestration_contracts.py tests/unit/test_newcomer_orchestration_graph.py -q`
 
 Expected: all tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/sales_trainer/orchestration backend/tests/unit/test_newcomer_orchestration_contracts.py backend/tests/unit/test_newcomer_orchestration_graph.py
