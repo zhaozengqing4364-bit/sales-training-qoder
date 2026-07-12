@@ -35,6 +35,12 @@ clean-start canonical gate.
 | Trellis context | implement 10 entries, check 8 entries, JSONL validation pass |
 | Artifact hygiene | `git diff --check` and Brooks history JSON parse pass |
 
+The first canonical attempt later exposed a stale critical-branch floor after the Journey extraction. The
+follow-up governance check added a pure projection branch suite and migrated the service/projection floors as a
+non-regressing pair: 340/426 combined versus 290/434 before extraction. Isolated guard evidence is 90.93%
+changed executable coverage with zero changed missing critical branch; final authority still belongs to the
+clean-start rerun.
+
 The existing lint warning inventory is non-blocking repository debt and was not suppressed or expanded. One
 pre-existing report-page hook warning became visible because the page was in scope; the audit removed it by using
 the actual `latestSupervisorReview` dependency. The canonical gate remains the final proof for full pytest,

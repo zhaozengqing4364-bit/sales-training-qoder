@@ -112,3 +112,13 @@
   Ruff, mypy for 675 source files, architecture policy, strict TypeScript, report/Readiness `55 passed`, task
   JSONL and artifact hygiene all pass. Full frontend lint exits 0 with 82 pre-existing repository warnings and
   none in changed Gate 5 files; no warning was suppressed to obtain closure.
+- The first Task 8 canonical run reached the final coverage guard after every preceding stage passed (backend
+  `3302 passed, 1 skipped`, Vitest 213 files / `1345 passed, 6 skipped`, Playwright `3/9/11/2/1`, selected
+  backend `598 passed, 21 skipped`) and then correctly failed. Root cause: the critical-branch adoption floor
+  still charged all pre-extraction Journey branches to the now-smaller service, while the newly critical
+  projection had no pure branch-completeness suite; three changed service branches were also uncovered.
+- The fix does not lower governance. New characterization tests cover admin permission denial and malformed
+  roleplay snapshots; `test_training_journey_projection.py` covers every projection branch. The floor migrates
+  as an executable pair from pre-Gate-5 `290/434` to service `176/262` plus projection `164/164`: combined
+  covered branches rise to 340 and combined ratio to 79.81% from 66.82%. The isolated coverage rerun reports
+  no changed missing critical branch and changed executable coverage `7318/8048` (90.93%).

@@ -157,6 +157,7 @@ Run from `backend/`:
 .venv/bin/python -m pytest -q --no-cov \
   tests/unit/test_gate5_locality_contracts.py \
   tests/unit/test_journey_read_repository.py \
+  tests/unit/test_training_journey_projection.py \
   tests/unit/test_readiness_dossier_projection.py \
   tests/unit/test_sales_trainer_training_journey_service.py \
   tests/unit/test_sales_trainer_readiness_dossier_service.py \
@@ -174,6 +175,9 @@ Assertion points:
 - review writes validate before one commit and continue to emit the same audit log fields;
 - application modules contain no `common.db.models` `User`/`PracticeSession` import.
 - application services contain no calls to private (`_...`) projection methods.
+- when deterministic branches move from a critical service into its projection, migrate the changed-coverage
+  floors as a tested pair: combined covered count and ratio must not fall, and the new critical projection must
+  have full changed-branch coverage before the canonical gate can pass.
 
 ## 7. Wrong vs Correct
 

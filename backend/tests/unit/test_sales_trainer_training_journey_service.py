@@ -109,6 +109,38 @@ def _scenario() -> Scenario:
     )
 
 
+@pytest.mark.asyncio
+async def test_admin_journey_reads_fail_closed_without_record_capability(
+    test_db: AsyncSession,
+) -> None:
+    service = TrainingJourneyService(test_db)
+    learner_viewer = _user("learner")
+
+    with pytest.raises(TrainingJourneyError) as detail_exc:
+        await service.get_admin_journey(
+            "hidden-learner",
+            viewer=learner_viewer,
+            team_department=None,
+        )
+    assert detail_exc.value.code == "[ROLE_REQUIRED]"
+    assert detail_exc.value.status_code == 403
+
+    with pytest.raises(TrainingJourneyError) as list_exc:
+        await service.list_admin_journeys(
+            viewer=learner_viewer,
+            team_department=None,
+        )
+    assert list_exc.value.code == "[ROLE_REQUIRED]"
+    assert list_exc.value.status_code == 403
+
+
+def test_voice_external_binding_rejects_non_mapping_snapshots() -> None:
+    assert TrainingJourneyService._voice_external_binding("legacy") == {}
+    assert TrainingJourneyService._voice_external_binding(
+        {"external_binding": {"owner": "sales_trainer"}}
+    ) == {"owner": "sales_trainer"}
+
+
 def _realtime_session(
     learner: User,
     scenario: Scenario,
