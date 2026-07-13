@@ -1,10 +1,22 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerJourneyAnalyticsPage from "./page";
 import { ApiRequestError } from "@/lib/api/client";
 import type { TrainingJourneyAnalyticsResponse } from "@/lib/api/types";
+
+function renderPage() {
+    const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+        <QueryClientProvider client={queryClient}>
+            <SalesTrainerJourneyAnalyticsPage />
+        </QueryClientProvider>,
+    );
+}
 
 const { getCapabilitiesMock, getJourneyAnalyticsMock } = vi.hoisted(() => ({
     getCapabilitiesMock: vi.fn(),
@@ -281,7 +293,7 @@ describe("SalesTrainerJourneyAnalyticsPage", () => {
     });
 
     it("renders summary, funnel, module summaries, level summaries and risk learners", async () => {
-        render(<SalesTrainerJourneyAnalyticsPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(getJourneyAnalyticsMock).toHaveBeenCalledWith({
@@ -351,7 +363,7 @@ describe("SalesTrainerJourneyAnalyticsPage", () => {
             }),
         );
 
-        render(<SalesTrainerJourneyAnalyticsPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(screen.getByText(/当前筛选下暂无 Journey 数据/)).toBeTruthy();
@@ -366,7 +378,7 @@ describe("SalesTrainerJourneyAnalyticsPage", () => {
             }),
         );
 
-        render(<SalesTrainerJourneyAnalyticsPage />);
+        renderPage();
 
         expect(await screen.findByRole("heading", { name: "角色一致性观测聚合" })).toBeTruthy();
         expect(screen.getByText(/后端 observation 聚合 DTO 尚未返回/)).toBeTruthy();
@@ -386,7 +398,7 @@ describe("SalesTrainerJourneyAnalyticsPage", () => {
             )
             .mockResolvedValueOnce(makeAnalytics());
 
-        render(<SalesTrainerJourneyAnalyticsPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(screen.getByText(/Journey Analytics 加载失败/)).toBeTruthy();
@@ -408,7 +420,7 @@ describe("SalesTrainerJourneyAnalyticsPage", () => {
             .mockResolvedValueOnce(makeAnalytics({ filters: { department: "销售二部", limit: 500 } }))
             .mockResolvedValueOnce(makeAnalytics({ filters: { department: "销售二部", limit: 500 } }));
 
-        render(<SalesTrainerJourneyAnalyticsPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(getJourneyAnalyticsMock).toHaveBeenNthCalledWith(1, {
@@ -466,7 +478,7 @@ describe("SalesTrainerJourneyAnalyticsPage", () => {
     it("fails closed before loading analytics when capabilities are unavailable", async () => {
         getCapabilitiesMock.mockRejectedValueOnce(new Error("capability unavailable"));
 
-        render(<SalesTrainerJourneyAnalyticsPage />);
+        renderPage();
 
         expect(await screen.findByText("页面访问受限")).toBeTruthy();
         expect(screen.getByText("capability unavailable")).toBeTruthy();

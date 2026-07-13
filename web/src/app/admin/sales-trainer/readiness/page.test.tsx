@@ -131,7 +131,7 @@ function workbenchFixture() {
         },
         filters: {
             department: null,
-            limit: 100,
+            limit: 20,
             offset: 0,
         },
         groups: {
@@ -190,7 +190,7 @@ describe("SalesTrainerReadinessWorkbenchPage", () => {
         render(<SalesTrainerReadinessWorkbenchPage />);
 
         await waitFor(() => {
-            expect(getReadinessWorkbenchMock).toHaveBeenCalledWith({ limit: 100 });
+            expect(getReadinessWorkbenchMock).toHaveBeenCalledWith({ limit: 20 });
         });
 
         expect(screen.getByText("达标验收工作台")).toBeTruthy();

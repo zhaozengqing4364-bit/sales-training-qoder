@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import { api, getApiErrorMessage } from "@/lib/api/client";
+import { getApiErrorMessage } from "@/lib/api/client";
 import type { SalesTrainerAdminCapabilities } from "@/lib/api/types";
+import { salesTrainerAdminCapabilitiesQueryOptions } from "@/lib/query/sales-trainer-admin";
 import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 
 export interface SalesTrainerAdminRouteAccess {
@@ -18,38 +20,10 @@ export interface SalesTrainerAdminRouteAccess {
 const DEFAULT_DENIAL_MESSAGE = "当前账号无权访问该新人训练管理页面。";
 
 export function useSalesTrainerAdminRouteAccess(pathname: string): SalesTrainerAdminRouteAccess {
-    const [capabilities, setCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [reloadToken, setReloadToken] = useState(0);
-
-    const reloadCapabilities = useCallback(() => {
-        setIsLoading(true);
-        setError(null);
-        setReloadToken((current) => current + 1);
-    }, []);
-
-    useEffect(() => {
-        let isCurrent = true;
-        void api.admin.salesTrainer.getCapabilities()
-            .then((result) => {
-                if (!isCurrent) return;
-                setCapabilities(result);
-                setError(null);
-            })
-            .catch((loadError) => {
-                if (!isCurrent) return;
-                setCapabilities(null);
-                setError(getApiErrorMessage(loadError));
-            })
-            .finally(() => {
-                if (!isCurrent) return;
-                setIsLoading(false);
-            });
-        return () => {
-            isCurrent = false;
-        };
-    }, [reloadToken]);
+    const query = useQuery(salesTrainerAdminCapabilitiesQueryOptions());
+    const capabilities = query.data ?? null;
+    const error = query.error ? getApiErrorMessage(query.error) : null;
+    const isLoading = query.isPending;
 
     const canAccess = useMemo(
         () => isSalesTrainerAdminPathAllowedForCapabilities(pathname, capabilities),
@@ -62,6 +36,8 @@ export function useSalesTrainerAdminRouteAccess(pathname: string): SalesTrainerA
         denialMessage: isLoading || canAccess ? null : error ?? DEFAULT_DENIAL_MESSAGE,
         error,
         isLoading,
-        reloadCapabilities,
+        reloadCapabilities: () => {
+            void query.refetch();
+        },
     };
 }

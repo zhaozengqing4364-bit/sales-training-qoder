@@ -16,12 +16,8 @@ import {
     formatTrainingTaskDisplay,
     formatUnitTypeLabel,
 } from "@/lib/sales-trainer/admin-display";
-import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
-import type {
-    SalesTrainerAdminCapabilities,
-    SalesTrainerTrainingRecord,
-    TrainingJourneyAnalyticsResponse,
-} from "@/lib/api/types";
+import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
+import type { SalesTrainerTrainingRecord } from "@/lib/api/types";
 
 const TRAINING_STAGE_FILTER_OPTIONS = [
     { value: "not_started", label: "未开始" },
@@ -197,31 +193,8 @@ export default function SalesTrainerTrainingRecordsPage() {
     const [recordStatus, setRecordStatus] = useState(initialFilters.status ?? "");
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [adminCapabilities, setAdminCapabilities] =
-        useState<SalesTrainerAdminCapabilities | null>(null);
-    const [capabilityError, setCapabilityError] = useState<string | null>(null);
-    const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
-    const [filterMetadata, setFilterMetadata] = useState<TrainingJourneyAnalyticsResponse | null>(
-        null,
-    );
-    const [filterMetadataError, setFilterMetadataError] = useState<string | null>(null);
-    const canAccessRecords = isSalesTrainerAdminPathAllowedForCapabilities(
-        pathname,
-        adminCapabilities,
-    );
-
-    const loadCapabilities = useCallback(async () => {
-        setIsCapabilityLoading(true);
-        setCapabilityError(null);
-        try {
-            setAdminCapabilities(await api.admin.salesTrainer.getCapabilities());
-        } catch (error) {
-            setAdminCapabilities(null);
-            setCapabilityError(getApiErrorMessage(error));
-        } finally {
-            setIsCapabilityLoading(false);
-        }
-    }, []);
+    const routeAccess = useSalesTrainerAdminRouteAccess(pathname);
+    const canAccessRecords = routeAccess.canAccess;
 
     const currentFilters = useCallback(
         (): TrainingRecordFilters =>
@@ -278,25 +251,8 @@ export default function SalesTrainerTrainingRecordsPage() {
         [canAccessRecords],
     );
 
-    const loadFilterMetadata = useCallback(async () => {
-        if (!canAccessRecords) {
-            return;
-        }
-        setFilterMetadataError(null);
-        try {
-            setFilterMetadata(await api.admin.salesTrainer.getJourneyAnalytics({ limit: 500 }));
-        } catch (loadError) {
-            setFilterMetadata(null);
-            setFilterMetadataError(getApiErrorMessage(loadError));
-        }
-    }, [canAccessRecords]);
-
     useEffect(() => {
-        void loadCapabilities();
-    }, [loadCapabilities]);
-
-    useEffect(() => {
-        if (isCapabilityLoading) {
+        if (routeAccess.isLoading) {
             return;
         }
         if (!canAccessRecords) {
@@ -306,28 +262,19 @@ export default function SalesTrainerTrainingRecordsPage() {
             return;
         }
         void loadRecords(currentFilters());
-        void loadFilterMetadata();
-    }, [canAccessRecords, currentFilters, isCapabilityLoading, loadFilterMetadata, loadRecords]);
+    }, [canAccessRecords, currentFilters, loadRecords, routeAccess.isLoading]);
 
     const moduleOptions = useMemo(() => {
-        const analyticsOptions = (filterMetadata?.module_summaries ?? []).map((summary) => ({
-            value: summary.module_key,
-            label: summary.title || summary.module_key,
-        }));
         const recordOptions = items
             .filter((record) => Boolean(record.module_key))
             .map((record) => ({
                 value: String(record.module_key),
                 label: record.unit_name || String(record.module_key),
             }));
-        return mergeFilterOptions([], [...analyticsOptions, ...recordOptions], moduleKey);
-    }, [filterMetadata?.module_summaries, items, moduleKey]);
+        return mergeFilterOptions([], recordOptions, moduleKey);
+    }, [items, moduleKey]);
 
     const learnerLevelOptions = useMemo(() => {
-        const analyticsOptions = (filterMetadata?.learner_level_summaries ?? []).map((summary) => ({
-            value: summary.key,
-            label: summary.label || summary.key,
-        }));
         const recordOptions = items
             .map((record) => record.learner_level)
             .filter((level): level is NonNullable<SalesTrainerTrainingRecord["learner_level"]> =>
@@ -337,14 +284,10 @@ export default function SalesTrainerTrainingRecordsPage() {
                 value: level.level_key,
                 label: level.label || level.level_key,
             }));
-        return mergeFilterOptions([], [...analyticsOptions, ...recordOptions], learnerLevel);
-    }, [filterMetadata?.learner_level_summaries, items, learnerLevel]);
+        return mergeFilterOptions([], recordOptions, learnerLevel);
+    }, [items, learnerLevel]);
 
     const roleLevelOptions = useMemo(() => {
-        const analyticsOptions = (filterMetadata?.role_level_summaries ?? []).map((summary) => ({
-            value: summary.key,
-            label: summary.label || summary.key,
-        }));
         const recordOptions = items
             .map((record) => record.role_level)
             .filter((level): level is NonNullable<SalesTrainerTrainingRecord["role_level"]> =>
@@ -354,8 +297,8 @@ export default function SalesTrainerTrainingRecordsPage() {
                 value: level.level_key,
                 label: level.label || level.level_key,
             }));
-        return mergeFilterOptions([], [...analyticsOptions, ...recordOptions], roleLevel);
-    }, [filterMetadata?.role_level_summaries, items, roleLevel]);
+        return mergeFilterOptions([], recordOptions, roleLevel);
+    }, [items, roleLevel]);
 
     function submitFilters() {
         const filters = currentFilters();
@@ -382,21 +325,21 @@ export default function SalesTrainerTrainingRecordsPage() {
     }
 
     const content = (() => {
-        if (isCapabilityLoading) {
+        if (routeAccess.isLoading) {
             return (
                 <div className="py-12 text-center text-sm text-slate-500">
                     正在校验训练记录权限...
                 </div>
             );
         }
-        if (capabilityError || !canAccessRecords) {
+        if (routeAccess.error || !canAccessRecords) {
             return (
                 <AdminLoadErrorCard
                     title="训练记录权限不足"
                     description="当前页不会在权限未确认时加载训练记录，避免把权限异常伪装为空记录。请联系管理员开通训练记录查看权限后重试。"
-                    message={capabilityError}
+                    message={routeAccess.denialMessage}
                     retryLabel="重新校验权限"
-                    onRetry={() => void loadCapabilities()}
+                    onRetry={routeAccess.reloadCapabilities}
                 />
             );
         }
@@ -563,7 +506,7 @@ export default function SalesTrainerTrainingRecordsPage() {
                     secondaryActions={
                         <SalesTrainerAdminModuleNav
                             currentPath={pathname}
-                            capabilities={adminCapabilities}
+                            capabilities={routeAccess.capabilities}
                         />
                     }
                 />
@@ -734,14 +677,6 @@ export default function SalesTrainerTrainingRecordsPage() {
                             重置
                         </Button>
                     </div>
-                    {filterMetadataError ? (
-                        <div
-                            role="alert"
-                            className="md:col-span-2 xl:col-span-5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
-                        >
-                            筛选项元数据加载失败：{filterMetadataError}
-                        </div>
-                    ) : null}
                 </form>
             </GlassCard>
 

@@ -1,8 +1,10 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminShell } from "./admin-shell";
+import type { CurrentUser } from "@/lib/auth/current-user";
 
 const {
     replaceMock,
@@ -54,16 +56,35 @@ vi.mock("@/lib/auth-handler", () => ({
     },
 }));
 
-const currentUser = {
+vi.mock("@/lib/query/sales-trainer-admin", () => ({
+    salesTrainerAdminCapabilitiesQueryOptions: () => ({
+        queryKey: ["test", "sales-trainer-capabilities"],
+        queryFn: async () => ({ capabilities: { admin_full_access: true } }),
+        staleTime: 300_000,
+    }),
+}));
+
+const currentUser: CurrentUser = {
     id: "admin-1",
     user_id: "admin-1",
     name: "管理员",
     display_name: "管理员",
     email: "admin@example.com",
-    role: "admin" as const,
+    role: "admin",
     is_active: true,
     created_at: "2026-04-01T00:00:00Z",
 };
+
+function renderShell(children: ReactNode, user = currentUser) {
+    const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+        <QueryClientProvider client={queryClient}>
+            <AdminShell currentUser={user}>{children}</AdminShell>
+        </QueryClientProvider>,
+    );
+}
 
 describe("AdminShell auth and role routing", () => {
     afterEach(() => {
@@ -89,11 +110,7 @@ describe("AdminShell auth and role routing", () => {
     it("delegates auth expiry to authHandler instead of forcing a browser location jump", async () => {
         useCurrentUserMock.mockReturnValue({ data: null, error: { status: 401 } });
 
-        render(
-            <AdminShell currentUser={currentUser}>
-                <div>admin content</div>
-            </AdminShell>,
-        );
+        renderShell(<div>admin content</div>);
 
         await waitFor(() => {
             expect(sessionExpiredMock).toHaveBeenCalledTimes(1);
@@ -110,11 +127,7 @@ describe("AdminShell auth and role routing", () => {
             error: null,
         });
 
-        render(
-            <AdminShell currentUser={currentUser}>
-                <div>admin content</div>
-            </AdminShell>,
-        );
+        renderShell(<div>admin content</div>);
 
         await waitFor(() => {
             expect(replaceMock).toHaveBeenCalledWith("/");
@@ -131,11 +144,7 @@ describe("AdminShell auth and role routing", () => {
             error: null,
         });
 
-        render(
-            <AdminShell currentUser={{ ...currentUser, role: "support" }}>
-                <div>sales trainer content</div>
-            </AdminShell>,
-        );
+        renderShell(<div>sales trainer content</div>, { ...currentUser, role: "support" });
 
         await waitFor(() => {
             expect(screen.getByText("sales trainer content")).toBeTruthy();
@@ -153,11 +162,7 @@ describe("AdminShell auth and role routing", () => {
             error: null,
         });
 
-        render(
-            <AdminShell currentUser={{ ...currentUser, role: "support" }}>
-                <div>admin content</div>
-            </AdminShell>,
-        );
+        renderShell(<div>admin content</div>, { ...currentUser, role: "support" });
 
         await waitFor(() => {
             expect(replaceMock).toHaveBeenCalledWith("/admin/newcomer-training/path");
@@ -168,11 +173,7 @@ describe("AdminShell auth and role routing", () => {
         useCurrentUserMock.mockReturnValue({ data: currentUser, error: null });
         usePathnameMock.mockReturnValue("/admin/curriculum-practice/examiner-agents");
 
-        render(
-            <AdminShell currentUser={currentUser}>
-                <div>admin content</div>
-            </AdminShell>,
-        );
+        renderShell(<div>admin content</div>);
 
         const examinerLinks = screen.getAllByRole("link", { name: /AI 考官管理/ });
         expect(examinerLinks.some((link) => link.getAttribute("href") === "/admin/curriculum-practice/examiner-agents"))

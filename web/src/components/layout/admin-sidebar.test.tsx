@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -60,13 +60,12 @@ function capabilities(enabled: Partial<SalesTrainerAdminCapabilities["capabiliti
 describe("AdminSidebarContent", () => {
     beforeEach(() => usePathnameMock.mockReturnValue("/admin/newcomer-training/path"));
 
-    it("exposes one canonical newcomer path entry", () => {
+    it("exposes newcomer training as one direct entry", () => {
         render(<AdminSidebarContent currentUser={{ id: "admin-1", display_name: "管理员", role: "admin" }} />);
-        fireEvent.click(screen.getByRole("button", { name: "新人训练路径" }));
-        const pathLink = screen.getByRole("link", { name: "路径编排" });
+        const pathLink = screen.getByRole("link", { name: "新人训练" });
         expect(pathLink.getAttribute("href")).toBe("/admin/newcomer-training/path");
-        expect(screen.queryByRole("link", { name: "工作台" })).toBeNull();
-        expect(screen.queryByRole("link", { name: "学习专题" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "新人训练路径" })).toBeNull();
+        expect(screen.queryByRole("link", { name: "学员进度" })).toBeNull();
     });
 
     it("gives content managers the same focused editor", () => {
@@ -76,8 +75,7 @@ describe("AdminSidebarContent", () => {
                 salesTrainerCapabilities={capabilities({ manage_content: true })}
             />,
         );
-        fireEvent.click(screen.getByRole("button", { name: "新人训练路径" }));
-        expect(screen.getByRole("link", { name: "路径编排" }).getAttribute("href"))
+        expect(screen.getByRole("link", { name: "新人训练" }).getAttribute("href"))
             .toBe("/admin/newcomer-training/path");
     });
 
@@ -88,8 +86,8 @@ describe("AdminSidebarContent", () => {
                 salesTrainerCapabilities={capabilities({ view_records: true })}
             />,
         );
-        fireEvent.click(screen.getByRole("button", { name: "新人训练路径" }));
-        expect(screen.queryByRole("link", { name: "路径编排" })).toBeNull();
-        expect(screen.getByRole("link", { name: "训练记录" })).not.toBeNull();
+        expect(screen.getByRole("link", { name: "新人训练" }).getAttribute("href"))
+            .toBe("/admin/newcomer-training/learners");
+        expect(screen.queryByRole("link", { name: "训练记录" })).toBeNull();
     });
 });

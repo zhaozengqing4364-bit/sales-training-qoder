@@ -187,7 +187,7 @@ export default function SalesTrainerReadinessWorkbenchPage() {
         setIsLoading(true);
         setError(null);
         try {
-            setWorkbench(await api.admin.salesTrainer.getReadinessWorkbench({ limit: 100 }));
+            setWorkbench(await api.admin.salesTrainer.getReadinessWorkbench({ limit: 20 }));
         } catch (loadError) {
             setWorkbench(null);
             setError(getApiErrorMessage(loadError));

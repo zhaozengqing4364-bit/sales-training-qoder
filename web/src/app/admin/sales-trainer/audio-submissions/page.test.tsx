@@ -1,7 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerAudioSubmissionsPage from "./page";
+
+function renderPage(children: ReactNode = <SalesTrainerAudioSubmissionsPage />) {
+    const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
+    );
+}
 
 const {
     getCapabilitiesMock,
@@ -95,7 +106,7 @@ describe("SalesTrainerAudioSubmissionsPage", () => {
     });
 
     it("shows Chinese submission status for ops diagnosis", async () => {
-        render(<SalesTrainerAudioSubmissionsPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(listAudioSubmissionsMock).toHaveBeenCalledWith({ limit: 100 });
@@ -111,7 +122,7 @@ describe("SalesTrainerAudioSubmissionsPage", () => {
     it("keeps list load failures visible instead of rendering an empty recording list", async () => {
         listAudioSubmissionsMock.mockRejectedValueOnce(new Error("audio list unavailable"));
 
-        render(<SalesTrainerAudioSubmissionsPage />);
+        renderPage();
 
         expect(await screen.findByText("录音记录加载失败")).toBeTruthy();
         expect(screen.getByText("audio list unavailable")).toBeTruthy();
@@ -130,7 +141,7 @@ describe("SalesTrainerAudioSubmissionsPage", () => {
     it("fails closed before loading audio submissions when capabilities are unavailable", async () => {
         getCapabilitiesMock.mockRejectedValueOnce(new Error("capability unavailable"));
 
-        render(<SalesTrainerAudioSubmissionsPage />);
+        renderPage();
 
         expect(await screen.findByText("页面访问受限")).toBeTruthy();
         expect(screen.getByText("capability unavailable")).toBeTruthy();

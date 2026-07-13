@@ -3,8 +3,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import Page from "./page";
 
+vi.mock("next/navigation", () => ({
+    usePathname: () => "/admin/newcomer-training/learners",
+}));
+
 const { listJourneys } = vi.hoisted(() => ({ listJourneys: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ api: { admin: { newcomerTraining: { listJourneys } } }, getApiErrorMessage: (error: Error) => error.message }));
+vi.mock("@/lib/sales-trainer/use-admin-route-access", () => ({
+    useSalesTrainerAdminRouteAccess: () => ({
+        capabilities: { capabilities: { admin_full_access: true } },
+        canAccess: true,
+        denialMessage: null,
+        error: null,
+        isLoading: false,
+        reloadCapabilities: vi.fn(),
+    }),
+}));
 
 describe("newcomer learner operations page", () => {
     beforeEach(() => listJourneys.mockReset());

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, Shield } from "lucide-react";
 
@@ -12,6 +13,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { isAuthenticationError } from "@/lib/api/client";
 import { authHandler } from "@/lib/auth-handler";
 import { cn } from "@/lib/utils";
+import { salesTrainerAdminCapabilitiesQueryOptions } from "@/lib/query/sales-trainer-admin";
 import {
     canUseAdminConsoleRole,
     shouldStayInSalesTrainerAdmin,
@@ -27,6 +29,11 @@ function canUseAdminShell(role: string): boolean {
 
 function isSalesTrainerManagerRole(role: string): boolean {
     return shouldStayInSalesTrainerAdmin(role);
+}
+
+function SalesTrainerCapabilitiesPreloader() {
+    useQuery(salesTrainerAdminCapabilitiesQueryOptions());
+    return null;
 }
 
 export function AdminShell({
@@ -100,6 +107,7 @@ export function AdminShell({
 
     return (
         <div className="flex bg-[#FAFAF9] min-h-screen text-slate-900 selection:bg-blue-100 selection:text-blue-900 relative overflow-hidden">
+            <SalesTrainerCapabilitiesPreloader />
             <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
                 <div className="absolute top-[-10%] left-[-10%] w-[800px] h-[800px] bg-blue-100/40 rounded-full blur-[120px] opacity-60" />
                 <div className="absolute bottom-[-10%] right-[-10%] w-[800px] h-[800px] bg-purple-100/40 rounded-full blur-[120px] opacity-60" />

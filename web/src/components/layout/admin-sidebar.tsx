@@ -98,6 +98,7 @@ interface AdminNavItem {
     label: string;
     href: string;
     icon: LucideIcon;
+    matchPrefixes?: readonly string[];
 }
 
 interface AdminNavSection {
@@ -109,11 +110,17 @@ interface AdminNavSection {
 }
 
 function salesTrainerSection(items: readonly AdminNavItem[]): AdminNavSection {
+    const editor = items.find((item) => item.href === "/admin/newcomer-training/path");
+    const learnerProgress = items.find(
+        (item) => item.href === "/admin/newcomer-training/learners",
+    );
+    const entry = editor ?? learnerProgress ?? items[0];
     return {
         key: "sales-trainer",
-        label: "新人训练路径",
+        label: "新人训练",
         icon: Mic,
-        items,
+        href: entry?.href,
+        items: [],
     };
 }
 
@@ -125,12 +132,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         href: "/admin",
         items: [],
     },
-    {
-        key: "sales-trainer",
-        label: "新人训练路径",
-        icon: Mic,
-        items: SALES_TRAINER_ADMIN_NAV_ITEMS,
-    },
+    salesTrainerSection(SALES_TRAINER_ADMIN_NAV_ITEMS),
     {
         key: "curriculum",
         label: "课程训练",
@@ -549,7 +551,11 @@ function AdminNavLink({
     isCollapsed: boolean;
     tooltipLabel: string;
 }) {
-    const isActive = isPathActive(pathname, item.href);
+    const isActive = isPathActive(pathname, item.href)
+        || item.matchPrefixes?.some(
+            (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+        )
+        || false;
 
     const LinkContent = (
         <Link
@@ -624,7 +630,14 @@ function AdminNavSectionGroup({
         return (
             <div className="space-y-1">
                 <AdminNavLink
-                    item={{ label: section.label, href: section.href, icon: section.icon }}
+                    item={{
+                        label: section.label,
+                        href: section.href,
+                        icon: section.icon,
+                        matchPrefixes: section.key === "sales-trainer"
+                            ? ["/admin/newcomer-training", "/admin/sales-trainer"]
+                            : undefined,
+                    }}
                     pathname={pathname}
                     isCollapsed={isCollapsed}
                     tooltipLabel={sectionLabel}

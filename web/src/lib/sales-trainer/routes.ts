@@ -12,7 +12,6 @@ import {
     ListChecks,
     Mic,
     Milestone,
-    Route,
     ScrollText,
     Settings,
     SlidersHorizontal,
@@ -110,7 +109,7 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
     },
     paths: {
         key: "paths",
-        label: "路径编排",
+        label: "训练内容与路径",
         icon: Milestone,
         href: "/admin/newcomer-training/path",
     },
@@ -164,7 +163,7 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
     },
     readiness: {
         key: "readiness",
-        label: "达标验收",
+        label: "达标审核",
         icon: ClipboardCheck,
         href: "/admin/sales-trainer/readiness",
     },
@@ -182,7 +181,7 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
     },
     analytics: {
         key: "analytics",
-        label: "Journey 分析",
+        label: "训练分析",
         icon: BarChart3,
         href: "/admin/sales-trainer/analytics",
     },
@@ -451,7 +450,7 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
     },
     {
         root: "/admin/newcomer-training/path",
-        label: "路径与达标",
+        label: "新人训练",
         roots: [
             "/admin/newcomer-training/path",
             "/admin/newcomer-training/learners",
@@ -462,17 +461,10 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
             "/admin/sales-trainer/analytics",
         ],
         items: [
-            {
-                ...SALES_TRAINER_ADMIN_ROUTES.paths,
-                label: "路径配置",
-                icon: Route,
-            },
+            SALES_TRAINER_ADMIN_ROUTES.paths,
             SALES_TRAINER_ADMIN_ROUTES.learnerProgress,
-            SALES_TRAINER_ADMIN_ROUTES.units,
-            SALES_TRAINER_ADMIN_ROUTES.aiCoach,
             SALES_TRAINER_ADMIN_ROUTES.readiness,
             SALES_TRAINER_ADMIN_ROUTES.trainingRecords,
-            SALES_TRAINER_ADMIN_ROUTES.analytics,
         ],
     },
     {

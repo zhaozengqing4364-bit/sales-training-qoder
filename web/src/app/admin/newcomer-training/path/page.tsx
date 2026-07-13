@@ -1,31 +1,39 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 import { PathEditor } from "@/components/admin/newcomer-training/path-editor";
+import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/client";
 import type { TrainingPathConfigResponse, TrainingPathPayload } from "@/lib/api/types/newcomer-training";
 import type { ActivityEditorResources } from "@/components/admin/newcomer-training/activity-editors/types";
+import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 
 const EMPTY_RESOURCES: ActivityEditorResources = { learning_contents: [], exam_papers: [], scoring_rubrics: [], materials: [], practice_templates: [], runtime_profiles: [], coach_profiles: [] };
 type ResourceCatalogKey = keyof ActivityEditorResources;
 type ResourceWarning = { key: ResourceCatalogKey; label: string };
 
 export default function NewcomerTrainingPathPage() {
+    const pathname = usePathname();
+    const routeAccess = useSalesTrainerAdminRouteAccess(pathname);
     const toast = useToast();
     const [model, setModel] = useState<TrainingPathConfigResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [resources, setResources] = useState<ActivityEditorResources>(EMPTY_RESOURCES);
     const [resourceWarnings, setResourceWarnings] = useState<ResourceWarning[]>([]);
+    const [resourcesLoading, setResourcesLoading] = useState(true);
     const [retryingCatalog, setRetryingCatalog] = useState<ResourceCatalogKey | null>(null);
     const load = useCallback(async () => {
         setLoading(true); setError(null);
         try {
-            const [pathResult, contents, papers, rubrics, materials, templates, runtimes, coaches] = await Promise.allSettled([
-                api.admin.newcomerTraining.getPath(),
+            setModel(await api.admin.newcomerTraining.getPath());
+            setLoading(false);
+            setResourcesLoading(true);
+            const [contents, papers, rubrics, materials, templates, runtimes, coaches] = await Promise.allSettled([
                 api.learningContents.list({ status: "published" }),
                 api.admin.salesTrainer.listExamPapers(),
                 api.admin.newcomerTraining.listScoringRubrics(),
@@ -34,8 +42,6 @@ export default function NewcomerTrainingPathPage() {
                 api.admin.getVoiceRuntimeProfiles({ only_active: true }),
                 api.admin.newcomerTraining.listCoachProfiles(),
             ]);
-            if (pathResult.status === "rejected") throw pathResult.reason;
-            setModel(pathResult.value);
             const warnings: ResourceWarning[] = [];
             const value = <T,>(result: PromiseSettledResult<T>, fallback: T, key: ResourceCatalogKey, label: string): T => {
                 if (result.status === "fulfilled") return result.value;
@@ -59,9 +65,14 @@ export default function NewcomerTrainingPathPage() {
                 coach_profiles: coachValue,
             });
             setResourceWarnings(warnings);
+            setResourcesLoading(false);
         }
-        catch { setError("训练路径加载失败，请检查网络后重试。"); }
-        finally { setLoading(false); }
+        catch {
+            setModel(null);
+            setError("训练路径加载失败，请检查网络后重试。");
+            setLoading(false);
+            setResourcesLoading(false);
+        }
     }, []);
     useEffect(() => { void load(); }, [load]);
 
@@ -91,6 +102,8 @@ export default function NewcomerTrainingPathPage() {
     if (error || !model) return <div role="alert" className="mx-auto mt-12 max-w-xl rounded-2xl border border-red-200 bg-red-50 p-6 text-red-800"><p className="font-semibold">{error ?? "训练路径不可用"}</p><Button className="mt-4" variant="secondary" onClick={() => void load()}>重新加载</Button></div>;
 
     return <main className="min-h-screen bg-slate-50 p-4 md:p-6">
+        <div className="mb-4"><SalesTrainerAdminModuleNav currentPath={pathname} capabilities={routeAccess.capabilities} /></div>
+        {resourcesLoading ? <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">可选资源仍在后台加载，不影响查看和编排路径。</div> : null}
         {resourceWarnings.length > 0 ? <div role="alert" className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><p>部分资源暂不可用，现有路径仍可编辑。</p><div className="mt-2 flex flex-wrap gap-2">{resourceWarnings.map((warning) => <div key={warning.key} className="inline-flex items-center gap-2 rounded-xl bg-white/70 px-2 py-1"><span>{warning.label}暂不可用</span><Button size="sm" variant="outline" isLoading={retryingCatalog === warning.key} onClick={() => void retryCatalog(warning)}>重新加载{warning.label}</Button></div>)}</div></div> : null}
         <PathEditor key={model.working_revision_id ?? model.active_revision_id ?? "empty"} initialModel={model} resources={resources}
             onSave={async (payload: TrainingPathPayload, reason: string, expectedRevisionId) => { const revision = await api.admin.newcomerTraining.saveDraft(payload, reason, expectedRevisionId); toast.success("草稿已保存"); return revision; }}
