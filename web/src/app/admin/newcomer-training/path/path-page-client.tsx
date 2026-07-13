@@ -128,6 +128,6 @@ export function NewcomerTrainingPathPageClient({
         <PathEditor key={model.working_revision_id ?? model.active_revision_id ?? "empty"} initialModel={model} resources={resources}
             onSave={async (payload: TrainingPathPayload, reason: string, expectedRevisionId) => { const revision = await api.admin.newcomerTraining.saveDraft(payload, reason, expectedRevisionId); toast.success("草稿已保存"); return revision; }}
             onValidate={async (payload) => { const validation = await api.admin.newcomerTraining.validateCandidate(payload); toast.success(validation.can_publish ? "检查通过，可以发布" : "检查完成，请处理未完成项"); return validation; }}
-            onPublish={async (payload, reason, expectedRevisionId) => { const revision = await api.admin.newcomerTraining.publishCandidate(payload, reason, expectedRevisionId); toast.success("训练路径已发布"); await load(true); return revision; }} />
+            onPublish={async (payload, reason, expectedRevisionId) => { const revision = await api.admin.newcomerTraining.publishCandidate(payload, reason, expectedRevisionId); toast.success("训练路径已发布"); void load(true); return revision; }} />
     </main>;
 }

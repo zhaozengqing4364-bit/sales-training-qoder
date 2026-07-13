@@ -8,13 +8,22 @@ vi.mock("next/navigation", () => ({
     usePathname: () => "/admin/newcomer-training/path",
 }));
 
-const { getPath, listExamPapers } = vi.hoisted(() => ({ getPath: vi.fn(), listExamPapers: vi.fn() }));
+const { getPath, listExamPapers, publishCandidate } = vi.hoisted(() => ({
+    getPath: vi.fn(),
+    listExamPapers: vi.fn(),
+    publishCandidate: vi.fn(),
+}));
 
 vi.mock("@/lib/api/client", () => ({
     api: {
         learningContents: { list: vi.fn().mockResolvedValue({ items: [], total: 0 }) },
         admin: {
-            newcomerTraining: { getPath, listCoachProfiles: vi.fn().mockResolvedValue([]), listScoringRubrics: vi.fn().mockResolvedValue([]) },
+            newcomerTraining: {
+                getPath,
+                publishCandidate,
+                listCoachProfiles: vi.fn().mockResolvedValue([]),
+                listScoringRubrics: vi.fn().mockResolvedValue([]),
+            },
             salesTrainer: {
                 listExamPapers,
                 listMaterials: vi.fn().mockResolvedValue({ items: [], total: 0 }),
@@ -43,6 +52,7 @@ vi.mock("@/lib/sales-trainer/use-admin-route-access", () => ({
 describe("newcomer path page", () => {
     beforeEach(() => {
         getPath.mockReset();
+        publishCandidate.mockReset();
         listExamPapers.mockReset().mockResolvedValue({ items: [], total: 0 });
     });
 
@@ -127,6 +137,33 @@ describe("newcomer path page", () => {
 
         expect(screen.queryByText("正在加载训练路径…")).toBeNull();
         expect(await screen.findByRole("tree", { name: "训练路径大纲" })).toBeTruthy();
+    });
+
+    it("closes the publish confirmation without waiting for resource catalogs to refresh", async () => {
+        const user = userEvent.setup();
+        const initialModel = {
+            active_revision_id: "revision-1",
+            active_revision_no: 1,
+            working_revision_id: "revision-1",
+            payload: {
+                schema_version: "newcomer_training_orchestration_v1" as const,
+                title: "新人训练路径",
+                description: null,
+                phases: [],
+            },
+            validation: null,
+        };
+        publishCandidate.mockResolvedValue({ revision_id: "revision-2" });
+        getPath.mockResolvedValue({ ...initialModel, active_revision_id: "revision-2" });
+        listExamPapers.mockImplementation(() => new Promise(() => undefined));
+
+        render(<Page initialModel={initialModel} />);
+        await user.type(screen.getByLabelText("发布说明"), "更新新人训练路径");
+        await user.click(screen.getByRole("button", { name: "发布" }));
+        await user.click(screen.getByRole("button", { name: "确认发布" }));
+
+        await waitFor(() => expect(screen.queryByText("确认发布训练路径")).toBeNull());
+        expect(publishCandidate).toHaveBeenCalledTimes(1);
     });
 
     it("shows a retryable inline error", async () => {
