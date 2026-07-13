@@ -187,7 +187,7 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
     },
     settings: {
         key: "settings",
-        label: "系统治理",
+        label: "新人训练设置",
         icon: Settings,
         href: "/admin/sales-trainer/settings",
     },

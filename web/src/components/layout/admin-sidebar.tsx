@@ -98,7 +98,6 @@ interface AdminNavItem {
     label: string;
     href: string;
     icon: LucideIcon;
-    matchPrefixes?: readonly string[];
 }
 
 interface AdminNavSection {
@@ -110,17 +109,19 @@ interface AdminNavSection {
 }
 
 function salesTrainerSection(items: readonly AdminNavItem[]): AdminNavSection {
-    const editor = items.find((item) => item.href === "/admin/newcomer-training/path");
-    const learnerProgress = items.find(
-        (item) => item.href === "/admin/newcomer-training/learners",
-    );
-    const entry = editor ?? learnerProgress ?? items[0];
+    const visibleHrefs = new Set([
+        "/admin/newcomer-training/path",
+        "/admin/newcomer-training/learners",
+        "/admin/sales-trainer/readiness",
+        "/admin/sales-trainer/training-records",
+        "/admin/sales-trainer/settings",
+        "/admin/sales-trainer/operation-logs",
+    ]);
     return {
         key: "sales-trainer",
         label: "新人训练",
         icon: Mic,
-        href: entry?.href,
-        items: [],
+        items: items.filter((item) => visibleHrefs.has(item.href)),
     };
 }
 
@@ -339,7 +340,7 @@ export function AdminSidebarContent({
                             isCollapsed={isCollapsed}
                             isLast={sectionIndex === sections.length - 1}
                             isOpen={openSectionKeys[section.key]
-                                ?? (section.key !== "sales-trainer" && section.key === activeSectionKey)}
+                                ?? section.key === activeSectionKey}
                             onToggle={() => {
                                 setOpenSectionKeys((prev) => ({
                                     ...prev,
@@ -551,11 +552,7 @@ function AdminNavLink({
     isCollapsed: boolean;
     tooltipLabel: string;
 }) {
-    const isActive = isPathActive(pathname, item.href)
-        || item.matchPrefixes?.some(
-            (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-        )
-        || false;
+    const isActive = isPathActive(pathname, item.href);
 
     const LinkContent = (
         <Link
@@ -630,14 +627,7 @@ function AdminNavSectionGroup({
         return (
             <div className="space-y-1">
                 <AdminNavLink
-                    item={{
-                        label: section.label,
-                        href: section.href,
-                        icon: section.icon,
-                        matchPrefixes: section.key === "sales-trainer"
-                            ? ["/admin/newcomer-training", "/admin/sales-trainer"]
-                            : undefined,
-                    }}
+                    item={{ label: section.label, href: section.href, icon: section.icon }}
                     pathname={pathname}
                     isCollapsed={isCollapsed}
                     tooltipLabel={sectionLabel}
