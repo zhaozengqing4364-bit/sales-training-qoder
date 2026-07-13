@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from "react";
 import { CheckCircle2, AlertCircle, X, LogOut } from "lucide-react";
 import { authHandler } from "@/lib/auth-handler";
 
@@ -10,6 +10,7 @@ interface Toast {
     id: string;
     message: string;
     type: ToastType;
+    exiting: boolean;
 }
 
 interface ToastContextType {
@@ -44,10 +45,16 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
     };
 
     return (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg border animate-in slide-in-from-right-4 ${styles[toast.type]}`}>
+        <div
+            role="status"
+            aria-atomic="true"
+            data-motion-kind="spatial"
+            data-state={toast.exiting ? "closed" : "open"}
+            className={`motion-toast flex items-center gap-2 rounded-2xl border px-4 py-3 shadow-lg ${styles[toast.type]}`}
+        >
             {icons[toast.type]}
             <span className="text-sm font-medium flex-1">{toast.message}</span>
-            <button onClick={onClose} className="p-1 hover:bg-black/5 rounded-full transition-colors">
+            <button type="button" aria-label="关闭通知" onClick={onClose} className="rounded-full p-1 transition-colors hover:bg-black/5">
                 <X className="w-3 h-3" />
             </button>
         </div>
@@ -56,18 +63,32 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
     const [toasts, setToasts] = useState<Toast[]>([]);
+    const autoDismissTimers = useRef(new Map<string, number>());
+    const removalTimers = useRef(new Map<string, number>());
 
     const removeToast = useCallback((id: string) => {
-        setToasts(prev => prev.filter(t => t.id !== id));
+        if (removalTimers.current.has(id)) return;
+        const autoDismissTimer = autoDismissTimers.current.get(id);
+        if (autoDismissTimer !== undefined) {
+            window.clearTimeout(autoDismissTimer);
+            autoDismissTimers.current.delete(id);
+        }
+        setToasts(prev => prev.map(toast => toast.id === id ? { ...toast, exiting: true } : toast));
+        const removalTimer = window.setTimeout(() => {
+            setToasts(prev => prev.filter(toast => toast.id !== id));
+            removalTimers.current.delete(id);
+        }, 200);
+        removalTimers.current.set(id, removalTimer);
     }, []);
 
     const showToast = useCallback((message: string, type: ToastType = "info") => {
         const id = Math.random().toString(36).slice(2);
-        setToasts(prev => [...prev, { id, message, type }]);
-        
+        setToasts(prev => [...prev, { id, message, type, exiting: false }]);
+
         // Auto remove after 4 seconds (auth toast stays longer)
         const duration = type === "auth" ? 2000 : 4000;
-        setTimeout(() => removeToast(id), duration);
+        const timer = window.setTimeout(() => removeToast(id), duration);
+        autoDismissTimers.current.set(id, timer);
     }, [removeToast]);
 
     const success = useCallback((message: string) => showToast(message, "success"), [showToast]);
@@ -80,6 +101,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         });
         return unsubscribe;
     }, [showToast]);
+
+    useEffect(() => () => {
+        autoDismissTimers.current.forEach((timer) => window.clearTimeout(timer));
+        removalTimers.current.forEach((timer) => window.clearTimeout(timer));
+    }, []);
 
     return (
         <ToastContext.Provider value={{ showToast, success, error }}>

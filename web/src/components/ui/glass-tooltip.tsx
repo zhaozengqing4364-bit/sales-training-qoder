@@ -17,8 +17,9 @@ const TooltipContent = React.forwardRef<
     <TooltipPrimitive.Content
         ref={ref}
         sideOffset={sideOffset}
+        data-motion-kind="spatial"
         className={cn(
-            "z-50 overflow-hidden rounded-xl border border-white/40 bg-white/80 backdrop-blur-xl px-3 py-1.5 text-xs font-bold text-slate-700 shadow-[0_4px_12px_rgba(0,0,0,0.05)] animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 selection:bg-blue-100",
+            "motion-tooltip z-50 overflow-hidden rounded-xl border border-white/40 bg-white/80 backdrop-blur-xl px-3 py-1.5 text-xs font-bold text-slate-700 shadow-[0_4px_12px_rgba(0,0,0,0.05)] selection:bg-blue-100",
             className
         )}
         {...props}

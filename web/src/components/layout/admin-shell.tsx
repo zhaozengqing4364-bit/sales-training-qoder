@@ -135,7 +135,7 @@ export function AdminShell({
 
             <main
                 className={cn(
-                    "flex-1 p-4 md:p-8 relative z-10 overflow-y-auto h-screen scroll-smooth mt-16 md:mt-0 transition-all duration-300 ease-in-out",
+                    "flex-1 p-4 md:p-8 relative z-10 overflow-y-auto h-screen scroll-smooth mt-16 md:mt-0",
                     isCollapsed ? "md:ml-28" : "md:ml-80",
                 )}
             >

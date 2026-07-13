@@ -16,7 +16,7 @@ export function JourneyHome({ journey }: { journey: JourneyResponse }) {
             </header>
             {mission
                 ? <LearnerMissionCard mission={mission} actionHref={`/newcomer-training/activities/${encodeURIComponent(mission.activityId)}`} />
-                : <section className="rounded-3xl border border-emerald-200 bg-white p-7 shadow-sm"><p className="text-xl font-semibold text-emerald-950">当前训练已全部完成</p><p className="mt-2 text-sm text-slate-600">你可以在训练记录中查看成绩和反馈。</p></section>}
+                : <section aria-live="polite" data-motion-kind="spatial" className="motion-completion-reveal rounded-3xl border border-emerald-200 bg-white p-7 shadow-sm"><p className="text-xl font-semibold text-emerald-950">当前训练已全部完成</p><p className="mt-2 text-sm text-slate-600">你可以在训练记录中查看成绩和反馈。</p></section>}
             <section className="mt-8">
                 <div className="mb-4"><h2 className="text-lg font-semibold text-slate-950">完整训练安排</h2><p className="mt-1 text-sm text-slate-500">一次只需完成当前任务，后续内容会按顺序解锁。</p></div>
                 <JourneyOutline phases={journey.phases} currentPhaseId={current?.phase_id ?? null} />

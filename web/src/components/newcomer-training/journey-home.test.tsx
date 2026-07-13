@@ -45,6 +45,48 @@ describe("JourneyHome", () => {
         expect(screen.getByText("覆盖三个核心价值")).toBeTruthy();
         expect(screen.queryByText("当前阶段：产品能力")).toBeNull();
         expect(screen.queryByText("我的全部录音")).toBeNull();
+        const missionCard = screen.getByRole("heading", { name: "产品能力学习" }).closest("article");
+        expect(missionCard).not.toBeNull();
+        expect(missionCard?.className ?? "").not.toContain("motion-completion-reveal");
+    });
+
+    it("announces and reveals the all-training-complete milestone once", () => {
+        const completedJourney = journey();
+        completedJourney.phases = completedJourney.phases.map((phaseItem) => ({
+            ...phaseItem,
+            status: "completed",
+            completed: true,
+            completed_count: 1,
+            percent: 100,
+            locked: false,
+            lock_reason: null,
+            modules: phaseItem.modules.map((moduleItem) => ({
+                ...moduleItem,
+                status: "completed",
+                completed: true,
+                completed_count: 1,
+                percent: 100,
+                locked: false,
+                activities: moduleItem.activities.map((activity) => ({
+                    ...activity,
+                    status: "completed",
+                    completed: true,
+                    locked: false,
+                    action_key: null,
+                    is_primary_next_action: false,
+                })),
+            })),
+        }));
+        completedJourney.progress = { completed: true, completed_count: 3, total_required: 3, percent: 100 };
+        completedJourney.primary_next_action = null;
+
+        render(<JourneyHome journey={completedJourney} />);
+
+        const card = screen.getByText("当前训练已全部完成").closest("section");
+        expect(card?.className).toContain("motion-completion-reveal");
+        expect(card?.getAttribute("data-motion-kind")).toBe("spatial");
+        expect(card?.getAttribute("aria-live")).toBe("polite");
+        expect(screen.getByRole("link", { name: "查看训练记录" })).toBeTruthy();
     });
 
     it("collapses completed and future phases", () => {

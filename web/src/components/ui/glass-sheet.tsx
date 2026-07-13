@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion, Variants } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import type { Variants } from "framer-motion";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ export function GlassSheet({
     const [mounted, setMounted] = React.useState(false);
     const panelRef = React.useRef<HTMLDivElement>(null);
     const previousFocusRef = React.useRef<HTMLElement | null>(null);
+    const reduceMotion = useReducedMotion();
 
     React.useEffect(() => {
         setMounted(true);
@@ -63,17 +65,23 @@ export function GlassSheet({
 
     if (!mounted) return null;
 
+    const closedTransform = side === "left"
+        ? "translate3d(-100%,0,0)"
+        : side === "right"
+            ? "translate3d(100%,0,0)"
+            : "translate3d(0,100%,0)";
     const variants: Variants = {
         closed: {
-            x: side === "left" ? "-100%" : side === "right" ? "100%" : 0,
-            y: side === "bottom" ? "100%" : 0,
             opacity: 0,
+            transform: reduceMotion ? "translate3d(0,0,0)" : closedTransform,
+            transition: { duration: reduceMotion ? 0.16 : 0.2, ease: [0.23, 1, 0.32, 1] },
         },
         open: {
-            x: 0,
-            y: 0,
             opacity: 1,
-            transition: { type: "spring", damping: 30, stiffness: 300 },
+            transform: "translate3d(0,0,0)",
+            transition: reduceMotion
+                ? { duration: 0.16, ease: [0.23, 1, 0.32, 1] }
+                : { type: "spring", duration: 0.5, bounce: 0.2 },
         },
     };
 
@@ -86,8 +94,9 @@ export function GlassSheet({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
+                        transition={{ duration: reduceMotion ? 0.16 : 0.2, ease: [0.23, 1, 0.32, 1] }}
                         onClick={onClose}
-                        className="fixed inset-0 z-50 bg-slate-900/20 backdrop-blur-sm"
+                        className="fixed inset-0 z-50 bg-slate-900/25"
                     />
 
                     {/* Sheet Content */}
@@ -95,6 +104,7 @@ export function GlassSheet({
                         ref={panelRef}
                         role="dialog"
                         aria-modal="true"
+                        data-motion-kind="spatial"
                         tabIndex={-1}
                         variants={variants}
                         initial="closed"

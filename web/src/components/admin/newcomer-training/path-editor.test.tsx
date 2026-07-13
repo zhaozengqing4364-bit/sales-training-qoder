@@ -60,6 +60,42 @@ function response(): TrainingPathConfigResponse {
 }
 
 describe("PathEditor", () => {
+    it("exposes saved and dirty draft states with text, icon, and live semantics", async () => {
+        const user = userEvent.setup();
+        const onSave = vi.fn();
+        render(<PathEditor initialModel={response()} onSave={onSave} />);
+
+        const status = screen.getByRole("status");
+        expect(status.getAttribute("data-save-state")).toBe("saved");
+        expect(status.textContent).toContain("草稿已保存");
+        expect(status.querySelector("svg")).not.toBeNull();
+
+        await user.clear(screen.getByLabelText("名称"));
+        await user.type(screen.getByLabelText("名称"), "新版新人训练路径");
+        expect(status.getAttribute("data-save-state")).toBe("dirty");
+        expect(status.textContent).toContain("有未保存修改");
+        expect(status.querySelector("svg")).toBeNull();
+
+        await user.click(screen.getByRole("button", { name: "保存草稿" }));
+        expect(onSave).toHaveBeenCalled();
+        expect(status.getAttribute("data-save-state")).toBe("saved");
+        expect(status.textContent).toContain("草稿已保存");
+    });
+
+    it("keeps the draft dirty when saving fails", async () => {
+        const user = userEvent.setup();
+        const onSave = vi.fn().mockRejectedValue(new Error("保存失败"));
+        render(<PathEditor initialModel={response()} onSave={onSave} />);
+
+        await user.type(screen.getByLabelText("名称"), " 2");
+        await user.click(screen.getByRole("button", { name: "保存草稿" }));
+
+        expect((await screen.findByRole("alert")).textContent).toContain("保存失败");
+        const status = screen.getByRole("status");
+        expect(status.getAttribute("data-save-state")).toBe("dirty");
+        expect(status.textContent).toContain("有未保存修改");
+    });
+
     it("uses a focused two-pane editor and opens the real learner preview on demand", async () => {
         const user = userEvent.setup();
         render(<PathEditor initialModel={response()} />);

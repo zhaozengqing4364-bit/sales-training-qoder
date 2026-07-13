@@ -72,7 +72,7 @@ export function AdminSidebar({ currentUser }: { currentUser: CurrentUser }) {
     return (
         <aside
             className={cn(
-                "hidden md:flex fixed left-4 top-4 h-[calc(100vh-2rem)] rounded-[2.5rem] bg-white/50 backdrop-blur-2xl border border-white/60 shadow-[0_8px_32px_rgba(0,0,0,0.04)] z-50 flex-col pt-8 pb-6 transition-all duration-300 ease-in-out overflow-hidden",
+                "hidden md:flex fixed left-4 top-4 h-[calc(100vh-2rem)] rounded-[2.5rem] bg-white/50 backdrop-blur-2xl border border-white/60 shadow-[0_8px_32px_rgba(0,0,0,0.04)] z-50 flex-col pt-8 pb-6 overflow-hidden",
                 isCollapsed ? "w-20 px-3" : "w-72 px-5"
             )}
         >
@@ -314,14 +314,14 @@ export function AdminSidebarContent({
         <div className="flex flex-col h-full w-full overflow-hidden">
             {/* Brand Identity - Admin */}
             <div className={cn(
-                "mb-10 flex items-center group cursor-default transition-all duration-300 shrink-0",
+                "mb-10 flex items-center group cursor-default shrink-0",
                 isCollapsed ? "justify-center px-0" : "gap-4 px-2"
             )}>
-                <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform duration-300 shrink-0">
+                <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform duration-[var(--duration-press)] ease-[var(--ease-out)] motion-reduce:transform-none shrink-0">
                     <Shield className="w-6 h-6 text-yellow-300" strokeWidth={2} />
                 </div>
                 <div className={cn(
-                    "flex flex-col overflow-hidden transition-all duration-300",
+                    "flex flex-col overflow-hidden",
                     isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100"
                 )}>
                     <span className="font-bold text-xl text-slate-900 tracking-tight leading-none whitespace-nowrap">管理</span>
@@ -370,7 +370,7 @@ export function AdminSidebarContent({
                         size="icon"
                         onClick={toggleSidebar}
                         className={cn(
-                            "mx-auto text-slate-400 hover:text-slate-600 hover:bg-black/5 rounded-full transition-all duration-300",
+                            "mx-auto text-slate-400 hover:text-slate-600 hover:bg-black/5 rounded-full transition-[color,background-color,box-shadow] duration-[var(--duration-press)] ease-[var(--ease-out)]",
                             isCollapsed ? "w-10 h-10" : "w-full flex gap-2 items-center justify-center h-10 px-4"
                         )}
                     >
@@ -558,7 +558,7 @@ function AdminNavLink({
         <Link
             href={item.href}
             className={cn(
-                "flex items-center gap-3 py-2.5 rounded-xl transition-all duration-300 group relative",
+                "flex items-center gap-3 py-2.5 rounded-xl transition-[color,background-color,box-shadow] duration-[var(--duration-press)] ease-[var(--ease-out)] group relative",
                 isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : "px-4 w-full",
                 isActive
                     ? "text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"
@@ -571,13 +571,13 @@ function AdminNavLink({
             <item.icon
                 strokeWidth={isActive ? 2.5 : 2}
                 className={cn(
-                    "transition-all duration-300 shrink-0",
+                    "transition-colors duration-[var(--duration-press)] ease-[var(--ease-out)] shrink-0",
                     isCollapsed ? "w-5 h-5" : "w-4 h-4",
-                    isActive ? "text-slate-900 scale-110" : "text-slate-400 group-hover:text-slate-600 group-hover:scale-105"
+                    isActive ? "text-slate-900" : "text-slate-400 group-hover:text-slate-600"
                 )}
             />
             <span className={cn(
-                "text-base font-medium tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300",
+                "text-base font-medium tracking-wide whitespace-nowrap overflow-hidden",
                 isActive ? "font-bold" : "",
                 isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100"
             )}>
@@ -644,7 +644,7 @@ function AdminNavSectionGroup({
             type="button"
             onClick={onToggle}
             className={cn(
-                "flex items-center gap-3 py-2.5 rounded-xl transition-all duration-300 w-full group",
+                "flex items-center gap-3 py-2.5 rounded-xl transition-[color,background-color,box-shadow] duration-[var(--duration-press)] ease-[var(--ease-out)] w-full group",
                 isCollapsed ? "justify-center px-0 h-10" : "px-4",
                 isSectionActive
                     ? "text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"
@@ -656,9 +656,9 @@ function AdminNavSectionGroup({
             <section.icon
                 strokeWidth={isSectionActive ? 2.5 : 2}
                 className={cn(
-                    "transition-all duration-300 shrink-0",
+                    "transition-colors duration-[var(--duration-press)] ease-[var(--ease-out)] shrink-0",
                     isCollapsed ? "w-5 h-5" : "w-4 h-4",
-                    isSectionActive ? "text-slate-900 scale-110" : "text-slate-400 group-hover:text-slate-600 group-hover:scale-105"
+                    isSectionActive ? "text-slate-900" : "text-slate-400 group-hover:text-slate-600"
                 )}
             />
             {!isCollapsed && (
@@ -668,7 +668,7 @@ function AdminNavSectionGroup({
                     </span>
                     <ChevronDown
                         className={cn(
-                            "ml-auto w-4 h-4 text-slate-400 transition-transform duration-200",
+                            "ml-auto w-4 h-4 text-slate-400 transition-transform duration-[var(--duration-popover)] ease-[var(--ease-out)] motion-reduce:transform-none",
                             isOpen && "rotate-180"
                         )}
                     />

@@ -179,4 +179,25 @@ describe("AdminShell auth and role routing", () => {
         expect(examinerLinks.some((link) => link.getAttribute("href") === "/admin/curriculum-practice/examiner-agents"))
             .toBe(true);
     });
+
+    it("switches collapsed layout without animating width or page margin", () => {
+        useCurrentUserMock.mockReturnValue({ data: currentUser, error: null });
+
+        const expanded = renderShell(<div>admin content</div>);
+        const expandedMain = expanded.container.querySelector("main");
+        expect(expandedMain?.className).toContain("md:ml-80");
+        expect(expandedMain?.className).not.toContain("transition-all");
+        expect(expandedMain?.className).not.toContain("duration-300");
+
+        cleanup();
+        useSidebarStoreMock.mockReturnValue({
+            isCollapsed: true,
+            toggleSidebar: vi.fn(),
+            setSidebarState: vi.fn(),
+        });
+        const collapsed = renderShell(<div>admin content</div>);
+        const collapsedMain = collapsed.container.querySelector("main");
+        expect(collapsedMain?.className).toContain("md:ml-28");
+        expect(collapsedMain?.className).not.toContain("transition-all");
+    });
 });

@@ -46,5 +46,10 @@ describe("SalesTrainerAdminModuleNav", () => {
         expect(screen.queryByRole("link", { name: /训练分析/ })).toBeNull();
         expect(screen.queryByRole("link", { name: /模块单元/ })).toBeNull();
         expect(screen.queryByText("路径与达标")).toBeNull();
+
+        const pathLink = screen.getByRole("link", { name: /训练内容与路径/ });
+        expect(pathLink.className).toContain("transition-colors");
+        expect(pathLink.className).toContain("duration-[var(--duration-press)]");
+        expect(pathLink.className).toContain("ease-[var(--ease-out)]");
     });
 });

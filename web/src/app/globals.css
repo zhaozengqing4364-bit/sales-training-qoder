@@ -27,6 +27,16 @@
   --glass-bg: rgba(255, 255, 255, 0.65);
   --glass-border: rgba(255, 255, 255, 0.6);
   --glass-shine: rgba(255, 255, 255, 0.4);
+
+  /* Motion tokens */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-press: 140ms;
+  --duration-tooltip: 160ms;
+  --duration-popover: 200ms;
+  --duration-modal: 240ms;
+  --duration-drawer: 320ms;
 }
 
 @theme inline {
@@ -68,4 +78,188 @@ body {
 /* Mobile Safe Area */
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Shared feedback motion */
+@keyframes motion-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes motion-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes motion-dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes motion-dialog-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.97);
+  }
+}
+
+@keyframes motion-tooltip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes motion-tooltip-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes motion-toast-in {
+  from {
+    opacity: 0;
+    transform: translate3d(16px, 0, 0) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes motion-toast-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(16px, 0, 0) scale(0.97);
+  }
+}
+
+.motion-dialog-overlay[data-state="open"] {
+  animation: motion-fade-in var(--duration-modal) var(--ease-out) both;
+}
+
+.motion-dialog-overlay[data-state="closed"] {
+  animation: motion-fade-out var(--duration-modal) var(--ease-out) both;
+}
+
+.motion-dialog-content {
+  --motion-reduced-transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%);
+}
+
+.motion-dialog-content[data-state="open"] {
+  animation: motion-dialog-in var(--duration-modal) var(--ease-out) both;
+}
+
+.motion-dialog-content[data-state="closed"] {
+  animation: motion-dialog-out var(--duration-modal) var(--ease-out) both;
+}
+
+.motion-tooltip {
+  transform-origin: var(--radix-tooltip-content-transform-origin);
+}
+
+.motion-tooltip[data-state="instant-open"],
+.motion-tooltip[data-state="delayed-open"] {
+  animation: motion-tooltip-in var(--duration-tooltip) var(--ease-out) both;
+}
+
+.motion-tooltip[data-state="closed"] {
+  animation: motion-tooltip-out var(--duration-tooltip) var(--ease-out) both;
+}
+
+.motion-toast[data-state="open"] {
+  animation: motion-toast-in var(--duration-popover) var(--ease-out) both;
+}
+
+.motion-toast[data-state="closed"] {
+  animation: motion-toast-out var(--duration-popover) var(--ease-out) both;
+}
+
+.motion-result-reveal {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity var(--duration-popover) var(--ease-out),
+    transform var(--duration-popover) var(--ease-out);
+}
+
+@starting-style {
+  .motion-result-reveal {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+.motion-completion-reveal {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity var(--duration-modal) var(--ease-out),
+    transform var(--duration-modal) var(--ease-out);
+}
+
+@starting-style {
+  .motion-completion-reveal {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-motion-kind="spatial"] {
+    transform: var(--motion-reduced-transform, none) !important;
+    transition-property: opacity, color, background-color, border-color, box-shadow !important;
+  }
+
+  [data-motion-kind="continuous"] {
+    animation: none !important;
+  }
+
+  .motion-dialog-overlay[data-state="open"],
+  .motion-dialog-content[data-state="open"],
+  .motion-tooltip[data-state="instant-open"],
+  .motion-tooltip[data-state="delayed-open"] {
+    animation: motion-fade-in var(--duration-tooltip) var(--ease-out) both;
+  }
+
+  .motion-dialog-overlay[data-state="closed"],
+  .motion-dialog-content[data-state="closed"],
+  .motion-tooltip[data-state="closed"],
+  .motion-toast[data-state="closed"] {
+    animation: motion-fade-out var(--duration-tooltip) var(--ease-out) both;
+  }
+
+  .motion-toast[data-state="open"] {
+    animation: motion-fade-in var(--duration-tooltip) var(--ease-out) both;
+  }
+
+  .motion-result-reveal,
+  .motion-completion-reveal {
+    transition-duration: var(--duration-tooltip);
+    transition-timing-function: var(--ease-out);
+  }
 }

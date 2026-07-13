@@ -74,6 +74,20 @@ describe("AdminSidebarContent", () => {
         expect(screen.queryByRole("link", { name: "训练分析" })).toBeNull();
     });
 
+    it("keeps high-frequency navigation feedback short and non-scaling", () => {
+        render(<AdminSidebarContent currentUser={{ id: "admin-1", display_name: "管理员", role: "admin" }} />);
+
+        const section = screen.getByRole("button", { name: "新人训练" });
+        const pathLink = screen.getByRole("link", { name: "训练内容与路径" });
+        for (const element of [section, pathLink]) {
+            expect(element.className).not.toContain("transition-all");
+            expect(element.className).toContain("duration-[var(--duration-press)]");
+            expect(element.className).toContain("ease-[var(--ease-out)]");
+            expect(element.innerHTML).not.toContain("scale-110");
+            expect(element.innerHTML).not.toContain("group-hover:scale-105");
+        }
+    });
+
     it("gives content managers the same focused editor", () => {
         render(
             <AdminSidebarContent
