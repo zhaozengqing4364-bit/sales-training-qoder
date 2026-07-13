@@ -10,4 +10,9 @@ describe("next dev config", () => {
       isCsrfOriginAllowed("203.0.113.42", nextConfig.allowedDevOrigins),
     ).toBe(true);
   });
+
+  it("keeps Turbopack and output tracing inside the frontend package", () => {
+    expect(nextConfig.turbopack?.root).toBe(process.cwd());
+    expect(nextConfig.outputFileTracingRoot).toBe(process.cwd());
+  });
 });

@@ -8,6 +8,17 @@
 
 **Tech Stack:** Next.js 16 App Router, React 19, TypeScript, TanStack Query 5, Vitest, Testing Library, FastAPI.
 
+## 2026-07-13 实测闭环
+
+- 开发模式两轮 10 次栏目切换：内容稳定中位数 284ms、P95 2275ms，3 次观察到
+  `Rendering ...`；首次训练、排行榜、历史记录的 Next.js 开发编译分别占 2.10s、1.09s、1.01s。
+- 同一提交的生产模式：内容稳定中位数 201ms、P95 266ms，`Rendering ...` 为 0 次；
+  首轮目标栏目的 RSC 请求为 8–12ms。
+- 公网 `3445` 最终生产模式复测：内容稳定中位数 147ms、P95 268ms，
+  `Rendering ...` 仍为 0 次，控制台错误为 0。
+- 根因是公网误用 `next dev`，不是 `/users/me`、页面 API 或 React 重渲染。本轮新增独立的
+  production runner 和 `scripts/app-up.sh`，保留 `dev-up.sh` 的本地热更新语义。
+
 ---
 
 ## File Structure
@@ -64,7 +75,7 @@
 - Read: `web/next.config.ts`
 - No source modification.
 
-- [ ] **Step 1: Build production bundle**
+- [x] **Step 1: Build production bundle**
 
 Run from `web/`:
 
@@ -74,7 +85,7 @@ npm run build
 
 Expected: build exits 0. If it fails, capture the first real TypeScript/build error and fix only if it blocks this plan.
 
-- [ ] **Step 2: Run production server**
+- [x] **Step 2: Run production server**
 
 Run from `web/`:
 
@@ -84,7 +95,7 @@ npm run start
 
 Expected: Next starts successfully. Use the printed local URL.
 
-- [ ] **Step 3: Compare dev and production route switching**
+- [x] **Step 3: Compare dev and production route switching**
 
 Manual check:
 
@@ -104,7 +115,7 @@ No whole-page infinite Rendering.
 Slow sections show local loading/degraded state.
 ```
 
-- [ ] **Step 4: Commit baseline notes if a doc is updated**
+- [x] **Step 4: Commit baseline notes if a doc is updated**
 
 Only if you add a short evidence note:
 
@@ -1211,4 +1222,3 @@ Main implementation risk:
 
 - `web/src/app/(dashboard)/page.tsx` is already modified in the working tree. The implementation must preserve those edits and avoid broad UI rewrites.
 - Adding a default timeout to every JSON request can break long-running admin actions. This plan adds timeout support globally, then applies explicit short timeouts first to auth/current-user/dashboard route-critical requests. Broader endpoint-by-endpoint timeout inventory should be a follow-up after measuring long-running admin APIs.
-

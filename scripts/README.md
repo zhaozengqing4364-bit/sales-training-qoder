@@ -12,6 +12,23 @@ bash scripts/dev-up.sh
 - 自动拉起 PostgreSQL / Redis（`brew services`）
 - 启动 Backend（`uvicorn`）和 Frontend（`next dev`）
 
+该入口只用于本地开发和自动化 smoke。`next dev` 会在首次访问路由时即时编译，并显示
+Next.js 的 `Rendering ...` 开发指示器，不应作为公网运行方式。
+
+## 一键启动公网体验环境（生产前端）
+
+```bash
+bash scripts/app-up.sh
+```
+
+该入口复用同一套后端、数据库和停止脚本，但前端会先执行 `next build`，再以 `next start`
+启动。它不会显示开发指示器，也不会在用户首次点击栏目时临时编译路由。
+
+- 公网或共享体验环境：使用 `bash scripts/app-up.sh`
+- 需要前端热更新的本地开发：使用 `bash scripts/dev-up.sh`
+- 两种模式统一使用 `bash scripts/dev-stop.sh` 停止
+- 底层也可通过 `FRONTEND_MODE=production bash scripts/dev-up.sh` 显式选择生产前端
+
 ## Smoke baseline：一键启动最小全栈验收环境
 
 ```bash

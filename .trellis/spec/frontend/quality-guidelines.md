@@ -195,6 +195,18 @@ cd web && npm run e2e      # playwright, tests/e2e/
 
 Keep E2E out of Vitest (`vitest.config.ts` exclude).
 
+### Shared / Public Runtime Performance Contract
+
+- `scripts/dev-up.sh` uses `next dev` and is only for local hot reload and smoke automation.
+- Shared demos and public access must start with `scripts/app-up.sh`, which performs `next build` and
+  serves with `next start`.
+- A visible Next.js `Rendering ...` badge on the public surface is a deployment-mode defect, not an
+  application loading state; do not hide the badge with CSS.
+- Route-switch performance checks must exercise at least 首页、训练模式、新人训练路径、排行榜、
+  历史记录 twice and record content-stable latency, console errors, and whether the dev indicator appeared.
+- Pin `turbopack.root` and `outputFileTracingRoot` to `web/` so unrelated workspace lockfiles cannot expand
+  the compile or output-tracing root.
+
 ## Scenario: Reproducible Binary Fixtures For Cross-Runner E2E
 
 ### 1. Scope / Trigger

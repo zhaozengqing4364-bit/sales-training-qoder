@@ -13,6 +13,7 @@ BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_UVICORN_RELOAD="${BACKEND_UVICORN_RELOAD:-0}"
 LOG_LEVEL="${LOG_LEVEL:-}"
 FRONTEND_PORT="${FRONTEND_PORT:-3445}"
+FRONTEND_MODE="${FRONTEND_MODE:-development}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 PORTS_TO_CLEAN_RAW="${PORTS_TO_CLEAN:-}"
@@ -542,13 +543,28 @@ start_backend() {
 start_frontend() {
   require_cmd npm
 
-  log "启动 Frontend (端口 ${FRONTEND_PORT})..."
+  local frontend_mode_label=""
+  case "${FRONTEND_MODE}" in
+    development)
+      frontend_mode_label="开发模式（热更新）"
+      ;;
+    production)
+      frontend_mode_label="生产模式（预构建）"
+      ;;
+    *)
+      die "FRONTEND_MODE=${FRONTEND_MODE} 无效；只支持 development 或 production。"
+      ;;
+  esac
+
+  log "启动 Frontend (端口 ${FRONTEND_PORT})，${frontend_mode_label}..."
   (
     cd "${ROOT_DIR}/web"
     nohup setsid env \
       NEXT_PUBLIC_API_URL="${EFFECTIVE_FRONTEND_API_URL}" \
       NEXT_PUBLIC_WS_URL="${EFFECTIVE_FRONTEND_WS_URL}" \
-      npm exec -- next dev -p "${FRONTEND_PORT}" \
+      FRONTEND_MODE="${FRONTEND_MODE}" \
+      FRONTEND_PORT="${FRONTEND_PORT}" \
+      bash "${ROOT_DIR}/scripts/frontend-runtime.sh" \
       >"${LOG_DIR}/frontend.log" 2>&1 < /dev/null &
     echo $! > "${PID_DIR}/frontend.pid"
   )
@@ -558,7 +574,7 @@ start_frontend() {
     die "Frontend 启动失败，请查看日志 ${LOG_DIR}/frontend.log"
   }
 
-  log "Frontend 已启动：http://localhost:${FRONTEND_PORT}"
+  log "Frontend 已启动：http://localhost:${FRONTEND_PORT}（${frontend_mode_label}）"
 }
 
 print_summary() {
@@ -567,6 +583,7 @@ print_summary() {
 ✅ 一键开发环境启动完成（纯本机模式，无 Docker）
 
 - Frontend: http://localhost:${FRONTEND_PORT}
+- Frontend mode: ${FRONTEND_MODE}
 - Backend API: http://localhost:${BACKEND_PORT}/api/v1
 - Backend listen: ${BACKEND_HOST}:${BACKEND_PORT}
 - Backend Docs: http://localhost:${BACKEND_PORT}/docs
