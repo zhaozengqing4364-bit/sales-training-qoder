@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from sales_trainer.orchestration.contracts import TrainingPathPayload
+from sales_trainer.orchestration.contracts import (
+    AudioAssessmentConfig,
+    TrainingPathPayload,
+)
 
 
 def _lesson_activity(*, product: str) -> dict[str, object]:
@@ -248,3 +251,39 @@ def test_should_accept_optional_learner_presentation_and_default_legacy_values()
         "记录",
         "确认完成",
     ]
+
+
+def test_audio_assessment_should_accept_configured_example_transcript() -> None:
+    config = AudioAssessmentConfig.model_validate(
+        {
+            "scoring_rubric_id": "rubric-ppt-intro",
+            "material_id": "material-ppt-intro",
+            "pass_score": 80,
+            "example_transcript": "先说明客户问题，再结合材料讲清方案价值。",
+        }
+    )
+
+    assert config.example_transcript == "先说明客户问题，再结合材料讲清方案价值。"
+
+
+def test_audio_assessment_should_reject_oversized_example_transcript() -> None:
+    with pytest.raises(ValidationError):
+        AudioAssessmentConfig.model_validate(
+            {
+                "scoring_rubric_id": "rubric-ppt-intro",
+                "pass_score": 80,
+                "example_transcript": "讲" * 8001,
+            }
+        )
+
+
+def test_audio_assessment_should_normalize_blank_example_transcript() -> None:
+    config = AudioAssessmentConfig.model_validate(
+        {
+            "scoring_rubric_id": "rubric-ppt-intro",
+            "pass_score": 80,
+            "example_transcript": "   \n  ",
+        }
+    )
+
+    assert config.example_transcript is None

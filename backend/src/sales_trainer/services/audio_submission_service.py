@@ -172,6 +172,7 @@ class AudioSubmissionService:
         source_page: str | None,
         confirmed_material_version_id: str | None,
         actor: User,
+        confirmed_scoring_rubric_revision_id: str | None = None,
         auto_process: bool = True,
         execution_context: ActivityExecutionContext | None = None,
     ) -> SalesTrainerAudioSubmission:
@@ -203,8 +204,12 @@ class AudioSubmissionService:
                 size_bytes=len(raw),
                 storage_key=storage_key,
                 file_hash=file_hash,
+                duration_seconds=None,
                 source_page=source_page,
                 confirmed_material_version_id=confirmed_material_version_id,
+                confirmed_scoring_rubric_revision_id=(
+                    confirmed_scoring_rubric_revision_id
+                ),
                 auto_process=auto_process,
             ),
             actor=actor,
@@ -244,6 +249,9 @@ class AudioSubmissionService:
             frozen = await ActivityAudioSnapshotService(self._db).freeze(
                 context=execution_context,
                 confirmed_material_version_id=payload.confirmed_material_version_id,
+                confirmed_scoring_rubric_revision_id=(
+                    payload.confirmed_scoring_rubric_revision_id
+                ),
             )
             snapshots = {
                 "material_snapshot": frozen.material_snapshot,

@@ -1,6 +1,6 @@
 # 新人训练活动编排 API 契约
 
-> 状态：已冻结（2026-07-12）
+> 状态：已冻结（2026-07-13）
 > 权威模型：`TrainingPath → Phase → Module → Activity`
 
 本文是新人训练路径的当前唯一契约。旧的固定模块键、学习专题矩阵、场景 slug、V1/V2 双轨及前端聚合约定均已废弃。
@@ -82,6 +82,24 @@ Journey 的模块与活动投影包含 `estimated_minutes`。`primary_next_actio
 | Activity | `primary_action_label` | 最长 40 字；为空时使用活动类型的受信任动作文案 |
 
 Journey 的 Phase、Module、Activity 分别投影上述字段。旧 revision 缺失字段时，服务端返回 `null`/空列表，前端按活动类型提供受信任的目标、步骤和通过标准回退。字段只接受纯文本，不允许 HTML、CSS、组件名、脚本或 URL。
+
+### 录音讲解准备包（向后兼容）
+
+`audio_assessment.config` 可额外配置 `example_transcript: string | null`，最长 8,000 字。它是学员录音前可阅读的优秀讲解文字示例；空白内容归一为 `null`。新增字段不改变 `schema_version`，历史路径 revision 无需迁移。
+
+`GET /activities/{activity_id}` 的 `audio_assessment` Runner 在原字段之外增加以下可选投影：
+
+| 字段 | 语义 |
+|---|---|
+| `material_version_label`、`material_file_name`、`material_content_type` | 当前已发布材料版本的学习者可见元数据 |
+| `scoring_rubric_revision_id`、`scoring_rubric_revision_no` | 当前页面使用的评分标准 revision；ID 只用于提交确认，不在普通界面展示 |
+| `scoring_rubric_title` | 学员可理解的评分标准名称 |
+| `scoring_focuses[]` | 仅含 `label`、`description`、`weight` 的安全投影，不含内部 key 或原始 JSON |
+| `example_transcript` | 当前路径 revision 配置的优秀讲解文字示例 |
+
+`POST /activities/{activity_id}/audio/submissions` 使用 multipart 表单。除既有 `file`、`client_token`、`confirmed_material_version_id` 外，可传 `confirmed_scoring_rubric_revision_id`。传入时，服务端必须校验该 revision 已发布、资源类型为 `audio_scoring_rubric` 且属于活动配置的 logical rubric；校验通过后冻结这一精确版本。不存在、未发布、类型错误或 logical id 不匹配时返回 HTTP 409 与 `[NEWCOMER_AUDIO_RUBRIC_VERSION_INVALID]`，不得静默换用新版本。旧客户端不传该字段时，为兼容既有调用冻结当前激活 revision。
+
+材料版本仍按 `confirmed_material_version_id` 精确校验和冻结。管理员之后发布新的 PPT 或评分标准，不得改写历史录音的材料、评分依据与任务快照。
 
 ## 错误与安全
 

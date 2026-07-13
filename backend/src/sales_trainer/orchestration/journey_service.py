@@ -8,7 +8,12 @@ from typing import cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from sales_trainer.models import NewcomerTrainingEnrollment, SalesTrainerAssetRevision
+from sales_trainer.models import (
+    NewcomerTrainingEnrollment,
+    SalesTrainerAssetRevision,
+    SalesTrainerMaterial,
+    SalesTrainerMaterialVersion,
+)
 from sales_trainer.orchestration.activities.base import (
     ActivityExecutionContext,
     ActivityProjection,
@@ -28,6 +33,7 @@ from sales_trainer.orchestration.contracts import (
     AssignmentRunnerDescriptor,
     AudioAssessmentConfig,
     AudioRunnerDescriptor,
+    AudioScoringFocus,
     JourneyActivityProgress,
     JourneyModuleProgress,
     JourneyNextAction,
@@ -420,21 +426,53 @@ async def _runner_descriptor(
         audio_config = cast(AudioAssessmentConfig, activity.config)
         material_version_id = None
         material_title = None
+        material_version_label = None
+        material_file_name = None
+        material_content_type = None
         if audio_config.material_id:
-            from sales_trainer.models import SalesTrainerMaterial
-
             material = await db.get(SalesTrainerMaterial, audio_config.material_id)
-            if material is not None:
-                material_version_id = (
-                    str(material.current_version_id)
+            if material is not None and material.status == "published":
+                material_title = str(material.name)
+                version = (
+                    await db.get(
+                        SalesTrainerMaterialVersion,
+                        str(material.current_version_id),
+                    )
                     if material.current_version_id is not None
                     else None
                 )
-                material_title = str(material.name)
+                if version is not None and version.status == "published":
+                    material_version_id = str(version.version_id)
+                    material_version_label = str(version.version_label)
+                    material_file_name = str(version.file_name)
+                    material_content_type = str(version.content_type)
+        rubric = await SalesTrainerAssetRevisionService(db).active_revision(
+            resource_type="audio_scoring_rubric",
+            logical_id=audio_config.scoring_rubric_id,
+        )
+        if rubric is not None and rubric.status != "published":
+            rubric = None
+        rubric_payload = (
+            cast(dict[str, object], rubric.payload_json) if rubric is not None else {}
+        )
         return AudioRunnerDescriptor(
             material_id=audio_config.material_id,
             material_version_id=material_version_id,
             material_title=material_title,
+            material_version_label=material_version_label,
+            material_file_name=material_file_name,
+            material_content_type=material_content_type,
+            scoring_rubric_revision_id=(
+                str(rubric.revision_id) if rubric is not None else None
+            ),
+            scoring_rubric_revision_no=(
+                int(rubric.revision_no) if rubric is not None else None
+            ),
+            scoring_rubric_title=_safe_optional_text(
+                rubric_payload.get("title"), max_length=200
+            ),
+            scoring_focuses=_scoring_focuses(rubric_payload.get("dimensions")),
+            example_transcript=audio_config.example_transcript,
             pass_score=audio_config.pass_score,
             max_attempts=audio_config.max_attempts,
         )
@@ -448,6 +486,48 @@ async def _runner_descriptor(
         review_mode=assignment_config.review_mode,
         max_file_size_bytes=assignment_config.max_file_size_bytes,
     )
+
+
+def _safe_optional_text(value: object, *, max_length: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized[:max_length] or None
+
+
+def _scoring_focuses(value: object) -> list[AudioScoringFocus]:
+    if not isinstance(value, list):
+        return []
+    focuses: list[AudioScoringFocus] = []
+    for raw_dimension in value:
+        if isinstance(raw_dimension, str):
+            label = _safe_optional_text(raw_dimension, max_length=120)
+            description = None
+            weight = None
+        elif isinstance(raw_dimension, dict):
+            label = _safe_optional_text(raw_dimension.get("label"), max_length=120)
+            description = _safe_optional_text(
+                raw_dimension.get("description"), max_length=500
+            )
+            raw_weight = raw_dimension.get("weight")
+            weight = (
+                float(raw_weight)
+                if isinstance(raw_weight, (int, float))
+                and not isinstance(raw_weight, bool)
+                and 0 <= raw_weight <= 100
+                else None
+            )
+        else:
+            continue
+        if label is not None:
+            focuses.append(
+                AudioScoringFocus(
+                    label=label,
+                    description=description,
+                    weight=weight,
+                )
+            )
+    return focuses
 
 
 __all__ = ["NewcomerJourneyService"]

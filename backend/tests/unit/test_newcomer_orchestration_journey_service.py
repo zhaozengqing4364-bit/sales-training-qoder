@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+from sales_trainer.models import SalesTrainerMaterial, SalesTrainerMaterialVersion
 from sales_trainer.orchestration.contracts import TrainingPathPayload
 from sales_trainer.orchestration.journey_service import NewcomerJourneyService
 from sales_trainer.orchestration.revision_service import TrainingPathRevisionService
+from sales_trainer.services.asset_revision_service import (
+    SalesTrainerAssetRevisionService,
+)
 
 
 def _payload(title: str) -> TrainingPathPayload:
@@ -57,6 +61,97 @@ async def _publish(test_db, actor, title):
     result = await service.publish(actor=actor, reason=title)
     await test_db.commit()
     return result.revision
+
+
+async def _publish_audio_path(test_db, actor) -> None:
+    material = SalesTrainerMaterial(
+        material_id="material-ppt-intro",
+        material_key="ppt-intro",
+        name="新人销售 PPT",
+        status="published",
+        created_by=str(actor.user_id),
+        updated_by=str(actor.user_id),
+    )
+    test_db.add(material)
+    await test_db.flush()
+    version = SalesTrainerMaterialVersion(
+        version_id="material-version-ppt-v3",
+        material_id=material.material_id,
+        version_label="v3.0",
+        title="新人销售 PPT（2026 夏季版）",
+        file_name="新人销售标准讲解-v3.pptx",
+        content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        file_size_bytes=4096,
+        storage_key="tests/newcomer/ppt-v3.pptx",
+        status="published",
+        created_by=str(actor.user_id),
+        published_by=str(actor.user_id),
+    )
+    test_db.add(version)
+    material.current_version_id = version.version_id
+    await SalesTrainerAssetRevisionService(test_db).create_published_revision(
+        resource_type="audio_scoring_rubric",
+        logical_id="rubric-ppt-intro",
+        payload={
+            "title": "PPT 标准讲解评分",
+            "dimensions": [
+                {
+                    "key": "structure",
+                    "label": "讲解结构",
+                    "description": "开场、方案和下一步衔接自然",
+                    "weight": 40,
+                },
+                "客户语言",
+            ],
+            "pass_score": 80,
+        },
+        actor=actor,
+        change_class="scoring_high_risk",
+        reason="测试学习者准备包",
+    )
+    await TrainingPathRevisionService(test_db).save_draft(
+        payload=TrainingPathPayload.model_validate(
+            {
+                "title": "录音训练路径",
+                "phases": [
+                    {
+                        "phase_id": "phase-pitch",
+                        "title": "产品讲解",
+                        "order_index": 1,
+                        "modules": [
+                            {
+                                "module_id": "module-ppt",
+                                "title": "PPT 讲解",
+                                "order_index": 1,
+                                "completion_policy": {"mode": "all_required"},
+                                "activities": [
+                                    {
+                                        "activity_id": "activity-ppt-audio",
+                                        "type": "audio_assessment",
+                                        "title": "PPT 讲解录音",
+                                        "order_index": 1,
+                                        "config": {
+                                            "scoring_rubric_id": "rubric-ppt-intro",
+                                            "material_id": material.material_id,
+                                            "pass_score": 80,
+                                            "example_transcript": "先确认客户现状，再说明产品如何解决问题。",
+                                        },
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        actor=actor,
+        reason="测试学习者准备包",
+    )
+    await TrainingPathRevisionService(test_db).publish(
+        actor=actor,
+        reason="测试学习者准备包",
+    )
+    await test_db.commit()
 
 
 @pytest.mark.asyncio
@@ -116,3 +211,33 @@ async def test_should_keep_existing_enrollment_on_old_revision_after_publish(
 
     assert before.path_revision_id == first.revision_id
     assert after.path_revision_id == first.revision_id
+
+
+@pytest.mark.asyncio
+async def test_audio_detail_should_project_preparation_pack_without_internal_keys(
+    test_db, test_user
+):
+    await _publish_audio_path(test_db, test_user)
+
+    detail = await NewcomerJourneyService(test_db).activity_detail(
+        learner=test_user,
+        activity_id="activity-ppt-audio",
+    )
+
+    runner = detail.runner.model_dump()
+    assert runner["material_version_label"] == "v3.0"
+    assert runner["material_file_name"] == "新人销售标准讲解-v3.pptx"
+    assert runner["material_content_type"].startswith("application/")
+    assert runner["scoring_rubric_revision_id"]
+    assert runner["scoring_rubric_revision_no"] == 1
+    assert runner["scoring_rubric_title"] == "PPT 标准讲解评分"
+    assert runner["scoring_focuses"] == [
+        {
+            "label": "讲解结构",
+            "description": "开场、方案和下一步衔接自然",
+            "weight": 40.0,
+        },
+        {"label": "客户语言", "description": None, "weight": None},
+    ]
+    assert runner["example_transcript"] == "先确认客户现状，再说明产品如何解决问题。"
+    assert "key" not in str(runner["scoring_focuses"])

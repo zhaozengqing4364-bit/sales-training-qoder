@@ -72,6 +72,9 @@ export function createNewcomerTrainingDomain({
             if (payload.confirmed_material_version_id) {
                 form.append("confirmed_material_version_id", payload.confirmed_material_version_id);
             }
+            if (payload.confirmed_scoring_rubric_revision_id) {
+                form.append("confirmed_scoring_rubric_revision_id", payload.confirmed_scoring_rubric_revision_id);
+            }
             form.append("file", payload.file);
             return upload<ActivityDetailResponse>(`${activityPath(activityId)}/audio/submissions`, form);
         },

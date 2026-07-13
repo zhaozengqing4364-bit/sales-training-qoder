@@ -203,6 +203,7 @@ async def submit_audio(
     activity_id: str,
     client_token: str = Form(...),
     confirmed_material_version_id: str | None = Form(None),
+    confirmed_scoring_rubric_revision_id: str | None = Form(None),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -217,6 +218,9 @@ async def submit_audio(
             context,
             file=file,
             confirmed_material_version_id=confirmed_material_version_id,
+            confirmed_scoring_rubric_revision_id=(
+                confirmed_scoring_rubric_revision_id
+            ),
             client_token=client_token,
             actor=current_user,
         )

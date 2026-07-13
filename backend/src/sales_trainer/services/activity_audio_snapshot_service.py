@@ -7,7 +7,11 @@ from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sales_trainer.models import SalesTrainerMaterial, SalesTrainerMaterialVersion
+from sales_trainer.models import (
+    SalesTrainerAssetRevision,
+    SalesTrainerMaterial,
+    SalesTrainerMaterialVersion,
+)
 from sales_trainer.orchestration.activities.base import ActivityExecutionContext
 from sales_trainer.orchestration.contracts import AudioAssessmentConfig
 from sales_trainer.orchestration.errors import NewcomerOrchestrationError
@@ -33,14 +37,16 @@ class ActivityAudioSnapshotService:
         *,
         context: ActivityExecutionContext,
         confirmed_material_version_id: str | None,
+        confirmed_scoring_rubric_revision_id: str | None = None,
     ) -> ActivityAudioSnapshots:
         if context.activity.type != "audio_assessment":
             raise NewcomerOrchestrationError(
                 "[NEWCOMER_ACTIVITY_CONTEXT_MISMATCH]", "当前活动不是录音讲解。", 409
             )
         config = cast(AudioAssessmentConfig, context.activity.config)
-        rubric = await self._revisions.active_revision(
-            resource_type="audio_scoring_rubric", logical_id=config.scoring_rubric_id
+        rubric = await self._rubric_revision(
+            logical_id=config.scoring_rubric_id,
+            confirmed_revision_id=confirmed_scoring_rubric_revision_id,
         )
         if rubric is None:
             raise NewcomerOrchestrationError(
@@ -68,6 +74,36 @@ class ActivityAudioSnapshotService:
                 "activity": context.activity.model_dump(mode="json"),
             },
         )
+
+    async def _rubric_revision(
+        self,
+        *,
+        logical_id: str,
+        confirmed_revision_id: str | None,
+    ) -> SalesTrainerAssetRevision | None:
+        if confirmed_revision_id is None:
+            revision = await self._revisions.active_revision(
+                resource_type="audio_scoring_rubric",
+                logical_id=logical_id,
+            )
+            return (
+                revision
+                if revision is not None and str(revision.status) == "published"
+                else None
+            )
+        revision = await self._revisions.revision_by_id(confirmed_revision_id)
+        if (
+            revision is None
+            or str(revision.resource_type) != "audio_scoring_rubric"
+            or str(revision.logical_id) != logical_id
+            or str(revision.status) != "published"
+        ):
+            raise NewcomerOrchestrationError(
+                "[NEWCOMER_AUDIO_RUBRIC_VERSION_INVALID]",
+                "本次录音使用的评分标准版本无效或尚未发布，请刷新页面后重试。",
+                409,
+            )
+        return revision
 
     async def _material_snapshot(
         self, *, material_id: str | None, confirmed_version_id: str | None

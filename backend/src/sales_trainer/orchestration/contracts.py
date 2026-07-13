@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ActivityType = Literal[
     "lesson",
@@ -36,6 +36,14 @@ class AudioAssessmentConfig(StrictModel):
     material_id: str | None = Field(default=None, min_length=1, max_length=36)
     pass_score: float = Field(ge=0, le=100)
     max_attempts: int | None = Field(default=None, ge=1, le=100)
+    example_transcript: str | None = Field(default=None, max_length=8000)
+
+    @field_validator("example_transcript")
+    @classmethod
+    def normalize_example_transcript(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
 
 
 class RealtimeRoleplayConfig(StrictModel):
@@ -285,11 +293,25 @@ class QuizRunnerDescriptor(StrictModel):
     max_attempts: int | None = None
 
 
+class AudioScoringFocus(StrictModel):
+    label: str = Field(min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    weight: float | None = Field(default=None, ge=0, le=100)
+
+
 class AudioRunnerDescriptor(StrictModel):
     type: Literal["audio_assessment"] = "audio_assessment"
     material_id: str | None = None
     material_version_id: str | None = None
     material_title: str | None = None
+    material_version_label: str | None = None
+    material_file_name: str | None = None
+    material_content_type: str | None = None
+    scoring_rubric_revision_id: str | None = None
+    scoring_rubric_revision_no: int | None = None
+    scoring_rubric_title: str | None = None
+    scoring_focuses: list[AudioScoringFocus] = Field(default_factory=list)
+    example_transcript: str | None = None
     pass_score: float
     max_attempts: int | None = None
 

@@ -39,6 +39,7 @@ class AudioAssessmentActivityHandler:
         *,
         file: UploadFile,
         confirmed_material_version_id: str | None,
+        confirmed_scoring_rubric_revision_id: str | None,
         client_token: str,
         actor: User,
         auto_process: bool = True,
@@ -58,6 +59,9 @@ class AudioAssessmentActivityHandler:
             purpose="activity_audio_assessment",
             source_page="newcomer_training_activity",
             confirmed_material_version_id=confirmed_material_version_id,
+            confirmed_scoring_rubric_revision_id=(
+                confirmed_scoring_rubric_revision_id
+            ),
             actor=actor,
             auto_process=auto_process,
             execution_context=context,

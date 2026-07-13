@@ -26,6 +26,14 @@ export const learnerRoutes: readonly NewcomerTrainingAuditRoute[] = [
     expectText: [/新人训练|继续|下一步/],
     forbiddenText: forbidden,
   },
+  {
+    id: "L-02",
+    label: "PPT 讲解录音准备",
+    path: "/newcomer-training/activities/ppt-intro-audio",
+    critical: true,
+    expectText: ["录音前，先看完这 3 项", "本次材料", "评分会关注", /优秀讲解示例|参考表达结构/],
+    forbiddenText: forbidden,
+  },
 ];
 
 export const adminRoutes: readonly NewcomerTrainingAuditRoute[] = [

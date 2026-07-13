@@ -22,6 +22,7 @@ export interface AudioAssessmentConfig {
     material_id: string | null;
     pass_score: number;
     max_attempts: number | null;
+    example_transcript?: string | null;
 }
 
 export interface RealtimeRoleplayConfig {
@@ -314,7 +315,26 @@ export interface ActivityDetailResponse {
 export type ActivityRunnerDescriptor =
     | { type: "lesson"; learning_content_id: string; completion_mode: "all_chapters" | "learner_confirmed" }
     | { type: "quiz"; exam_paper_id: string; pass_score: number; max_attempts: number | null }
-    | { type: "audio_assessment"; material_id: string | null; material_version_id: string | null; material_title: string | null; pass_score: number; max_attempts: number | null }
+    | {
+        type: "audio_assessment";
+        material_id: string | null;
+        material_version_id: string | null;
+        material_title: string | null;
+        material_version_label?: string | null;
+        material_file_name?: string | null;
+        material_content_type?: string | null;
+        scoring_rubric_revision_id?: string | null;
+        scoring_rubric_revision_no?: number | null;
+        scoring_rubric_title?: string | null;
+        scoring_focuses?: Array<{
+            label: string;
+            description: string | null;
+            weight: number | null;
+        }>;
+        example_transcript?: string | null;
+        pass_score: number;
+        max_attempts: number | null;
+    }
     | { type: "realtime_roleplay" }
     | { type: "ai_coach" }
     | { type: "assignment"; submission_type: "text" | "file" | "text_or_file"; review_mode: "automatic_complete" | "manual_review"; max_file_size_bytes: number };
@@ -335,6 +355,7 @@ export interface QuizAttemptRequest extends ClientTokenRequest {
 export interface AudioSubmissionRequest extends ClientTokenRequest {
     file: File;
     confirmed_material_version_id?: string | null;
+    confirmed_scoring_rubric_revision_id?: string | null;
 }
 
 export interface AssignmentSubmissionRequest extends ClientTokenRequest {

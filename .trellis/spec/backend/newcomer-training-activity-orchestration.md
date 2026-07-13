@@ -25,6 +25,10 @@ Use this contract whenever newcomer training paths, activities, enrollment progr
 - Journey module/activity projections carry configured `estimated_minutes`; only one activity is marked as the primary next action.
 - Learner-facing copy is controlled configuration, not presentation code: `PhaseConfig.outcome`, `ModuleConfig.outcome`, and activity `objective`, `why_it_matters`, `steps`, `success_criteria`, `primary_action_label` are optional additive fields in schema v1.
 - Journey projections carry these fields unchanged. Old revisions return null/empty defaults and the frontend may apply trusted activity-type guidance; it must never execute or render HTML/CSS/script from configuration.
+- `audio_assessment.config.example_transcript` is optional plain text (maximum 8,000 characters). Blank content normalizes to null. It is learner-facing configuration, not a prompt or scoring instruction.
+- An audio activity detail projects one learner-safe preparation pack from governed resources: published material version metadata, the active scoring-rubric revision identity, rubric title, and normalized scoring focuses. Internal dimension keys and raw rubric JSON must never enter the learner UI.
+- Audio submission may carry `confirmed_scoring_rubric_revision_id`. When present, the backend must verify that exact revision is published and belongs to the configured `audio_scoring_rubric` logical resource before freezing it. Missing confirmation remains compatible with legacy clients by freezing the active revision; an invalid explicit revision never falls back silently.
+- Material confirmation continues to freeze the exact published material version. A later material or rubric publication must not change historical submission evidence.
 - Admin candidate preview and the real learner journey must adapt into the same learner mission ViewModel and render the same mission component.
 - Alembic runs before application startup; `create_all` is bootstrap-only and must not precede pending migrations.
 
@@ -40,6 +44,7 @@ Use this contract whenever newcomer training paths, activities, enrollment progr
 | Duplicate enrollment request | Return the existing active enrollment |
 | Duplicate activity `client_token` | Return the existing attempt/evidence |
 | Concurrent draft/publish conflict | Fail explicitly; never overwrite silently |
+| Confirmed audio rubric revision is missing, unpublished, wrong type, or wrong logical resource | Return `[NEWCOMER_AUDIO_RUBRIC_VERSION_INVALID]` with HTTP 409; never substitute another revision |
 | Provider unavailable | Keep evidence truthful and expose a retryable failure; never fabricate completion |
 
 ## 5. Good / Base / Bad Cases
@@ -57,6 +62,7 @@ Use this contract whenever newcomer training paths, activities, enrollment progr
 - Reset dry-run/apply, seed idempotency, and verify-mode evidence.
 - Frontend Vitest for editor state, in-flow resource creation, renderer registry, and one-primary-action projection.
 - Contract and frontend tests for learner-copy defaults, configured-copy round trips, and the shared admin/learner mission preview.
+- Audio preparation tests for material metadata, learner-safe rubric normalization, configured/legacy example labels, confirmation gating, and exact material/rubric revision freezing.
 - Playwright for admin editor, learner journey, and immutable enrollment closed loop.
 - Alembic head, OpenAPI parity, Ruff, Mypy, TypeScript, ESLint, Vitest, and production build.
 

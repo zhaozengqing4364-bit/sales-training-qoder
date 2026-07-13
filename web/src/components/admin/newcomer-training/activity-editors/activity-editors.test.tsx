@@ -1,5 +1,4 @@
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AudioAssessmentActivity } from "@/lib/api/types/newcomer-training";
@@ -25,14 +24,36 @@ const base = { activity_id: "activity-1", title: "活动", description: null, ob
 describe("activity editors", () => {
     it("edits audio assessment without exposing prompt IDs or JSON", async () => {
         const onChange = vi.fn();
-        const value: AudioAssessmentActivity = { ...base, type: "audio_assessment", config: { scoring_rubric_id: "rubric-1", material_id: "material-1", pass_score: 80, max_attempts: null } };
-        render(<AudioAssessmentEditor value={value} resources={resources} onChange={onChange} />);
+        const value: AudioAssessmentActivity = { ...base, type: "audio_assessment", config: { scoring_rubric_id: "rubric-1", material_id: "material-1", pass_score: 80, max_attempts: null, example_transcript: null } };
+        const { rerender } = render(<AudioAssessmentEditor value={value} resources={resources} onChange={onChange} />);
 
         expect(screen.getByLabelText("评分标准")).toBeTruthy();
         expect(screen.getByLabelText("通过分")).toBeTruthy();
+        expect(screen.getByText("学员会在录音前看到这段文字，请提供一份可模仿的完整讲解。")).toBeTruthy();
         expect(screen.queryByText(/prompt_id|raw JSON|runtime_binding/i)).toBeNull();
-        await userEvent.type(screen.getByLabelText("通过分"), "5");
-        expect(onChange).toHaveBeenCalled();
+        fireEvent.change(screen.getByLabelText("优秀讲解示例（文字版）"), {
+            target: { value: "先说客户问题，再讲产品价值。  " },
+        });
+        expect(onChange).toHaveBeenLastCalledWith({
+            ...value,
+            config: {
+                ...value.config,
+                example_transcript: "先说客户问题，再讲产品价值。  ",
+            },
+        });
+        const configuredValue: AudioAssessmentActivity = {
+            ...value,
+            config: { ...value.config, example_transcript: "先说客户问题，再讲产品价值。  " },
+        };
+        rerender(<AudioAssessmentEditor value={configuredValue} resources={resources} onChange={onChange} />);
+        onChange.mockClear();
+        fireEvent.change(screen.getByLabelText("优秀讲解示例（文字版）"), {
+            target: { value: "" },
+        });
+        expect(onChange).toHaveBeenLastCalledWith({
+            ...value,
+            config: { ...value.config, example_transcript: null },
+        });
     });
 
     it("renders business fields for all six activity types", () => {

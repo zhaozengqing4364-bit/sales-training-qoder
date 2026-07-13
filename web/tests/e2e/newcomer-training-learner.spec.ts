@@ -39,4 +39,27 @@ test.describe("新人训练学员端", () => {
     await page.goto("/newcomer-training");
     await expect(page.locator('[data-primary-action="true"]')).toBeInViewport();
   });
+
+  test("PPT 录音在当前页完成准备并保留任务上下文", async ({ page }) => {
+    await loginFromUi(page, learnerEmail);
+    await page.goto("/newcomer-training/activities/ppt-intro-audio");
+
+    await expect(page.getByRole("heading", { name: "录音前，先看完这 3 项" })).toBeVisible();
+    await expect(page.getByText("1 · 本次材料")).toBeVisible();
+    await expect(page.getByText("2 · 评分会关注")).toBeVisible();
+    await expect(page.getByText("3 · 参考表达")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /优秀讲解示例（文字版）|参考表达结构（系统默认）/ })).toBeVisible();
+
+    const startButton = page.getByRole("button", { name: "开始录音" });
+    await expect(startButton).toBeDisabled();
+    await page.getByRole("checkbox", { name: "我已看过材料、评分重点和讲解示例" }).check();
+    await expect(startButton).toBeEnabled();
+
+    const materialLink = page.getByRole("link", { name: /在新标签页查看.*原文件/ });
+    await expect(materialLink).toHaveAttribute("target", "_blank");
+    const currentUrl = page.url();
+    const [popup] = await Promise.all([page.waitForEvent("popup"), materialLink.click()]);
+    await expect(page).toHaveURL(currentUrl);
+    await popup.close();
+  });
 });

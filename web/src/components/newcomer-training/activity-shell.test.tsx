@@ -57,7 +57,7 @@ describe("ActivityShell", () => {
 
         render(<ActivityShell detail={audioDetail} />);
 
-        expect(screen.getByText("我已阅读本次讲解材料")).toBeTruthy();
+        expect(screen.getByText("我已看过材料、评分重点和讲解示例")).toBeTruthy();
         expect(screen.queryByText(/已发布版本/)).toBeNull();
     });
 });

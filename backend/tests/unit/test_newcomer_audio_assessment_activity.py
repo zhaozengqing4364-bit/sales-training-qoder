@@ -11,6 +11,7 @@ from sales_trainer.models import (
 )
 from sales_trainer.orchestration.activities.base import ActivityExecutionContext
 from sales_trainer.orchestration.contracts import AudioAssessmentActivity
+from sales_trainer.orchestration.errors import NewcomerOrchestrationError
 from sales_trainer.services.activity_audio_snapshot_service import (
     ActivityAudioSnapshotService,
 )
@@ -82,10 +83,72 @@ async def test_should_freeze_audio_rubric_and_material_without_sales_trainer_uni
     )
 
     snapshots = await ActivityAudioSnapshotService(test_db).freeze(
-        context=context, confirmed_material_version_id=str(version.version_id)
+        context=context,
+        confirmed_material_version_id=str(version.version_id),
+        confirmed_scoring_rubric_revision_id=str(revision.revision_id),
     )
 
     assert snapshots.score_scheme_snapshot["prompt_id"] == rubric_id
+    assert snapshots.score_scheme_snapshot["rubric_revision_id"] == str(
+        revision.revision_id
+    )
     assert snapshots.task_brief_snapshot["activity_id"] == "audio-1"
     assert snapshots.task_brief_snapshot["path_revision_id"] == "path-revision-1"
     assert snapshots.material_snapshot["material_version_id"] == str(version.version_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("resource_type", "logical_id", "status"),
+    [
+        ("audio_scoring_rubric", "rubric-other", "published"),
+        ("practice_template", "rubric-product-a", "published"),
+        ("audio_scoring_rubric", "rubric-product-a", "working"),
+    ],
+)
+async def test_should_reject_untrusted_confirmed_rubric_revision(
+    test_db,
+    test_user,
+    resource_type: str,
+    logical_id: str,
+    status: str,
+):
+    revision = SalesTrainerAssetRevision(
+        resource_type=resource_type,
+        logical_id=logical_id,
+        revision_no=1,
+        status=status,
+        payload_json={"dimensions": ["准确性"]},
+        payload_hash=uuid.uuid4().hex,
+    )
+    test_db.add(revision)
+    await test_db.flush()
+    context = ActivityExecutionContext(
+        learner_id=str(test_user.user_id),
+        enrollment_id="enrollment-1",
+        path_revision_id="path-revision-1",
+        phase_id="phase-1",
+        module_id="product-a",
+        activity=AudioAssessmentActivity.model_validate(
+            {
+                "activity_id": "audio-1",
+                "type": "audio_assessment",
+                "title": "讲解产品 A",
+                "order_index": 1,
+                "config": {
+                    "scoring_rubric_id": "rubric-product-a",
+                    "pass_score": 75,
+                },
+            }
+        ),
+    )
+
+    with pytest.raises(NewcomerOrchestrationError) as exc_info:
+        await ActivityAudioSnapshotService(test_db).freeze(
+            context=context,
+            confirmed_material_version_id=None,
+            confirmed_scoring_rubric_revision_id=str(revision.revision_id),
+        )
+
+    assert exc_info.value.code == "[NEWCOMER_AUDIO_RUBRIC_VERSION_INVALID]"
+    assert exc_info.value.status_code == 409

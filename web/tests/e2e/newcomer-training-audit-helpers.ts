@@ -239,6 +239,7 @@ function isIgnorableFailedRequest(request: Request): boolean {
     url.endsWith("/favicon.ico") ||
     (failure === "net::ERR_ABORTED" && url.includes("/_next/static/")) ||
     (failure === "net::ERR_ABORTED" && url.includes("/__nextjs_font/")) ||
+    (failure === "net::ERR_ABORTED" && url.includes("_rsc=")) ||
     (failure === "net::ERR_ABORTED" && pathname === "/") ||
     (failure === "net::ERR_ABORTED" &&
       ignorableAbortedApiPaths.some((path) => pathname.startsWith(path)))

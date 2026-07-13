@@ -15,7 +15,12 @@ describe("newcomer training orchestration API", () => {
         await domain.getJourney();
         await domain.completeLessonChapter("activity-1", "chapter-1", "token-1");
         const file = new File(["audio"], "demo.wav", { type: "audio/wav" });
-        await domain.submitAudio("activity-1", { file, client_token: "token-2" });
+        await domain.submitAudio("activity-1", {
+            file,
+            client_token: "token-2",
+            confirmed_material_version_id: "material-version-3",
+            confirmed_scoring_rubric_revision_id: "rubric-revision-2",
+        });
 
         expect(request).toHaveBeenNthCalledWith(1, "/newcomer-training/journey");
         expect(request).toHaveBeenNthCalledWith(
@@ -27,6 +32,8 @@ describe("newcomer training orchestration API", () => {
             "/newcomer-training/activities/activity-1/audio/submissions",
         );
         expect(upload.mock.calls[0][1].get("client_token")).toBe("token-2");
+        expect(upload.mock.calls[0][1].get("confirmed_material_version_id")).toBe("material-version-3");
+        expect(upload.mock.calls[0][1].get("confirmed_scoring_rubric_revision_id")).toBe("rubric-revision-2");
         expect(upload.mock.calls[0][1].get("file")).toBe(file);
     });
 

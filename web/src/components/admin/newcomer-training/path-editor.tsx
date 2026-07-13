@@ -41,7 +41,7 @@ function defaultActivity(type: ActivityType = "lesson"): ActivityConfig {
     switch (type) {
         case "lesson": return { ...base, type, config: { learning_content_id: "", completion_mode: "all_chapters" } };
         case "quiz": return { ...base, type, config: { exam_paper_id: "", pass_score: 80, max_attempts: null } };
-        case "audio_assessment": return { ...base, type, config: { scoring_rubric_id: "", material_id: null, pass_score: 80, max_attempts: null } };
+        case "audio_assessment": return { ...base, type, config: { scoring_rubric_id: "", material_id: null, pass_score: 80, max_attempts: null, example_transcript: null } };
         case "realtime_roleplay": return { ...base, type, config: { practice_template_id: "", runtime_profile_id: "", completion_mode: "session_completed" } };
         case "ai_coach": return { ...base, type, config: { coach_profile_id: "", completion_mode: "session_completed" } };
         case "assignment": return { ...base, type, config: { submission_type: "text_or_file", review_mode: "manual_review", max_file_size_bytes: 10_485_760 } };
@@ -50,17 +50,30 @@ function defaultActivity(type: ActivityType = "lesson"): ActivityConfig {
 
 function normalizeLearnerCopy(path: TrainingPathPayload): TrainingPathPayload {
     const clean = (values: string[]) => values.map((value) => value.trim()).filter(Boolean);
+    const normalizeActivity = (activity: ActivityConfig): ActivityConfig => {
+        const learnerCopy = {
+            steps: clean(activity.steps),
+            success_criteria: clean(activity.success_criteria),
+        };
+        if (activity.type === "audio_assessment") {
+            return {
+                ...activity,
+                ...learnerCopy,
+                config: {
+                    ...activity.config,
+                    example_transcript: activity.config.example_transcript?.trim() || null,
+                },
+            };
+        }
+        return { ...activity, ...learnerCopy };
+    };
     return {
         ...path,
         phases: path.phases.map((phase) => ({
             ...phase,
             modules: phase.modules.map((moduleConfig) => ({
                 ...moduleConfig,
-                activities: moduleConfig.activities.map((activity) => ({
-                    ...activity,
-                    steps: clean(activity.steps),
-                    success_criteria: clean(activity.success_criteria),
-                })),
+                activities: moduleConfig.activities.map(normalizeActivity),
             })),
         })),
     };

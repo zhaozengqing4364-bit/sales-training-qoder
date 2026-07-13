@@ -1349,6 +1349,9 @@ class AudioSubmissionCreate(BaseModel):
     duration_seconds: float | None = Field(None, ge=0)
     source_page: str | None = Field(None, min_length=1, max_length=100)
     confirmed_material_version_id: str | None = Field(None, min_length=1, max_length=36)
+    confirmed_scoring_rubric_revision_id: str | None = Field(
+        None, min_length=1, max_length=36
+    )
     auto_process: bool = True
 
 
