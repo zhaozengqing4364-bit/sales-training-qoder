@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import Page from "./page";
+import { NewcomerTrainingPathPageClient as Page } from "./path-page-client";
 
 vi.mock("next/navigation", () => ({
     usePathname: () => "/admin/newcomer-training/path",
@@ -107,6 +107,26 @@ describe("newcomer path page", () => {
 
         expect(await screen.findByRole("tree", { name: "训练路径大纲" })).toBeTruthy();
         expect(screen.getByText("可选资源仍在后台加载，不影响查看和编排路径。")).toBeTruthy();
+    });
+
+    it("renders server-provided path data without showing a blank loading screen", async () => {
+        getPath.mockImplementation(() => new Promise(() => undefined));
+
+        render(<Page initialModel={{
+            active_revision_id: null,
+            active_revision_no: null,
+            working_revision_id: null,
+            payload: {
+                schema_version: "newcomer_training_orchestration_v1",
+                title: "新人训练路径",
+                description: null,
+                phases: [],
+            },
+            validation: null,
+        }} />);
+
+        expect(screen.queryByText("正在加载训练路径…")).toBeNull();
+        expect(await screen.findByRole("tree", { name: "训练路径大纲" })).toBeTruthy();
     });
 
     it("shows a retryable inline error", async () => {
