@@ -1,15 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
-import type { ActivityEditorResources } from "@/components/admin/newcomer-training/activity-editors/types";
+import type { ActivityEditorResources, ResourceOption } from "@/components/admin/newcomer-training/activity-editors/types";
 import { PathEditor } from "@/components/admin/newcomer-training/path-editor";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/client";
 import type {
+    ActivityType,
     TrainingPathConfigResponse,
     TrainingPathPayload,
 } from "@/lib/api/types/newcomer-training";
@@ -19,8 +20,58 @@ const EMPTY_RESOURCES: ActivityEditorResources = {
     learning_contents: [], exam_papers: [], scoring_rubrics: [], materials: [],
     practice_templates: [], runtime_profiles: [], coach_profiles: [],
 };
+
 type ResourceCatalogKey = keyof ActivityEditorResources;
 type ResourceWarning = { key: ResourceCatalogKey; label: string };
+type CatalogLoadState = "idle" | "loading" | "loaded" | "failed";
+
+const RESOURCE_LABELS: Record<ResourceCatalogKey, string> = {
+    learning_contents: "学习内容目录",
+    exam_papers: "试卷目录",
+    scoring_rubrics: "评分标准目录",
+    materials: "讲解材料目录",
+    practice_templates: "对练模板目录",
+    runtime_profiles: "语音运行方案目录",
+    coach_profiles: "AI 教练方案目录",
+};
+
+const ACTIVITY_RESOURCE_KEYS: Record<ActivityType, ResourceCatalogKey[]> = {
+    lesson: ["learning_contents"],
+    quiz: ["exam_papers"],
+    audio_assessment: ["scoring_rubrics", "materials"],
+    realtime_roleplay: ["practice_templates", "runtime_profiles"],
+    ai_coach: ["coach_profiles"],
+    assignment: [],
+};
+
+async function fetchResourceCatalog(key: ResourceCatalogKey): Promise<ResourceOption[]> {
+    switch (key) {
+        case "learning_contents": {
+            const result = await api.learningContents.list({ status: "published" });
+            return result.items.map((item) => ({ id: item.learning_content_id, title: item.title, status: item.status }));
+        }
+        case "exam_papers": {
+            const result = await api.admin.salesTrainer.listExamPapers();
+            return result.items.map((item) => ({ id: item.paper_id, title: item.title, status: item.status }));
+        }
+        case "scoring_rubrics":
+            return api.admin.newcomerTraining.listScoringRubrics();
+        case "materials": {
+            const result = await api.admin.salesTrainer.listMaterials();
+            return result.items.map((item) => ({ id: item.material_id, title: item.name, status: item.current_version_id ? "published" : item.status }));
+        }
+        case "practice_templates": {
+            const result = await api.admin.listPracticeTemplates();
+            return result.items.map((item) => ({ id: item.template_id, title: item.name, status: item.status }));
+        }
+        case "runtime_profiles": {
+            const result = await api.admin.getVoiceRuntimeProfiles({ only_active: true });
+            return result.items.map((item) => ({ id: item.id, title: item.name, status: item.is_active ? "published" : "archived" }));
+        }
+        case "coach_profiles":
+            return api.admin.newcomerTraining.listCoachProfiles();
+    }
+}
 
 export function NewcomerTrainingPathPageClient({
     initialModel,
@@ -35,99 +86,74 @@ export function NewcomerTrainingPathPageClient({
     const [error, setError] = useState<string | null>(null);
     const [resources, setResources] = useState<ActivityEditorResources>(EMPTY_RESOURCES);
     const [resourceWarnings, setResourceWarnings] = useState<ResourceWarning[]>([]);
-    const [resourcesLoading, setResourcesLoading] = useState(true);
-    const [retryingCatalog, setRetryingCatalog] = useState<ResourceCatalogKey | null>(null);
+    const [loadingCatalogs, setLoadingCatalogs] = useState<ResourceCatalogKey[]>([]);
+    const initialLoadStarted = useRef(false);
+    const catalogStates = useRef<Record<ResourceCatalogKey, CatalogLoadState>>({
+        learning_contents: "idle", exam_papers: "idle", scoring_rubrics: "idle", materials: "idle",
+        practice_templates: "idle", runtime_profiles: "idle", coach_profiles: "idle",
+    });
 
-    const load = useCallback(async (reloadPath: boolean) => {
-        if (reloadPath) {
-            setError(null);
-            if (!model) setLoading(true);
-            try {
-                setModel(await api.admin.newcomerTraining.getPath());
-            } catch {
-                if (!model) {
-                    setError("训练路径加载失败，请检查网络后重试。");
-                }
-                return;
-            } finally {
-                setLoading(false);
-            }
+    const load = useCallback(async () => {
+        setError(null);
+        if (!model) setLoading(true);
+        try {
+            setModel(await api.admin.newcomerTraining.getPath());
+        } catch {
+            if (!model) setError("训练路径加载失败，请检查网络后重试。");
+        } finally {
+            setLoading(false);
         }
-
-        setResourcesLoading(true);
-        const [contents, papers, rubrics, materials, templates, runtimes, coaches] = await Promise.allSettled([
-            api.learningContents.list({ status: "published" }),
-            api.admin.salesTrainer.listExamPapers(),
-            api.admin.newcomerTraining.listScoringRubrics(),
-            api.admin.salesTrainer.listMaterials(),
-            api.admin.listPracticeTemplates(),
-            api.admin.getVoiceRuntimeProfiles({ only_active: true }),
-            api.admin.newcomerTraining.listCoachProfiles(),
-        ]);
-        const warnings: ResourceWarning[] = [];
-        const value = <T,>(result: PromiseSettledResult<T>, fallback: T, key: ResourceCatalogKey, label: string): T => {
-            if (result.status === "fulfilled") return result.value;
-            warnings.push({ key, label });
-            return fallback;
-        };
-        const contentValue = value(contents, { items: [], total: 0 }, "learning_contents", "学习内容目录");
-        const paperValue = value(papers, { items: [], total: 0 }, "exam_papers", "试卷目录");
-        const rubricValue = value(rubrics, [], "scoring_rubrics", "评分标准目录");
-        const materialValue = value(materials, { items: [], total: 0 }, "materials", "讲解材料目录");
-        const templateValue = value(templates, { items: [], total: 0 }, "practice_templates", "对练模板目录");
-        const runtimeValue = value(runtimes, { items: [], total: 0 }, "runtime_profiles", "语音运行方案目录");
-        const coachValue = value(coaches, [], "coach_profiles", "AI 教练方案目录");
-        setResources({
-            learning_contents: contentValue.items.map((item) => ({ id: item.learning_content_id, title: item.title, status: item.status })),
-            exam_papers: paperValue.items.map((item) => ({ id: item.paper_id, title: item.title, status: item.status })),
-            scoring_rubrics: rubricValue,
-            materials: materialValue.items.map((item) => ({ id: item.material_id, title: item.name, status: item.current_version_id ? "published" : item.status })),
-            practice_templates: templateValue.items.map((item) => ({ id: item.template_id, title: item.name, status: item.status })),
-            runtime_profiles: runtimeValue.items.map((item) => ({ id: item.id, title: item.name, status: item.is_active ? "published" : "archived" })),
-            coach_profiles: coachValue,
-        });
-        setResourceWarnings(warnings);
-        setResourcesLoading(false);
     }, [model]);
 
     useEffect(() => {
-        void load(!initialModel);
-        // The server-provided model is the initial authority; resources hydrate once after mount.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        if (initialModel || initialLoadStarted.current) return;
+        initialLoadStarted.current = true;
+        void load();
+    }, [initialModel, load]);
+
+    const loadCatalog = useCallback(async (key: ResourceCatalogKey, force = false) => {
+        const state = catalogStates.current[key];
+        if (!force && state !== "idle") return;
+
+        catalogStates.current[key] = "loading";
+        setLoadingCatalogs((current) => current.includes(key) ? current : [...current, key]);
+        try {
+            const options = await fetchResourceCatalog(key);
+            setResources((current) => ({ ...current, [key]: options }));
+            setResourceWarnings((current) => current.filter((warning) => warning.key !== key));
+            catalogStates.current[key] = "loaded";
+        } catch {
+            catalogStates.current[key] = "failed";
+            setResourceWarnings((current) => current.some((warning) => warning.key === key)
+                ? current
+                : [...current, { key, label: RESOURCE_LABELS[key] }]);
+        } finally {
+            setLoadingCatalogs((current) => current.filter((catalogKey) => catalogKey !== key));
+        }
     }, []);
 
+    const loadResourcesForActivity = useCallback((activityType: ActivityType) => {
+        ACTIVITY_RESOURCE_KEYS[activityType].forEach((key) => { void loadCatalog(key); });
+    }, [loadCatalog]);
+
     const retryCatalog = async (warning: ResourceWarning) => {
-        setRetryingCatalog(warning.key);
-        try {
-            let options: ActivityEditorResources[ResourceCatalogKey];
-            switch (warning.key) {
-                case "learning_contents": { const result = await api.learningContents.list({ status: "published" }); options = result.items.map((item) => ({ id: item.learning_content_id, title: item.title, status: item.status })); break; }
-                case "exam_papers": { const result = await api.admin.salesTrainer.listExamPapers(); options = result.items.map((item) => ({ id: item.paper_id, title: item.title, status: item.status })); break; }
-                case "scoring_rubrics": options = await api.admin.newcomerTraining.listScoringRubrics(); break;
-                case "materials": { const result = await api.admin.salesTrainer.listMaterials(); options = result.items.map((item) => ({ id: item.material_id, title: item.name, status: item.current_version_id ? "published" : item.status })); break; }
-                case "practice_templates": { const result = await api.admin.listPracticeTemplates(); options = result.items.map((item) => ({ id: item.template_id, title: item.name, status: item.status })); break; }
-                case "runtime_profiles": { const result = await api.admin.getVoiceRuntimeProfiles({ only_active: true }); options = result.items.map((item) => ({ id: item.id, title: item.name, status: item.is_active ? "published" : "archived" })); break; }
-                case "coach_profiles": options = await api.admin.newcomerTraining.listCoachProfiles(); break;
-            }
-            setResources((current) => ({ ...current, [warning.key]: options }));
-            setResourceWarnings((current) => current.filter((item) => item.key !== warning.key));
-        } catch {
+        await loadCatalog(warning.key, true);
+        if (catalogStates.current[warning.key] === "failed") {
             toast.error(`${warning.label}仍不可用，请稍后重试`);
-        } finally {
-            setRetryingCatalog(null);
         }
     };
 
     if (loading) return <div className="flex min-h-[50vh] items-center justify-center text-sm text-slate-500">正在加载训练路径…</div>;
-    if (error || !model) return <div role="alert" className="mx-auto mt-12 max-w-xl rounded-2xl border border-red-200 bg-red-50 p-6 text-red-800"><p className="font-semibold">{error ?? "训练路径不可用"}</p><Button className="mt-4" variant="secondary" onClick={() => void load(true)}>重新加载</Button></div>;
+    if (error || !model) return <div role="alert" className="mx-auto mt-12 max-w-xl rounded-2xl border border-red-200 bg-red-50 p-6 text-red-800"><p className="font-semibold">{error ?? "训练路径不可用"}</p><Button className="mt-4" variant="secondary" onClick={() => void load()}>重新加载</Button></div>;
 
     return <main className="min-h-screen bg-slate-50 p-4 md:p-6">
         <div className="mb-4"><SalesTrainerAdminModuleNav currentPath={pathname} capabilities={routeAccess.capabilities} /></div>
-        {resourcesLoading ? <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">可选资源仍在后台加载，不影响查看和编排路径。</div> : null}
-        {resourceWarnings.length > 0 ? <div role="alert" className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><p>部分资源暂不可用，现有路径仍可编辑。</p><div className="mt-2 flex flex-wrap gap-2">{resourceWarnings.map((warning) => <div key={warning.key} className="inline-flex items-center gap-2 rounded-xl bg-white/70 px-2 py-1"><span>{warning.label}暂不可用</span><Button size="sm" variant="outline" isLoading={retryingCatalog === warning.key} onClick={() => void retryCatalog(warning)}>重新加载{warning.label}</Button></div>)}</div></div> : null}
+        {loadingCatalogs.length > 0 ? <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">正在加载当前活动需要的可选资源…</div> : null}
+        {resourceWarnings.length > 0 ? <div role="alert" className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><p>当前活动的部分资源暂不可用，路径仍可继续编辑。</p><div className="mt-2 flex flex-wrap gap-2">{resourceWarnings.map((warning) => <div key={warning.key} className="inline-flex items-center gap-2 rounded-xl bg-white/70 px-2 py-1"><span>{warning.label}暂不可用</span><Button size="sm" variant="outline" isLoading={loadingCatalogs.includes(warning.key)} onClick={() => void retryCatalog(warning)}>重新加载{warning.label}</Button></div>)}</div></div> : null}
         <PathEditor key={model.working_revision_id ?? model.active_revision_id ?? "empty"} initialModel={model} resources={resources}
+            onResourcesNeeded={loadResourcesForActivity}
             onSave={async (payload: TrainingPathPayload, reason: string, expectedRevisionId) => { const revision = await api.admin.newcomerTraining.saveDraft(payload, reason, expectedRevisionId); toast.success("草稿已保存"); return revision; }}
             onValidate={async (payload) => { const validation = await api.admin.newcomerTraining.validateCandidate(payload); toast.success(validation.can_publish ? "检查通过，可以发布" : "检查完成，请处理未完成项"); return validation; }}
-            onPublish={async (payload, reason, expectedRevisionId) => { const revision = await api.admin.newcomerTraining.publishCandidate(payload, reason, expectedRevisionId); toast.success("训练路径已发布"); void load(true); return revision; }} />
+            onPublish={async (payload, reason, expectedRevisionId) => { const revision = await api.admin.newcomerTraining.publishCandidate(payload, reason, expectedRevisionId); toast.success("训练路径已发布"); void load(); return revision; }} />
     </main>;
 }

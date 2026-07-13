@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Eye, History, Save, Send } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -25,6 +25,7 @@ export interface PathEditorProps {
     onValidate?: (path: TrainingPathPayload) => Promise<PathValidationResponse> | PathValidationResponse;
     onPublish?: Mutation;
     resources?: ActivityEditorResources;
+    onResourcesNeeded?: (activityType: ActivityType) => void;
 }
 
 const EMPTY_RESOURCES: ActivityEditorResources = { learning_contents: [], exam_papers: [], scoring_rubrics: [], materials: [], practice_templates: [], runtime_profiles: [], coach_profiles: [] };
@@ -79,7 +80,7 @@ function normalizeLearnerCopy(path: TrainingPathPayload): TrainingPathPayload {
     };
 }
 
-export function PathEditor({ initialModel, onSave, onValidate, onPublish, resources: initialResources = EMPTY_RESOURCES }: PathEditorProps) {
+export function PathEditor({ initialModel, onSave, onValidate, onPublish, resources: initialResources = EMPTY_RESOURCES, onResourcesNeeded }: PathEditorProps) {
     const [draft, setDraft] = useState(initialModel.payload);
     const [selection, setSelection] = useState<EditorSelection>({ kind: "path" });
     const [validation, setValidation] = useState(initialModel.validation);
@@ -89,10 +90,44 @@ export function PathEditor({ initialModel, onSave, onValidate, onPublish, resour
     const [error, setError] = useState<string | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<{ kind: "phase" | "module" | "activity"; id: string; title: string } | null>(null);
     const [resources, setResources] = useState(initialResources);
+    const previousInitialResources = useRef(initialResources);
     const [quickCreate, setQuickCreate] = useState<ResourcePickerKind | null>(null);
     const [revisionId, setRevisionId] = useState(initialModel.working_revision_id ?? initialModel.active_revision_id);
     const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
     const [previewOpen, setPreviewOpen] = useState(false);
+
+    const selectedActivityType = useMemo(() => {
+        if (selection.kind !== "activity") return null;
+        return draft.phases
+            .flatMap((phase) => phase.modules)
+            .flatMap((moduleConfig) => moduleConfig.activities)
+            .find((activity) => activity.activity_id === selection.activity_id)?.type ?? null;
+    }, [draft, selection]);
+
+    useEffect(() => {
+        if (selectedActivityType) onResourcesNeeded?.(selectedActivityType);
+    }, [onResourcesNeeded, selectedActivityType]);
+
+    useEffect(() => {
+        if (previousInitialResources.current === initialResources) return;
+        previousInitialResources.current = initialResources;
+        setResources((current) => {
+            const merge = (key: keyof ActivityEditorResources) => {
+                const byId = new Map(current[key].map((resource) => [resource.id, resource]));
+                initialResources[key].forEach((resource) => byId.set(resource.id, resource));
+                return [...byId.values()];
+            };
+            return {
+                learning_contents: merge("learning_contents"),
+                exam_papers: merge("exam_papers"),
+                scoring_rubrics: merge("scoring_rubrics"),
+                materials: merge("materials"),
+                practice_templates: merge("practice_templates"),
+                runtime_profiles: merge("runtime_profiles"),
+                coach_profiles: merge("coach_profiles"),
+            };
+        });
+    }, [initialResources]);
 
     useEffect(() => {
         const beforeUnload = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = ""; } };
