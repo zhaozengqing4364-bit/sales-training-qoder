@@ -30,11 +30,16 @@ from curriculum_practice.models import (  # noqa: E402
     QuestionItem,
 )
 from sales_trainer.models import (  # noqa: E402
+    SalesTrainerAudioScorePrompt,
     SalesTrainerExamPaper,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
     SalesTrainerUnit,
     SalesTrainerUnitQuestion,
+)
+from sales_trainer.services.prompt_revision_payloads import (  # noqa: E402
+    PROMPT_RESOURCE_TYPE,
+    prompt_lifecycle_snapshot,
 )
 from sales_trainer.orchestration.contracts import TrainingPathPayload  # noqa: E402
 from sales_trainer.orchestration.revision_service import (  # noqa: E402
@@ -108,12 +113,11 @@ async def seed(db: AsyncSession, *, actor: User | None = None) -> SeedSummary:
     ):
         rubric_id = f"{SEED_PREFIX}-rubric-{key}"
         created += int(
-            await _published_asset(
+            await _published_score_prompt(
                 db,
                 actor=actor,
-                resource_type="audio_scoring_rubric",
-                logical_id=rubric_id,
-                payload={"dimensions": ["准确性", "结构", "表达"], "max_score": 100},
+                prompt_id=rubric_id,
+                name=f"{title}评分标准",
             )
         )
         rubric_ids[key] = rubric_id
@@ -340,6 +344,72 @@ async def _published_asset(
     return True
 
 
+async def _published_score_prompt(
+    db: AsyncSession,
+    *,
+    actor: User,
+    prompt_id: str,
+    name: str,
+) -> bool:
+    existing = await db.get(SalesTrainerAudioScorePrompt, prompt_id)
+    if existing is not None:
+        return False
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=prompt_id,
+        name=name,
+        purpose="general_audio_scoring",
+        system_prompt="你是销售训练录音评分专家，请依据评分说明对学员录音转写文本给出客观评分。",
+        scoring_template=(
+            "评分维度：准确性、结构、表达。\n"
+            "通过线：75 分。\n"
+            "输出要求：请仅返回 JSON 对象，字段必须包含 "
+            "total_score、summary、strengths、improvements、dimension_scores。\n\n"
+            "录音转写：\n{transcript}"
+        ),
+        output_schema={},
+        learner_rubric={
+            "visible_to_learner": True,
+            "pass_threshold": 75,
+            "criteria": [
+                {
+                    "key": "accuracy",
+                    "label": "准确性",
+                    "description": "关键信息完整、事实准确",
+                    "weight": 40,
+                },
+                {
+                    "key": "structure",
+                    "label": "结构",
+                    "description": "讲解有开场、主体和结论",
+                    "weight": 30,
+                },
+                {
+                    "key": "delivery",
+                    "label": "表达",
+                    "description": "表达清晰、客户可理解",
+                    "weight": 30,
+                },
+            ],
+            "common_mistakes": [],
+        },
+        version=1,
+        status="published",
+        created_by=str(actor.user_id),
+        updated_by=str(actor.user_id),
+    )
+    db.add(prompt)
+    await db.flush()
+    await SalesTrainerAssetRevisionService(db).create_published_revision(
+        resource_type=PROMPT_RESOURCE_TYPE,
+        logical_id=prompt_id,
+        payload=prompt_lifecycle_snapshot(prompt),
+        actor=actor,
+        change_class="scoring_high_risk",
+        reason="新人训练原型录音评分标准",
+    )
+    return True
+
+
 async def _realtime_activity(db: AsyncSession) -> dict[str, str] | None:
     runtime = await db.scalar(
         select(VoiceRuntimeProfile)
@@ -462,11 +532,15 @@ def _path_payload(
         quiz("product-a-quiz", "产品 A 小测", papers["product-a"], 2),
         audio("product-a-audio", "讲解产品 A", "product-a", 3, "产品 A"),
     ]
+    product_a[1]["prerequisites"] = ["product-a-lesson"]
+    product_a[2]["prerequisites"] = ["product-a-quiz"]
     product_b = [
         lesson("product-b-lesson", "学习产品 B", content["product-b"], 1),
         quiz("product-b-quiz", "产品 B 小测", papers["product-b"], 2),
         audio("product-b-audio", "讲解产品 B", "product-b", 3, "产品 B"),
     ]
+    product_b[1]["prerequisites"] = ["product-b-lesson"]
+    product_b[2]["prerequisites"] = ["product-b-quiz"]
     practice = [
         {
             "activity_id": "coach-optional",
@@ -506,6 +580,7 @@ def _path_payload(
                 "steps": ["了解客户情境", "完成实时语音对练", "根据反馈复盘"],
                 "success_criteria": ["完成整场对练并覆盖核心沟通目标"],
                 "order_index": 3,
+                "prerequisites": ["assignment-summary"],
                 "config": realtime,
             }
         )
@@ -549,6 +624,7 @@ def _path_payload(
                             "title": "产品 A 核心功能",
                             "outcome": "能讲清产品 A 的价值、功能和适用场景",
                             "order_index": 1,
+                            "prerequisites": ["ppt-intro"],
                             "completion_policy": {"mode": "all_required"},
                             "activities": product_a,
                         },
@@ -557,6 +633,7 @@ def _path_payload(
                             "title": "产品 B 核心功能",
                             "outcome": "能讲清产品 B 的价值、功能和适用场景",
                             "order_index": 2,
+                            "prerequisites": ["product-a"],
                             "completion_policy": {"mode": "all_required"},
                             "activities": product_b,
                         },
@@ -565,6 +642,7 @@ def _path_payload(
                             "title": "标准产品 Demo",
                             "outcome": "能独立完成一次标准产品演示",
                             "order_index": 3,
+                            "prerequisites": ["product-b"],
                             "completion_policy": {"mode": "all_required"},
                             "activities": [
                                 audio(
@@ -589,6 +667,7 @@ def _path_payload(
                             "title": "技术基础",
                             "outcome": "能回答客户常见的基础技术问题",
                             "order_index": 1,
+                            "prerequisites": ["standard-demo"],
                             "completion_policy": {"mode": "all_required"},
                             "activities": [
                                 lesson(
@@ -602,7 +681,8 @@ def _path_payload(
                                     "技术基础小测",
                                     papers["technical"],
                                     2,
-                                ),
+                                )
+                                | {"prerequisites": ["technical-lesson"]},
                             ],
                         },
                         {
@@ -610,6 +690,7 @@ def _path_payload(
                             "title": "综合实战",
                             "outcome": "能在完整客户场景中应用所学能力",
                             "order_index": 2,
+                            "prerequisites": ["technical"],
                             "completion_policy": {"mode": "all_required"},
                             "activities": practice,
                         },

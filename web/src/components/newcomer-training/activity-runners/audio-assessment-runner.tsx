@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FileAudio, Mic, RotateCcw, Square } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { createIdempotencyTokenStore } from "@/lib/idempotency-token-store";
 import { AudioPreparationPack } from "./audio-preparation-pack";
 import type { ActivityRunnerProps } from "./types";
 import { useBrowserAudioRecorder } from "./use-browser-audio-recorder";
@@ -20,6 +21,7 @@ export function AudioAssessmentRunner({ detail, onRefresh }: ActivityRunnerProps
     const [confirmed, setConfirmed] = useState(false);
     const [pending, setPending] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const tokenStore = useRef(createIdempotencyTokenStore());
     const file = recorder.audioFile ?? fallbackFile;
     const materialUrl = runner?.material_version_id
         ? api.salesTrainer.getMaterialVersionFileUrl(runner.material_version_id, {
@@ -38,17 +40,26 @@ export function AudioAssessmentRunner({ detail, onRefresh }: ActivityRunnerProps
         }
         setPending(true);
         setError(null);
+        const inputKey = [
+            detail.activity.activity_id,
+            file.name,
+            file.size,
+            file.lastModified,
+            runner?.material_version_id ?? "",
+            runner?.scoring_rubric_revision_id ?? "",
+        ].join(":");
         try {
             const updated = await api.newcomerTraining.submitAudio(
                 detail.activity.activity_id,
                 {
                     file,
-                    client_token: crypto.randomUUID(),
+                    client_token: tokenStore.current.tokenFor(inputKey),
                     confirmed_material_version_id: runner?.material_version_id,
                     confirmed_scoring_rubric_revision_id:
                         runner?.scoring_rubric_revision_id,
                 },
             );
+            tokenStore.current.complete(inputKey);
             onRefresh?.(updated);
         } catch (cause) {
             setError(getApiErrorMessage(cause));

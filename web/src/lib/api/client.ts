@@ -419,6 +419,13 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[SHORT_ANSWER_AI_SCORING_DISABLED]": "简答题暂未开启 AI 批改，请联系管理员。",
     "[STREAM_RESPONSE_UNAVAILABLE]": "当前浏览器无法读取流式响应，请刷新后重试。",
     "[STREAM_PARSE_ERROR]": "流式响应解析失败，请刷新后重试。",
+    "[COS_NOT_CONFIGURED]": "对象存储暂不可用，请稍后重试或联系管理员。",
+    "[OSS_NOT_CONFIGURED]": "对象存储暂不可用，请稍后重试或联系管理员。",
+    "[NEWCOMER_ACTIVITY_FAILED]": "训练操作失败，请稍后重试。",
+    "[NEWCOMER_SERVICE_UNAVAILABLE]": "服务暂不可用，请稍后重试。",
+    "[NEWCOMER_UPLOAD_FAILED]": "上传失败：请重新选择录音文件后重试。",
+    "[NEWCOMER_REQUEST_INVALID]": "请求无效：请确认录音文件与页面信息后重试。",
+    "[NEWCOMER_ACTIVITY_FORBIDDEN]": "当前没有权限完成该训练操作。",
 };
 
 type NormalizedApiErrorPayload = {
@@ -485,7 +492,18 @@ function normalizeApiErrorPayload(status: number, payload: unknown): NormalizedA
 }
 
 function buildApiErrorDisplayMessage(payload: NormalizedApiErrorPayload): string {
-    const friendly = API_ERROR_MESSAGE_MAP[payload.errorCode] || payload.message || "请求失败，请稍后重试。";
+    const mapped = API_ERROR_MESSAGE_MAP[payload.errorCode];
+    const backendMessage = payload.message?.trim() || "";
+    const hasSpecificBackend =
+        backendMessage.length > 0 && backendMessage !== payload.errorCode;
+    // Prefer backend Chinese/user copy over a mapped string so actionable
+    // learner messages (e.g. rubric/material failures) are not overwritten.
+    const preferBackend =
+        hasSpecificBackend &&
+        (!mapped || /[\u4e00-\u9fff]/.test(backendMessage));
+    const friendly = preferBackend
+        ? backendMessage
+        : (mapped || backendMessage || "请求失败，请稍后重试。");
     const traceSuffix = payload.traceId ? ` (trace_id: ${payload.traceId})` : "";
     return `${friendly}${traceSuffix}`;
 }
@@ -1948,16 +1966,24 @@ async function apiUpload<T>(
     endpoint: string,
     formData: FormData,
     signal?: AbortSignal,
-    options: { skipSessionExpiredHandling?: boolean } = {},
+    options: {
+        skipSessionExpiredHandling?: boolean;
+        timeoutMs?: number;
+        timeoutMessage?: string;
+    } = {},
 ): Promise<T> {
     const url = `${resolveApiBaseUrl()}${endpoint}`;
     const requestId = `upload_${++requestCounter}`;
-    const controller = new AbortController();
-    const { skipSessionExpiredHandling = false } = options;
-
-    if (signal) {
-        signal.addEventListener("abort", () => controller.abort(), { once: true });
-    }
+    const {
+        skipSessionExpiredHandling = false,
+        timeoutMs,
+        timeoutMessage,
+    } = options;
+    const abortContext = createRequestAbortContext({
+        externalSignal: signal,
+        timeoutMs,
+    });
+    const { controller, signal: requestSignal } = abortContext;
 
     activeRequests.set(requestId, controller);
 
@@ -1973,12 +1999,12 @@ async function apiUpload<T>(
         const response = await fetchWithLoopbackRetry(url, {
             method: "POST",
             body: formData,
-            signal: signal || controller.signal,
+            signal: requestSignal,
             credentials: resolvedCredentials,
             headers,
         });
 
-        const responseJson = await response.json().catch(() => ({}));
+        const responseJson = await readJsonOrFallback<ApiJsonResponse<T>>(response, {});
 
         if (!response.ok) {
             if (response.status === 401 && !skipSessionExpiredHandling) {
@@ -1991,10 +2017,14 @@ async function apiUpload<T>(
             throw new ApiRequestError(normalizeApiErrorPayload(response.status, responseJson));
         }
 
-        return responseJson.data !== undefined ? responseJson.data : responseJson;
+        return responseJson.data !== undefined ? responseJson.data : responseJson as T;
     } catch (error) {
         if (error instanceof ApiRequestError) {
             throw error;
+        }
+
+        if (abortContext.didTimeout()) {
+            throw createTimeoutError(timeoutMessage);
         }
 
         if (error instanceof Error && error.name === "AbortError") {
@@ -2011,6 +2041,7 @@ async function apiUpload<T>(
             message,
         });
     } finally {
+        abortContext.cleanup();
         activeRequests.delete(requestId);
     }
 }

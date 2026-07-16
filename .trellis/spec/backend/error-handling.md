@@ -287,6 +287,50 @@ Delivery is explicit and testable.
 
 ---
 
+## Scenario: Newcomer learner activity errors (`learner_api._error`)
+
+### 1. Scope / Trigger
+
+- Trigger: learner submits audio / quiz / other activity evidence via `sales_trainer/orchestration/learner_api.py`.
+- Scope: typed business errors vs unexpected exceptions; client-safe Chinese `message`; structured logs with `trace_id`.
+
+### 2. Signatures
+
+- `_error(exc, *, trace_id) -> JSONResponse`
+- Business shapes: `NewcomerOrchestrationError`, `AudioSubmissionServiceError`, `MaterialServiceError`, `EffectiveAudioTrainingConfigError` (or duck-types with `code`/`message`/`status_code`).
+
+### 3. Contracts
+
+- Business errors: return original `code` + **client-safe** Chinese `message` + HTTP status; never forward env var names, secret keys, absolute paths, or raw `str(CosConfigError|OssConfigError)`.
+- Unexpected errors: categorize into 上传失败 / 请求无效 / 服务暂不可用 / 通用失败; log `exc_info` + `trace_id` + `error_type` + truncated `exception_message`; response still includes `trace_id`.
+- Frontend (`web/src/lib/api/client.ts`): prefer backend Chinese `message` over generic `API_ERROR_MESSAGE_MAP` when the message is already Chinese user copy.
+
+### 4. Validation & Error Matrix
+
+| Case | Client message | Log |
+|---|---|---|
+| Typed business error with safe Chinese message | Keep message | Normal |
+| Typed business error whose message looks like env/config dump | Replace with safe Chinese fallback | `warning` with original server text |
+| Unexpected upload-ish exception | 上传失败类中文 | `error` + `exc_info` |
+| Unexpected other exception | 服务暂不可用 / 请重试 + `trace_id` | `error` + `exc_info` |
+
+### 5. Good / Bad
+
+- Good: COS not configured → learner sees「对象存储暂不可用…」, logs keep detail.
+- Bad: `getattr(exc, "message", "训练操作失败，请重试。")` for all exceptions (hides root cause and may leak config strings).
+
+### 6. Tests Required
+
+- `backend/tests/unit/test_newcomer_learner_api_errors.py` — business passthrough, unsafe message scrub, unexpected categorization.
+- Frontend: runner/client tests assert Chinese backend message is shown.
+
+### 7. Wrong vs Correct
+
+- Wrong: always return「训练操作失败，请重试」and skip `exc_info`.
+- Correct: preserve actionable business messages; categorize unexpected failures; never leak COS/OSS env names to learners.
+
+---
+
 ## Anti-Patterns
 
 - Returning HTTP 500 with exception message body to the practice UI.
@@ -294,6 +338,7 @@ Delivery is explicit and testable.
 - `print()` for errors — use structlog (see Logging Guidelines).
 - `raise HTTPException(500, detail=str(e))` in new practice/scenario code.
 - Assuming all failures use the `error` field — check whether the path returns `fallback`.
+- Collapsing all learner activity exceptions into one opaque「训练操作失败」string without logging `exc_info`.
 
 ---
 
@@ -302,6 +347,7 @@ Delivery is explicit and testable.
 - Forgetting `trace_id` on manual JSON responses — use `success_response` / `error_response`.
 - Mixing bracketed codes and plain strings — stay consistent with existing fallbacks in the same module.
 - Swallowing errors silently — log with context, return safe fallback to client.
+- Forwarding `str(CosConfigError)` / missing-env dumps to the learner UI.
 
 ---
 

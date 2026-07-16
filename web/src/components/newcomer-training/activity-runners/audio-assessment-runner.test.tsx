@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiRequestError } from "@/lib/api/client";
 import type { ActivityDetailResponse } from "@/lib/api/types/newcomer-training";
 import { AudioAssessmentRunner } from "./audio-assessment-runner";
 
@@ -23,16 +24,26 @@ vi.mock("./use-browser-audio-recorder", () => ({
     }),
 }));
 
-vi.mock("@/lib/api/client", () => ({
-    api: {
-        salesTrainer: {
-            getMaterialVersionFileUrl: (versionId: string) =>
-                `/api/material-versions/${versionId}/file`,
+vi.mock("@/lib/api/client", async () => {
+    const actual = await vi.importActual<typeof import("@/lib/api/client")>(
+        "@/lib/api/client",
+    );
+    return {
+        ...actual,
+        api: {
+            ...actual.api,
+            salesTrainer: {
+                ...actual.api.salesTrainer,
+                getMaterialVersionFileUrl: (versionId: string) =>
+                    `/api/material-versions/${versionId}/file`,
+            },
+            newcomerTraining: {
+                ...actual.api.newcomerTraining,
+                submitAudio,
+            },
         },
-        newcomerTraining: { submitAudio },
-    },
-    getApiErrorMessage: () => "提交失败",
-}));
+    };
+});
 
 function audioDetail(exampleTranscript: string | null = "先说客户问题，再讲方案价值。"):
     ActivityDetailResponse {
@@ -142,5 +153,54 @@ describe("AudioAssessmentRunner", () => {
                 confirmed_scoring_rubric_revision_id: "rubric-revision-2",
             }),
         );
+    });
+
+    it("reuses the same idempotency token when an uncertain submit is retried", async () => {
+        const detail = audioDetail();
+        submitAudio
+            .mockRejectedValueOnce(new Error("response lost"))
+            .mockResolvedValueOnce(detail);
+        const user = userEvent.setup();
+        render(<AudioAssessmentRunner detail={detail} />);
+
+        await user.click(screen.getByRole("checkbox", { name: "我已看过材料、评分重点和讲解示例" }));
+        await user.upload(
+            screen.getByLabelText("选择录音文件"),
+            new File(["audio"], "讲解.webm", { type: "audio/webm" }),
+        );
+        await user.click(screen.getByRole("button", { name: "提交录音评分" }));
+        expect(await screen.findByRole("alert")).toBeTruthy();
+        await user.click(screen.getByRole("button", { name: "提交录音评分" }));
+
+        await waitFor(() => expect(submitAudio).toHaveBeenCalledTimes(2));
+        expect(submitAudio.mock.calls[1][1].client_token).toBe(
+            submitAudio.mock.calls[0][1].client_token,
+        );
+    });
+
+    it("shows the backend business message instead of a vaguer fallback", async () => {
+        submitAudio.mockRejectedValueOnce(
+            new ApiRequestError({
+                status: 409,
+                errorCode: "[NEWCOMER_AUDIO_RUBRIC_NOT_PUBLISHED]",
+                message: "录音评分标准尚未发布，请重新选择或新建评分标准。",
+                traceId: "trace-audio-1",
+            }),
+        );
+        const user = userEvent.setup();
+        render(<AudioAssessmentRunner detail={audioDetail()} />);
+
+        await user.click(screen.getByRole("checkbox", { name: "我已看过材料、评分重点和讲解示例" }));
+        await user.upload(
+            screen.getByLabelText("选择录音文件"),
+            new File(["audio"], "讲解.webm", { type: "audio/webm" }),
+        );
+        await user.click(screen.getByRole("button", { name: "提交录音评分" }));
+
+        const alert = await screen.findByRole("alert");
+        expect(alert.textContent).toContain(
+            "录音评分标准尚未发布，请重新选择或新建评分标准。",
+        );
+        expect(alert.textContent).toContain("trace-audio-1");
     });
 });

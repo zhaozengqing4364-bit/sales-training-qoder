@@ -23,6 +23,7 @@ from common.oss.signing import (
     OssConfigError,
     get_oss_signing_service,
 )
+from common.teams.policy import TeamDataScope
 from sales_trainer.models import (
     SalesTrainerAudioScorePrompt,
     SalesTrainerAudioScoreResult,
@@ -89,6 +90,11 @@ class AudioSubmissionServiceError(Exception):
         super().__init__(message)
 
 
+_OBJECT_STORAGE_UNAVAILABLE_MESSAGE = (
+    "对象存储暂不可用，请稍后重试或联系管理员。"
+)
+
+
 class AudioSubmissionService:
     def __init__(
         self,
@@ -119,7 +125,7 @@ class AudioSubmissionService:
             except OssConfigError as exc:
                 raise AudioSubmissionServiceError(
                     "[OSS_NOT_CONFIGURED]",
-                    str(exc),
+                    _OBJECT_STORAGE_UNAVAILABLE_MESSAGE,
                     status_code=503,
                 ) from exc
             oss_presigned = oss_signer.generate_put_url(
@@ -139,7 +145,7 @@ class AudioSubmissionService:
             except CosConfigError as exc:
                 raise AudioSubmissionServiceError(
                     "[COS_NOT_CONFIGURED]",
-                    str(exc),
+                    _OBJECT_STORAGE_UNAVAILABLE_MESSAGE,
                     status_code=503,
                 ) from exc
             cos_presigned = cos_signer.generate_put_url(
@@ -489,17 +495,14 @@ class AudioSubmissionService:
         *,
         actor: User,
         allow_admin: bool = False,
-        team_department: str | None = None,
+        team_scope: TeamDataScope | None = None,
     ) -> SalesTrainerAudioSubmission | None:
         submission = await self._db.get(SalesTrainerAudioSubmission, submission_id)
         if submission is None:
             return None
         if allow_admin:
             return submission
-        if team_department is not None and await self._submission_in_department(
-            submission,
-            team_department,
-        ):
+        if team_scope is not None and team_scope.allows_learner(submission.user_id):
             return submission
         if submission.user_id != str(actor.user_id):
             raise AudioSubmissionServiceError(
@@ -513,13 +516,13 @@ class AudioSubmissionService:
         *,
         actor: User,
         allow_admin: bool = False,
-        team_department: str | None = None,
+        team_scope: TeamDataScope | None = None,
     ) -> AudioFileAccess:
         submission = await self.get_submission(
             submission_id,
             actor=actor,
             allow_admin=allow_admin,
-            team_department=team_department,
+            team_scope=team_scope,
         )
         if submission is None:
             raise AudioSubmissionServiceError(
@@ -564,13 +567,13 @@ class AudioSubmissionService:
             except OssConfigError as exc:
                 raise AudioSubmissionServiceError(
                     "[OSS_NOT_CONFIGURED]",
-                    str(exc),
+                    _OBJECT_STORAGE_UNAVAILABLE_MESSAGE,
                     status_code=503,
                 ) from exc
             except CosConfigError as exc:
                 raise AudioSubmissionServiceError(
                     "[COS_NOT_CONFIGURED]",
-                    str(exc),
+                    _OBJECT_STORAGE_UNAVAILABLE_MESSAGE,
                     status_code=503,
                 ) from exc
             return AudioFileAccess(
@@ -591,7 +594,7 @@ class AudioSubmissionService:
         self,
         *,
         user_id: str | None = None,
-        team_department: str | None = None,
+        team_scope: TeamDataScope | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[SalesTrainerAudioSubmission], int]:
@@ -602,14 +605,13 @@ class AudioSubmissionService:
             count_stmt = count_stmt.where(
                 SalesTrainerAudioSubmission.user_id == user_id
             )
-        if team_department is not None:
-            stmt = stmt.join(User, SalesTrainerAudioSubmission.user_id == User.user_id)
-            count_stmt = count_stmt.join(
-                User,
-                SalesTrainerAudioSubmission.user_id == User.user_id,
+        if team_scope is not None and not team_scope.unrestricted:
+            stmt = stmt.where(
+                SalesTrainerAudioSubmission.user_id.in_(team_scope.learner_ids)
             )
-            stmt = stmt.where(User.department == team_department)
-            count_stmt = count_stmt.where(User.department == team_department)
+            count_stmt = count_stmt.where(
+                SalesTrainerAudioSubmission.user_id.in_(team_scope.learner_ids)
+            )
         result = await self._db.execute(
             stmt.order_by(SalesTrainerAudioSubmission.created_at.desc())
             .offset(offset)
@@ -623,7 +625,7 @@ class AudioSubmissionService:
         *,
         user_id: str | None = None,
         submission_id: str | None = None,
-        team_department: str | None = None,
+        team_scope: TeamDataScope | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[SalesTrainerAudioScoreResult], int]:
@@ -653,14 +655,13 @@ class AudioSubmissionService:
             count_stmt = count_stmt.where(
                 SalesTrainerAudioScoreResult.submission_id == submission_id
             )
-        if team_department is not None:
-            stmt = stmt.join(User, SalesTrainerAudioSubmission.user_id == User.user_id)
-            count_stmt = count_stmt.join(
-                User,
-                SalesTrainerAudioSubmission.user_id == User.user_id,
+        if team_scope is not None and not team_scope.unrestricted:
+            stmt = stmt.where(
+                SalesTrainerAudioSubmission.user_id.in_(team_scope.learner_ids)
             )
-            stmt = stmt.where(User.department == team_department)
-            count_stmt = count_stmt.where(User.department == team_department)
+            count_stmt = count_stmt.where(
+                SalesTrainerAudioSubmission.user_id.in_(team_scope.learner_ids)
+            )
 
         result = await self._db.execute(
             stmt.order_by(SalesTrainerAudioScoreResult.created_at.desc())
@@ -689,7 +690,6 @@ class AudioSubmissionService:
             "user_id": submission.user_id,
             "user_name": user.name if user else None,
             "user_email": user.email if user else None,
-            "user_department": user.department if user else None,
             "purpose": submission.purpose,
             "original_filename": submission.original_filename,
             "content_type": submission.content_type,
@@ -1007,17 +1007,6 @@ class AudioSubmissionService:
         )
         return result.scalars().first()
 
-    async def _submission_in_department(
-        self,
-        submission: SalesTrainerAudioSubmission,
-        department: str,
-    ) -> bool:
-        result = await self._db.execute(
-            select(User.department).where(User.user_id == submission.user_id)
-        )
-        found_department = result.scalar_one_or_none()
-        return found_department is not None and str(found_department) == department
-
     def _validate_content_type(self, content_type: str) -> None:
         allowed = {
             item.strip()
@@ -1078,13 +1067,13 @@ class AudioSubmissionService:
         except OssConfigError as exc:
             raise AudioSubmissionServiceError(
                 "[OSS_NOT_CONFIGURED]",
-                str(exc),
+                _OBJECT_STORAGE_UNAVAILABLE_MESSAGE,
                 status_code=503,
             ) from exc
         except CosConfigError as exc:
             raise AudioSubmissionServiceError(
                 "[COS_NOT_CONFIGURED]",
-                str(exc),
+                _OBJECT_STORAGE_UNAVAILABLE_MESSAGE,
                 status_code=503,
             ) from exc
         except Exception as exc:
@@ -1124,7 +1113,7 @@ class AudioSubmissionService:
             except CosConfigError as exc:
                 raise AudioSubmissionServiceError(
                     "[COS_NOT_CONFIGURED]",
-                    str(exc),
+                    _OBJECT_STORAGE_UNAVAILABLE_MESSAGE,
                     status_code=503,
                 ) from exc
             except Exception as exc:

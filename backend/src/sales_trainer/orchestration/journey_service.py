@@ -11,6 +11,7 @@ from common.db.models import User
 from sales_trainer.models import (
     NewcomerTrainingEnrollment,
     SalesTrainerAssetRevision,
+    SalesTrainerAudioScorePrompt,
     SalesTrainerMaterial,
     SalesTrainerMaterialVersion,
 )
@@ -45,7 +46,7 @@ from sales_trainer.orchestration.contracts import (
     ModuleDetailResponse,
     QuizConfig,
     QuizRunnerDescriptor,
-    RealtimeRunnerDescriptor,
+    RealtimeRoleplayConfig,
     TrainingPathPayload,
 )
 from sales_trainer.orchestration.errors import NewcomerOrchestrationError
@@ -53,13 +54,21 @@ from sales_trainer.orchestration.registry import (
     ActivityTypeRegistry,
     build_activity_registry,
 )
-from sales_trainer.orchestration.repository import EnrollmentRepository
+from sales_trainer.orchestration.repository import (
+    AttemptRepository,
+    EnrollmentRepository,
+)
 from sales_trainer.orchestration.revision_service import (
     PATH_LOGICAL_ID,
     PATH_RESOURCE_TYPE,
 )
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
+)
+from sales_trainer.services.material_service import normalize_learner_rubric
+from sales_trainer.services.prompt_revision_payloads import PROMPT_RESOURCE_TYPE
+from sales_trainer.services.realtime_binding_snapshot_service import (
+    realtime_runner_descriptor,
 )
 
 
@@ -124,6 +133,10 @@ class NewcomerJourneyService:
             for module in phase.modules:
                 for activity in module.activities:
                     if activity.activity_id == activity_id:
+                        context = await self._context_for_activity_unchecked(
+                            learner=learner,
+                            activity_id=activity_id,
+                        )
                         return ActivityDetailResponse(
                             enrollment_id=journey.enrollment_id,
                             path_revision_id=journey.path_revision_id,
@@ -132,9 +145,7 @@ class NewcomerJourneyService:
                             activity=activity,
                             runner=await _runner_descriptor(
                                 self._db,
-                                (await self.context_for_activity(
-                                    learner=learner, activity_id=activity_id
-                                )).activity
+                                context.activity,
                             ),
                         )
         raise NewcomerOrchestrationError(
@@ -142,6 +153,29 @@ class NewcomerJourneyService:
         )
 
     async def context_for_activity(
+        self, *, learner: User, activity_id: str
+    ) -> ActivityExecutionContext:
+        journey = await self.get_or_create_for_learner(learner=learner)
+        for phase in journey.phases:
+            for module in phase.modules:
+                for activity in module.activities:
+                    if activity.activity_id != activity_id:
+                        continue
+                    if activity.locked:
+                        raise NewcomerOrchestrationError(
+                            "[NEWCOMER_ACTIVITY_PREREQUISITE_NOT_MET]",
+                            activity.lock_reason or "请先完成前置训练任务。",
+                            409,
+                        )
+                    return await self._context_for_activity_unchecked(
+                        learner=learner,
+                        activity_id=activity_id,
+                    )
+        raise NewcomerOrchestrationError(
+            "[NEWCOMER_ACTIVITY_NOT_FOUND]", "训练活动不存在。", 404
+        )
+
+    async def _context_for_activity_unchecked(
         self, *, learner: User, activity_id: str
     ) -> ActivityExecutionContext:
         _, enrollment, payload = await self._pinned_payload(learner)
@@ -205,30 +239,46 @@ class NewcomerJourneyService:
         learner: User,
     ) -> JourneyResponse:
         payload = TrainingPathPayload.model_validate(revision.payload_json)
+        latest_attempts = await AttemptRepository(self._db).latest_for_enrollment(
+            enrollment_id=str(enrollment.enrollment_id)
+        )
         phase_rows: list[JourneyPhaseProgress] = []
         phase_aggregates: dict[str, ProgressAggregate] = {}
         primary: JourneyNextAction | None = None
         optional_candidate: tuple[JourneyNextAction, str, str] | None = None
         completed_ids: set[str] = set()
+        required_phase_gate_open = True
         for phase in sorted(payload.phases, key=lambda item: item.order_index):
             module_rows: list[JourneyModuleProgress] = []
             module_aggregates: dict[str, ProgressAggregate] = {}
-            phase_locked = any(
-                prerequisite not in completed_ids
-                for module in phase.modules
-                for prerequisite in module.prerequisites
-            )
+            phase_locked = phase.required and not required_phase_gate_open
+            required_module_gate_open = True
             for module in sorted(phase.modules, key=lambda item: item.order_index):
-                module_locked = phase_locked or any(
-                    item not in completed_ids for item in module.prerequisites
+                sequential_module_locked = (
+                    module.required and not required_module_gate_open
+                )
+                module_locked = (
+                    phase_locked
+                    or sequential_module_locked
+                    or any(item not in completed_ids for item in module.prerequisites)
                 )
                 projections: dict[str, ActivityProjection] = {}
                 activity_rows: list[JourneyActivityProgress] = []
+                required_activity_gate_open = True
                 for activity in sorted(
                     module.activities, key=lambda item: item.order_index
                 ):
-                    locked = module_locked or any(
-                        item not in completed_ids for item in activity.prerequisites
+                    sequential_activity_locked = (
+                        module.completion_policy.mode == "all_required"
+                        and activity.required
+                        and not required_activity_gate_open
+                    )
+                    locked = (
+                        module_locked
+                        or sequential_activity_locked
+                        or any(
+                            item not in completed_ids for item in activity.prerequisites
+                        )
                     )
                     context = ActivityExecutionContext(
                         learner_id=str(learner.user_id),
@@ -237,6 +287,8 @@ class NewcomerJourneyService:
                         phase_id=phase.phase_id,
                         module_id=module.module_id,
                         activity=activity,
+                        latest_attempt=latest_attempts.get(activity.activity_id),
+                        latest_attempt_loaded=True,
                     )
                     projection = await self._registry.handler_for(
                         activity.type
@@ -244,6 +296,12 @@ class NewcomerJourneyService:
                     projections[activity.activity_id] = projection
                     if projection.completed:
                         completed_ids.add(activity.activity_id)
+                    if (
+                        module.completion_policy.mode == "all_required"
+                        and activity.required
+                        and not projection.completed
+                    ):
+                        required_activity_gate_open = False
                     action_key = (
                         _action_key(activity.type)
                         if not projection.completed and not locked
@@ -293,7 +351,15 @@ class NewcomerJourneyService:
                             score=projection.score,
                             max_score=projection.max_score,
                             locked=locked,
-                            lock_reason="请先完成前置任务" if locked else None,
+                            lock_reason=(
+                                "请先完成前一项必修任务"
+                                if sequential_activity_locked
+                                else "请先完成前置模块"
+                                if module_locked
+                                else "请先完成前置任务"
+                                if locked
+                                else None
+                            ),
                             action_key=action_key,
                             is_primary_next_action=is_primary,
                         )
@@ -302,6 +368,8 @@ class NewcomerJourneyService:
                 module_aggregates[module.module_id] = aggregate
                 if aggregate.completed:
                     completed_ids.add(module.module_id)
+                if module.required and not aggregate.completed:
+                    required_module_gate_open = False
                 module_rows.append(
                     JourneyModuleProgress(
                         module_id=module.module_id,
@@ -328,6 +396,8 @@ class NewcomerJourneyService:
             phase_aggregates[phase.phase_id] = phase_aggregate
             if phase_aggregate.completed:
                 completed_ids.add(phase.phase_id)
+            if phase.required and not phase_aggregate.completed:
+                required_phase_gate_open = False
             phase_rows.append(
                 JourneyPhaseProgress(
                     phase_id=phase.phase_id,
@@ -446,15 +516,26 @@ async def _runner_descriptor(
                     material_version_label = str(version.version_label)
                     material_file_name = str(version.file_name)
                     material_content_type = str(version.content_type)
-        rubric = await SalesTrainerAssetRevisionService(db).active_revision(
-            resource_type="audio_scoring_rubric",
-            logical_id=audio_config.scoring_rubric_id,
+        prompt = await db.get(
+            SalesTrainerAudioScorePrompt, audio_config.scoring_rubric_id
         )
-        if rubric is not None and rubric.status != "published":
-            rubric = None
-        rubric_payload = (
-            cast(dict[str, object], rubric.payload_json) if rubric is not None else {}
-        )
+        if prompt is not None and str(prompt.status) != "published":
+            prompt = None
+        active_revision = None
+        criteria: object = []
+        scoring_title: str | None = None
+        if prompt is not None:
+            active_revision = await SalesTrainerAssetRevisionService(
+                db
+            ).active_revision(
+                resource_type=PROMPT_RESOURCE_TYPE,
+                logical_id=str(prompt.prompt_id),
+            )
+            rubric = cast(
+                dict[str, object], normalize_learner_rubric(prompt.learner_rubric)
+            )
+            criteria = rubric.get("criteria") or []
+            scoring_title = _safe_optional_text(prompt.name, max_length=200)
         return AudioRunnerDescriptor(
             material_id=audio_config.material_id,
             material_version_id=material_version_id,
@@ -463,21 +544,24 @@ async def _runner_descriptor(
             material_file_name=material_file_name,
             material_content_type=material_content_type,
             scoring_rubric_revision_id=(
-                str(rubric.revision_id) if rubric is not None else None
+                str(active_revision.revision_id)
+                if active_revision is not None
+                else None
             ),
             scoring_rubric_revision_no=(
-                int(rubric.revision_no) if rubric is not None else None
+                int(active_revision.revision_no)
+                if active_revision is not None
+                else None
             ),
-            scoring_rubric_title=_safe_optional_text(
-                rubric_payload.get("title"), max_length=200
-            ),
-            scoring_focuses=_scoring_focuses(rubric_payload.get("dimensions")),
+            scoring_rubric_title=scoring_title,
+            scoring_focuses=_scoring_focuses(criteria),
             example_transcript=audio_config.example_transcript,
             pass_score=audio_config.pass_score,
             max_attempts=audio_config.max_attempts,
         )
     if activity.type == "realtime_roleplay":
-        return RealtimeRunnerDescriptor()
+        realtime_config = cast(RealtimeRoleplayConfig, activity.config)
+        return await realtime_runner_descriptor(db, realtime_config)
     if activity.type == "ai_coach":
         return AiCoachRunnerDescriptor()
     assignment_config = cast(AssignmentConfig, activity.config)

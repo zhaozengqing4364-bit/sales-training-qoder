@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import Any, Literal
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
@@ -19,6 +18,7 @@ from common.teams import TeamScopePolicy
 from sales_trainer.models import (
     SalesTrainerAssetActiveRevision,
     SalesTrainerAssetRevision,
+    SalesTrainerAudioScorePrompt,
 )
 from sales_trainer.orchestration.contracts import StrictModel, TrainingPathPayload
 from sales_trainer.orchestration.errors import (
@@ -37,14 +37,40 @@ from sales_trainer.permissions import (
     can_publish_newcomer_training_path,
     can_view_sales_trainer_records,
 )
+from sales_trainer.schemas import (
+    AudioScorePromptCreate,
+    SalesTrainerLearnerRubric,
+    SalesTrainerLearnerRubricCriterion,
+)
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.prompt_service import (
+    AudioScorePromptService,
+    PromptServiceError,
+)
 from sales_trainer.services.readiness_dossier_service import (
     ReadinessDossierError,
     ReadinessDossierService,
 )
+
+_PATH_SCORE_PROMPT_SYSTEM = (
+    "你是销售训练录音评分专家，请依据评分说明对学员录音转写文本给出客观评分。"
+)
+
+
+def _path_score_scoring_template(*, dimension_labels: str, pass_score: float) -> str:
+    """Build a Deucate-ready scoring template; keep braces in labels literal."""
+    return (
+        f"评分维度：{dimension_labels}。\n"
+        f"通过线：{pass_score} 分。\n"
+        "输出要求：请仅返回 JSON 对象，字段必须包含 "
+        "total_score、summary、strengths、improvements、dimension_scores。\n"
+        "\n"
+        "录音转写：\n"
+        "{transcript}"
+    )
 
 admin_router = APIRouter(prefix="/admin/newcomer-training/path")
 admin_journey_router = APIRouter(prefix="/admin/newcomer-training")
@@ -351,8 +377,22 @@ async def scoring_rubrics(
 ) -> dict[str, Any] | JSONResponse:
     if not can_manage_newcomer_training_path(current_user):
         return _forbidden()
+    rows = (
+        await db.execute(
+            select(SalesTrainerAudioScorePrompt)
+            .where(SalesTrainerAudioScorePrompt.status == "published")
+            .order_by(SalesTrainerAudioScorePrompt.updated_at.desc())
+        )
+    ).scalars()
     return success_response(
-        await _active_asset_options(db, resource_type="audio_scoring_rubric")
+        [
+            {
+                "id": str(row.prompt_id),
+                "title": str(row.name),
+                "status": "published",
+            }
+            for row in rows
+        ]
     )
 
 
@@ -365,27 +405,61 @@ async def create_scoring_rubric(
 ) -> dict[str, Any] | JSONResponse:
     if not can_manage_newcomer_training_path(current_user):
         return _forbidden()
-    logical_id = str(uuid4())
-    revision = await SalesTrainerAssetRevisionService(db).create_published_revision(
-        resource_type="audio_scoring_rubric",
-        logical_id=logical_id,
-        payload=payload.model_dump(mode="json"),
-        actor=current_user,
-        change_class="scoring_high_risk",
-        reason="在训练路径编辑器中创建评分标准",
-        trace_id=_trace_id(request),
-    )
+    service = AudioScorePromptService(db)
+    try:
+        dimension_labels = "、".join(item.label for item in payload.dimensions)
+        create_payload = AudioScorePromptCreate(
+            name=payload.title,
+            purpose="general_audio_scoring",
+            system_prompt=_PATH_SCORE_PROMPT_SYSTEM,
+            scoring_template=_path_score_scoring_template(
+                dimension_labels=dimension_labels,
+                pass_score=payload.pass_score,
+            ),
+            learner_rubric=SalesTrainerLearnerRubric(
+                visible_to_learner=True,
+                pass_threshold=payload.pass_score,
+                criteria=[
+                    SalesTrainerLearnerRubricCriterion(
+                        key=item.key,
+                        label=item.label,
+                        description=item.description,
+                        weight=item.weight,
+                    )
+                    for item in payload.dimensions
+                ],
+            ),
+        )
+        prompt = await service.create_prompt(create_payload, actor=current_user)
+        prompt = await service.publish_prompt(prompt, actor=current_user)
+    except PromptServiceError as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=error_response(exc.code, message=exc.message),
+        )
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=422,
+            content=error_response(
+                "[SCORING_PROMPT_INVALID]",
+                message=str(exc) or "评分标准内容无效。",
+            ),
+        )
     await OperationLogService(db).record(
         actor=current_user,
         action="newcomer_training_scoring_rubric_created",
-        target_type="audio_scoring_rubric",
-        target_id=logical_id,
+        target_type="sales_trainer_audio_score_prompt",
+        target_id=str(prompt.prompt_id),
         request_id=_trace_id(request),
-        metadata={"revision_id": str(revision.revision.revision_id)},
+        metadata={"prompt_id": str(prompt.prompt_id), "status": str(prompt.status)},
     )
     await db.commit()
     return success_response(
-        {"id": logical_id, "title": payload.title, "status": "published"}
+        {
+            "id": str(prompt.prompt_id),
+            "title": str(prompt.name),
+            "status": "published",
+        }
     )
 
 

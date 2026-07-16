@@ -1,0 +1,9 @@
+{"file": ".trellis/tasks/07-16-unify-path-score-standards/prd.md", "reason": "Locked MVP: unify path scoring with AudioScorePrompt, UX B, legacy rebind-only"}
+{"file": ".trellis/spec/backend/newcomer-training-activity-orchestration.md", "reason": "Path activity binding, freeze snapshot, audio_assessment contracts"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Fail-closed validation messages for invalid/old rubric bindings"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend layering, tests, API consistency"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "Admin path editor and score-standards navigation patterns"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "In-flow create drawer / dialog patterns"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "In-flow completion: bind then refine prompt without leaving task"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Keep admin UI, orchestration API, and scoring freeze in sync"}
+{"file": "docs/api-contract/sales-trainer.md", "reason": "Public API contract for scoring-rubrics and audio submissions"}

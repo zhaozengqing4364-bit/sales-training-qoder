@@ -318,6 +318,79 @@ describe("API client 401 handling", () => {
         }
     });
 
+    it("material upload aborts after its size-aware timeout instead of staying pending forever", async () => {
+        vi.useFakeTimers();
+        let rejectFetch: ((reason?: unknown) => void) | undefined;
+        try {
+            const fetchMock = vi.fn(
+                (_url: RequestInfo | URL, init?: RequestInit) => new Promise((_resolve, reject) => {
+                    rejectFetch = reject;
+                    init?.signal?.addEventListener("abort", () => {
+                        reject(new DOMException("The operation was aborted.", "AbortError"));
+                    });
+                }),
+            );
+            vi.stubGlobal("fetch", fetchMock);
+            const file = new File(["deck"], "company-master.pptx", {
+                type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            });
+
+            const result = api.admin.salesTrainer.uploadMaterialVersion("material-1", {
+                file,
+                version_label: "1.0",
+                title: "公司主胶片",
+            }).catch((error: unknown) => error);
+
+            await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+
+            const requestSignal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal | undefined;
+            expect(requestSignal?.aborted).toBe(true);
+            await expect(result).resolves.toMatchObject({
+                name: "ApiRequestError",
+                status: 0,
+                errorCode: "[REQUEST_TIMEOUT]",
+                message: "材料上传长时间无响应，已停止本次上传。文件和材料名称均已保留，可直接重试。",
+            });
+        } finally {
+            rejectFetch?.(new Error("test cleanup"));
+            vi.useRealTimers();
+        }
+    });
+
+    it("material upload reports timeout when response JSON stalls", async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchMock = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => new Promise((_resolve, reject) => {
+                    init?.signal?.addEventListener("abort", () => {
+                        reject(new DOMException("The operation was aborted.", "AbortError"));
+                    });
+                }),
+            }));
+            vi.stubGlobal("fetch", fetchMock);
+            const file = new File(["deck"], "company-master.pptx", {
+                type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            });
+
+            const result = api.admin.salesTrainer.uploadMaterialVersion("material-1", {
+                file,
+                version_label: "1.0",
+                title: "公司主胶片",
+            }).catch((error: unknown) => error);
+
+            await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+
+            await expect(result).resolves.toMatchObject({
+                name: "ApiRequestError",
+                errorCode: "[REQUEST_TIMEOUT]",
+            });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it("current-user request aborts after configured timeout", async () => {
         vi.useFakeTimers();
         try {
@@ -340,6 +413,35 @@ describe("API client 401 handling", () => {
 
             const requestSignal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal | undefined;
             expect(requestSignal?.aborted).toBe(true);
+            await rejection;
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("allows a slow developer login up to its explicit 15 second timeout", async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchMock = vi.fn(
+                (_url: RequestInfo | URL, init?: RequestInit) => new Promise((_resolve, reject) => {
+                    init?.signal?.addEventListener("abort", () => {
+                        reject(new DOMException("The operation was aborted.", "AbortError"));
+                    });
+                }),
+            );
+            vi.stubGlobal("fetch", fetchMock);
+
+            const request = api.auth.devLogin();
+            const rejection = expect(request).rejects.toMatchObject({
+                name: "ApiRequestError",
+                status: 0,
+                errorCode: "[REQUEST_TIMEOUT]",
+                message: "登录超时，请重试。",
+            });
+            await vi.advanceTimersByTimeAsync(14_999);
+            expect((fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal).aborted).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect((fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal).aborted).toBe(true);
             await rejection;
         } finally {
             vi.useRealTimers();
@@ -533,6 +635,44 @@ describe("API client 401 handling", () => {
             errorCode: "[REPORT_NOT_FOUND]",
             rawMessage: "报告不存在。",
             traceId: "trace-report-1",
+        });
+    });
+
+    it("prefers backend Chinese message over mapped copy for learner failures", async () => {
+        mockFetchResponse(409, {
+            success: false,
+            error: "[ROLE_REQUIRED]",
+            message: "当前账号不能进入新人训练。",
+            trace_id: "trace-newcomer-1",
+        });
+
+        await expect(api.user.getMe()).rejects.toMatchObject({
+            name: "ApiRequestError",
+            status: 409,
+            errorCode: "[ROLE_REQUIRED]",
+            message: "当前账号不能进入新人训练。 (trace_id: trace-newcomer-1)",
+            rawMessage: "当前账号不能进入新人训练。",
+            traceId: "trace-newcomer-1",
+        });
+    });
+
+    it("falls back to mapped Chinese copy when backend storage config dump is English", async () => {
+        mockFetchResponse(503, {
+            success: false,
+            error: "[COS_NOT_CONFIGURED]",
+            message:
+                "COS credentials not configured - missing env vars: TENCENT_COS_SECRET_ID",
+            trace_id: "trace-cos-1",
+        });
+
+        await expect(api.user.getMe()).rejects.toMatchObject({
+            name: "ApiRequestError",
+            status: 503,
+            errorCode: "[COS_NOT_CONFIGURED]",
+            message: "对象存储暂不可用，请稍后重试或联系管理员。 (trace_id: trace-cos-1)",
+            rawMessage:
+                "COS credentials not configured - missing env vars: TENCENT_COS_SECRET_ID",
+            traceId: "trace-cos-1",
         });
     });
 });

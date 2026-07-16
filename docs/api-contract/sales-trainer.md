@@ -10,6 +10,7 @@
 - 路径配置只保存声明式业务数据，不得保存组件名、路由、URL、脚本或网络请求。
 - 活动类型是封闭集合：`lesson`、`quiz`、`audio_assessment`、`realtime_roleplay`、`ai_coach`、`assignment`。
 - 产品名、PPT、Demo、课程主题只是管理员录入的标题和资源，不是代码分支。
+- 工作草稿允许资源绑定暂时为空；`lesson.learning_content_id`、`quiz.exam_paper_id`、`audio_assessment.scoring_rubric_id`、`realtime_roleplay.practice_template_id/runtime_profile_id`、`ai_coach.coach_profile_id` 的空字符串表示“尚未选择”。可选的 `audio_assessment.material_id` 空字符串归一为 `null`。
 - 发布生成不可变 revision，并在同一事务中把所有 active enrollment 的 `path_revision_id` 切换到新 revision；Journey 读取会修复发布并发窗口中的陈旧指针。
 - attempt 冻结活动、资源 revision、评分结果和外部会话绑定；后续发布不得改写历史。
 - 所有写入以后端权限、对象范围、幂等键、并发版本、审计和明确错误为准。
@@ -31,7 +32,7 @@
 | POST | `/revisions/{revision_id}/restore` | 从历史快照生成新工作草稿；可传 `expected_revision_id` 防止覆盖其他管理员的新版本 |
 | GET | `/activity-types` | 返回六类活动的受信任描述符 |
 | GET | `/coach-profiles` | 返回可绑定的已治理 AI Coach Profile |
-| GET/POST | `/scoring-rubrics` | 查询或就地创建录音评分标准 |
+| GET/POST | `/scoring-rubrics` | 查询或就地创建录音评分标准（与 `SalesTrainerAudioScorePrompt` / 侧栏「录音评分标准」同源；`id` 即 `prompt_id`；创建后立即 published，含默认 `system_prompt` 与含 `{transcript}` 的 `scoring_template`） |
 
 团队投影前缀：`/api/v1/admin/newcomer-training`
 
@@ -45,6 +46,8 @@
 资源快速新建复用现有 LearningContent、ExamPaper、材料版本和审计 API。创建后必须发布并自动绑定当前活动，不要求管理员离开编辑器。
 
 候选检查不得隐式保存。管理端保存和候选发布必须回传当前编辑所基于的 `expected_revision_id`；服务端发现工作草稿或已发布指针已变化时返回 HTTP 409 与 `[NEWCOMER_PATH_REVISION_CONFLICT]`，客户端保留本地内容供人工合并。
+
+`PUT /draft` 接受资源尚未选择的工作草稿。`POST /validate-candidate` 对缺失绑定返回 HTTP 200、`can_publish=false` 和可定位到活动及字段的 `issues[]`；`POST /publish-candidate` 对同一候选返回 HTTP 422、`[NEWCOMER_PATH_VALIDATION_FAILED]` 和相同结构的 `details[]`。缺失资源选择属于发布条件问题，不得退化为 FastAPI 请求体校验数组或通用“请求参数格式不正确”。
 
 ## 学员端
 
@@ -99,7 +102,9 @@ Journey 的 Phase、Module、Activity 分别投影上述字段。旧 revision �
 | `scoring_focuses[]` | 仅含 `label`、`description`、`weight` 的安全投影，不含内部 key 或原始 JSON |
 | `example_transcript` | 当前路径 revision 配置的优秀讲解文字示例 |
 
-`POST /activities/{activity_id}/audio/submissions` 使用 multipart 表单。除既有 `file`、`client_token`、`confirmed_material_version_id` 外，可传 `confirmed_scoring_rubric_revision_id`。传入时，服务端必须校验该 revision 已发布、资源类型为 `audio_scoring_rubric` 且属于活动配置的 logical rubric；校验通过后冻结这一精确版本。不存在、未发布、类型错误或 logical id 不匹配时返回 HTTP 409 与 `[NEWCOMER_AUDIO_RUBRIC_VERSION_INVALID]`，不得静默换用新版本。旧客户端不传该字段时，为兼容既有调用冻结当前激活 revision。
+`audio_assessment.config.scoring_rubric_id` 的语义为已发布 `SalesTrainerAudioScorePrompt.prompt_id`（字段名保持兼容）。路径发布/资源校验不再接受旧 `audio_scoring_rubric` 资产绑定；此类绑定返回可操作错误「请重新选择或新建评分标准」。提交时冻结的 `score_scheme_snapshot` 必须包含 `prompt_id` 与 `prompt_snapshot`（含 `system_prompt`、含 `{transcript}` 的 `scoring_template`），以便 AI 评分读取完整提示词。
+
+`POST /activities/{activity_id}/audio/submissions` 使用 multipart 表单。除既有 `file`、`client_token`、`confirmed_material_version_id` 外，可传 `confirmed_scoring_rubric_revision_id`。传入时，服务端必须校验该 revision 已发布、资源类型为 `sales_trainer_audio_score_prompt` 且 `logical_id` 等于活动配置的 `scoring_rubric_id`（prompt_id）；校验通过后冻结该精确版本的 prompt 快照。不存在、未发布、类型错误或 logical id 不匹配时返回 HTTP 409 与 `[NEWCOMER_AUDIO_RUBRIC_VERSION_INVALID]`，不得静默换用新版本。旧客户端不传该字段时，为兼容既有调用冻结当前已发布 prompt。
 
 材料版本仍按 `confirmed_material_version_id` 精确校验和冻结。管理员之后发布新的 PPT 或评分标准，不得改写历史录音的材料、评分依据与任务快照。
 
