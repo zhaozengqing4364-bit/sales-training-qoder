@@ -58,6 +58,63 @@ def test_should_keep_hot_reload_in_development_mode(tmp_path: Path) -> None:
     assert calls == ["exec -- next dev -p 4555"]
 
 
+def test_should_clear_next_dev_cache_before_development_server(tmp_path: Path) -> None:
+    web_dir = tmp_path / "web"
+    stale_marker = web_dir / ".next" / "dev" / "stale"
+    stale_marker.parent.mkdir(parents=True)
+    stale_marker.write_text("stale", encoding="utf-8")
+    production_artifact = web_dir / ".next" / "BUILD_ID"
+    production_artifact.write_text("keep-me", encoding="utf-8")
+
+    environment, call_log = _fake_npm_environment(tmp_path)
+    environment.update({"FRONTEND_MODE": "development", "FRONTEND_PORT": "4555"})
+    result = subprocess.run(
+        ["/bin/bash", str(RUNTIME_SCRIPT)],
+        cwd=web_dir,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    calls = call_log.read_text(encoding="utf-8").splitlines() if call_log.exists() else []
+
+    assert result.returncode == 0, result.stderr
+    assert calls == ["exec -- next dev -p 4555"]
+    assert not (web_dir / ".next" / "dev").exists()
+    assert production_artifact.read_text(encoding="utf-8") == "keep-me"
+
+
+def test_should_clear_full_next_cache_when_next_clean_cache_enabled(
+    tmp_path: Path,
+) -> None:
+    web_dir = tmp_path / "web"
+    stale_marker = web_dir / ".next" / "dev" / "stale"
+    stale_marker.parent.mkdir(parents=True)
+    stale_marker.write_text("stale", encoding="utf-8")
+
+    environment, call_log = _fake_npm_environment(tmp_path)
+    environment.update(
+        {
+            "FRONTEND_MODE": "development",
+            "FRONTEND_PORT": "4555",
+            "NEXT_CLEAN_CACHE": "1",
+        }
+    )
+    result = subprocess.run(
+        ["/bin/bash", str(RUNTIME_SCRIPT)],
+        cwd=web_dir,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    calls = call_log.read_text(encoding="utf-8").splitlines() if call_log.exists() else []
+
+    assert result.returncode == 0, result.stderr
+    assert calls == ["exec -- next dev -p 4555"]
+    assert not (web_dir / ".next").exists()
+
+
 def test_should_reject_unknown_frontend_mode(tmp_path: Path) -> None:
     result, calls = _run_runtime(tmp_path, "turbo-magic")
 
@@ -104,3 +161,5 @@ def test_should_delegate_dev_up_frontend_process_to_runtime_script() -> None:
     assert 'FRONTEND_MODE="${FRONTEND_MODE:-development}"' in script
     assert '"${ROOT_DIR}/scripts/frontend-runtime.sh"' in script
     assert "npm exec -- next dev" not in script
+    assert 'rm -rf "${ROOT_DIR}/web/.next/dev"' in script
+    assert "疑似陈旧 web/.next/dev 缓存" in script

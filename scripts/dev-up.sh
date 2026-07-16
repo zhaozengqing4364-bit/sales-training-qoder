@@ -26,11 +26,11 @@ POSTGRES_DB="${POSTGRES_DB:-sales_training}"
 
 BACKEND_DATABASE_URL_DEFAULT="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
 BACKEND_REDIS_URL_DEFAULT="redis://127.0.0.1:${REDIS_PORT}/0"
-# Keep frontend and backend on the same loopback hostname by default.
-# Using 127.0.0.1 for API while opening the frontend on localhost (or vice versa)
-# creates host-only auth cookies that the Next.js app cannot read after login.
-FRONTEND_API_URL_DEFAULT="http://localhost:${BACKEND_PORT}/api/v1"
-FRONTEND_WS_URL_DEFAULT="ws://localhost:${BACKEND_PORT}"
+# Keep browser HTTP traffic on the frontend origin. Next.js proxies /api/v1 to
+# the internal backend, so remote browsers do not need direct access to 3444
+# and host-only auth cookies remain visible to server-rendered route guards.
+FRONTEND_API_URL_DEFAULT="http://localhost:${FRONTEND_PORT}/api/v1"
+FRONTEND_WS_URL_DEFAULT="ws://localhost:${FRONTEND_PORT}"
 
 EFFECTIVE_DATABASE_URL=""
 EFFECTIVE_REDIS_URL=""
@@ -71,6 +71,15 @@ strip_surrounding_quotes() {
     elif [[ "${first_char}" == "'" && "${last_char}" == "'" ]]; then
       value="${value:1:-1}"
     fi
+  fi
+  printf '%s' "${value}"
+}
+
+redact_url_userinfo() {
+  local value="$1"
+  if [[ "${value}" =~ ^([^:]+://)([^/@]+)@(.+)$ ]]; then
+    printf '%s[REDACTED]@%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[3]}"
+    return
   fi
   printf '%s' "${value}"
 }
@@ -540,6 +549,24 @@ start_backend() {
   log "Backend 已启动：http://localhost:${BACKEND_PORT}"
 }
 
+_launch_frontend_process() {
+  (
+    cd "${ROOT_DIR}/web"
+    nohup setsid env \
+      NEXT_PUBLIC_API_URL="${EFFECTIVE_FRONTEND_API_URL}" \
+      NEXT_PUBLIC_WS_URL="${EFFECTIVE_FRONTEND_WS_URL}" \
+      FRONTEND_MODE="${FRONTEND_MODE}" \
+      FRONTEND_PORT="${FRONTEND_PORT}" \
+      bash "${ROOT_DIR}/scripts/frontend-runtime.sh" \
+      >"${LOG_DIR}/frontend.log" 2>&1 < /dev/null &
+    echo $! > "${PID_DIR}/frontend.pid"
+  )
+}
+
+_wait_for_frontend_ready() {
+  wait_for_port "${FRONTEND_PORT}" 60 && wait_for_http_ok "http://127.0.0.1:${FRONTEND_PORT}/login" 60
+}
+
 start_frontend() {
   require_cmd npm
 
@@ -557,27 +584,35 @@ start_frontend() {
   esac
 
   log "启动 Frontend (端口 ${FRONTEND_PORT})，${frontend_mode_label}..."
-  (
-    cd "${ROOT_DIR}/web"
-    nohup setsid env \
-      NEXT_PUBLIC_API_URL="${EFFECTIVE_FRONTEND_API_URL}" \
-      NEXT_PUBLIC_WS_URL="${EFFECTIVE_FRONTEND_WS_URL}" \
-      FRONTEND_MODE="${FRONTEND_MODE}" \
-      FRONTEND_PORT="${FRONTEND_PORT}" \
-      bash "${ROOT_DIR}/scripts/frontend-runtime.sh" \
-      >"${LOG_DIR}/frontend.log" 2>&1 < /dev/null &
-    echo $! > "${PID_DIR}/frontend.pid"
-  )
+  _launch_frontend_process
 
-  wait_for_port "${FRONTEND_PORT}" 60 && wait_for_http_ok "http://127.0.0.1:${FRONTEND_PORT}/login" 60 || {
-    tail -n 80 "${LOG_DIR}/frontend.log" >&2 || true
-    die "Frontend 启动失败，请查看日志 ${LOG_DIR}/frontend.log"
-  }
+  if _wait_for_frontend_ready; then
+    log "Frontend 已启动：http://localhost:${FRONTEND_PORT}（${frontend_mode_label}）"
+    return
+  fi
 
-  log "Frontend 已启动：http://localhost:${FRONTEND_PORT}（${frontend_mode_label}）"
+  # Development /login 404 is often a stale Turbopack .next/dev cache. Clean and
+  # retry once before failing the whole stack.
+  if [[ "${FRONTEND_MODE}" == "development" ]]; then
+    warn "Frontend /login 未就绪；疑似陈旧 web/.next/dev 缓存，清理后重试一次…"
+    kill_port "${FRONTEND_PORT}"
+    rm -rf "${ROOT_DIR}/web/.next/dev"
+    _launch_frontend_process
+    if _wait_for_frontend_ready; then
+      log "Frontend 已启动：http://localhost:${FRONTEND_PORT}（${frontend_mode_label}）"
+      return
+    fi
+  fi
+
+  tail -n 80 "${LOG_DIR}/frontend.log" >&2 || true
+  die "Frontend 启动失败，请查看日志 ${LOG_DIR}/frontend.log。若 /login 持续 404，可手动执行: rm -rf web/.next/dev 后重试。"
 }
 
 print_summary() {
+  local safe_database_url
+  safe_database_url="$(redact_url_userinfo "${EFFECTIVE_DATABASE_URL}")"
+  local safe_redis_url
+  safe_redis_url="$(redact_url_userinfo "${EFFECTIVE_REDIS_URL}")"
   cat <<SUMMARY
 
 ✅ 一键开发环境启动完成（纯本机模式，无 Docker）
@@ -588,8 +623,8 @@ print_summary() {
 - Backend listen: ${BACKEND_HOST}:${BACKEND_PORT}
 - Backend Docs: http://localhost:${BACKEND_PORT}/docs
 - Backend reload: $([[ "${BACKEND_UVICORN_RELOAD}" == "1" ]] && echo "开启（--reload）" || echo "关闭（稳定模式，适合语音 WebSocket）")
-- DATABASE_URL: ${EFFECTIVE_DATABASE_URL}
-- REDIS_URL: ${EFFECTIVE_REDIS_URL}
+- DATABASE_URL: ${safe_database_url}
+- REDIS_URL: ${safe_redis_url}
 
 日志文件：
 - ${LOG_DIR}/backend.log
