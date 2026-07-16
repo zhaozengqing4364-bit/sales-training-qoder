@@ -98,12 +98,16 @@ class AttemptRepository:
             return existing
         try:
             async with self._db.begin_nested():
+                # Lock matching rows first — PostgreSQL rejects FOR UPDATE with
+                # aggregate functions such as max().
                 latest_no = await self._db.scalar(
-                    select(func.max(NewcomerTrainingActivityAttempt.attempt_no))
+                    select(NewcomerTrainingActivityAttempt.attempt_no)
                     .where(
                         NewcomerTrainingActivityAttempt.enrollment_id == enrollment_id,
                         NewcomerTrainingActivityAttempt.activity_id == activity_id,
                     )
+                    .order_by(NewcomerTrainingActivityAttempt.attempt_no.desc())
+                    .limit(1)
                     .with_for_update()
                 )
                 attempt = NewcomerTrainingActivityAttempt(
@@ -173,9 +177,7 @@ class AttemptRepository:
                     "attempt_no"
                 ),
             )
-            .where(
-                NewcomerTrainingActivityAttempt.enrollment_id.in_(enrollment_ids)
-            )
+            .where(NewcomerTrainingActivityAttempt.enrollment_id.in_(enrollment_ids))
             .group_by(
                 NewcomerTrainingActivityAttempt.enrollment_id,
                 NewcomerTrainingActivityAttempt.activity_id,
@@ -195,9 +197,7 @@ class AttemptRepository:
                     == latest_attempt_numbers.c.attempt_no,
                 ),
             )
-            .where(
-                NewcomerTrainingActivityAttempt.enrollment_id.in_(enrollment_ids)
-            )
+            .where(NewcomerTrainingActivityAttempt.enrollment_id.in_(enrollment_ids))
         )
         grouped: dict[str, dict[str, NewcomerTrainingActivityAttempt]] = {
             enrollment_id: {} for enrollment_id in enrollment_ids

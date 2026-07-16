@@ -191,11 +191,11 @@ def _error(exc: Exception) -> JSONResponse:
         code, message, status = typed
         raw_message = str(getattr(exc, "message", "") or "")
         if raw_message and _looks_unsafe_client_message(raw_message):
+            # Do not pass trace_id= here — the project logger already binds it.
             logger.warning(
                 "newcomer_learner_business_message_redacted",
                 error_type=type(exc).__name__,
                 error_code=code,
-                trace_id=get_trace_id(),
                 exception_message=raw_message[:500],
             )
         return JSONResponse(
@@ -205,11 +205,11 @@ def _error(exc: Exception) -> JSONResponse:
 
     code, message, status = _classify_unexpected_error(exc)
     trace_id = get_trace_id()
+    # Do not pass trace_id= here — the project logger already binds it.
     logger.error(
         "newcomer_learner_activity_failed",
         error_type=type(exc).__name__,
         error_code=code,
-        trace_id=trace_id,
         exception_message=str(exc)[:500],
         exc_info=True,
     )
@@ -375,9 +375,7 @@ async def submit_audio(
             context,
             file=file,
             confirmed_material_version_id=confirmed_material_version_id,
-            confirmed_scoring_rubric_revision_id=(
-                confirmed_scoring_rubric_revision_id
-            ),
+            confirmed_scoring_rubric_revision_id=(confirmed_scoring_rubric_revision_id),
             client_token=client_token,
             actor=current_user,
         )

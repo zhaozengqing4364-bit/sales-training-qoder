@@ -82,8 +82,39 @@ def test_should_classify_unexpected_errors_with_useful_chinese_message(
     assert logged["event"] == "newcomer_learner_activity_failed"
     assert logged["error_type"] == "RuntimeError"
     assert logged["error_code"] == "[NEWCOMER_ACTIVITY_FAILED]"
-    assert logged["trace_id"] == "trace-unexpected-1"
+    assert "trace_id" not in logged
     assert logged["exc_info"] is True
+
+
+def test_should_not_crash_when_logger_already_binds_trace_id(monkeypatch) -> None:
+    """StructuredLogger.error(msg, trace_id=get_trace_id(), **kwargs) collides
+    if callers also pass trace_id=."""
+
+    class _InjectingLogger:
+        def error(self, event: str, **kwargs: object) -> None:
+            # Same shape as StructuredLogger.error / .warning.
+            if "trace_id" in kwargs:
+                raise TypeError("got multiple values for keyword argument 'trace_id'")
+            self.last_event = event
+
+        def warning(self, event: str, **kwargs: object) -> None:
+            if "trace_id" in kwargs:
+                raise TypeError("got multiple values for keyword argument 'trace_id'")
+
+    monkeypatch.setattr(
+        "sales_trainer.orchestration.learner_api.logger",
+        _InjectingLogger(),
+    )
+    monkeypatch.setattr(
+        "sales_trainer.orchestration.learner_api.get_trace_id",
+        lambda: "trace-body-1",
+    )
+
+    response = _error(RuntimeError("boom"))
+    assert response.status_code == 500
+    payload = _payload(response)
+    assert payload["trace_id"] == "trace-body-1"
+    assert payload["error"] == "[NEWCOMER_ACTIVITY_FAILED]"
 
 
 def test_should_map_upload_and_service_categories_for_common_exceptions() -> None:
@@ -95,14 +126,17 @@ def test_should_map_upload_and_service_categories_for_common_exceptions() -> Non
     )
     assert "请求无效" in _classify_unexpected_error(ValueError("bad"))[1]
     assert (
-        _classify_unexpected_error(
-            OperationalError("stmt", {}, Exception("db down"))
-        )[0]
+        _classify_unexpected_error(OperationalError("stmt", {}, Exception("db down")))[
+            0
+        ]
         == "[NEWCOMER_SERVICE_UNAVAILABLE]"
     )
-    assert "服务暂不可用" in _classify_unexpected_error(
-        OperationalError("stmt", {}, Exception("db down"))
-    )[1]
+    assert (
+        "服务暂不可用"
+        in _classify_unexpected_error(
+            OperationalError("stmt", {}, Exception("db down"))
+        )[1]
+    )
 
 
 def test_should_redact_storage_config_dump_from_client_message(
@@ -148,4 +182,5 @@ def test_should_redact_storage_config_dump_from_client_message(
     assert "missing env vars" not in str(payload["message"]).lower()
     assert logged["event"] == "newcomer_learner_business_message_redacted"
     assert logged["error_code"] == "[COS_NOT_CONFIGURED]"
+    assert "trace_id" not in logged
     assert "TENCENT_COS_SECRET_ID" in str(logged["exception_message"])
