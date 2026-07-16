@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
+from sqlalchemy import or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.response import error_response, success_response
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
-from common.db.models import User
+from common.db.models import Team, TeamLeaderAssignment, TeamMembership, User
 from common.db.session import get_db
+from common.teams.policy import TeamScopePolicy
 from supervisor.schemas import (
     RetrainingTaskCompleteRequest,
     RetrainingTaskCreate,
@@ -25,6 +27,97 @@ from supervisor.schemas import (
 from supervisor.service import SupervisorReviewService, SupervisorServiceError
 
 router = APIRouter()
+
+
+@router.get("/supervisor/team/scope")
+async def get_team_scope(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Return active explicit teams and members visible to the current reader."""
+    policy = TeamScopePolicy(db)
+    if not policy.has_unrestricted_scope(current_user) and not policy.is_team_leader(
+        current_user
+    ):
+        return _error(403, "[TEAM_READER_REQUIRED]", "需要平台管理员或销售组长权限。")
+    team_ids = await policy.authorized_team_ids(current_user)
+    if team_ids is not None and not team_ids:
+        return success_response({"teams": [], "members": []})
+    now = datetime.now(UTC)
+    team_query = select(Team).where(Team.is_active.is_(True))
+    if team_ids is not None:
+        team_query = team_query.where(Team.team_id.in_(team_ids))
+    teams = list((await db.scalars(team_query.order_by(Team.name, Team.code))).all())
+    visible_team_ids = [str(team.team_id) for team in teams]
+    memberships = []
+    if visible_team_ids:
+        memberships = list(
+            (
+                await db.execute(
+                    select(TeamMembership, User)
+                    .join(User, User.user_id == TeamMembership.user_id)
+                    .where(
+                        TeamMembership.team_id.in_(visible_team_ids),
+                        TeamMembership.effective_from <= now,
+                        or_(
+                            TeamMembership.effective_to.is_(None),
+                            TeamMembership.effective_to > now,
+                        ),
+                        User.is_active.is_(True),
+                    )
+                    .order_by(User.name, User.user_id)
+                )
+            ).all()
+        )
+    leaders = []
+    if visible_team_ids:
+        leaders = list(
+            (
+                await db.execute(
+                    select(TeamLeaderAssignment, User)
+                    .join(User, User.user_id == TeamLeaderAssignment.leader_user_id)
+                    .where(
+                        TeamLeaderAssignment.team_id.in_(visible_team_ids),
+                        TeamLeaderAssignment.effective_from <= now,
+                        or_(
+                            TeamLeaderAssignment.effective_to.is_(None),
+                            TeamLeaderAssignment.effective_to > now,
+                        ),
+                    )
+                )
+            ).all()
+        )
+    leaders_by_team: dict[str, list[dict[str, Any]]] = {}
+    for assignment, leader in leaders:
+        leaders_by_team.setdefault(str(assignment.team_id), []).append(
+            {
+                "user_id": str(leader.user_id),
+                "name": leader.name,
+                "role": assignment.assignment_role,
+            }
+        )
+    return success_response(
+        {
+            "teams": [
+                {
+                    "team_id": str(team.team_id),
+                    "code": team.code,
+                    "name": team.name,
+                    "leaders": leaders_by_team.get(str(team.team_id), []),
+                }
+                for team in teams
+            ],
+            "members": [
+                {
+                    "team_id": str(membership.team_id),
+                    "learner_id": str(user.user_id),
+                    "learner_name": user.name,
+                    "email": user.email,
+                }
+                for membership, user in memberships
+            ],
+        }
+    )
 
 
 def _error(status_code: int, error_code: str, message: str) -> JSONResponse:
@@ -90,6 +183,8 @@ async def get_team_insights(
     learner_id: str | None = Query(default=None),
     date_from: datetime | None = Query(default=None),
     date_to: datetime | None = Query(default=None),
+    team_id: str | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=120),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
@@ -101,6 +196,8 @@ async def get_team_insights(
             learner_id=learner_id,
             date_from=date_from,
             date_to=date_to,
+            team_id=team_id,
+            search=search,
         )
         return success_response(insights.model_dump(mode="json"))
     except SupervisorServiceError as exc:
@@ -109,6 +206,76 @@ async def get_team_insights(
         return build_server_error(
             "[SUPERVISOR_TEAM_INSIGHTS_FAILED]",
             message="主管团队训练洞察暂时无法读取。",
+            exc=exc,
+        )
+
+
+@router.get("/supervisor/team/workbench")
+async def get_team_workbench(
+    team_id: str | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=120),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Read-only team result without readiness, calibration, ranking or retraining."""
+    try:
+        result = await SupervisorReviewService(db).get_team_workbench(
+            current_user=current_user,
+            team_id=team_id,
+            search=search,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        return success_response(result)
+    except SupervisorServiceError as exc:
+        return _service_error(exc)
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[SUPERVISOR_TEAM_WORKBENCH_FAILED]",
+            message="团队训练工作台暂时无法读取。",
+            exc=exc,
+        )
+
+
+@router.get("/supervisor/team/workbench/{learner_id}")
+async def get_team_workbench_member(
+    learner_id: str,
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Read-only member drilldown with source tasks and deterministic evidence."""
+    try:
+        detail = await SupervisorReviewService(db).get_team_insights_detail(
+            current_user=current_user,
+            learner_id=learner_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        return success_response(
+            {
+                "learner_id": detail.learner_id,
+                "learner_name": detail.learner_name,
+                "learner_email": detail.learner_email,
+                "extra_task_progress": detail.completion.model_dump(mode="json"),
+                "training_tasks": [
+                    task.model_dump(mode="json") for task in detail.training_tasks
+                ],
+                "risk_labels": [item.dimension for item in detail.top_weaknesses],
+                "common_issues": [
+                    item.model_dump(mode="json") for item in detail.common_issues
+                ],
+            }
+        )
+    except SupervisorServiceError as exc:
+        return _service_error(exc)
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[SUPERVISOR_TEAM_MEMBER_WORKBENCH_FAILED]",
+            message="成员训练详情暂时无法读取。",
             exc=exc,
         )
 

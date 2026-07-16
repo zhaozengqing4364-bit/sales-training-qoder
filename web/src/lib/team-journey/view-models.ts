@@ -16,7 +16,6 @@ export function journeyRiskActivities(journey: JourneyResponse): JourneyActivity
 export interface TeamJourneyRow {
     learnerId: string;
     learnerName: string;
-    department: string;
     currentPhase: string;
     progressPercent: number;
     completedCount: number;
@@ -25,15 +24,15 @@ export interface TeamJourneyRow {
 }
 
 export function toTeamJourneyRow(item: AdminJourneyItem): TeamJourneyRow {
-    const current = item.journey.phases.find((phase) => !phase.completed && !phase.locked);
+    const summary = item.summary;
+    const current = summary.current_phase;
     return {
         learnerId: item.learner_id,
         learnerName: item.learner_name.trim() || "未命名学员",
-        department: item.department.trim() || "未分配部门",
-        currentPhase: current?.title ?? (item.journey.progress.completed ? "已完成" : "尚未开始"),
-        progressPercent: Math.round(item.journey.progress.percent),
-        completedCount: item.journey.progress.completed_count,
-        totalRequired: item.journey.progress.total_required,
-        riskLabels: journeyRiskActivities(item.journey).slice(0, 2).map((activity) => activity.title),
+        currentPhase: current?.title ?? (summary.progress.completed ? "已完成" : "尚未开始"),
+        progressPercent: Math.round(summary.progress.percent),
+        completedCount: summary.progress.completed_count,
+        totalRequired: summary.progress.total_required,
+        riskLabels: summary.risk_labels.slice(0, 2),
     };
 }

@@ -10,7 +10,7 @@
 - 路径配置只保存声明式业务数据，不得保存组件名、路由、URL、脚本或网络请求。
 - 活动类型是封闭集合：`lesson`、`quiz`、`audio_assessment`、`realtime_roleplay`、`ai_coach`、`assignment`。
 - 产品名、PPT、Demo、课程主题只是管理员录入的标题和资源，不是代码分支。
-- 发布生成不可变 revision；学员首次读取 Journey 时创建 enrollment 并固定 `path_revision_id`。
+- 发布生成不可变 revision，并在同一事务中把所有 active enrollment 的 `path_revision_id` 切换到新 revision；Journey 读取会修复发布并发窗口中的陈旧指针。
 - attempt 冻结活动、资源 revision、评分结果和外部会话绑定；后续发布不得改写历史。
 - 所有写入以后端权限、对象范围、幂等键、并发版本、审计和明确错误为准。
 
@@ -25,8 +25,8 @@
 | DELETE | `/draft` | 放弃工作草稿 |
 | POST | `/validate` | 校验图结构、依赖、资源发布状态和闭环条件 |
 | POST | `/validate-candidate` | 只读校验当前未保存候选，不创建 revision |
-| POST | `/publish` | 以不可变 revision 发布；请求含变更说明 |
-| POST | `/publish-candidate` | 带期望 revision 原子创建并发布当前候选 |
+| POST | `/publish` | 以不可变 revision 发布并同步所有在训学员；请求含变更说明 |
+| POST | `/publish-candidate` | 带期望 revision 原子创建、发布当前候选并同步所有在训学员 |
 | GET | `/revisions` | 查询历史 revision |
 | POST | `/revisions/{revision_id}/restore` | 从历史快照生成新工作草稿；可传 `expected_revision_id` 防止覆盖其他管理员的新版本 |
 | GET | `/activity-types` | 返回六类活动的受信任描述符 |
@@ -37,8 +37,8 @@
 
 | 方法 | 路径 | 语义 |
 |---|---|---|
-| GET | `/journeys` | 按对象权限和部门范围分页读取团队 Journey |
-| GET | `/journeys/{learner_id}` | 读取指定学员固定 revision 的 Journey |
+| GET | `/journeys` | 分页返回已有 enrollment 的 **Journey 列表摘要**（`summary`：进度、当前阶段、下一步、最多两条风险标题）；不返回完整 phases 树；详情仍用 `/journeys/{learner_id}` |
+| GET | `/journeys/{learner_id}` | 读取指定学员当前发布 revision 的 Journey |
 | GET | `/readiness/workbench` | 达标工作台 |
 | GET | `/readiness/dossiers/{learner_id}` | 达标档案 |
 
@@ -52,7 +52,7 @@
 
 | 方法 | 路径 | 语义 |
 |---|---|---|
-| GET | `/journey` | 返回固定 revision 的阶段/模块/活动进度和唯一主要下一步 |
+| GET | `/journey` | 返回当前发布 revision 的阶段/模块/活动进度和唯一主要下一步 |
 | GET | `/modules/{module_id}` | 返回模块详情 |
 | GET | `/activities/{activity_id}` | 返回服务端可信活动详情和 Runner 描述符 |
 | POST | `/activities/{activity_id}/start` | 以 `client_token` 幂等启动活动 |
@@ -66,6 +66,8 @@
 | POST | `/activities/{activity_id}/assignments` | 提交文本或文件作业 |
 
 Journey 的模块与活动投影包含 `estimated_minutes`。`primary_next_action` 仍只返回一个权威活动；动作按钮文案由前端封闭活动类型映射生成，不使用内容标题冒充动作。
+
+发布只移动 active enrollment 的当前路径指针，不迁移、不重算也不删除已存在的 attempt。历史 attempt 继续引用创建时的 `path_revision_id` 与 `activity_snapshot`，因此已完成记录、评分、材料版本、答卷、录音和外部会话证据可解释且不可变。发布审计记录影响范围与同步人数。
 
 ### 学员表达字段（向后兼容）
 

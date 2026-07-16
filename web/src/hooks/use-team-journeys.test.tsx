@@ -36,14 +36,14 @@ const response = {
     items: [{
         learner_id: "learner-1",
         learner_name: "张三",
-        department: "销售部",
-        journey: {
-            enrollment_id: "enrollment-1",
+        team: { team_id: "team-sales", code: "sales", name: "销售组" },
+        summary: {
             path_revision_id: "revision-1",
             path_title: "新人训练",
-            phases: [],
-            progress: { completed_activities: 0, total_activities: 1, percentage: 0 },
+            current_phase: null,
+            progress: { completed: false, completed_count: 0, total_required: 1, percent: 0 },
             primary_next_action: null,
+            risk_labels: [],
         },
     }],
     total: 1,

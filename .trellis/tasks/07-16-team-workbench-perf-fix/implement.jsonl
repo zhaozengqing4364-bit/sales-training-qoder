@@ -1,0 +1,13 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端模块边界、API/service 分层与验证入口"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Async SQLAlchemy、显式事务、SQL 查询与 SQLite/PostgreSQL 兼容约束"}
+{"file":".trellis/spec/backend/newcomer-training-activity-orchestration.md","reason":"Journey enrollment、自愈 revision、attempt 批量投影与完整/摘要语义约束"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"性能测试、契约测试、Ruff/Mypy 与 changed coverage 要求"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端架构、API facade 与验证命令入口"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"现有 useEffect/local state 模式及刷新状态边界"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"局部 loading、错误恢复、可访问状态与既有组件复用"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Vitest、TypeScript、ESLint、渲染与性能验证要求"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"摘要 DTO、API facade 与 snake_case 类型契约"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"后端摘要 DTO 到 ViewModel/UI 的跨层契约核对"}
+{"file":".trellis/spec/guides/product-design-engineering.md","reason":"页面契约、刷新/部分失败/恢复、慢网和实际渲染验收"}
+{"file":".trellis/tasks/07-16-team-workbench-perf-fix/research/current-state-and-benchmark.md","reason":"已核验链路、路由边界、工作树冲突保护与统一基准口径"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Partial failure and service error envelopes"}

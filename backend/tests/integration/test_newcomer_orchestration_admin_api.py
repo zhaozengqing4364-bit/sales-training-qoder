@@ -3,13 +3,15 @@ from __future__ import annotations
 import pytest
 
 
-def _payload() -> dict[str, object]:
+def _payload(
+    *, title: str = "可配置新人训练", phase_title: str = "入门"
+) -> dict[str, object]:
     return {
-        "title": "可配置新人训练",
+        "title": title,
         "phases": [
             {
                 "phase_id": "phase-1",
-                "title": "入门",
+                "title": phase_title,
                 "order_index": 1,
                 "modules": [
                     {
@@ -94,6 +96,52 @@ async def test_admin_can_validate_and_publish_unsaved_candidate(
 
 
 @pytest.mark.asyncio
+async def test_publish_candidate_syncs_existing_learner_to_latest_path(
+    async_client, auth_headers
+):
+    first_payload = _payload(title="全员同步版本一")
+    first = await async_client.post(
+        "/api/v1/admin/newcomer-training/path/publish-candidate",
+        headers=auth_headers,
+        json={
+            "payload": first_payload,
+            "reason": "发布版本一",
+            "expected_revision_id": None,
+        },
+    )
+    assert first.status_code == 200, first.text
+
+    before = await async_client.get(
+        "/api/v1/newcomer-training/journey", headers=auth_headers
+    )
+    assert before.status_code == 200, before.text
+    assert (
+        before.json()["data"]["path_revision_id"] == first.json()["data"]["revision_id"]
+    )
+
+    second_payload = _payload(title="全员同步版本二", phase_title="同步后的入门")
+    second = await async_client.post(
+        "/api/v1/admin/newcomer-training/path/publish-candidate",
+        headers=auth_headers,
+        json={
+            "payload": second_payload,
+            "reason": "同步全体在训学员",
+            "expected_revision_id": first.json()["data"]["revision_id"],
+        },
+    )
+    assert second.status_code == 200, second.text
+
+    after = await async_client.get(
+        "/api/v1/newcomer-training/journey", headers=auth_headers
+    )
+    assert after.status_code == 200, after.text
+    assert (
+        after.json()["data"]["path_revision_id"] == second.json()["data"]["revision_id"]
+    )
+    assert after.json()["data"]["phases"][0]["title"] == "同步后的入门"
+
+
+@pytest.mark.asyncio
 async def test_admin_returns_409_for_stale_path_revision(async_client, auth_headers):
     saved = await async_client.put(
         "/api/v1/admin/newcomer-training/path/draft",
@@ -173,9 +221,7 @@ async def test_admin_creates_and_lists_structured_audio_rubric(
         json={
             "title": "产品讲解评分标准",
             "pass_score": 80,
-            "dimensions": [
-                {"key": "accuracy", "label": "内容准确", "weight": 1}
-            ],
+            "dimensions": [{"key": "accuracy", "label": "内容准确", "weight": 1}],
         },
     )
     assert created.status_code == 200, created.text
@@ -226,19 +272,40 @@ async def test_admin_journey_uses_activity_identity(
     assert listed.status_code == 200, listed.text
     assert listed.json()["data"]["total"] == 1
     assert listed.json()["data"]["items"][0]["learner_id"] == str(test_user.user_id)
-    assert (
-        listed.json()["data"]["items"][0]["journey"]["phases"][0]["modules"][0][
-            "module_id"
-        ]
-        == "product-a"
-    )
+    summary = listed.json()["data"]["items"][0]["summary"]
+    assert "journey" not in listed.json()["data"]["items"][0]
+    assert summary["path_title"]
+    assert "progress" in summary
+    assert "primary_next_action" in summary
+    assert "risk_labels" in summary
+    assert "phases" not in summary
 
     dossier = await async_client.get(
         f"/api/v1/admin/newcomer-training/readiness/dossiers/{test_user.user_id}",
         headers=auth_headers,
     )
     assert dossier.status_code == 200, dossier.text
-    assert dossier.json()["data"]["status"] == "in_training"
+    dossier_data = dossier.json()["data"]
+    assert dossier_data["contract_version"] == "readiness_dossier_v1"
+    assert dossier_data["status"] == "not_started"
+    assert dossier_data["summary"]["total_modules"] == 1
+    assert dossier_data["realtime_gate"]["locked"] is True
+
+    workbench = await async_client.get(
+        "/api/v1/admin/newcomer-training/readiness/workbench",
+        headers=auth_headers,
+    )
+    assert workbench.status_code == 200, workbench.text
+    workbench_data = workbench.json()["data"]
+    assert workbench_data["contract_version"] == "readiness_dossier_v1"
+    assert set(workbench_data["groups"]) == {
+        "pending_review",
+        "not_passed",
+        "needs_retraining",
+        "config_exception",
+        "approved",
+        "in_training",
+    }
 
 
 @pytest.mark.asyncio

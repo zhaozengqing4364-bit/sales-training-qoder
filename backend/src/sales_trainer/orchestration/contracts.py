@@ -50,6 +50,28 @@ class RealtimeRoleplayConfig(StrictModel):
     practice_template_id: str = Field(min_length=1, max_length=36)
     runtime_profile_id: str = Field(min_length=1, max_length=120)
     completion_mode: Literal["session_completed", "scored"] = "session_completed"
+    practice_template_revision_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=36,
+    )
+    practice_template_version: int | None = Field(default=None, ge=1)
+    practice_template_content_hash: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=160,
+    )
+    runtime_profile_snapshot_hash: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=160,
+    )
+    governed_assets_snapshot_hash: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=160,
+    )
+    runner_snapshot: dict[str, object] | None = None
 
 
 class AiCoachActivityConfig(StrictModel):
@@ -81,9 +103,9 @@ class ActivityBase(StrictModel):
         default_factory=list,
         max_length=10,
     )
-    success_criteria: list[
-        Annotated[str, Field(min_length=1, max_length=240)]
-    ] = Field(default_factory=list, max_length=10)
+    success_criteria: list[Annotated[str, Field(min_length=1, max_length=240)]] = Field(
+        default_factory=list, max_length=10
+    )
     primary_action_label: str | None = Field(default=None, max_length=40)
 
 
@@ -273,6 +295,33 @@ class JourneyResponse(StrictModel):
     primary_next_action: JourneyNextAction | None = None
 
 
+class JourneyListCurrentPhase(StrictModel):
+    phase_id: str
+    title: str
+    status: str
+
+
+class JourneyListSummary(StrictModel):
+    path_revision_id: str
+    path_title: str
+    current_phase: JourneyListCurrentPhase | None = None
+    progress: JourneyProgressSummary
+    primary_next_action: JourneyNextAction | None = None
+    risk_labels: list[str] = Field(default_factory=list, max_length=2)
+
+
+class AdminJourneyListItem(StrictModel):
+    learner_id: str
+    learner_name: str
+    team: dict[str, str] | None = None
+    summary: JourneyListSummary
+
+
+class AdminJourneyListResponse(StrictModel):
+    items: list[AdminJourneyListItem] = Field(default_factory=list)
+    total: int = 0
+
+
 class ModuleDetailResponse(StrictModel):
     enrollment_id: str
     path_revision_id: str
@@ -316,8 +365,28 @@ class AudioRunnerDescriptor(StrictModel):
     max_attempts: int | None = None
 
 
+class RealtimeScoringFocus(StrictModel):
+    label: str
+    description: str | None = None
+    weight: float | None = None
+
+
 class RealtimeRunnerDescriptor(StrictModel):
     type: Literal["realtime_roleplay"] = "realtime_roleplay"
+    configuration_ready: bool
+    configuration_message: str | None = None
+    template_title: str | None = None
+    template_description: str | None = None
+    template_version: int | None = None
+    scenario: str | None = None
+    counterpart_role: str | None = None
+    counterpart_style: str | None = None
+    goals: list[str] = Field(default_factory=list)
+    scoring_title: str | None = None
+    scoring_description: str | None = None
+    scoring_version: str | None = None
+    scoring_focuses: list[RealtimeScoringFocus] = Field(default_factory=list)
+    passing_score: float | None = None
 
 
 class AiCoachRunnerDescriptor(StrictModel):

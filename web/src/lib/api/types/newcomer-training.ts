@@ -29,6 +29,12 @@ export interface RealtimeRoleplayConfig {
     practice_template_id: string;
     runtime_profile_id: string;
     completion_mode: "session_completed" | "scored";
+    practice_template_revision_id?: string | null;
+    practice_template_version?: number | null;
+    practice_template_content_hash?: string | null;
+    runtime_profile_snapshot_hash?: string | null;
+    governed_assets_snapshot_hash?: string | null;
+    runner_snapshot?: Record<string, unknown> | null;
 }
 
 export interface AiCoachConfig {
@@ -284,11 +290,26 @@ export interface JourneyResponse {
     primary_next_action: JourneyNextAction | null;
 }
 
+export interface JourneyListCurrentPhase {
+    phase_id: string;
+    title: string;
+    status: string;
+}
+
+export interface JourneyListSummary {
+    path_revision_id: string;
+    path_title: string;
+    current_phase: JourneyListCurrentPhase | null;
+    progress: JourneyProgressSummary;
+    primary_next_action: JourneyNextAction | null;
+    risk_labels: string[];
+}
+
 export interface AdminJourneyItem {
     learner_id: string;
     learner_name: string;
-    department: string;
-    journey: JourneyResponse;
+    team: { team_id: string; code: string; name: string } | null;
+    summary: JourneyListSummary;
 }
 
 export interface AdminJourneyListResponse {
@@ -335,7 +356,27 @@ export type ActivityRunnerDescriptor =
         pass_score: number;
         max_attempts: number | null;
     }
-    | { type: "realtime_roleplay" }
+    | {
+        type: "realtime_roleplay";
+        configuration_ready: boolean;
+        configuration_message: string | null;
+        template_title: string | null;
+        template_description: string | null;
+        template_version: number | null;
+        scenario: string | null;
+        counterpart_role: string | null;
+        counterpart_style: string | null;
+        goals: string[];
+        scoring_title: string | null;
+        scoring_description: string | null;
+        scoring_version: string | null;
+        scoring_focuses: Array<{
+            label: string;
+            description: string | null;
+            weight: number | null;
+        }>;
+        passing_score: number | null;
+    }
     | { type: "ai_coach" }
     | { type: "assignment"; submission_type: "text" | "file" | "text_or_file"; review_mode: "automatic_complete" | "manual_review"; max_file_size_bytes: number };
 

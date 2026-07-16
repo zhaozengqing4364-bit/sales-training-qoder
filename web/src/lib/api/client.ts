@@ -19,8 +19,15 @@ import {
     CurriculumAnalyticsResponse,
     User,
     AdminUser,
+    CreatedAdminUser,
     AdminUserUpdatePayload,
     AdminUserRoleUpdatePayload,
+    AdminUserStatusMutationPayload,
+    AdminUserStatusMutationResult,
+    AdminTeam,
+    AdminTeamLeaderCandidate,
+    AdminTeamListResponse,
+    TeamSummary,
     AdminAgent,
     AdminPersona,
     AdminPersonaCustomerPressure,
@@ -175,6 +182,11 @@ import {
     CertificationReviewQueueItem,
     TeamInsightsResponse,
     TeamInsightsLearnerDetail,
+    TeamScopeResponse,
+    TeamWorkbenchResponse,
+    TeamWorkbenchMemberResponse,
+    ProvisioningBatchResult,
+    ProvisioningCredential,
     TrainingReportViewModel,
     RetrainingTask,
     RetrainingTaskCreateRequest,
@@ -355,6 +367,9 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[INVALID_TOKEN]": "登录态已失效，请重新登录。",
     "[AUTH_USER_NOT_FOUND]": "登录用户不存在或已被删除。",
     "[AUTH_USER_DISABLED]": "当前账号已被停用。",
+    "[ACCOUNT_STATUS_CONFLICT]": "账号状态已被其他管理员更新，系统将刷新最新状态。",
+    "[CANNOT_REMOVE_LAST_ADMIN]": "必须保留至少一个可用的平台管理员。",
+    "[CANNOT_SUSPEND_SELF]": "不能停用当前登录账号。",
     "[AGENT_PERSONA_PAIR_REQUIRED]": "请选择智能体与角色后再开始训练。",
     "[AGENT_ARCHIVED]": "该智能体已归档，暂时无法创建训练会话。",
     "[AGENT_NOT_PUBLISHED]": "该智能体尚未发布，请选择可用智能体。",
@@ -722,6 +737,15 @@ type PresentationForbiddenWord = {
 
 function toRecord(value: unknown): Record<string, unknown> {
     return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function normalizeTeamSummary(value: unknown): TeamSummary | null {
+    const raw = toRecord(value);
+    const teamId = toStringValue(raw.team_id);
+    const code = toStringValue(raw.code);
+    const name = toStringValue(raw.name);
+    if (!teamId || !code || !name) return null;
+    return { team_id: teamId, code, name };
 }
 
 function toStringValue(value: unknown, fallback = ""): string {
@@ -1324,7 +1348,7 @@ function normalizeAnalyticsLeaderboard(input: unknown): AnalyticsLeaderboard {
                     rank: toNumberValue(entry.rank, 0),
                     user_id: toStringValue(entry.user_id),
                     username: username || "-",
-                    department: typeof entry.department === "string" ? entry.department : null,
+                    team: normalizeTeamSummary(entry.team),
                     total_sessions: toNumberValue(entry.total_sessions, 0),
                     average_score: toNumberValue(entry.average_score, 0),
                     best_score: toNumberValue(entry.best_score, 0),
@@ -1404,7 +1428,7 @@ function normalizeManagerLiteLists(input: unknown): ManagerLiteListsResponse {
                 return {
                     user_id: toStringValue(entry.user_id),
                     user_name: toStringValue(entry.user_name),
-                    department: typeof entry.department === "string" ? entry.department : null,
+                    team: normalizeTeamSummary(entry.team),
                     overall_result: toStringValue(entry.overall_result, "fail"),
                     session_id: toStringValue(entry.session_id),
                     session_start_time: toStringValue(entry.session_start_time),
@@ -1418,7 +1442,7 @@ function normalizeManagerLiteLists(input: unknown): ManagerLiteListsResponse {
                 return {
                     user_id: toStringValue(entry.user_id),
                     user_name: toStringValue(entry.user_name),
-                    department: typeof entry.department === "string" ? entry.department : null,
+                    team: normalizeTeamSummary(entry.team),
                     last_session_at: toStringValue(entry.last_session_at),
                     inactive_days: toNumberValue(entry.inactive_days, 0),
                 };
@@ -1430,7 +1454,7 @@ function normalizeManagerLiteLists(input: unknown): ManagerLiteListsResponse {
                 return {
                     user_id: toStringValue(entry.user_id),
                     user_name: toStringValue(entry.user_name),
-                    department: typeof entry.department === "string" ? entry.department : null,
+                    team: normalizeTeamSummary(entry.team),
                     pass_gain: toNumberValue(entry.pass_gain, 0),
                     baseline_pass_rate: toNumberValue(entry.baseline_pass_rate, 0),
                     current_pass_rate: toNumberValue(entry.current_pass_rate, 0),
@@ -1451,9 +1475,9 @@ function normalizeAdminOperatingPack(input: unknown): AdminOperatingPackResponse
             issue_text: toStringValue(entry.issue_text) || null,
             count: toNumberValue(entry.count, 0),
             user_count: toNumberValue(entry.user_count, 0),
-            department_count: entry.department_count === undefined
+            team_count: entry.team_count === undefined
                 ? undefined
-                : toNumberValue(entry.department_count, 0),
+                : toNumberValue(entry.team_count, 0),
         };
     };
     const normalizeReasonBucket = (value: unknown) => {
@@ -1487,7 +1511,7 @@ function normalizeAdminOperatingPack(input: unknown): AdminOperatingPackResponse
             evaluable_sessions: toNumberValue(weeklySummary.evaluable_sessions, 0),
             not_evaluable_sessions: toNumberValue(weeklySummary.not_evaluable_sessions, 0),
             degraded_sessions: toNumberValue(weeklySummary.degraded_sessions, 0),
-            active_departments: toNumberValue(weeklySummary.active_departments, 0),
+            active_teams: toNumberValue(weeklySummary.active_teams, 0),
             at_risk_users: toNumberValue(weeklySummary.at_risk_users, 0),
             improving_users: toNumberValue(weeklySummary.improving_users, 0),
             top_issue_family: Object.keys(toRecord(weeklySummary.top_issue_family)).length > 0
@@ -1506,11 +1530,11 @@ function normalizeAdminOperatingPack(input: unknown): AdminOperatingPackResponse
         cohort_issue_buckets: Array.isArray(raw.cohort_issue_buckets)
             ? raw.cohort_issue_buckets.map(normalizeIssueBucket)
             : [],
-        department_issue_buckets: Array.isArray(raw.department_issue_buckets)
-            ? raw.department_issue_buckets.map((item) => {
+        team_issue_buckets: Array.isArray(raw.team_issue_buckets)
+            ? raw.team_issue_buckets.map((item) => {
                 const entry = toRecord(item);
                 return {
-                    department: toStringValue(entry.department, "未分配部门"),
+                    team: normalizeTeamSummary(entry.team),
                     session_count: toNumberValue(entry.session_count, 0),
                     evaluable_sessions: toNumberValue(entry.evaluable_sessions, 0),
                     not_evaluable_sessions: toNumberValue(entry.not_evaluable_sessions, 0),
@@ -2290,7 +2314,7 @@ export const api = {
                 display_name: string;
                 avatar_url?: string | null;
                 role: string;
-                department?: string | null;
+                team?: TeamSummary | null;
                 email?: string | null;
             }>("/users/me", {
                 timeoutMs: 8000,
@@ -2308,10 +2332,6 @@ export const api = {
                 payload.name = data.display_name;
             }
 
-            if (typeof data.department === "string") {
-                payload.department = data.department;
-            }
-
             if (typeof data.email === "string") {
                 const normalizedEmail = data.email.trim();
                 if (normalizedEmail) {
@@ -2324,7 +2344,7 @@ export const api = {
                 display_name: string;
                 avatar_url?: string | null;
                 role: string;
-                department?: string | null;
+                team?: TeamSummary | null;
                 email?: string | null;
             }>("/users/me", {
                 method: "PATCH",
@@ -2631,6 +2651,26 @@ export const api = {
     },
 
     supervisor: {
+        getTeamScope: async () => apiFetch<TeamScopeResponse>("/supervisor/team/scope"),
+
+        getTeamWorkbench: async (params?: { team_id?: string; search?: string; date_from?: string; date_to?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.team_id) searchParams.set("team_id", params.team_id);
+            if (params?.search) searchParams.set("search", params.search);
+            if (params?.date_from) searchParams.set("date_from", params.date_from);
+            if (params?.date_to) searchParams.set("date_to", params.date_to);
+            const query = searchParams.toString();
+            return apiFetch<TeamWorkbenchResponse>(`/supervisor/team/workbench${query ? `?${query}` : ""}`);
+        },
+
+        getTeamWorkbenchMember: async (learnerId: string, params?: { date_from?: string; date_to?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.date_from) searchParams.set("date_from", params.date_from);
+            if (params?.date_to) searchParams.set("date_to", params.date_to);
+            const query = searchParams.toString();
+            return apiFetch<TeamWorkbenchMemberResponse>(`/supervisor/team/workbench/${encodeURIComponent(learnerId)}${query ? `?${query}` : ""}`);
+        },
+
         getTrainingReportView: async (sessionId: string) => {
             return apiFetch<TrainingReportViewModel>(`/supervisor/report-view/${encodeURIComponent(sessionId)}`);
         },
@@ -2656,12 +2696,16 @@ export const api = {
             learner_id?: string;
             date_from?: string;
             date_to?: string;
+            team_id?: string;
+            search?: string;
         }) => {
             const searchParams = new URLSearchParams();
             if (params?.scenario_type) searchParams.set("scenario_type", params.scenario_type);
             if (params?.learner_id) searchParams.set("learner_id", params.learner_id);
             if (params?.date_from) searchParams.set("date_from", params.date_from);
             if (params?.date_to) searchParams.set("date_to", params.date_to);
+            if (params?.team_id) searchParams.set("team_id", params.team_id);
+            if (params?.search) searchParams.set("search", params.search);
             const query = searchParams.toString();
             return apiFetch<TeamInsightsResponse>(`/supervisor/team/insights${query ? `?${query}` : ""}`);
         },
@@ -3638,21 +3682,100 @@ export const api = {
         },
 
         // Users
-        getUsers: async (params?: { page?: number; page_size?: number; search?: string; status?: string; role?: string }) => {
+        getUsers: async (params?: { page?: number; page_size?: number; search?: string; status?: string; role?: string; team_id?: string }) => {
             const searchParams = new URLSearchParams();
             if (params?.page) searchParams.set("page", params.page.toString());
             if (params?.page_size) searchParams.set("page_size", params.page_size.toString());
             if (params?.search) searchParams.set("search", params.search);
             if (params?.status) searchParams.set("status", params.status);
             if (params?.role) searchParams.set("role", params.role);
+            if (params?.team_id) searchParams.set("team_id", params.team_id);
 
             return apiFetch<{ items: AdminUser[]; total: number }>(`/admin/users?${searchParams}`);
         },
 
-        createUser: async (data: { display_name: string; email?: string; password?: string; name?: string; department?: string; role?: string }) => {
-            return apiFetch<AdminUser>("/admin/users", {
+        getTeams: async () => {
+            const payload = await apiFetch<AdminTeamListResponse>("/admin/teams");
+            return {
+                ...payload,
+                items: (payload.items || []).map((team) => ({
+                    ...team,
+                    leader_user_ids: team.leader_user_ids || [],
+                    leaders: team.leaders || [],
+                    members: team.members || [],
+                    member_count: team.member_count || 0,
+                })),
+            };
+        },
+
+        getTeamLeaderCandidates: async () => (
+            apiFetch<{ items: AdminTeamLeaderCandidate[] }>("/admin/teams/leader-candidates")
+        ),
+
+        createTeam: async (data: { code: string; name: string; primary_leader_user_id: string }) => (
+            apiFetch<AdminTeam>("/admin/teams", {
                 method: "POST",
                 body: JSON.stringify(data),
+            })
+        ),
+
+        assignTeamMember: async (teamId: string, learnerUserId: string) => (
+            apiFetch<{ membership_id: string }>(`/admin/teams/${encodeURIComponent(teamId)}/members`, {
+                method: "POST",
+                body: JSON.stringify({ learner_user_id: learnerUserId }),
+            })
+        ),
+
+        assignTeamLeader: async (
+            teamId: string,
+            data: { leader_user_id: string; assignment_role: "primary" | "proxy" },
+        ) => (
+            apiFetch<{ assignment_id: string }>(`/admin/teams/${encodeURIComponent(teamId)}/leaders`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            })
+        ),
+
+        createUser: async (data: { name: string; email: string; role?: string; team_id?: string }) => {
+            return apiFetch<CreatedAdminUser>("/admin/users", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        resetTemporaryPassword: async (id: string, data: AdminUserStatusMutationPayload) => {
+            return apiFetch<CreatedAdminUser>(`/admin/users/${id}/reset-temporary-password`, {
+                method: "POST",
+                body: JSON.stringify(data),
+                timeoutMs: 8000,
+                timeoutMessage: "临时密码重置超时，系统将核对凭证状态。",
+            });
+        },
+
+        previewUserProvisioning: async (data: { csv_text: string; source_name: string; idempotency_key: string }) => {
+            return apiFetch<ProvisioningBatchResult>("/admin/user-provisioning/preview", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        getUserProvisioningBatch: async (batchId: string) => {
+            return apiFetch<ProvisioningBatchResult>(`/admin/user-provisioning/${batchId}`);
+        },
+
+        confirmUserProvisioning: async (
+            batchId: string,
+            data: { team_overrides: Record<string, { name?: string; primary_leader_email?: string }>; retry_team_codes?: string[] },
+        ) => {
+            return apiFetch<ProvisioningBatchResult>(`/admin/user-provisioning/${batchId}/confirm`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        resetUserProvisioningCredentials: async (batchId: string) => {
+            return apiFetch<{ batch_id: string; credentials: ProvisioningCredential[] }>(`/admin/user-provisioning/${batchId}/reset-credentials`, {
+                method: "POST",
             });
         },
 
@@ -3671,15 +3794,36 @@ export const api = {
         },
 
         deleteUser: async (id: string) => {
-            return apiFetch<void>(`/admin/users/${id}`, { method: "DELETE" });
+            return apiFetch<void>(`/admin/users/${id}`, {
+                method: "DELETE",
+                timeoutMs: 8000,
+                timeoutMessage: "账户停用请求超时，系统将核对最终状态。",
+            });
         },
 
-        suspendUser: async (id: string) => {
-            return apiFetch<AdminUser>(`/admin/users/${id}/suspend`, { method: "POST" });
+        getUser: async (id: string) => {
+            return apiFetch<AdminUser>(`/admin/users/${id}`, {
+                timeoutMs: 5000,
+                timeoutMessage: "账号最新状态加载超时，请稍后刷新。",
+            });
         },
 
-        activateUser: async (id: string) => {
-            return apiFetch<AdminUser>(`/admin/users/${id}/activate`, { method: "POST" });
+        suspendUser: async (id: string, data: AdminUserStatusMutationPayload) => {
+            return apiFetch<AdminUserStatusMutationResult>(`/admin/users/${id}/suspend`, {
+                method: "POST",
+                body: JSON.stringify(data),
+                timeoutMs: 8000,
+                timeoutMessage: "账户停用请求超时，系统将核对最终状态。",
+            });
+        },
+
+        activateUser: async (id: string, data: AdminUserStatusMutationPayload) => {
+            return apiFetch<AdminUserStatusMutationResult>(`/admin/users/${id}/activate`, {
+                method: "POST",
+                body: JSON.stringify(data),
+                timeoutMs: 8000,
+                timeoutMessage: "账户激活请求超时，系统将核对最终状态。",
+            });
         },
 
         // User Details API

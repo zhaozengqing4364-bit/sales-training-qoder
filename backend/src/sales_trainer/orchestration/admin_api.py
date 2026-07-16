@@ -8,15 +8,15 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import Field
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.response import error_response, success_response
 from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
+from common.teams import TeamScopePolicy
 from sales_trainer.models import (
-    NewcomerTrainingEnrollment,
     SalesTrainerAssetActiveRevision,
     SalesTrainerAssetRevision,
 )
@@ -26,15 +26,16 @@ from sales_trainer.orchestration.errors import (
     PathValidationError,
 )
 from sales_trainer.orchestration.journey_service import NewcomerJourneyService
+from sales_trainer.orchestration.journey_summary_service import (
+    JourneySummaryReadService,
+)
 from sales_trainer.orchestration.revision_service import (
-    PATH_LOGICAL_ID,
     TrainingPathRevisionService,
 )
 from sales_trainer.permissions import (
     can_manage_newcomer_training_path,
     can_publish_newcomer_training_path,
     can_view_sales_trainer_records,
-    team_scope_department,
 )
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
@@ -72,7 +73,13 @@ class RestoreRequest(ReasonRequest):
 
 
 class ReadinessReviewRequest(StrictModel):
-    decision: Literal["approve", "reject", "retrain"]
+    decision: Literal[
+        "approve",
+        "require_retraining",
+        "mark_manual_follow_up",
+        "reject",
+        "retrain",
+    ]
     reason: str = Field(min_length=1, max_length=500)
     capability_keys: list[str] = Field(default_factory=list, max_length=50)
     source_evidence_ids: list[str] = Field(default_factory=list, max_length=100)
@@ -391,10 +398,9 @@ async def learner_journey(
     if not can_view_sales_trainer_records(current_user):
         return _forbidden()
     learner = await db.get(User, learner_id)
-    department_scope = team_scope_department(current_user)
-    if learner is None or (
-        department_scope is not None
-        and str(learner.department or "") != department_scope
+    scope_policy = TeamScopePolicy(db)
+    if learner is None or not await scope_policy.can_view_learner(
+        current_user, learner_id
     ):
         return JSONResponse(
             status_code=404,
@@ -414,7 +420,8 @@ async def learner_journey(
 
 @admin_journey_router.get("/journeys", response_model=None)
 async def learner_journeys(
-    department: str | None = Query(default=None),
+    team_id: str | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=120),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
@@ -422,55 +429,23 @@ async def learner_journeys(
 ) -> dict[str, Any] | JSONResponse:
     if not can_view_sales_trainer_records(current_user):
         return _forbidden()
-    department_scope = team_scope_department(current_user)
-    if department_scope is not None and department and department != department_scope:
-        return success_response({"items": [], "total": 0})
-    effective_department = department_scope or department
-    filters = [NewcomerTrainingEnrollment.path_id == PATH_LOGICAL_ID]
-    if effective_department:
-        filters.append(User.department == effective_department)
-    total = int(
-        await db.scalar(
-            select(func.count())
-            .select_from(NewcomerTrainingEnrollment)
-            .join(User, User.user_id == NewcomerTrainingEnrollment.learner_id)
-            .where(*filters)
+    try:
+        result = await JourneySummaryReadService(db).list_summaries(
+            current_user=current_user,
+            team_id=team_id,
+            search=search,
+            limit=limit,
+            offset=offset,
         )
-        or 0
-    )
-    rows = (
-        await db.execute(
-            select(User)
-            .join(
-                NewcomerTrainingEnrollment,
-                NewcomerTrainingEnrollment.learner_id == User.user_id,
-            )
-            .where(*filters)
-            .order_by(User.name, User.user_id)
-            .offset(offset)
-            .limit(limit)
-        )
-    ).scalars()
-    items = []
-    for learner in rows:
-        journey = await NewcomerJourneyService(db).get_or_create_for_learner(
-            learner=learner
-        )
-        items.append(
-            {
-                "learner_id": str(learner.user_id),
-                "learner_name": str(learner.name or ""),
-                "department": str(learner.department or ""),
-                "journey": journey.model_dump(),
-            }
-        )
-    await db.commit()
-    return success_response({"items": items, "total": total})
+    except NewcomerOrchestrationError as exc:
+        return _error(exc)
+    if result.wrote:
+        await db.commit()
+    return success_response(result.response.model_dump())
 
 
 @admin_journey_router.get("/readiness/workbench", response_model=None)
 async def readiness_workbench(
-    department: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
@@ -481,8 +456,7 @@ async def readiness_workbench(
     try:
         payload = await ReadinessDossierService(db).list_workbench(
             viewer=current_user,
-            team_department=team_scope_department(current_user),
-            department=department,
+            team_scope=await TeamScopePolicy(db).resolve(current_user),
             limit=limit,
             offset=offset,
         )
@@ -503,7 +477,7 @@ async def readiness_dossier(
         payload = await ReadinessDossierService(db).get_dossier(
             learner_id,
             viewer=current_user,
-            team_department=team_scope_department(current_user),
+            team_scope=await TeamScopePolicy(db).resolve(current_user),
         )
     except ReadinessDossierError as exc:
         return _readiness_error(exc)
@@ -526,7 +500,7 @@ async def create_readiness_review(
         action = await ReadinessDossierService(db).create_review_action(
             learner_id,
             actor=current_user,
-            team_department=team_scope_department(current_user),
+            team_scope=await TeamScopePolicy(db).resolve(current_user),
             decision=payload.decision,
             reason=payload.reason,
             capability_keys=payload.capability_keys,

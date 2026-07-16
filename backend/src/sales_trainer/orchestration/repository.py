@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,9 @@ class EnrollmentRepository:
     ) -> NewcomerTrainingEnrollment:
         existing = await self.active_for_learner(learner_id=learner_id, path_id=path_id)
         if existing is not None:
+            if str(existing.path_revision_id) != path_revision_id:
+                setattr(existing, "path_revision_id", path_revision_id)
+                await self._db.flush()
             return existing
         try:
             async with self._db.begin_nested():
@@ -41,6 +44,9 @@ class EnrollmentRepository:
                 learner_id=learner_id, path_id=path_id
             )
             if existing is not None:
+                if str(existing.path_revision_id) != path_revision_id:
+                    setattr(existing, "path_revision_id", path_revision_id)
+                    await self._db.flush()
                 return existing
             raise
 
@@ -57,6 +63,20 @@ class EnrollmentRepository:
                 )
             ),
         )
+
+    async def sync_active_path_revision(
+        self, *, path_id: str, path_revision_id: str
+    ) -> int:
+        result = await self._db.execute(
+            update(NewcomerTrainingEnrollment)
+            .where(
+                NewcomerTrainingEnrollment.path_id == path_id,
+                NewcomerTrainingEnrollment.status == "active",
+                NewcomerTrainingEnrollment.path_revision_id != path_revision_id,
+            )
+            .values(path_revision_id=path_revision_id)
+        )
+        return int(getattr(result, "rowcount", 0) or 0)
 
 
 class AttemptRepository:
@@ -131,6 +151,62 @@ class AttemptRepository:
                 .limit(1)
             ),
         )
+
+    async def latest_for_enrollment(
+        self, *, enrollment_id: str
+    ) -> dict[str, NewcomerTrainingActivityAttempt]:
+        by_enrollment = await self.latest_for_enrollments(
+            enrollment_ids=[enrollment_id]
+        )
+        return by_enrollment.get(enrollment_id, {})
+
+    async def latest_for_enrollments(
+        self, *, enrollment_ids: list[str]
+    ) -> dict[str, dict[str, NewcomerTrainingActivityAttempt]]:
+        if not enrollment_ids:
+            return {}
+        latest_attempt_numbers = (
+            select(
+                NewcomerTrainingActivityAttempt.enrollment_id.label("enrollment_id"),
+                NewcomerTrainingActivityAttempt.activity_id.label("activity_id"),
+                func.max(NewcomerTrainingActivityAttempt.attempt_no).label(
+                    "attempt_no"
+                ),
+            )
+            .where(
+                NewcomerTrainingActivityAttempt.enrollment_id.in_(enrollment_ids)
+            )
+            .group_by(
+                NewcomerTrainingActivityAttempt.enrollment_id,
+                NewcomerTrainingActivityAttempt.activity_id,
+            )
+            .subquery()
+        )
+        result = await self._db.execute(
+            select(NewcomerTrainingActivityAttempt)
+            .join(
+                latest_attempt_numbers,
+                and_(
+                    NewcomerTrainingActivityAttempt.enrollment_id
+                    == latest_attempt_numbers.c.enrollment_id,
+                    NewcomerTrainingActivityAttempt.activity_id
+                    == latest_attempt_numbers.c.activity_id,
+                    NewcomerTrainingActivityAttempt.attempt_no
+                    == latest_attempt_numbers.c.attempt_no,
+                ),
+            )
+            .where(
+                NewcomerTrainingActivityAttempt.enrollment_id.in_(enrollment_ids)
+            )
+        )
+        grouped: dict[str, dict[str, NewcomerTrainingActivityAttempt]] = {
+            enrollment_id: {} for enrollment_id in enrollment_ids
+        }
+        for attempt in result.scalars().all():
+            grouped.setdefault(str(attempt.enrollment_id), {})[
+                str(attempt.activity_id)
+            ] = attempt
+        return grouped
 
     async def attach_evidence(
         self, *, attempt_id: str, evidence_type: str, evidence_id: str, status: str

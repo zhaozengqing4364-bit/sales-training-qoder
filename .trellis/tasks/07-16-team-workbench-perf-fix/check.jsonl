@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核日期 SQL 下推、事务边界、查询数量与数据库兼容性"}
+{"file":".trellis/spec/backend/newcomer-training-activity-orchestration.md","reason":"复核摘要与完整 Journey、enrollment 自愈和 attempt 历史语义"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"复核单元/集成/性能/契约门禁与覆盖率"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"复核防抖、刷新、竞态与 URL 状态同步"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核 Vitest、TypeScript、ESLint 和浏览器验证"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"复核 API 摘要 DTO 与 facade 消费边界"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 API DTO → ViewModel → UI 全链一致性"}
+{"file":".trellis/spec/guides/product-design-engineering.md","reason":"复核首次/刷新/部分失败/权限/恢复与可访问状态"}
+{"file":".trellis/tasks/07-16-team-workbench-perf-fix/research/current-state-and-benchmark.md","reason":"按同一 50/100/500 口径复核结果，避免无证据性能结论"}

@@ -11,6 +11,7 @@ from typing import Any, cast
 from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from common.db.models import (
     ComprehensiveReport,
@@ -21,6 +22,7 @@ from common.db.models import (
     Scenario,
     SupervisorReview,
     SupervisorScoreCalibration,
+    TeamMembership,
     TrainingReportSnapshot,
     TrainingTask,
     User,
@@ -31,6 +33,7 @@ from common.services.practice_session_service import (
     PracticeServiceError,
     PracticeSessionCreateService,
 )
+from common.teams import TeamScopePolicy
 from supervisor.schemas import (
     BeforeAfterComparison,
     CertificationReviewQueueItem,
@@ -192,7 +195,9 @@ class SupervisorReviewService:
             await self._serialize_review(review) if review is not None else None
         )
         tasks = review_response.retraining_tasks if review_response is not None else []
-        before_after = review_response.before_after if review_response is not None else None
+        before_after = (
+            review_response.before_after if review_response is not None else None
+        )
         report = await self._build_session_report_or_none(
             session_id=session_id,
             session=session,
@@ -274,15 +279,19 @@ class SupervisorReviewService:
         current_user: User,
         limit: int = 50,
     ) -> list[SupervisorTeamReport]:
-        self._require_admin(current_user)
-        rows = await self.db.execute(
+        learner_ids = await self._team_reader_scope(current_user)
+        statement = (
             select(PracticeSession, User, Scenario.scenario_type)
             .join(User, User.user_id == PracticeSession.user_id)
             .join(Scenario, Scenario.scenario_id == PracticeSession.scenario_id)
             .where(PracticeSession.status.in_(("completed", "scoring")))
             .order_by(PracticeSession.start_time.desc())
-            .limit(max(1, min(limit, 100)))
         )
+        if learner_ids is not None:
+            if not learner_ids:
+                return []
+            statement = statement.where(PracticeSession.user_id.in_(learner_ids))
+        rows = await self.db.execute(statement.limit(max(1, min(limit, 100))))
         reports: list[SupervisorTeamReport] = []
         for session, trainee, scenario_type in rows.all():
             review = await self._get_review_for_session(_as_str(session.session_id))
@@ -296,13 +305,19 @@ class SupervisorReviewService:
                     trainee_name=cast(str | None, getattr(trainee, "name", None)),
                     scenario_type=str(scenario_type or "sales"),
                     status=str(getattr(session, "status", "")),
-                    report_status=cast(str | None, getattr(session, "report_status", None)),
+                    report_status=cast(
+                        str | None, getattr(session, "report_status", None)
+                    ),
                     overall_score=await self._session_overall_score(
                         _as_str(session.session_id),
                         session=session,
                     ),
-                    started_at=cast(datetime | None, getattr(session, "start_time", None)),
-                    completed_at=cast(datetime | None, getattr(session, "end_time", None)),
+                    started_at=cast(
+                        datetime | None, getattr(session, "start_time", None)
+                    ),
+                    completed_at=cast(
+                        datetime | None, getattr(session, "end_time", None)
+                    ),
                     latest_review=review_response,
                     before_after=review_response.before_after
                     if review_response is not None
@@ -325,7 +340,9 @@ class SupervisorReviewService:
             .where(PracticeSession.status == "completed")
             .where(PracticeSession.report_status == "completed")
             .where(PracticeSession.practice_template_id.is_not(None))
-            .order_by(PracticeSession.end_time.desc(), PracticeSession.start_time.desc())
+            .order_by(
+                PracticeSession.end_time.desc(), PracticeSession.start_time.desc()
+            )
             .limit(max(1, min(limit, 100)))
         )
         items: list[CertificationReviewQueueItem] = []
@@ -387,19 +404,29 @@ class SupervisorReviewService:
         learner_id: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        team_id: str | None = None,
+        search: str | None = None,
     ) -> TeamInsightsResponse:
-        self._require_admin(current_user)
+        learner_ids = await self._filtered_team_reader_scope(
+            current_user=current_user, team_id=team_id, search=search
+        )
+        if learner_id and learner_ids is not None and learner_id not in learner_ids:
+            raise SupervisorServiceError(
+                "[LEARNER_NOT_FOUND]", status_code=404, message="学员不存在。"
+            )
         tasks = await self._filtered_training_tasks(
             scenario_type=scenario_type,
             learner_id=learner_id,
             date_from=date_from,
             date_to=date_to,
+            learner_ids=learner_ids,
         )
         sessions = await self._filtered_sessions(
             scenario_type=scenario_type,
             learner_id=learner_id,
             date_from=date_from,
             date_to=date_to,
+            learner_ids=learner_ids,
         )
         session_ids = {_as_str(session.session_id) for session in sessions}
         reviews = await self._reviews_for_sessions(session_ids)
@@ -409,10 +436,7 @@ class SupervisorReviewService:
         reports = await self._reports_for_sessions(session_ids)
         snapshots = await self._snapshots_for_sessions(session_ids)
         users = await self._users_by_id(
-            {
-                _as_str(task.assignee_id)
-                for task in tasks
-            }
+            {_as_str(task.assignee_id) for task in tasks}
             | {_as_str(session.user_id) for session in sessions}
         )
 
@@ -444,6 +468,158 @@ class SupervisorReviewService:
             ),
         )
 
+    async def get_team_workbench(
+        self,
+        *,
+        current_user: User,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        team_id: str | None = None,
+        search: str | None = None,
+    ) -> dict[str, Any]:
+        """Light team workbench projection without readiness/score refresh loops."""
+        learner_ids = await self._filtered_team_reader_scope(
+            current_user=current_user, team_id=team_id, search=search
+        )
+        tasks = await self._filtered_training_tasks(
+            scenario_type=None,
+            learner_id=None,
+            date_from=date_from,
+            date_to=date_to,
+            learner_ids=learner_ids,
+        )
+        sessions = await self._filtered_sessions(
+            scenario_type=None,
+            learner_id=None,
+            date_from=date_from,
+            date_to=date_to,
+            learner_ids=learner_ids,
+        )
+        session_ids = {_as_str(session.session_id) for session in sessions}
+        reviews = await self._reviews_for_sessions(session_ids)
+        reports = await self._reports_for_sessions(session_ids)
+        users = await self._users_by_id(
+            {_as_str(task.assignee_id) for task in tasks}
+            | {_as_str(session.user_id) for session in sessions}
+        )
+
+        top_weaknesses = self._top_weaknesses(reports, sessions)
+        if not top_weaknesses:
+            retraining_tasks = await self._retraining_tasks_for_reviews(
+                {_as_str(review.review_id) for review in reviews}
+            )
+            top_weaknesses = self._retraining_weaknesses(retraining_tasks)
+
+        tasks_by_learner: dict[str, list[Any]] = defaultdict(list)
+        for task in tasks:
+            tasks_by_learner[_as_str(task.assignee_id)].append(task)
+        sessions_by_learner: dict[str, list[Any]] = defaultdict(list)
+        for session in sessions:
+            sessions_by_learner[_as_str(session.user_id)].append(session)
+
+        learner_id_set = sorted(
+            set(users.keys())
+            | set(tasks_by_learner.keys())
+            | set(sessions_by_learner.keys())
+        )
+        learners: list[dict[str, Any]] = []
+        for learner_id in learner_id_set:
+            if not learner_id:
+                continue
+            learner_sessions = sessions_by_learner.get(learner_id, [])
+            learner_reports = {
+                _as_str(session.session_id): reports[_as_str(session.session_id)]
+                for session in learner_sessions
+                if _as_str(session.session_id) in reports
+            }
+            learner_weaknesses = self._top_weaknesses(learner_reports, learner_sessions)
+            learners.append(
+                {
+                    "learner_id": learner_id,
+                    "learner_name": cast(
+                        str | None, getattr(users.get(learner_id), "name", None)
+                    ),
+                    "extra_task_progress": self._completion_for_tasks(
+                        tasks_by_learner.get(learner_id, [])
+                    ).model_dump(mode="json"),
+                    "risk_labels": [
+                        weakness.dimension for weakness in learner_weaknesses
+                    ],
+                }
+            )
+
+        return {
+            "extra_task_progress": self._completion_for_tasks(tasks).model_dump(
+                mode="json"
+            ),
+            "risk_groups": [
+                {
+                    "rule": "below_published_standard",
+                    "label": item.dimension,
+                    "learner_ids": item.learner_ids,
+                    "evidence_count": item.count,
+                }
+                for item in top_weaknesses
+            ],
+            "common_issues": [
+                item.model_dump(mode="json")
+                for item in self._common_issues(
+                    reports,
+                    sessions,
+                    reviews=reviews,
+                    limit=3,
+                )
+            ],
+            "learners": learners,
+        }
+
+    async def _filtered_team_reader_scope(
+        self,
+        *,
+        current_user: User,
+        team_id: str | None,
+        search: str | None,
+    ) -> set[str] | None:
+        policy = TeamScopePolicy(self.db)
+        if not policy.has_unrestricted_scope(
+            current_user
+        ) and not policy.is_team_leader(current_user):
+            raise SupervisorServiceError(
+                "[TEAM_READER_REQUIRED]",
+                status_code=403,
+                message="需要平台管理员或销售组长权限。",
+            )
+        learner_ids = await policy.authorized_learner_ids(current_user)
+        filters: list[ColumnElement[bool]] = [User.is_active.is_(True)]
+        if learner_ids is not None:
+            if not learner_ids:
+                return set()
+            filters.append(User.user_id.in_(learner_ids))
+        if team_id:
+            if not await policy.require_team(current_user, team_id):
+                return set()
+            filters.append(
+                User.user_id.in_(
+                    select(TeamMembership.user_id).where(
+                        TeamMembership.team_id == team_id,
+                        TeamMembership.effective_from <= _now(),
+                        (TeamMembership.effective_to.is_(None))
+                        | (TeamMembership.effective_to > _now()),
+                    )
+                )
+            )
+        if search and search.strip():
+            pattern = f"%{search.strip()}%"
+            filters.append((User.name.ilike(pattern)) | (User.email.ilike(pattern)))
+        if team_id or (search and search.strip()) or learner_ids is not None:
+            return {
+                str(user_id)
+                for user_id in (
+                    await self.db.scalars(select(User.user_id).where(*filters))
+                ).all()
+            }
+        return None
+
     async def get_team_insights_detail(
         self,
         *,
@@ -453,7 +629,11 @@ class SupervisorReviewService:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
     ) -> TeamInsightsLearnerDetail:
-        self._require_admin(current_user)
+        learner_ids = await self._team_reader_scope(current_user)
+        if learner_ids is not None and learner_id not in learner_ids:
+            raise SupervisorServiceError(
+                "[LEARNER_NOT_FOUND]", status_code=404, message="学员不存在。"
+            )
         user = await self._get_user(learner_id)
         if user is None:
             raise SupervisorServiceError(
@@ -466,12 +646,14 @@ class SupervisorReviewService:
             learner_id=learner_id,
             date_from=date_from,
             date_to=date_to,
+            learner_ids=learner_ids,
         )
         sessions = await self._filtered_sessions(
             scenario_type=scenario_type,
             learner_id=learner_id,
             date_from=date_from,
             date_to=date_to,
+            learner_ids=learner_ids,
         )
         session_ids = {_as_str(session.session_id) for session in sessions}
         reviews = await self._reviews_for_sessions(session_ids)
@@ -533,7 +715,9 @@ class SupervisorReviewService:
         if session_id:
             query = query.where(SupervisorReview.session_id == session_id)
         if not _is_admin(current_user):
-            query = query.where(SupervisorReview.trainee_user_id == current_user.user_id)
+            query = query.where(
+                SupervisorReview.trainee_user_id == current_user.user_id
+            )
 
         rows = await self.db.execute(query)
         reviews = list(rows.scalars().all())
@@ -546,6 +730,7 @@ class SupervisorReviewService:
         learner_id: str | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        learner_ids: set[str] | None = None,
     ) -> list[Any]:
         stmt = select(
             TrainingTask.task_id,
@@ -560,16 +745,24 @@ class SupervisorReviewService:
             stmt = stmt.where(TrainingTask.scenario_type == scenario_type)
         if learner_id:
             stmt = stmt.where(TrainingTask.assignee_id == learner_id)
-        result = await self.db.execute(stmt)
-        return [
-            task
-            for task in result.all()
-            if _is_within_date_range(
-                cast(datetime | None, getattr(task, "created_at", None)),
-                date_from=date_from,
-                date_to=date_to,
+        elif learner_ids is not None:
+            if not learner_ids:
+                return []
+            stmt = stmt.where(TrainingTask.assignee_id.in_(learner_ids))
+        if date_from is not None:
+            bound = (
+                date_from
+                if date_from.tzinfo is not None
+                else date_from.replace(tzinfo=UTC)
             )
-        ]
+            stmt = stmt.where(TrainingTask.created_at >= bound)
+        if date_to is not None:
+            bound = (
+                date_to if date_to.tzinfo is not None else date_to.replace(tzinfo=UTC)
+            )
+            stmt = stmt.where(TrainingTask.created_at <= bound)
+        result = await self.db.execute(stmt)
+        return list(result.all())
 
     async def _filtered_sessions(
         self,
@@ -578,6 +771,7 @@ class SupervisorReviewService:
         learner_id: str | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        learner_ids: set[str] | None = None,
     ) -> list[Any]:
         stmt = (
             select(
@@ -595,16 +789,24 @@ class SupervisorReviewService:
             stmt = stmt.where(Scenario.scenario_type == scenario_type)
         if learner_id:
             stmt = stmt.where(PracticeSession.user_id == learner_id)
-        result = await self.db.execute(stmt)
-        return [
-            session
-            for session in result.all()
-            if _is_within_date_range(
-                cast(datetime | None, getattr(session, "start_time", None)),
-                date_from=date_from,
-                date_to=date_to,
+        elif learner_ids is not None:
+            if not learner_ids:
+                return []
+            stmt = stmt.where(PracticeSession.user_id.in_(learner_ids))
+        if date_from is not None:
+            bound = (
+                date_from
+                if date_from.tzinfo is not None
+                else date_from.replace(tzinfo=UTC)
             )
-        ]
+            stmt = stmt.where(PracticeSession.start_time >= bound)
+        if date_to is not None:
+            bound = (
+                date_to if date_to.tzinfo is not None else date_to.replace(tzinfo=UTC)
+            )
+            stmt = stmt.where(PracticeSession.start_time <= bound)
+        result = await self.db.execute(stmt)
+        return list(result.all())
 
     async def _reviews_for_sessions(
         self,
@@ -634,7 +836,9 @@ class SupervisorReviewService:
         if await self._column_exists("retraining_tasks", "training_task_id"):
             columns.append(RetrainingTask.training_task_id)
         result = await self.db.execute(
-            select(*columns).where(RetrainingTask.source_review_id.in_(list(review_ids)))
+            select(*columns).where(
+                RetrainingTask.source_review_id.in_(list(review_ids))
+            )
         )
         return list(result.all())
 
@@ -683,10 +887,14 @@ class SupervisorReviewService:
         clean_ids = {user_id for user_id in user_ids if user_id}
         if not clean_ids:
             return {}
-        result = await self.db.execute(select(User).where(User.user_id.in_(list(clean_ids))))
+        result = await self.db.execute(
+            select(User).where(User.user_id.in_(list(clean_ids)))
+        )
         return {_as_str(user.user_id): user for user in result.scalars().all()}
 
-    def _completion_for_tasks(self, tasks: list[TrainingTask]) -> TeamInsightsCompletion:
+    def _completion_for_tasks(
+        self, tasks: list[TrainingTask]
+    ) -> TeamInsightsCompletion:
         by_status = Counter(_as_str(task.status) for task in tasks)
         total = len(tasks)
         completed = by_status.get("completed", 0)
@@ -702,7 +910,10 @@ class SupervisorReviewService:
         reports: dict[str, ComprehensiveReport],
         sessions: list[PracticeSession],
     ) -> list[TeamInsightsWeakness]:
-        session_users = {_as_str(session.session_id): _as_str(session.user_id) for session in sessions}
+        session_users = {
+            _as_str(session.session_id): _as_str(session.user_id)
+            for session in sessions
+        }
         scores: dict[str, list[float]] = defaultdict(list)
         learners: dict[str, set[str]] = defaultdict(set)
         for session_id, report in reports.items():
@@ -718,7 +929,9 @@ class SupervisorReviewService:
                 dimension=dimension,
                 count=len(values),
                 average_score=round(sum(values) / len(values), 1) if values else None,
-                learner_ids=sorted(user_id for user_id in learners[dimension] if user_id),
+                learner_ids=sorted(
+                    user_id for user_id in learners[dimension] if user_id
+                ),
             )
             for dimension, values in scores.items()
         ]
@@ -735,12 +948,17 @@ class SupervisorReviewService:
         reviews: list[SupervisorReview] | None = None,
         limit: int,
     ) -> list[TeamInsightsCommonIssue]:
-        session_users = {_as_str(session.session_id): _as_str(session.user_id) for session in sessions}
+        session_users = {
+            _as_str(session.session_id): _as_str(session.user_id)
+            for session in sessions
+        }
         counts: Counter[tuple[str, str | None]] = Counter()
         learners: dict[tuple[str, str | None], set[str]] = defaultdict(set)
         for session_id, report in reports.items():
             user_id = session_users.get(session_id, "")
-            for issue in self._as_string_list(getattr(report, "key_improvements", None)):
+            for issue in self._as_string_list(
+                getattr(report, "key_improvements", None)
+            ):
                 key = (issue, None)
                 counts[key] += 1
                 learners[key].add(user_id)
@@ -756,7 +974,9 @@ class SupervisorReviewService:
                 issue=issue,
                 dimension=dimension,
                 count=count,
-                learner_ids=sorted(user_id for user_id in learners[(issue, dimension)] if user_id),
+                learner_ids=sorted(
+                    user_id for user_id in learners[(issue, dimension)] if user_id
+                ),
             )
             for (issue, dimension), count in counts.most_common(limit)
         ]
@@ -778,7 +998,9 @@ class SupervisorReviewService:
                 dimension=dimension,
                 count=count,
                 average_score=None,
-                learner_ids=sorted(user_id for user_id in learners[dimension] if user_id),
+                learner_ids=sorted(
+                    user_id for user_id in learners[dimension] if user_id
+                ),
             )
             for dimension, count in counts.most_common(5)
         ]
@@ -789,13 +1011,17 @@ class SupervisorReviewService:
         users: dict[str, User],
     ) -> TeamInsightsReadiness:
         latest = self._latest_reviews_by_learner(reviews)
-        by_status = Counter(_as_str(review.readiness_status) for review in latest.values())
+        by_status = Counter(
+            _as_str(review.readiness_status) for review in latest.values()
+        )
         return TeamInsightsReadiness(
             by_status=dict(by_status),
             learners=[
                 TeamInsightsReadinessLearner(
                     learner_id=learner_id,
-                    learner_name=cast(str | None, getattr(users.get(learner_id), "name", None)),
+                    learner_name=cast(
+                        str | None, getattr(users.get(learner_id), "name", None)
+                    ),
                     readiness_status=cast(Any, review.readiness_status),
                     latest_review_id=_as_str(review.review_id),
                     session_id=_as_str(review.session_id),
@@ -816,7 +1042,10 @@ class SupervisorReviewService:
             tasks_by_review[_as_str(task.source_review_id)].append(task)
         candidates: list[TeamInsightsRetrainingCandidate] = []
         for review in reviews:
-            if not bool(review.required_retraining) and review.decision != "needs_retraining":
+            if (
+                not bool(review.required_retraining)
+                and review.decision != "needs_retraining"
+            ):
                 continue
             learner_id = _as_str(review.trainee_user_id)
             linked_tasks = tasks_by_review.get(_as_str(review.review_id))
@@ -825,12 +1054,20 @@ class SupervisorReviewService:
                     candidates.append(
                         TeamInsightsRetrainingCandidate(
                             learner_id=learner_id,
-                            learner_name=cast(str | None, getattr(users.get(learner_id), "name", None)),
+                            learner_name=cast(
+                                str | None, getattr(users.get(learner_id), "name", None)
+                            ),
                             session_id=_as_str(review.session_id),
                             review_id=_as_str(review.review_id),
-                            retraining_task_id=_as_str(getattr(task, "task_id", None)) or None,
-                            training_task_id=_as_str(getattr(task, "training_task_id", None)) or None,
-                            skill_dimension=cast(str | None, getattr(task, "skill_dimension", None)),
+                            retraining_task_id=_as_str(getattr(task, "task_id", None))
+                            or None,
+                            training_task_id=_as_str(
+                                getattr(task, "training_task_id", None)
+                            )
+                            or None,
+                            skill_dimension=cast(
+                                str | None, getattr(task, "skill_dimension", None)
+                            ),
                             readiness_status=cast(Any, review.readiness_status),
                             reason=cast(str | None, review.comment),
                         )
@@ -839,7 +1076,9 @@ class SupervisorReviewService:
             candidates.append(
                 TeamInsightsRetrainingCandidate(
                     learner_id=learner_id,
-                    learner_name=cast(str | None, getattr(users.get(learner_id), "name", None)),
+                    learner_name=cast(
+                        str | None, getattr(users.get(learner_id), "name", None)
+                    ),
                     session_id=_as_str(review.session_id),
                     review_id=_as_str(review.review_id),
                     retraining_task_id=None,
@@ -871,8 +1110,14 @@ class SupervisorReviewService:
                 learner_id=item,
                 user=users.get(item),
                 tasks=[task for task in tasks if _as_str(task.assignee_id) == item],
-                sessions=[session for session in sessions if _as_str(session.user_id) == item],
-                reviews=[review for review in reviews if _as_str(review.trainee_user_id) == item],
+                sessions=[
+                    session for session in sessions if _as_str(session.user_id) == item
+                ],
+                reviews=[
+                    review
+                    for review in reviews
+                    if _as_str(review.trainee_user_id) == item
+                ],
                 reports=reports,
                 snapshots=snapshots,
             )
@@ -892,10 +1137,14 @@ class SupervisorReviewService:
         snapshots: dict[str, TrainingReportSnapshot],
     ) -> TeamInsightsLearnerSummary:
         latest_review = self._latest_review(reviews)
-        latest_session = max(
-            sessions,
-            key=lambda item: getattr(item, "start_time", None) or datetime.min,
-        ) if sessions else None
+        latest_session = (
+            max(
+                sessions,
+                key=lambda item: getattr(item, "start_time", None) or datetime.min,
+            )
+            if sessions
+            else None
+        )
         latest_session_id = _as_str(getattr(latest_session, "session_id", None))
         latest_score = None
         if latest_session_id:
@@ -919,7 +1168,9 @@ class SupervisorReviewService:
             top_weaknesses=self._top_weaknesses(learner_reports, sessions),
             config_metadata=self._report_config_metadata(
                 snapshots.get(latest_session_id)
-            ) if latest_session_id else {},
+            )
+            if latest_session_id
+            else {},
         )
 
     @staticmethod
@@ -998,7 +1249,9 @@ class SupervisorReviewService:
             return None
         stage_snapshots = self._stage_snapshots_from_session(session)
         review_stage_keys = self._review_stage_keys(
-            curriculum_plan=cast(dict[str, Any] | None, getattr(template, "curriculum_plan", None)),
+            curriculum_plan=cast(
+                dict[str, Any] | None, getattr(template, "curriculum_plan", None)
+            ),
             stage_snapshots=stage_snapshots,
         )
         if not review_stage_keys:
@@ -1017,7 +1270,9 @@ class SupervisorReviewService:
             },
         }
 
-    async def _practice_template_for_session(self, session: PracticeSession) -> Any | None:
+    async def _practice_template_for_session(
+        self, session: PracticeSession
+    ) -> Any | None:
         template_id = getattr(session, "practice_template_id", None)
         if not template_id:
             return None
@@ -1041,7 +1296,9 @@ class SupervisorReviewService:
     ) -> list[str]:
         keywords = ("review", "certification", "onboarding", "复核", "认证", "入职")
         keys: list[str] = []
-        stages = curriculum_plan.get("stages") if isinstance(curriculum_plan, dict) else None
+        stages = (
+            curriculum_plan.get("stages") if isinstance(curriculum_plan, dict) else None
+        )
         if isinstance(stages, list):
             for stage in stages:
                 if not isinstance(stage, dict):
@@ -1053,7 +1310,10 @@ class SupervisorReviewService:
                     keys.append(stage_key)
         for stage_key in stage_snapshots:
             haystack = _as_str(stage_key).lower()
-            if any(keyword in haystack for keyword in keywords) and stage_key not in keys:
+            if (
+                any(keyword in haystack for keyword in keywords)
+                and stage_key not in keys
+            ):
                 keys.append(stage_key)
         return keys
 
@@ -1359,6 +1619,16 @@ class SupervisorReviewService:
                 message="需要管理员权限。",
             )
 
+    async def _team_reader_scope(self, user: User) -> set[str] | None:
+        learner_ids = await TeamScopePolicy(self.db).authorized_learner_ids(user)
+        if learner_ids is not None and not TeamScopePolicy.is_team_leader(user):
+            raise SupervisorServiceError(
+                "[TEAM_READER_REQUIRED]",
+                status_code=403,
+                message="需要管理员或销售组长权限。",
+            )
+        return None if learner_ids is None else {str(learner_id) for learner_id in learner_ids}
+
     def _assert_task_access(self, task: RetrainingTask, user: User) -> None:
         if _is_admin(user):
             return
@@ -1455,9 +1725,7 @@ class SupervisorReviewService:
         )
         return result.scalar_one_or_none()
 
-    async def _get_review_for_session(
-        self, session_id: str
-    ) -> SupervisorReview | None:
+    async def _get_review_for_session(self, session_id: str) -> SupervisorReview | None:
         result = await self.db.execute(
             select(SupervisorReview).where(SupervisorReview.session_id == session_id)
         )
@@ -1538,7 +1806,9 @@ class SupervisorReviewService:
 
     async def _get_session_scenario_type(self, session: PracticeSession) -> str:
         result = await self.db.execute(
-            select(Scenario.scenario_type).where(Scenario.scenario_id == session.scenario_id)
+            select(Scenario.scenario_type).where(
+                Scenario.scenario_id == session.scenario_id
+            )
         )
         return str(result.scalar_one_or_none() or "sales")
 
@@ -1674,7 +1944,9 @@ class SupervisorReviewService:
     ) -> SupervisorReviewResponse:
         tasks = await self._get_tasks_for_review(_as_str(review.review_id))
         serialized_tasks = [await self._serialize_task(task) for task in tasks]
-        calibrations = await self._get_calibrations_for_review(_as_str(review.review_id))
+        calibrations = await self._get_calibrations_for_review(
+            _as_str(review.review_id)
+        )
         before_after = next(
             (task.before_after for task in serialized_tasks if task.before_after),
             None,
@@ -1694,8 +1966,7 @@ class SupervisorReviewService:
             retraining_tasks=serialized_tasks,
             before_after=before_after,
             calibrations=[
-                self._serialize_calibration(calibration)
-                for calibration in calibrations
+                self._serialize_calibration(calibration) for calibration in calibrations
             ],
         )
 
@@ -1804,7 +2075,9 @@ class SupervisorReviewService:
                     dimension=dimension,
                     issue=issue,
                     evidence_type=evidence_type,
-                    turn_number=cast(int | None, getattr(source_message, "turn_number", None)),
+                    turn_number=cast(
+                        int | None, getattr(source_message, "turn_number", None)
+                    ),
                     speaker=cast(str | None, getattr(source_message, "role", None)),
                     quote=resolved_quote,
                     source_message_id=(
@@ -1857,7 +2130,9 @@ class SupervisorReviewService:
                 page_number=cast(int | None, raw_issue.get("page_number")),
                 turn_number=cast(int | None, raw_issue.get("turn_number")),
                 quote=_short_text(raw_issue.get("quote")),
-                knowledge_source_id=cast(str | None, raw_issue.get("knowledge_source_id")),
+                knowledge_source_id=cast(
+                    str | None, raw_issue.get("knowledge_source_id")
+                ),
                 confidence=cast(float | None, raw_issue.get("confidence")),
             )
             key_issues.append(
@@ -1890,7 +2165,9 @@ class SupervisorReviewService:
         report: Any | None,
         stored_report: ComprehensiveReport | None,
     ) -> list[TrainingReportDimensionScore]:
-        presentation_review = self._as_dict(getattr(report, "presentation_review", None))
+        presentation_review = self._as_dict(
+            getattr(report, "presentation_review", None)
+        )
         presentation_dimensions = presentation_review.get("dimension_scores")
         if isinstance(presentation_dimensions, list) and presentation_dimensions:
             return [
@@ -1900,7 +2177,8 @@ class SupervisorReviewService:
                     description=cast(str | None, item.get("description")),
                 )
                 for item in presentation_dimensions
-                if isinstance(item, dict) and (item.get("name") or item.get("dimension"))
+                if isinstance(item, dict)
+                and (item.get("name") or item.get("dimension"))
             ]
 
         stored_dimensions = getattr(stored_report, "dimension_scores", None)
@@ -1951,7 +2229,9 @@ class SupervisorReviewService:
         stored_report: ComprehensiveReport | None,
     ) -> list[dict[str, Any]]:
         issues: list[dict[str, Any]] = []
-        presentation_review = self._as_dict(getattr(report, "presentation_review", None))
+        presentation_review = self._as_dict(
+            getattr(report, "presentation_review", None)
+        )
         if scenario_type == "presentation" and presentation_review:
             for item in self._as_string_list(presentation_review.get("improvements")):
                 issues.append(
@@ -2063,7 +2343,9 @@ class SupervisorReviewService:
         report: Any | None,
         stored_report: ComprehensiveReport | None,
     ) -> list[str]:
-        presentation_review = self._as_dict(getattr(report, "presentation_review", None))
+        presentation_review = self._as_dict(
+            getattr(report, "presentation_review", None)
+        )
         strengths = self._as_string_list(presentation_review.get("strengths"))
         if strengths:
             return strengths
@@ -2074,14 +2356,20 @@ class SupervisorReviewService:
         report: Any | None,
         stored_report: ComprehensiveReport | None,
     ) -> list[str]:
-        presentation_review = self._as_dict(getattr(report, "presentation_review", None))
-        recommendations = self._as_string_list(presentation_review.get("recommendations"))
+        presentation_review = self._as_dict(
+            getattr(report, "presentation_review", None)
+        )
+        recommendations = self._as_string_list(
+            presentation_review.get("recommendations")
+        )
         if recommendations:
             return recommendations
         recommendations = self._as_string_list(getattr(report, "suggestions", None))
         recommendations.extend(
             item
-            for item in self._as_string_list(getattr(stored_report, "recommendations", None))
+            for item in self._as_string_list(
+                getattr(stored_report, "recommendations", None)
+            )
             if item not in recommendations
         )
         return recommendations
@@ -2305,7 +2593,9 @@ class SupervisorReviewService:
 
     async def _get_report(self, session_id: str) -> ComprehensiveReport | None:
         result = await self.db.execute(
-            select(ComprehensiveReport).where(ComprehensiveReport.session_id == session_id)
+            select(ComprehensiveReport).where(
+                ComprehensiveReport.session_id == session_id
+            )
         )
         return result.scalar_one_or_none()
 
@@ -2327,4 +2617,8 @@ class SupervisorReviewService:
         if snapshot is None:
             return {"source": "legacy_unversioned"}
         lineage = getattr(snapshot, "config_bundle_snapshot", None)
-        return dict(lineage) if isinstance(lineage, dict) else {"source": "legacy_unversioned"}
+        return (
+            dict(lineage)
+            if isinstance(lineage, dict)
+            else {"source": "legacy_unversioned"}
+        )

@@ -407,8 +407,10 @@ export interface LearningContent {
     revision_state: LearningContentRevisionState;
 }
 
+export type LearningContentSummary = Omit<LearningContent, "chapters" | "revision_state">;
+
 export interface LearningContentListResponse {
-    items: LearningContent[];
+    items: LearningContentSummary[];
     total: number;
 }
 
@@ -1478,7 +1480,7 @@ export interface LeaderboardEntry {
     rank: number;
     user_id: string;
     username: string;
-    department: string | null;
+    team: TeamSummary | null;
     total_sessions: number;
     average_score: number;
     best_score: number;
@@ -1723,11 +1725,17 @@ export interface SupportRuntimeFaultsResponse {
 }
 
 // User types
+export interface TeamSummary {
+    team_id: string;
+    code: string;
+    name: string;
+}
+
 export interface User {
     user_id: string;
     name: string;
     email: string;
-    department?: string;
+    team?: TeamSummary | null;
     role: string;
     is_active: boolean;
     created_at: string;
@@ -1737,10 +1745,11 @@ export interface User {
 // Admin types
 export interface AdminUser {
     id: string;
-    user_id: string;
+    /** Compatibility alias used by a few legacy admin payloads. `id` is canonical. */
+    user_id?: string;
     display_name: string;
     email?: string;
-    department?: string;
+    team?: TeamSummary | null;
     role: string;
     is_active: boolean;
     status: string;
@@ -1750,12 +1759,103 @@ export interface AdminUser {
     total_sessions: number;
     total_duration_minutes: number;
     average_score: number;
+    credential_status?: "active" | "temporary" | "reset_required";
+    temporary_password_expires_at?: string | null;
+    credential_version?: number;
+}
+
+export interface AdminUserStatusMutationPayload {
+    audit_reason: string;
+    expected_credential_version?: number;
+}
+
+export interface AdminUserStatusMutationResult {
+    user_id: string;
+    status: "active" | "inactive";
+    changed: boolean;
+    credential_version: number;
+    suspended?: boolean;
+    activated?: boolean;
+}
+
+export interface AdminTeamPerson {
+    user_id: string;
+    name?: string | null;
+    email?: string | null;
+}
+
+export interface AdminTeamLeader extends AdminTeamPerson {
+    assignment_role: "primary" | "proxy" | string;
+}
+
+export interface AdminTeamMember extends AdminTeamPerson {
+    membership_role: "primary" | string;
+}
+
+export interface AdminTeam {
+    team_id: string;
+    code: string;
+    name: string;
+    is_active: boolean;
+    leader_user_ids: string[];
+    leaders: AdminTeamLeader[];
+    members: AdminTeamMember[];
+    member_count: number;
+}
+
+export interface AdminTeamListResponse {
+    items: AdminTeam[];
+    total: number;
+}
+
+export type AdminTeamLeaderCandidate = AdminTeamPerson;
+
+export interface CreatedAdminUser extends AdminUser {
+    temporary_password: string;
+}
+
+export interface ProvisioningRowResult {
+    row_number: number;
+    name: string;
+    email: string;
+    role: "user" | "training_manager" | string;
+    team_code: string;
+    team_name?: string | null;
+    primary_leader_email?: string | null;
+    status: "valid" | "invalid" | "created" | "failed" | "skipped";
+    error_code?: string | null;
+    error_message?: string | null;
+    user_id?: string | null;
+}
+
+export interface ProvisioningTeamResult {
+    team_code: string;
+    status: "pending" | "completed" | "failed";
+    error_code?: string | null;
+    exists: boolean;
+    row_count: number;
+}
+
+export interface ProvisioningCredential {
+    row_number: number;
+    name: string;
+    email: string;
+    temporary_password: string;
+    temporary_password_expires_at: string;
+}
+
+export interface ProvisioningBatchResult {
+    batch_id: string;
+    status: "previewed" | "processing" | "completed" | "partially_completed" | "failed";
+    source_name: string;
+    rows: ProvisioningRowResult[];
+    teams: ProvisioningTeamResult[];
+    credentials?: ProvisioningCredential[];
 }
 
 export interface AdminUserUpdatePayload {
     name?: string;
     email?: string;
-    department?: string;
     is_active?: boolean;
     audit_reason?: string;
 }
@@ -3295,6 +3395,48 @@ export interface TeamInsightsLearnerDetail extends TeamInsightsLearnerSummary {
     retraining_candidates: TeamInsightsRetrainingCandidate[];
 }
 
+export interface TeamScopeResponse {
+    teams: Array<{
+        team_id: string;
+        code: string;
+        name: string;
+        leaders: Array<{ user_id: string; name: string | null; role: "primary" | "proxy" | string }>;
+    }>;
+    members: Array<{
+        team_id: string;
+        learner_id: string;
+        learner_name: string | null;
+        email: string | null;
+    }>;
+}
+
+export interface TeamWorkbenchResponse {
+    extra_task_progress: TeamInsightsCompletion;
+    risk_groups: Array<{
+        rule: "below_published_standard" | string;
+        label: string;
+        learner_ids: string[];
+        evidence_count: number;
+    }>;
+    common_issues: TeamInsightsCommonIssue[];
+    learners: Array<{
+        learner_id: string;
+        learner_name: string | null;
+        extra_task_progress: TeamInsightsCompletion;
+        risk_labels: string[];
+    }>;
+}
+
+export interface TeamWorkbenchMemberResponse {
+    learner_id: string;
+    learner_name: string | null;
+    learner_email: string | null;
+    extra_task_progress: TeamInsightsCompletion;
+    training_tasks: TrainingTaskSummary[];
+    risk_labels: string[];
+    common_issues: TeamInsightsCommonIssue[];
+}
+
 export interface TrainingTaskSummary {
     task_id: string;
     title: string;
@@ -3443,7 +3585,7 @@ export interface OpenAnalyticsDashboard {
 export interface ManagerLiteNotPassedItem {
     user_id: string;
     user_name: string;
-    department?: string | null;
+    team?: TeamSummary | null;
     overall_result: string;
     session_id: string;
     session_start_time: string;
@@ -3453,7 +3595,7 @@ export interface ManagerLiteNotPassedItem {
 export interface ManagerLiteInactiveStreakItem {
     user_id: string;
     user_name: string;
-    department?: string | null;
+    team?: TeamSummary | null;
     last_session_at: string;
     inactive_days: number;
 }
@@ -3461,7 +3603,7 @@ export interface ManagerLiteInactiveStreakItem {
 export interface ManagerLiteImprovingItem {
     user_id: string;
     user_name: string;
-    department?: string | null;
+    team?: TeamSummary | null;
     pass_gain: number;
     baseline_pass_rate: number;
     current_pass_rate: number;
@@ -3479,7 +3621,7 @@ export interface AdminOperatingPackIssueBucket {
     issue_text?: string | null;
     count: number;
     user_count: number;
-    department_count?: number;
+    team_count?: number;
 }
 
 export interface AdminOperatingPackReasonBucket {
@@ -3492,8 +3634,8 @@ export interface AdminOperatingPackDegradationBreakdown {
     degraded_reasons: AdminOperatingPackReasonBucket[];
 }
 
-export interface AdminOperatingPackDepartmentBucket {
-    department: string;
+export interface AdminOperatingPackTeamBucket {
+    team: TeamSummary | null;
     session_count: number;
     evaluable_sessions: number;
     not_evaluable_sessions: number;
@@ -3509,7 +3651,7 @@ export interface AdminOperatingPackWeeklySummary {
     evaluable_sessions: number;
     not_evaluable_sessions: number;
     degraded_sessions: number;
-    active_departments: number;
+    active_teams: number;
     at_risk_users: number;
     improving_users: number;
     top_issue_family?: AdminOperatingPackIssueBucket | null;
@@ -3522,7 +3664,7 @@ export interface AdminOperatingPackResponse {
     score_basis: string;
     weekly_summary: AdminOperatingPackWeeklySummary;
     cohort_issue_buckets: AdminOperatingPackIssueBucket[];
-    department_issue_buckets: AdminOperatingPackDepartmentBucket[];
+    team_issue_buckets: AdminOperatingPackTeamBucket[];
     repeated_blocker_families: AdminOperatingPackIssueBucket[];
     degradation_breakdown: AdminOperatingPackDegradationBreakdown;
     manager_lists: ManagerLiteListsResponse;
@@ -4249,7 +4391,6 @@ export interface BusinessEtiquetteUnitQuizAttempt {
     learning_unit_title: string;
     user_id: string;
     user_name: string | null;
-    user_department: string | null;
     path_revision_id: string | null;
     path_revision_no: number | null;
     training_pack_revision_id: string | null;
@@ -4352,7 +4493,6 @@ export interface BusinessEtiquetteReleaseAiCoachConfigImpact {
 export interface BusinessEtiquetteReleaseLearnerImpact {
     user_id: string;
     user_name: string | null;
-    department: string | null;
     source_record_types: Array<"quiz_attempt" | "ai_coach_session">;
     latest_path_revision_no: number | null;
     latest_training_pack_revision_no: number | null;
@@ -4907,7 +5047,6 @@ export interface SalesTrainerQuizAttempt {
     user_id: string;
     user_name?: string | null;
     user_email?: string | null;
-    user_department?: string | null;
     total_score: number | null;
     max_score: number | null;
     passed: boolean | null;
@@ -5413,7 +5552,6 @@ export interface SalesTrainerAudioSubmission {
     user_id: string;
     user_name: string | null;
     user_email: string | null;
-    user_department: string | null;
     purpose: string;
     original_filename: string;
     content_type: string;
@@ -5539,7 +5677,9 @@ export interface SalesTrainerAdminCapabilities {
     capability_keys: SalesTrainerAdminCapabilityKey[];
 }
 
-export type SalesTrainerTrainingRecordType =
+export type SalesTrainerTrainingRecordType = "newcomer_activity_attempt";
+
+export type LegacySalesTrainerTrainingRecordType =
     | "audio_submission"
     | "quiz_attempt"
     | "business_etiquette_quiz_attempt"
@@ -5931,7 +6071,6 @@ export interface SalesTrainerManagerDashboardWeakDimension {
 export interface SalesTrainerManagerDashboardRiskLearner {
     user_id: string;
     user_name: string | null;
-    user_department: string | null;
     risk_reasons: string[];
     latest_submitted_at: string | null;
     lowest_score: number | null;
@@ -5949,9 +6088,13 @@ export interface SalesTrainerManagerDashboardInterventionSuggestion {
     reason_codes: string[];
 }
 
-export interface SalesTrainerTrainingRecord {
+/**
+ * Read-only compatibility shape for archived realtime observation snapshots.
+ * New admin record APIs return `SalesTrainerTrainingRecord` below.
+ */
+export interface LegacySalesTrainerTrainingRecord {
     record_id: string;
-    record_type: SalesTrainerTrainingRecordType;
+    record_type: LegacySalesTrainerTrainingRecordType;
     path_key: string | null;
     path_revision_id: string | null;
     path_revision_no: number | null;
@@ -5966,7 +6109,6 @@ export interface SalesTrainerTrainingRecord {
     user_id: string;
     user_name: string | null;
     user_email: string | null;
-    user_department: string | null;
     status: string;
     score: number | null;
     max_score: number | null;
@@ -5986,6 +6128,34 @@ export interface SalesTrainerTrainingRecord {
     score_explanation?: SalesTrainerScoreExplanation | null;
     ability_profile?: SalesTrainerAbilityProfile | null;
     remediation?: SalesTrainerRemediation | null;
+}
+
+export interface SalesTrainerTrainingRecord {
+    record_id: string;
+    record_type: SalesTrainerTrainingRecordType;
+    evidence_id: string;
+    user_id: string;
+    user_name: string | null;
+    user_email: string | null;
+    team: TeamSummary | null;
+    enrollment_id: string;
+    path_revision_id: string;
+    activity_id: string;
+    activity_type: "lesson" | "quiz" | "audio_assessment" | "realtime_roleplay" | "ai_coach" | "assignment" | string;
+    phase_id: string | null;
+    module_id: string | null;
+    phase_title: string | null;
+    module_title: string | null;
+    activity_title: string | null;
+    status: string;
+    score: number | null;
+    max_score: number | null;
+    passed: boolean | null;
+    submitted_at: string | null;
+    completed_at: string | null;
+    evidence_type: string | null;
+    source_evidence_id: string | null;
+    capability_scores: Array<{ capability_key: string; score: number }>;
 }
 
 export interface SalesTrainerTrainingRecordListResponse {
