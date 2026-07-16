@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端集成、并发与权限回归门禁"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端 Vitest、类型、可访问性和渲染门禁"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"API 错误、状态与请求契约类型检查"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"数据库到 API 到页面状态的闭环复核"}
+{"file":"DESING.md","reason":"最终页面状态、恢复和模态链验收"}

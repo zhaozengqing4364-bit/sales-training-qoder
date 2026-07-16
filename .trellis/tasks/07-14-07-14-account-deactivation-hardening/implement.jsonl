@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/error-handling.md","reason":"账号写入的稳定错误与响应丢失恢复契约"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"账号状态事务、锁与异步 SQLAlchemy 规范"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"账号状态审计与安全日志规范"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"确认流、模态与可访问性规范"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"对象级提交、超时与恢复状态规范"}
+{"file":".trellis/spec/guides/product-design-engineering.md","reason":"用户可见账号生命周期与恢复契约"}
+{"file":"DESING.md","reason":"破坏性操作、模态链和企业后台设计规范"}

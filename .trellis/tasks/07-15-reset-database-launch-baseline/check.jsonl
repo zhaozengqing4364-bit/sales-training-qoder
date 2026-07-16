@@ -1,0 +1,11 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核 baseline、metadata parity、约束、索引和 Alembic 单一权威。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"复核测试隔离、Ruff、mypy 和禁止伪测试。"}
+{"file":".trellis/spec/backend/architecture-fitness.md","reason":"复核 reset registry、根组合与跨包依赖没有结构退化。"}
+{"file":".trellis/spec/backend/compatibility-retirement-and-root-composition.md","reason":"复核旧 DDL、共享登录和 department 授权已真正退役。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"复核报告与日志无密钥、密码、token 或连接秘密。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"复核 department 移除后的前端类型与映射无兼容 fallback。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核登录、Team、权限和各异步状态。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 schema→API→UI→权限→审计全链路。"}
+{"file":".trellis/spec/guides/product-design-engineering.md","reason":"复核就地创建/关联和用户可见契约。"}
+{"file":".trellis/spec/guides/design-artifact-audit-guide.md","reason":"复核 PRD、实现、失败分类和验证证据一致。"}
+{"file":".trellis/tasks/07-15-reset-database-launch-baseline/research/design-artifact-audit.md","reason":"复核所有编码前识别的高风险点都已有证据或硬门禁。"}

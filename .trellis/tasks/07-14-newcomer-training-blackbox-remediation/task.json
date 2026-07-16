@@ -1,0 +1,28 @@
+{
+  "id": "newcomer-training-blackbox-remediation",
+  "name": "newcomer-training-blackbox-remediation",
+  "title": "修复新人训练黑盒回归缺陷（域名除外）",
+  "description": "",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "zzq",
+  "assignee": "zzq",
+  "createdAt": "2026-07-14",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "codex/newcomer-path-live-preview-layout",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-14-account-team-lead"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

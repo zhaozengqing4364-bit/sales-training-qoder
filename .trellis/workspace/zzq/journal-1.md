@@ -803,3 +803,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: 销售组长 /team 工作台性能修复
+
+**Date**: 2026-07-16
+**Task**: 销售组长 /team 工作台性能修复
+**Branch**: `codex/newcomer-path-live-preview-layout`
+
+### Summary
+
+完成 Journey 列表批量摘要、Workbench SQL 日期下推与轻量投影、/team 搜索防抖与局部刷新；质量门禁 Pass。未采集完整 50/100/500 墙钟基准；未改 /admin/teams。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f57fcadf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

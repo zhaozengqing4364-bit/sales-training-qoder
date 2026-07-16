@@ -1,0 +1,19 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端非协商边界、验证入口与数据库变更前置检查。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"统一 SQLAlchemy metadata、Alembic authority、事务和 PostgreSQL 约束。"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"reset application service、存储适配器、CLI 与测试的职责放置。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"破坏性阶段失败必须显式、可定位并返回非零状态。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"manifest/audit 结构化记录与密钥、连接信息脱敏。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"pytest、Ruff、mypy 与隔离测试门禁。"}
+{"file":".trellis/spec/backend/business-rule-configs.md","reason":"配置快照和恢复必须尊重规则发布、版本和审计权威。"}
+{"file":".trellis/spec/backend/compatibility-retirement-and-root-composition.md","reason":"移除 runtime DDL、旧登录和部门授权兼容层，并统一根组合入口。"}
+{"file":".trellis/spec/backend/architecture-fitness.md","reason":"新增 reset 模块和 model registry 不得制造反向依赖或循环。"}
+{"file":".trellis/spec/frontend/index.md","reason":"用户、Team、登录等受影响页面的前端总约束。"}
+{"file":".trellis/spec/frontend/admin-console-patterns.md","reason":"复用现有 Team 工作区并保持上下文内完成。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"移除 department 后 DTO→Domain→ViewModel 契约必须完整。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"权限、空态、错误态和回归测试门禁。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"从 schema、ORM、API、页面到 Team 权限的跨层闭环。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"复用现有 Team、凭证和存储实现，避免并行权威。"}
+{"file":".trellis/spec/guides/product-design-engineering.md","reason":"账号和 Team 页面遵守任务优先、状态完整与就地处理。"}
+{"file":".trellis/tasks/07-15-reset-database-launch-baseline/research/alembic-zero-baseline.md","reason":"新 baseline 的仓库证据、官方语义和已选方案。"}
+{"file":".trellis/tasks/07-15-reset-database-launch-baseline/research/configuration-preservation-boundary.md","reason":"秘密保留与数据库配置白名单快照边界。"}
+{"file":".trellis/tasks/07-15-reset-database-launch-baseline/research/design-artifact-audit.md","reason":"编码前修正的顺序、权限、Redis/路径安全和真实 apply 门禁。"}
