@@ -10,7 +10,6 @@ Response Format:
 """
 
 import hmac
-import json
 import os
 import uuid
 from datetime import UTC, datetime
@@ -19,8 +18,10 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.security import HTTPAuthorizationCredentials
+from jwt import InvalidTokenError
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,11 +39,14 @@ from common.auth.service import (
     is_dev_login_enabled,
     mark_user_logged_in,
     pwd_context,
+    resolve_bearer_or_cookie_token,
+    security,
     set_auth_session_cookie,
     set_wecom_oauth_flow_cookies,
     should_enforce_csrf,
     upsert_wecom_user,
     validate_csrf_request,
+    verify_token,
 )
 from common.db.models import User
 from common.db.session import get_db
@@ -59,8 +63,6 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
-AUTH_SHARED_PASSWORD_ENV = "AUTH_SHARED_PASSWORD"
-AUTH_USER_PASSWORDS_ENV = "AUTH_USER_PASSWORDS_JSON"
 AUTH_FORMALIZATION_SURFACE = {
     "password_reset_service": "common.services.password_reset.PasswordResetService",
     "password_reset_model": "common.db.models.PasswordResetToken",
@@ -69,12 +71,9 @@ AUTH_FORMALIZATION_SURFACE = {
         "027_reset_lifecycle_delivery",
         "028_reset_single_active_token",
     ),
-    "runtime_ddl_owner": "common.db.session.init_db",
-    "login_compatibility_boundary": (
-        "User.hashed_password is authoritative once present; "
-        "AUTH_USER_PASSWORDS_JSON/AUTH_SHARED_PASSWORD stay as the fallback login path "
-        "for users that have not been reset into managed credentials yet."
-    ),
+    "runtime_schema_authority": "alembic-only; startup verification is read-only",
+    "login_credential_authority": "User.hashed_password",
+    "legacy_environment_passwords_read": False,
 }
 
 
@@ -101,6 +100,12 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+class ChangeTemporaryPasswordRequest(BaseModel):
+    """First-login password replacement using a limited credential."""
+
+    new_password: str
+
+
 class LoginUserResponse(BaseModel):
     """User info in login response"""
 
@@ -115,6 +120,7 @@ class LoginResponse(BaseModel):
 
     token: str
     user: LoginUserResponse
+    requires_password_change: bool = False
 
 
 class LogoutResponse(BaseModel):
@@ -166,64 +172,6 @@ def _invalid_credentials_response() -> JSONResponse:
     )
 
 
-def _get_auth_shared_password() -> str | None:
-    """Read configured shared login password for controlled auth."""
-    configured = os.getenv(AUTH_SHARED_PASSWORD_ENV, "").strip()
-    return configured or None
-
-
-def _get_auth_user_passwords() -> dict[str, str] | None:
-    """Read optional per-user password mapping from env."""
-    raw = os.getenv(AUTH_USER_PASSWORDS_ENV, "").strip()
-    if not raw:
-        return None
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValueError("invalid AUTH_USER_PASSWORDS_JSON") from exc
-
-    if not isinstance(parsed, dict):
-        raise ValueError("invalid AUTH_USER_PASSWORDS_JSON")
-
-    normalized: dict[str, str] = {}
-    for key, value in parsed.items():
-        email_key = str(key).strip().lower()
-        password_value = str(value).strip()
-        if email_key and password_value:
-            normalized[email_key] = password_value
-    return normalized
-
-
-def get_auth_config_diagnostics() -> dict[str, Any]:
-    """Return non-sensitive auth configuration diagnostics for startup logs."""
-    shared_password = _get_auth_shared_password()
-    diagnostics: dict[str, Any] = {
-        "shared_password_configured": bool(shared_password),
-        "user_override_count": 0,
-        "user_overrides_valid": True,
-        "credentials_ready": bool(shared_password),
-    }
-
-    try:
-        user_passwords = _get_auth_user_passwords()
-    except ValueError:
-        diagnostics["user_overrides_valid"] = False
-        diagnostics["credentials_ready"] = bool(shared_password)
-        return diagnostics
-
-    if user_passwords:
-        diagnostics["user_override_count"] = len(user_passwords)
-        diagnostics["credentials_ready"] = True
-
-    return diagnostics
-
-
-def _is_valid_password(provided_password: str, expected_password: str) -> bool:
-    """Constant-time password comparison for configured credentials."""
-    return hmac.compare_digest(provided_password, expected_password)
-
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
     return bool(pwd_context.verify(plain_password, hashed_password))
@@ -270,73 +218,54 @@ def _auth_error_redirect(error_code: str) -> str:
 
 
 @router.post("/auth/login")
+@rate_limit(calls=10, period=60, scope="login")
 async def login(
-    credentials: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)
+    request: Request, credentials: LoginRequest, db: AsyncSession = Depends(get_db)
 ) -> JSONResponse:
     """
     Controlled login endpoint.
-    Validates existing active account and configured credentials,
+    Validates an existing active account and its managed password,
     then issues JWT with role claim.
     """
     try:
-        configured_password = _get_auth_shared_password()
-        try:
-            configured_user_passwords = _get_auth_user_passwords()
-        except ValueError:
-            logger.warning(
-                "AUTH_USER_PASSWORDS_JSON is invalid; falling back to shared password"
-            )
-            configured_user_passwords = None
-        if configured_password is None and configured_user_passwords is None:
-            logger.error("Login rejected: auth credentials are not configured")
-            return error_response(
-                "[AUTH_SERVICE_UNAVAILABLE]",
-                "认证服务暂不可用",
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-
         # Find user by email
-        result = await db.execute(select(User).where(User.email == credentials.email))
+        normalized_email = str(credentials.email).strip().lower()
+        result = await db.execute(
+            select(User).where(func.lower(User.email) == normalized_email)
+        )
         user = result.scalar_one_or_none()
 
         # Secure failure response to prevent user/account state enumeration
-        if user is None:
+        if user is None or not getattr(user, "is_active", False):
             return _invalid_credentials_response()
-        if not getattr(user, "is_active", False):
-            return _invalid_credentials_response()
-        user_email = (user.email or "").strip().lower()
-        expected_password = None
-        compatibility_mode: str | None = None
-        authority = "user_hashed_password"
-
-        # First check user-specific hashed_password (set via password reset)
         user_hashed_pw = getattr(user, "hashed_password", None)
-        if user_hashed_pw:
-            if not verify_password(credentials.password, user_hashed_pw):
-                return _invalid_credentials_response()
-        else:
-            authority = "compatibility_env_password"
-            # Fall back to env-configured shared password
-            if configured_user_passwords is not None:
-                expected_password = configured_user_passwords.get(user_email)
-                if expected_password is not None:
-                    compatibility_mode = "user_password_override"
-            if expected_password is None:
-                expected_password = configured_password
-                if expected_password is not None:
-                    compatibility_mode = "shared_password"
+        if not user_hashed_pw or not verify_password(
+            credentials.password, user_hashed_pw
+        ):
+            return _invalid_credentials_response()
 
-            if expected_password is None:
-                return _invalid_credentials_response()
-            if not _is_valid_password(credentials.password, expected_password):
-                return _invalid_credentials_response()
+        credential_status = getattr(user, "credential_status", "active") or "active"
+        if credential_status == "temporary":
+            expires_at = getattr(user, "temporary_password_expires_at", None)
+            if expires_at is not None:
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=UTC)
+                if expires_at <= datetime.now(UTC):
+                    return error_response(
+                        "[TEMPORARY_PASSWORD_EXPIRED]",
+                        "临时密码已过期，请联系管理员重置。",
+                        status_code=status.HTTP_403_FORBIDDEN,
+                    )
 
-        # Create JWT token with role claim
+        # Temporary credentials receive only a password-change token.
         user_role = getattr(user, "role", None) or "user"
+        requires_password_change = credential_status in {"temporary", "reset_required"}
         token = create_access_token(
             data={
                 "sub": str(user.user_id),
                 "role": user_role,
+                "scope": "password_change" if requires_password_change else "business",
+                "credential_version": getattr(user, "credential_version", 1),
             }
         )
 
@@ -353,6 +282,7 @@ async def login(
                 email=user.email or "",
                 role=user_role,
             ),
+            requires_password_change=requires_password_change,
         )
 
         logger.info(
@@ -360,8 +290,7 @@ async def login(
             user_id=str(user.user_id),
             user_email=user.email,
             role=user_role,
-            auth_authority=authority,
-            auth_compatibility_mode=compatibility_mode or "managed_password",
+            auth_authority="managed_user_password",
         )
         response = JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -370,8 +299,8 @@ async def login(
         set_auth_session_cookie(response, token)
         _set_login_authority_headers(
             response,
-            compatibility_mode=compatibility_mode,
-            authority=authority,
+            compatibility_mode=None,
+            authority="managed_user_password",
         )
         return response
 
@@ -382,6 +311,110 @@ async def login(
             error_type=type(e).__name__,
         )
         return error_response("[LOGIN_FAILED]", "登录失败，请稍后重试")
+
+
+@router.post("/auth/change-temporary-password")
+async def change_temporary_password(
+    body: ChangeTemporaryPasswordRequest,
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    """Replace a temporary password and issue the first business session."""
+    token = resolve_bearer_or_cookie_token(
+        credentials=credentials,
+        request=request,
+    )
+    if not token:
+        return error_response(
+            "[TEMPORARY_CREDENTIAL_REQUIRED]",
+            "请先使用临时密码登录。",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    try:
+        payload = verify_token(token)
+    except InvalidTokenError:
+        return error_response(
+            "[INVALID_TOKEN]",
+            "临时登录凭证已失效，请重新登录。",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    if payload.get("scope") != "password_change":
+        return error_response(
+            "[TEMPORARY_CREDENTIAL_REQUIRED]",
+            "当前登录凭证不能执行首次改密。",
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+    if (
+        len(body.new_password) < 8
+        or not any(c.isalpha() for c in body.new_password)
+        or not any(c.isdigit() for c in body.new_password)
+    ):
+        return error_response(
+            "[INVALID_PASSWORD]",
+            "新密码至少 8 位，并包含字母和数字。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user_id = str(payload.get("sub") or "").strip()
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        return error_response(
+            "[AUTH_USER_NOT_FOUND]",
+            "账号不存在或已停用。",
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+    if getattr(user, "credential_status", "active") not in {
+        "temporary",
+        "reset_required",
+    }:
+        return error_response(
+            "[PASSWORD_CHANGE_ALREADY_COMPLETED]",
+            "临时密码已经失效，请使用新密码登录。",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+    if int(payload.get("credential_version", 1)) != int(
+        getattr(user, "credential_version", 1)
+    ):
+        return error_response(
+            "[INVALID_TOKEN]",
+            "临时登录凭证已失效，请重新登录。",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    user.hashed_password = pwd_context.hash(body.new_password)
+    user.credential_status = "active"
+    user.temporary_password_expires_at = None
+    user.password_changed_at = datetime.now(UTC)
+    user.credential_version = int(getattr(user, "credential_version", 1)) + 1
+    user.last_login = datetime.now(UTC)
+    await db.commit()
+
+    business_token = create_access_token(
+        data={
+            "sub": str(user.user_id),
+            "role": user.role or "user",
+            "scope": "business",
+            "credential_version": user.credential_version,
+        }
+    )
+    response = JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=success_response(
+            LoginResponse(
+                token=business_token,
+                user=LoginUserResponse(
+                    id=str(user.user_id),
+                    name=user.name or "用户",
+                    email=user.email or "",
+                    role=user.role or "user",
+                ),
+            ).model_dump()
+        ),
+    )
+    set_auth_session_cookie(response, business_token)
+    return response
 
 
 @router.post("/auth/logout")

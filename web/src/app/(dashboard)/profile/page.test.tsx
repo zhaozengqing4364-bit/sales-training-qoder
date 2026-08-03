@@ -101,7 +101,7 @@ describe("ProfilePage password route handoff", () => {
             name: "王小明",
             display_name: "王小明",
             email: "learner@example.com",
-            department: "销售部",
+            team: { team_id: "team-1", code: "sales-1", name: "销售一组" },
         });
         getHistoryStatisticsMock.mockResolvedValue({
             total_sessions: 4,

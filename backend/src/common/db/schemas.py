@@ -114,7 +114,6 @@ class LinkedAssetChangeReference(BaseModel):
 # ========== User Schemas ==========
 class UserBase(BaseModel):
     name: str = Field(..., max_length=100)
-    department: str | None = Field(None, max_length=100)
     email: EmailStr | None = None
 
 

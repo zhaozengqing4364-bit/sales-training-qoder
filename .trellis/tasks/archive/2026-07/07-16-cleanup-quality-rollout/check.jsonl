@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "migration、幂等、回滚和数据一致性"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "可观测性和敏感数据检查"}
+{"file": ".trellis/spec/backend/prompt-template-governance.md", "reason": "AI gold set、Prompt 发布与回滚"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "验证完整业务链路而非局部可运行"}
+{"file": ".trellis/tasks/archive/2026-07/07-16-newcomer-sales-foundation-platform/acceptance-matrix.md", "reason": "逐项关闭父任务验收矩阵"}

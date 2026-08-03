@@ -89,12 +89,12 @@ export function ManagerLitePanel({ data, onRemind, getUserHref = defaultGetUserH
               data.not_passed.map((item) => (
                 <div key={`${item.user_id}-${item.session_id}`} className="rounded-xl border border-rose-100 bg-white/80 p-3">
                   <p className="text-sm font-semibold text-slate-900">{item.user_name}</p>
-                  <p className="mt-1 text-xs text-slate-500">{item.department || "未分配部门"}</p>
+                  <p className="mt-1 text-xs text-slate-500">{item.team?.name || "未分配团队"}</p>
                   <p className="mt-1 text-xs text-rose-600">统一结果：{formatOverallResult(item.overall_result)}（已排除证据不足）</p>
                   <p className="mt-1 text-[11px] text-slate-500 text-pretty">先看统一报告，再决定是否提醒。</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button asChild size="sm" variant="outline" className="h-8 rounded-full">
-                      <Link href={`/practice/${item.session_id}/report`}>查看统一报告</Link>
+                      <Link href={`/practice/${item.session_id}/report`} prefetch={false}>查看统一报告</Link>
                     </Button>
                     <Button asChild size="sm" variant="outline" className="h-8 rounded-full">
                       <Link
@@ -104,6 +104,7 @@ export function ManagerLitePanel({ data, onRemind, getUserHref = defaultGetUserH
                           issueFamily: item.issue_family || "evidence_gap",
                           note: getDefaultAdminUserFocusNote(item.issue_family),
                         })}
+                        prefetch={false}
                       >
                         查看并设重点
                       </Link>
@@ -136,11 +137,11 @@ export function ManagerLitePanel({ data, onRemind, getUserHref = defaultGetUserH
               data.inactive_streak.map((item) => (
                 <div key={item.user_id} className="rounded-xl border border-amber-100 bg-white/80 p-3">
                   <p className="text-sm font-semibold text-slate-900">{item.user_name}</p>
-                  <p className="mt-1 text-xs text-slate-500">{item.department || "未分配部门"}</p>
+                  <p className="mt-1 text-xs text-slate-500">{item.team?.name || "未分配团队"}</p>
                   <p className="mt-1 text-xs text-amber-700">连续未练：{item.inactive_days} 天</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button asChild size="sm" variant="outline" className="h-8 rounded-full">
-                      <Link href={getUserHref({ kind: "inactive_streak", userId: item.user_id })}>查看详情</Link>
+                      <Link href={getUserHref({ kind: "inactive_streak", userId: item.user_id })} prefetch={false}>查看详情</Link>
                     </Button>
                     <Button
                       size="sm"
@@ -170,14 +171,14 @@ export function ManagerLitePanel({ data, onRemind, getUserHref = defaultGetUserH
               data.improving.map((item) => (
                 <div key={item.user_id} className="rounded-xl border border-emerald-100 bg-white/80 p-3">
                   <p className="text-sm font-semibold text-slate-900">{item.user_name}</p>
-                  <p className="mt-1 text-xs text-slate-500">{item.department || "未分配部门"}</p>
+                  <p className="mt-1 text-xs text-slate-500">{item.team?.name || "未分配团队"}</p>
                   <p className="mt-1 text-xs text-emerald-700">可评估通过率提升：+{item.pass_gain}%</p>
                   <p className="mt-1 text-[11px] text-slate-500">
                     基线 {item.baseline_pass_rate}% → 当前 {item.current_pass_rate}%
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button asChild size="sm" variant="outline" className="h-8 rounded-full">
-                      <Link href={getUserHref({ kind: "improving", userId: item.user_id })}>查看详情</Link>
+                      <Link href={getUserHref({ kind: "improving", userId: item.user_id })} prefetch={false}>查看详情</Link>
                     </Button>
                   </div>
                 </div>

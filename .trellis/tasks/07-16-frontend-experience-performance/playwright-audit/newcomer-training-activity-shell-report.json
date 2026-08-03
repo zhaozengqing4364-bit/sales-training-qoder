@@ -1,0 +1,234 @@
+{
+  "routes": [
+    {
+      "id": "L-03",
+      "label": "测验活动",
+      "path": "/newcomer-training/activities/quiz-product_knowledge",
+      "critical": true,
+      "expectText": [
+        "当前任务",
+        "为什么要做",
+        "怎么完成",
+        "完成标准",
+        "测验"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "L-04",
+      "label": "录音讲解活动",
+      "path": "/newcomer-training/activities/audio-foundation-explanation",
+      "critical": true,
+      "expectText": [
+        "当前任务",
+        "为什么要做",
+        "怎么完成",
+        "完成标准",
+        "录音"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "L-05",
+      "label": "结构化教练活动",
+      "path": "/newcomer-training/activities/coach-foundation-remediation",
+      "critical": true,
+      "expectText": [
+        "当前任务",
+        "为什么要做",
+        "怎么完成",
+        "完成标准",
+        "结构化"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "L-06",
+      "label": "异步客户场景录音活动",
+      "path": "/newcomer-training/activities/assignment-foundation-customer-scenario",
+      "critical": true,
+      "expectText": [
+        "当前任务",
+        "为什么要做",
+        "怎么完成",
+        "完成标准",
+        "客户场景录音"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    }
+  ],
+  "results": [
+    {
+      "id": "L-03",
+      "label": "测验活动",
+      "path": "/newcomer-training/activities/quiz-product_knowledge",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/quiz-product_knowledge",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 339,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-03-desktop-newcomer-training-activities-quiz-product-knowledge.png"
+    },
+    {
+      "id": "L-03",
+      "label": "测验活动",
+      "path": "/newcomer-training/activities/quiz-product_knowledge",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/quiz-product_knowledge",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 284,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-03-mobile-newcomer-training-activities-quiz-product-knowledge.png"
+    },
+    {
+      "id": "L-04",
+      "label": "录音讲解活动",
+      "path": "/newcomer-training/activities/audio-foundation-explanation",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/audio-foundation-explanation",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 297,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-04-desktop-newcomer-training-activities-audio-foundation-explanation.png"
+    },
+    {
+      "id": "L-04",
+      "label": "录音讲解活动",
+      "path": "/newcomer-training/activities/audio-foundation-explanation",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/audio-foundation-explanation",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 242,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-04-mobile-newcomer-training-activities-audio-foundation-explanation.png"
+    },
+    {
+      "id": "L-05",
+      "label": "结构化教练活动",
+      "path": "/newcomer-training/activities/coach-foundation-remediation",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/coach-foundation-remediation",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 303,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-05-desktop-newcomer-training-activities-coach-foundation-remediation.png"
+    },
+    {
+      "id": "L-05",
+      "label": "结构化教练活动",
+      "path": "/newcomer-training/activities/coach-foundation-remediation",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/coach-foundation-remediation",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 248,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-05-mobile-newcomer-training-activities-coach-foundation-remediation.png"
+    },
+    {
+      "id": "L-06",
+      "label": "异步客户场景录音活动",
+      "path": "/newcomer-training/activities/assignment-foundation-customer-scenario",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/assignment-foundation-customer-scenario",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 297,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-06-desktop-newcomer-training-activities-assignment-foundation-customer-scenario.png"
+    },
+    {
+      "id": "L-06",
+      "label": "异步客户场景录音活动",
+      "path": "/newcomer-training/activities/assignment-foundation-customer-scenario",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/assignment-foundation-customer-scenario",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 242,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-06-mobile-newcomer-training-activities-assignment-foundation-customer-scenario.png"
+    }
+  ]
+}

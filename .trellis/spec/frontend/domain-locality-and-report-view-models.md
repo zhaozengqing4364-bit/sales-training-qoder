@@ -114,7 +114,7 @@ npx vitest run \
   src/lib/api/sales-trainer.test.ts \
   'src/app/(user)/practice/[sessionId]/report/report-actions.test.ts' \
   'src/app/(user)/practice/[sessionId]/report/report-view-model.test.ts' \
-  'src/app/admin/sales-trainer/readiness/[learnerId]/readiness-view-model.test.ts'
+  'src/app/admin/newcomer-training/reviews/readiness-view-model.test.ts'
 npx vitest run --reporter=dot
 ```
 

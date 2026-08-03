@@ -271,3 +271,17 @@ Bug 修复优先新增复现测试。核心流程至少覆盖一条关键路径�
 - 改动范围可解释，与现有风格一致。
 - 验证证据充分，风险和回滚路径明确。
 - 无必要新依赖，无无关重构，未完成事项已记录。
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for `zhaozengqing4364-bit/sales-training-qoder`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The repository uses the five default canonical triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+The repository uses a single-context domain documentation layout. See `docs/agents/domain.md`.

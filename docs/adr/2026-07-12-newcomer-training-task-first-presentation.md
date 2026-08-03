@@ -1,7 +1,9 @@
 # ADR：新人训练采用任务优先展示与按需真实预览
 
+> **Superseded / Legacy（2026-07-16）：** 本 ADR 仅保留当前在途界面的历史决策，不再授权 Phase/Module 或 v1 Journey 合同。目标页面与领域权威见 [`../newcomer-foundation-contract-index.md`](../newcomer-foundation-contract-index.md)。
+
 - 日期：2026-07-12
-- 状态：Accepted
+- 状态：Superseded（保留为 Legacy 历史记录）
 - 关联：`2026-07-12-newcomer-training-activity-orchestration.md`
 
 ## 决策
@@ -32,4 +34,3 @@
 - 直接把阶段改名得更具体：只能改善种子内容，无法保证每个活动都有目标、步骤与通过标准。
 - 引入低代码页面构建器：原型阶段成本、治理和迁移负担远高于当前需求。
 - 创建 `schema_version = v2`：新字段全为可选添加，版本分叉只会制造双轨。
-

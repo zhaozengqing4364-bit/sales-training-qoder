@@ -22,7 +22,7 @@ async def test_update_current_user_success(
     """Test successful user profile update"""
     response = await async_client.patch(
         "/api/v1/users/me",
-        json={"name": "Updated Name", "department": "Engineering"},
+        json={"name": "Updated Name"},
         headers=auth_headers,
     )
 
@@ -30,7 +30,21 @@ async def test_update_current_user_success(
     data = response.json()
     assert data["success"] is True
     assert data["data"]["display_name"] == "Updated Name"
-    assert data["data"]["department"] == "Engineering"
+    assert data["data"]["team"] is None
+
+
+@pytest.mark.asyncio
+async def test_update_current_user_rejects_retired_department_field(
+    async_client: AsyncClient,
+    auth_headers: dict,
+) -> None:
+    response = await async_client.patch(
+        "/api/v1/users/me",
+        json={"department": "Engineering"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -82,8 +96,6 @@ async def test_update_user_partial_fields(
     auth_headers: dict,
 ):
     """Test that only provided fields are updated"""
-    original_department = test_user.department
-
     response = await async_client.patch(
         "/api/v1/users/me",
         json={"name": "New Name Only"},
@@ -94,7 +106,7 @@ async def test_update_user_partial_fields(
     data = response.json()
     assert data["success"] is True
     assert data["data"]["display_name"] == "New Name Only"
-    assert data["data"]["department"] == original_department
+    assert data["data"]["team"] is None
 
 
 @pytest.mark.asyncio

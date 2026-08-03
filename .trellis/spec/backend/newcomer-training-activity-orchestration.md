@@ -1,154 +1,346 @@
 # Newcomer Training Activity Orchestration
 
-## 1. Scope / Trigger
+> Target contract accepted 2026-07-16; implementation status updated 2026-07-17. Slice 6 implements Path/Stage/ActivityDefinition, frozen Enrollment, Journey, generic Attempt/Outcome, five first-launch activities, Readiness review, the unified admin workspace and ReleasePlan governance. Phase/Module, realtime, auto-rollout and subtype-route behavior are Legacy migration input only.
 
-Use this contract whenever newcomer training paths, activities, enrollment progress, admin editing, in-flow scoring-standard binding, or a new execution capability changes. Business content such as product names, PPT/Demo topics, and technical courses is configuration data; it must not become a route, enum, `module_key`, or service branch.
+## 1. Scope / Authority
 
-## 2. Signatures
+Apply to Path/Revision, Stage, ActivityDefinition, Cohort, Enrollment, ActivityAttempt/Outcome, Journey, activity execution, admin publishing, and migration from the current Sales Trainer orchestration.
 
-- Data hierarchy: `TrainingPathPayload.phases[].modules[].activities[]`.
-- Activity types: `lesson`, `quiz`, `audio_assessment`, `realtime_roleplay`, `ai_coach`, `assignment`.
-- Admin API root: `/api/v1/admin/newcomer-training/path`.
-- Learner API root: `/api/v1/newcomer-training`.
-- Audio scoring-standard administration:
-  - `GET|POST /api/v1/admin/newcomer-training/path/scoring-rubrics`
-  - `PUT /api/v1/admin/newcomer-training/path/draft`
-  - `PUT /api/v1/admin/sales-trainer/audio-score-prompts/{prompt_id}`
-  - `POST /api/v1/admin/sales-trainer/audio-score-prompts/{prompt_id}/publish`
-- Enrollment uniqueness: one active row per `(learner_id, path_id)`; publish atomically moves every active enrollment to the new `path_revision_id`.
-- Attempts are idempotent by `client_token` and freeze `activity_snapshot` plus result/evidence snapshots.
-- `realtime_roleplay.config` may carry server-owned `practice_template_revision_id`, `practice_template_version`, `practice_template_content_hash`, `runtime_profile_snapshot_hash`, `governed_assets_snapshot_hash`, and learner-safe `runner_snapshot`; clients round-trip these fields but never author them.
-- Readiness detail and workbench share `contract_version=readiness_dossier_v1`; review decisions are `approve`, `require_retraining`, or `mark_manual_follow_up` (legacy `reject`/`retrain` inputs normalize before persistence).
+Normative sources:
+
+- `docs/newcomer-foundation-contract-index.md`
+- `docs/architecture/newcomer-foundation-contract.md`
+- `docs/architecture/newcomer-foundation-state-machines.md`
+- `docs/api-contract/newcomer-training-v2.md`
+
+Executable entry points include `newcomer_training.PathEnrollmentService`, `JourneyQueryService`, `ActivityAttemptService`, `learning.LessonRuntimeService`, `QuizRuntimeService`, `audio_assessment.AudioAssessmentRuntime` and `ai_coach.StructuredCoachRuntime`. Cross-domain execution is composed through `PublishedActivityResourcePort`, `ActivityRuntimePort` and `ActivityOutcomeWriterPort`; activity domains do not import each other's ORM to infer completion. Admin API、role projection and standard-pack installation are application-root composition modules, not domain-owned backdoors. The executable Coach contract is [Structured AI Coach](./structured-ai-coach.md).
+
+## 2. Target Signatures
+
+```text
+Path -> PathRevision -> Stage[] -> ActivityDefinition[]
+```
+
+```python
+ActivityType = Literal[
+    "lesson", "quiz", "audio_assessment", "ai_coach", "assignment"
+]
+
+class ActivityRuntime(Protocol):
+    type_key: ActivityType
+    async def project(self, context: ActivityExecutionContext) -> ActivityProjection: ...
+    async def execute(self, command: ActivityCommand, context: ActivityExecutionContext) -> ActivityExecutionAccepted: ...
+    async def reconcile(self, attempt: ActivityAttemptSnapshot, evidence: ActivityEvidenceSnapshot) -> ActivityOutcome: ...
+
+class ActivityDefinitionCompiler(Protocol):
+    async def validate(self, definition: ActivityDefinition) -> tuple[ValidationIssue, ...]: ...
+    async def preview(self, definition: ActivityDefinition, actor: ActorContext) -> ActivityPreview: ...
+    async def compile(self, definition: ActivityDefinition) -> CompiledActivityDefinition: ...
+```
+
+Target namespaces are `/api/v1/newcomer-training/**` and `/api/v1/admin/newcomer-training/**`. Writes require `Idempotency-Key`; mutable revisions/decisions use `If-Match`.
 
 ## 3. Contracts
 
-- Only configuration and governed resource IDs may be stored. Never store code, component names, routes, URLs, scripts, or request definitions in path payloads.
-- Draft save, validate, publish, restore, and high-risk resource creation require backend permission checks and audit records.
-- Publish validates every referenced resource against the responsible module through adapters.
-- Draft save freezes realtime template/runtime identity and learner preparation data into the path payload. Publish rejects a missing or stale freeze with `realtime_binding_snapshot_stale`; it never silently switches an already-saved path to a newer template/runtime.
-- A learner's first journey read may create an enrollment; the API transaction must explicitly commit it because `get_db()` never auto-commits.
-- Admin resource pickers use existing engines (`LearningContent`, papers, materials, rubrics, practice templates, runtime profiles, coach profiles). Content, papers, materials, and rubrics support safe in-flow creation; governed execution profiles are selectable here but must never be fabricated from placeholder defaults.
-- Candidate validation is read-only. Candidate publish saves and activates one immutable revision in the same request transaction.
-- Publish synchronizes all active enrollments in the same transaction and records `rollout_scope=all_active_learners` plus the affected count. Journey reads self-heal a stale active enrollment to the current published revision to cover publish/read races.
-- Existing attempts never move with the enrollment: their `path_revision_id`, `activity_snapshot`, evidence, submissions, scores, and external bindings remain immutable historical evidence.
-- Retrying one logical browser write reuses its `client_token` after a timeout or lost response. Rotate the token only after confirmed success or when the user changes the submitted input; a pending-button guard alone is insufficient.
-- Readiness `GET /readiness/dossiers/{learner_id}` returns the full detail DTO (`path`, `status_label`, `status_reason`, `summary`, `modules`, `competencies`, `evidence`, `review_actions`, `retraining_tasks`, `realtime_gate`, `diagnostics`, `next_actions`). The workbench must derive its rows from the same projection.
-- Draft save and candidate publish accept `expected_revision_id`; a mismatch returns `[NEWCOMER_PATH_REVISION_CONFLICT]` with HTTP 409 and never overwrites the newer revision.
-- Journey module/activity projections carry configured `estimated_minutes`; only one activity is marked as the primary next action.
-- Journey reads load the latest unified attempts for one enrollment as a single grouped projection and pass those frozen rows into handlers. Do not restore one `latest_for_activity` query per activity; handlers may query directly only for standalone activity execution contexts that were not preloaded.
-- Admin journey **list** `GET /admin/newcomer-training/journeys` returns an explicit `summary` DTO per row (`path_revision_id`, `path_title`, `current_phase`, `progress`, `primary_next_action`, ≤2 `risk_labels`) via a batch read service. It must not call per-learner `get_or_create_for_learner()` or full `_project()`. List only includes learners that already have an enrollment; it must not bulk-create enrollments for team completeness. Commit only when a one-shot stale-revision heal actually wrote. Detail `GET .../journeys/{learner_id}` keeps full Journey + first-read create/heal semantics.
-- Supervisor team **workbench** must use a light projection with SQL date bounds on task `created_at` / session `start_time`. Do not build full team insights then drop fields; do not per-learner score refresh. Keep risk fallback / common-issues semantics and parallel current+previous period calls for `/team` comparison UX.
-- Learner-facing copy is controlled configuration, not presentation code: `PhaseConfig.outcome`, `ModuleConfig.outcome`, and activity `objective`, `why_it_matters`, `steps`, `success_criteria`, `primary_action_label` are optional additive fields in schema v1.
-- Journey projections carry these fields unchanged. Old revisions return null/empty defaults and the frontend may apply trusted activity-type guidance; it must never execute or render HTML/CSS/script from configuration.
-- `audio_assessment.config.example_transcript` is optional plain text (maximum 8,000 characters). Blank content normalizes to null. It is learner-facing configuration, not a prompt or scoring instruction.
-- An audio activity detail projects one learner-safe preparation pack from governed resources: published material version metadata, the active scoring-rubric revision identity, rubric title, and normalized scoring focuses. Internal dimension keys and raw rubric JSON must never enter the learner UI.
-- `audio_assessment.config.scoring_rubric_id` binds a published `SalesTrainerAudioScorePrompt.prompt_id` (field name kept for API compatibility). Path publish validation rejects legacy `audio_scoring_rubric` asset IDs with an actionable rebind message.
-- Path `GET /scoring-rubrics` and the recording scoring-standard console must read the same `SalesTrainerAudioScorePrompt` authority. Path `POST /scoring-rubrics` creates and publishes that same resource from the minimum in-flow fields; it must not create a parallel rubric asset.
-- After in-flow creation and binding, the editor must persist the updated `scoring_rubric_id` through `PUT /draft` and accept the returned working revision before reporting “草稿已保存”. A later path reload must recover the same binding from the service-side working revision.
-- “去完善提示词” is a cross-surface continuation, not a disposable navigation shortcut. The browser window must be reserved synchronously from the user click, then navigate only after any required draft save succeeds; save failure, revision conflict, drawer close, or unmount must close the reserved window and expose a recoverable error.
-- Updating a published audio score prompt writes a working revision; it does not make that revision runtime-effective by itself. The operator edit flow must perform `PUT` followed by `POST .../publish`, label the action “保存并发布”, and keep an inline outcome record. If publish fails after update succeeds, the UI must state that the previous published revision remains effective.
-- `scoring_template` must contain `{transcript}` and must round-trip without client or API truncation. Runtime scoring replaces the placeholder with the submitted transcript and freezes the full prompt snapshot; later prompt publication must not mutate historical attempts.
-- Audio submission may carry `confirmed_scoring_rubric_revision_id`. When present, the backend must verify that exact revision is published, has resource type `sales_trainer_audio_score_prompt`, and belongs to the configured prompt_id before freezing `prompt_id` + `prompt_snapshot`. Missing confirmation remains compatible with legacy clients by freezing the current published prompt; an invalid explicit revision never falls back silently.
-- Material confirmation continues to freeze the exact published material version. A later material or rubric publication must not change historical submission evidence.
-- Admin candidate preview and the real learner journey must adapt into the same learner mission ViewModel and render the same mission component.
-- Alembic runs before application startup; `create_all` is bootstrap-only and must not precede pending migrations.
+### Path and definitions
 
-## 4. Validation & Error Matrix
+- `PathRevision` working content may change; published content is immutable.
+- Phase and Module are forbidden in the target schema. A Stage directly owns ordered ActivityDefinitions.
+- Realtime is forbidden from the first-launch union, seed, navigation, permission matrix, and acceptance tests.
+- Definitions store typed declarative config and published resource revision IDs/hashes only. Executable code, component names, routes, URLs, scripts, arbitrary dictionaries, and Provider secrets are rejected.
+- Unknown activity types or fields fail validation; no silent ignore or dynamic import.
+- Final publication runs through ReleasePlan dependency validation and atomic business publication. The former direct Path/resource publish HTTP tombstones were deleted after the Slice 8 consumer/OpenAPI inventory proved no remaining callers; they must not be restored as forwarding or dual-write routes.
 
-| Condition | Behavior |
+### Enrollment and attempts
+
+- Cohort binds one published PathRevision; Enrollment freezes it.
+- Publishing a new revision does not modify active Enrollments. Journey reads never self-heal to latest.
+- Revision movement requires `MigrateEnrollmentRevision` preview + confirm, expected version, reason, permission, audit, and `EnrollmentRevisionMigrated` Outbox event.
+- ActivityAttempt freezes PathRevision, ActivityDefinition, resource revisions, scoring/Prompt/model contracts as required.
+- Technical retry reuses the same Attempt and idempotency key. A learner retry creates a new attempt number only after an explicit command.
+- Activity modules own detailed writes. Journey receives one normalized ActivityOutcome and never queries another module's ORM to infer completion.
+
+### Five activity contracts
+
+| Type | Required frozen authority | Completion |
+|---|---|---|
+| lesson | LearningUnit revision + completion policy | deterministic confirmation/progress rule |
+| quiz | QuizRevision + answer/scoring/red-line contract | rule score plus completed async short-answer results |
+| audio_assessment | task brief + material + scoring scheme + limits | durable pipeline yields Outcome or needs review |
+| ai_coach | profile + Prompt/model/rubric + card/round limits | required checkpoints/mastery gates or human review |
+| assignment | exactly three asynchronous customer-scenario audio segments, per-segment goal/material, and scoring/review contract | all three valid segment outcomes plus configured rule/human review |
+
+AI failure never fabricates a score or completion. Audio technical quality failure does not become competency failure. First-launch `assignment` is not a generic text/file homework type: it is the three-segment asynchronous customer-scenario recording activity, and cannot complete with missing, low-confidence, or unreviewed segments.
+
+### Read projection and UI
+
+- Journey, Activity Workspace, Task Status, Evidence Dossier, and Admin Queue use the v2 ViewModels.
+- Exactly one primary next action is projected.
+- Frontend follows DTO -> Domain -> ViewModel -> UI and never calculates readiness from raw activity payloads.
+- User-facing copy excludes internal codes, Prompt/Provider, trace IDs, raw JSON, database IDs, Phase/Module, and Realtime-first-launch messaging.
+
+## 4. Validation / Error Matrix
+
+| Condition | Required behavior |
 |---|---|
-| Unsupported activity type or unknown config field | Reject the payload; do not ignore it |
-| Duplicate IDs/order or invalid prerequisite | Validation issue blocks publish |
-| Missing/draft/archived bound resource | Validation issue identifies object and field |
-| No active published path | Journey returns `NEWCOMER_PATH_ACTIVE_REVISION_MISSING` |
-| Enrollment revision missing | Journey returns `NEWCOMER_PATH_PINNED_REVISION_MISSING` |
-| Duplicate enrollment request | Return the existing active enrollment |
-| Duplicate activity `client_token` | Return the existing attempt/evidence |
-| Same logical input retried after an uncertain client failure | Reuse the previous `client_token`; do not create a second attempt/session |
-| Realtime runner snapshot missing or no longer matches the published template/runtime | Block path publish with `realtime_binding_snapshot_stale`; an already-published activity reports configuration unavailable and start returns `[NEWCOMER_REALTIME_PINNED_BINDING_STALE]` |
-| Readiness review uses legacy `reject` or `retrain` | Normalize to `mark_manual_follow_up` or `require_retraining` before audit persistence and response |
-| Concurrent draft/publish conflict | Fail explicitly; never overwrite silently |
-| In-flow score prompt was created but the bound path draft save fails | Keep the editor state and created prompt truthful, do not navigate or claim the path binding was saved, and offer retry |
-| Browser blocks the reserved “去完善提示词” window | Show a recoverable popup-blocked message; do not pretend that the edit page opened |
-| Prompt update succeeds but prompt publication fails | Preserve the working revision, report partial failure inline, and state that the previous published revision is still effective |
-| `scoring_template` omits `{transcript}` | Reject create/update with a typed prompt validation error; never publish an unusable scoring revision |
-| Confirmed audio rubric revision is missing, unpublished, wrong type, or wrong logical resource | Return `[NEWCOMER_AUDIO_RUBRIC_VERSION_INVALID]` with HTTP 409; never substitute another revision |
-| Provider unavailable | Keep evidence truthful and expose a retryable failure; never fabricate completion |
+| Phase/Module or realtime in target payload | 422 typed validation failure |
+| Unknown activity/config field | 422; do not ignore |
+| Referenced resource missing/draft/stale | ReleasePlan blocked with object/field issue |
+| No assigned Enrollment | explicit unassigned state; no learner self-enrollment |
+| Enrollment revision missing | typed configuration failure; never substitute latest |
+| Publish while active Enrollments exist | publish succeeds without moving them; impact reports counts |
+| Migration preview/version/hash stale | 409/412, no write |
+| Duplicate logical command | original result returned |
+| Same idempotency key with different input | 409 `[IDEMPOTENCY_KEY_REUSED]` |
+| Provider unavailable | persisted retryable/needs-review state; no fake completion |
+| Outcome arrives twice | consumer idempotency returns current Attempt/Outcome pointer |
 
 ## 5. Good / Base / Bad Cases
 
-- Good: an admin adds products A, B, and C with the same module/activity editor and no source change; publishing synchronizes every active learner while completed attempts retain their original snapshots.
-- Good: an admin creates a minimal scoring standard inside the path, the path working revision persists the returned `prompt_id`, then “去完善提示词” opens the full editor; saving and publishing there makes the new revision available to future scoring while old attempts keep their snapshots.
-- Good: path revision R1 keeps showing its frozen realtime preparation pack; after the template changes, R1 becomes explicitly unavailable until an admin saves and publishes a new path revision.
-- Base: prompt update succeeds but publish fails; the working revision remains retryable and the UI clearly says the old published prompt still drives scoring.
-- Bad: `if product == "PPT"`, fixed `module_key` branches, executable configuration, route redirects to a retired path, fallback to an old config authority, reading mutable current assets for a frozen path revision, claiming a path draft was saved before the server returns its working revision, or treating prompt `PUT` as publication.
+- **Good**: an Assignment definition freezes exactly three customer-scenario recording segments; each segment finalizes through a durable Task, produces a normalized segment Outcome, and the common Attempt completes only after all three are valid and any configured human review is recorded.
+- **Base**: a learner opens Journey with a frozen Enrollment, starts one Lesson Attempt, repeats an uncertain network write with the same idempotency key, receives the original result, and publishing a new PathRevision leaves that Enrollment unchanged.
+- **Bad**: a route imports another module's ORM, accepts a generic text/file Assignment, resolves a resource from latest after Attempt creation, moves active Enrollments during publish, or marks completion directly from model output.
 
 ## 6. Tests Required
 
-- Contract validation and publish resource validation for all six activity types.
-- Repository concurrency/idempotency and immutable revision tests.
-- Repository tests prove the enrollment-level latest-attempt projection returns only the highest `attempt_no` per activity; journey tests cover the preloaded and standalone handler paths.
-- Journey **list** performance/contract tests: SQL count stays O(1) vs returned row count (1/50/100), no N× full project, heal-once commit, summary↔full Journey parity for progress/next/risk on the same fixture.
-- Workbench tests: captured SQL contains date predicates; query count does not grow linearly with 50/100/500-scope seeds under `limit=100` list semantics.
-- Unit tests for every Handler plus unified registry completeness.
-- Integration tests for admin draft/validate/publish/restore and learner journey/activity APIs.
-- Reset dry-run/apply, seed idempotency, and verify-mode evidence.
-- Frontend Vitest for editor state, in-flow resource creation, renderer registry, and one-primary-action projection.
-- Frontend tests for synchronous popup reservation, draft-save-before-navigation, blocked popup recovery, save failure, and update-success/publish-failure messaging.
-- Integration tests reload the path working revision after in-flow score-prompt creation and assert the same `scoring_rubric_id`; prompt revision tests assert long `scoring_template` content round-trips without truncation and becomes effective only after publish.
-- Contract and frontend tests for learner-copy defaults, configured-copy round trips, and the shared admin/learner mission preview.
-- Audio preparation tests for material metadata, learner-safe rubric normalization, configured/legacy example labels, confirmation gating, and exact material/rubric revision freezing.
-- Realtime tests assert draft-time snapshot fields, learner-safe projection, stale-template rejection, start-binding audit metadata, and that a later template update never changes the old runner payload silently.
-- Browser runner tests simulate “server accepted, response lost” and assert the retry sends exactly the same `client_token` for quiz, audio, assignment, lesson, AI coach, and realtime start.
-- Readiness API integration tests validate the full `readiness_dossier_v1` detail payload and every review decision/response shape used by the frontend.
-- Playwright for admin editor, learner journey, all-active enrollment rollout, and immutable attempt evidence.
-- Alembic head, OpenAPI parity, Ruff, Mypy, TypeScript, ESLint, Vitest, and production build.
+- Schema/registry exhaustiveness proves exactly five activity types and no dynamic import.
+- Published revision immutability; new publish leaves existing Enrollment unchanged.
+- Explicit migration preview/confirm, conflict, permission, idempotency, audit, and event tests.
+- Attempt concurrency, same-token uncertain retry, new learner attempt, immutable snapshots, and Outcome reconcile tests.
+- Unit contract for every Runtime/Compiler Adapter through the stable interface.
+- PostgreSQL integration for business write + Outbox atomicity and duplicate delivery.
+- OpenAPI/DTO/ViewModel parity; frontend states; one-primary-action and no internal-term leakage.
+- E2E for five activities, background recovery, manager review, cross-organization denial, and absence of Realtime.
 
 ## 7. Wrong vs Correct
 
-### Wrong
+### Wrong: subtype route owns business state and generic Assignment
 
 ```python
-if module_key == "ppt_explanation":
-    return PptRecordingPage()
+@router.post("/activities/{activity_id}/assignments")
+async def submit_assignment(text: str | None, file: UploadFile | None) -> None:
+    attempt.status = "completed"
+    await db.commit()
 ```
 
-### Correct
+This bypasses the ActivityRuntime/Outcome seam, permits a non-contract submission, and makes the delivery layer the state-machine writer.
+
+### Correct: typed command enters the application seam
 
 ```python
-handler = activity_registry.require(activity.type)
-return await handler.project(execution_context)
+accepted = await activity_application.execute(
+    ActivityCommandV1(
+        command_type="finalize_assignment_segment",
+        attempt_id=attempt_id,
+        expected_attempt_version=expected_version,
+        payload=FinalizeAssignmentSegmentV1(
+            segment_id=segment_id,
+            upload_ref=upload_ref,
+        ),
+    ),
+    actor=actor,
+    idempotency_key=idempotency_key,
+)
 ```
 
-The stable registry selects execution capability; titles and product/topic identities remain data.
+The application service validates the frozen three-segment contract, delegates to the registered Runtime/Task port, and reconciles only a schema-valid ActivityOutcome. The route maps the accepted result; it never writes status itself.
+
+## Scenario: Full-File Audio Upload And Durable Assessment
+
+### 1. Scope / Trigger
+
+- Trigger: implementing or changing recording/upload, media normalization, ASR, scoring, reconciliation, regrade or incomplete-upload cleanup for `audio_assessment` or `assignment`.
+- Excludes realtime streams, realtime customer roleplay, voice cloning and emotion/voiceprint analysis.
+
+### 2. Signatures
+
+```http
+POST /api/v1/newcomer-training/activities/{activity_id}/commands
+PUT  /api/v1/newcomer-training/audio-upload-sessions/{upload_session_id}/parts/{part_number}/content
+GET  /api/v1/newcomer-training/audio-artifacts/{artifact_id}/playback
+GET  /api/v1/admin/newcomer-training/audio-assessments/queue
+POST /api/v1/admin/newcomer-training/audio-submissions/{submission_id}/commands/repair
+POST /api/v1/admin/newcomer-training/audio-submissions/{submission_id}/{regrade|transcript-correction|invalidation}/{preview|confirm}
+```
+
+Learner command union: `start | create_upload_session | confirm_upload_part | finalize_upload | retry_stage | cancel`.
+
+```text
+task_type = "audio_assessment.pipeline.process"
+states = uploaded -> validating -> normalizing -> transcribing -> scoring -> reconciling
+AUDIO_ASSESSMENT_STORAGE_BACKEND = local | oss | cos
+NEWCOMER_AUDIO_ASSESSMENT_ENABLED = true | false
+NEWCOMER_ASYNC_ASSIGNMENT_ENABLED = true | false
+```
+
+Upload persistence includes immutable part declarations plus `cleanup_started_at`, `cleanup_claim_token`, `cleanup_completed_at` and `cleanup_attempts` on the UploadSession.
+
+### 3. Contracts
+
+- Attempt start freezes material/scenario, Scorecard, language, ASR/scoring route, quality thresholds, competency mapping and capture limits. Backend snapshot is authoritative; the frontend only prevents obvious invalid input early.
+- Application-level multipart uses backend-generated organization/Run/UploadSession object keys. Each part is independently uploaded and declared by number, size and SHA-256; client callbacks never establish completion.
+- Local development streams one part through the protected PUT route. OSS/COS returns signed direct-upload URLs; cloud files never traverse API memory.
+- `confirm_upload_part` re-HEADs one object. `finalize_upload` only verifies registered completeness and enqueues the durable task; the Worker re-HEADs/materializes all parts and validates complete size/hash/ownership.
+- Every slow boundary (object IO, ffmpeg/ffprobe, ASR, LLM) runs outside a database transaction. Prepare/apply phases use fenced short transactions and store an exact retry stage.
+- Original and normalized artifacts are separate immutable rows. TranscriptRevision and ScoreOutcomeVersion are append-only; manual correction, retranscription, regrade and invalidation retain history.
+- Quality `not_scorable/needs_review` is distinct from competency failure and never emits zero-score evidence.
+- Expired/cancelled upload parts are claimed in bounded batches with row locks, stale-claim recovery and a UUID fence. Claim commits before object deletion; completion/release requires the same token. Finalized artifacts are never selected.
+- Cleanup runs from a deployment scheduler, not an API-process `asyncio.create_task`; formal evidence retention is a separate governed task/policy.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+|---|---|
+| Size/duration/content type/part layout exceeds frozen policy | 422 typed error before session creation |
+| Part object size/hash differs from declaration | reject confirm/finalize; keep draft and recoverable position |
+| Upload expires or is cancelled | no formal result; cleanup claim deletes only unfinished objects |
+| Empty/corrupt/unsupported media | terminal failure and explicit re-upload path; original reference retained when materialized |
+| Storage/ffmpeg tool temporarily unavailable | `failed_recoverable` at exact stage |
+| ASR timeout/429/invalid schema | recoverable transcription failure; no empty Transcript |
+| Low speech/confidence/language mismatch | `needs_review/not_scorable`; no score/competency failure |
+| Scoring Prompt/provider/schema/evidence invalid | recoverable scoring failure; no ScoreOutcomeVersion |
+| Reconcile interrupted or duplicated | `reconciling`; safe replay produces one normalized Outcome/event effect |
+| Cross-organization playback/regrade | hidden 404/denial plus requesting-scope audit |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a 30-minute-capable browser recording persists one-second chunks locally, resumes missing 5MB parts, finalizes quickly and completes after a restarted Worker without duplicate Outcome.
+- Base: ASR is temporarily unavailable; original/normalized artifacts and task location remain, an authorized repair command requeues transcription, and the learner can leave the page.
+- Bad: call `UploadFile.read()` for the whole recording, trust a client complete callback, run ffmpeg inside an open transaction, overwrite a Transcript row, or mark task success as business completion before reconcile.
+
+### 6. Tests Required
+
+- Runtime: frozen 30-minute/100MB policy, part layout, hash/size mismatch, resume, cancel, expiry and cleanup retry/fencing.
+- Worker: new Handler instance replays persisted state; validation/storage, ASR timeout, invalid scoring Schema and reconcile duplication preserve the exact recovery contract.
+- Media: real ffprobe/ffmpeg fixture validates decode, duration, silence/volume, normalization and corrupt/overlong rejection.
+- Governance: automatic/manual/retranscribed revisions and regrade versions append; stale preview/idempotency/cross-org commands reject and audit.
+- Delivery: canonical learner/admin route inventory and legacy writer/BackgroundTask importer inventory.
+- Frontend: chunk persistence/recovery, one-part-at-a-time upload, missing-part resume, pause/cancel, truthful processing/not-scorable/terminal states and no internal terms.
+- Migration: audio tables, constraints, indexes and Attempt outcome extension upgrade/downgrade in the targeted fixture.
+
+### 7. Wrong vs Correct
+
+#### Wrong
 
 ```python
-# Wrong: a frozen path reads the mutable current template.
-template = await db.get(PracticeTemplate, config.practice_template_id)
-
-# Correct: learner display uses the path-owned snapshot and current assets are
-# checked only to decide whether that frozen binding can still run safely.
-runner = await realtime_runner_descriptor(db, config)
+contents = await upload.read()
+result = await transcribe_and_score(contents)
+submission.status = "completed"
 ```
 
-```typescript
-// Wrong: after the await, browsers may no longer treat this as a user gesture.
-await persistDraft()
-window.open(editHref, "_blank")
+This buffers the full file, binds Provider latency to the request and makes process death lose the recovery point.
 
-// Correct: reserve the window synchronously, then navigate only after persistence.
-const refineWindow = window.open("about:blank", "_blank")
-await persistDraft()
-refineWindow?.location.replace(editHref)
+#### Correct
+
+```python
+upload = await audio_runtime.create_upload_session(frozen_manifest)
+# browser streams/direct-uploads each declared part
+accepted = await audio_runtime.finalize_upload(upload.upload_session_id)
+# durable Worker: prepare transaction -> external IO -> fenced apply transaction
 ```
 
-```typescript
-// Wrong: updating a published prompt only saves a working revision.
-await updateScorePrompt(promptId, payload)
-showSuccess("已生效")
+The request returns task/result references quickly; all formal writes are idempotent and recoverable from PostgreSQL truth.
 
-// Correct: publish explicitly, and distinguish partial failure.
-await updateScorePrompt(promptId, payload)
-await publishScorePrompt(promptId)
-showSuccess("新修订已发布，后续评分将使用该版本")
+## Scenario: Atomic Foundation Release And Rollback
+
+### 1. Scope / Trigger
+
+- Trigger: adding or changing Path/resource publication, release validation, active-version selection, rollback, Enrollment impact reporting or an admin endpoint that can make a training revision formally effective.
+- Excludes mutable working saves, learner execution, Enrollment revision migration and Realtime customer voice roleplay.
+
+### 2. Signatures
+
+```http
+POST /api/v1/admin/newcomer-training/release-plans/preview
+GET  /api/v1/admin/newcomer-training/release-plans
+POST /api/v1/admin/newcomer-training/release-plans/{release_plan_id}/commands/publish
+POST /api/v1/admin/newcomer-training/release-plans/{release_plan_id}/rollback-preview
+POST /api/v1/admin/newcomer-training/release-plans/{release_plan_id}/commands/rollback
 ```
+
+```python
+class ReleaseDependencyPort(Protocol):
+    async def inspect(self, *, organization_id: str, activity_type: str, revision_id: str) -> ReleaseDependency: ...
+    async def publish(self, *, organization_id: str, target: ReleaseTarget, actor: CommandActor) -> None: ...
+```
+
+`ReleasePlan` freezes `path_revision_id`, target revisions, dependency graph, validation report, impact preview/hash, runtime contract hash, reason, actor and version. Confirm commands require the short-lived preview token, identical impact hash, `If-Match` and `Idempotency-Key`.
+
+### 3. Contracts
+
+- `ReleasePlanService` is the sole HTTP-reachable coordinator for formal Path/Source/Question/LearningUnit/Quiz publication. Routes and UI never call a domain publish method directly.
+- Preview resolves the complete exact-revision graph and validates organization, approval/status, source anchors, competency mappings, runtime contract, required governed configuration and Enrollment impact before activation.
+- Working children may be composed into one plan, but publish order follows the dependency graph: Source and Question before LearningUnit and Quiz, all resources before Path. The final validation sees only exact revisions published inside the same transaction.
+- Publish is one database transaction. A blocker, stale target, hash/version conflict or domain failure rolls back every pointer and keeps the previous active plan serving learners.
+- Publishing a PathRevision never mutates active Enrollment. Migration remains a separate preview/confirm command with its own scope, reason and audit.
+- Rollback reactivates a previously published plan for the same organization and Path. It never edits or deletes a published revision.
+- The direct Path/resource publish compatibility routes return `[NEWCOMER_RELEASE_PLAN_REQUIRED]` and write nothing. They are not forwarding adapters.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+|---|---|
+| Missing/unapproved/stale/cross-org dependency | preview contains a blocker; publish is unavailable |
+| Missing competency mapping or incompatible runtime hash | blocker tied to Path activity/field |
+| Preview token expired or impact hash changed | 409, no pointer or status changes |
+| `If-Match` no longer matches plan | 412, no write |
+| Any target publish fails inside closure | transaction rollback; old active plan remains effective; failure is persisted/audited without partial activation |
+| Publish retried with same key and same input | original plan/result returned |
+| Same key with different input | 409 `[IDEMPOTENCY_KEY_REUSED]` |
+| New Path published with active Enrollments | impact reports them; their frozen revision remains unchanged |
+| Rollback target belongs to another Path/organization | hidden denial; no write; rejection audited |
+| Direct publish tombstone called | 409 `[NEWCOMER_RELEASE_PLAN_REQUIRED]`; no domain publish call |
+
+### 5. Good / Base / Bad Cases
+
+- **Good**: one plan contains a working Source, approved Question, dependent LearningUnit and Quiz, then the Path; all publish atomically in dependency order and the exact active pointer changes once.
+- **Base**: a new PathRevision publishes while 120 active Enrollments remain frozen on the prior revision; only future explicit Cohort binding or migration uses the new revision.
+- **Bad**: a resource route publishes first, the Path route publishes later, a failure leaves half the graph effective, or rollback mutates old revision content.
+
+### 6. Tests Required
+
+- Unit: dependency closure/order, blocker classification, immutable target set and runtime/competency validation.
+- Transaction integration: successful atomic closure, injected mid-closure failure keeps all old pointers, concurrent/stale publish and same-key replay.
+- Rollback: preview/hash/version/reason, same-Path and cross-organization rules, frozen Enrollment behavior and audit history.
+- Delivery: ReleasePlan route/DTO contract and direct publish tombstone assertions.
+- Frontend: dependency/blocker/impact rendering, publish/rollback preview-confirm, conflict/permission/partial failure and persistent result location.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+await learning.publish_resource(resource_id)
+await path.publish_revision(path_revision_id)
+```
+
+Two independent commits create a partial release and bypass the frozen impact contract.
+
+#### Correct
+
+```python
+preview = await release_plans.preview(
+    actor=actor,
+    path_revision_id=path_revision_id,
+    reason=reason,
+    idempotency_key=idempotency_key,
+)
+result = await release_plans.publish(
+    actor=actor,
+    release_plan_id=preview.release_plan_id,
+    preview_token=preview.preview_token,
+    impact_hash=preview.impact_hash,
+    expected_version=preview.version,
+    idempotency_key=idempotency_key,
+)
+```
+
+The service owns one transaction, validates the frozen graph and changes formal authority only after the complete closure succeeds.
+
+## 8. Legacy History Appendix (superseded, not runtime authority)
+
+Historical source and audit tests may still describe `TrainingPathPayload.phases[].modules[].activities[]`, six Handler/Renderer types, `/admin/newcomer-training/path`, subtype learner routes, publish-time Enrollment movement, Journey self-heal and realtime binding snapshots. Their routers are no longer registered, are absent from OpenAPI and have no Foundation frontend consumers. Retained tables/services are read-only migration evidence; they do not authorize a writer or compatibility facade.
+
+`docs/api-contract/sales-trainer.md` and ADRs dated 2026-07-12/13 are superseded for Foundation runtime design. Do not add target behavior to those structures or restore them to application composition.
+
+Retirement owner and deadline are recorded in `docs/architecture/newcomer-foundation-clean-cut.md` and `newcomer-foundation-guard-policy.yaml`.

@@ -85,6 +85,7 @@ export default function AdminDashboardPage() {
                     </div>
                     <Link
                         href="/admin/analytics"
+                        prefetch={false}
                         className="inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-medium text-white shadow-lg shadow-slate-900/20 transition hover:bg-slate-800"
                     >
                         进入数据分析
@@ -124,7 +125,7 @@ export default function AdminDashboardPage() {
                     <div>
                         <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">管理首页数据来源说明</h2>
                         <p className="mt-2 text-sm text-slate-700 text-pretty">
-                            当前只有上方“训练效果核心看板（近7天）”直接读取 <code>api.internal.health()</code> 与 <code>api.analyticsOpen.getDashboard()</code>。
+                            当前只有上方“训练效果核心看板（近7天）”已接入系统健康与训练效果数据。
                             以下卡片当前只保留为待接入清单，用来标记还未接上正式数据来源的组织、资源与运维面。
                         </p>
                     </div>
@@ -139,13 +140,13 @@ export default function AdminDashboardPage() {
                             <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3">总用户数</div>
                             <div className="text-3xl font-black text-slate-900 mb-4 tracking-tight">待接真实统计</div>
                             <p className="text-sm text-slate-500 text-pretty">
-                                首页当前没有统一的总用户数据源；如果恢复该卡片，应先明确是复用用户集合还是管理分析的 cohort 统计。
+                                首页当前没有统一的总用户数据源；如果恢复该卡片，应先明确复用用户列表还是管理分析中的分组统计。
                             </p>
                         </div>
                         <Users className="w-10 h-10 text-slate-300" />
                     </div>
                     <div className="mt-5">
-                        <Link href="/admin/users" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                        <Link href="/admin/users" prefetch={false} className="text-sm font-medium text-blue-600 hover:text-blue-700">
                             进入用户管理
                         </Link>
                     </div>
@@ -157,13 +158,13 @@ export default function AdminDashboardPage() {
                             <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3">活跃会话</div>
                             <div className="text-3xl font-black text-slate-900 mb-4 tracking-tight">待接真实统计</div>
                             <p className="text-sm text-slate-500 text-pretty">
-                                首页不再本地维护活跃会话示意值；真实判断应回到 admin analytics 的 operating pack、趋势页或 support/runtime 相关观测面。
+                                首页不再维护活跃会话示意值；真实判断应回到数据分析、趋势页或系统运行状态页面。
                             </p>
                         </div>
                         <Activity className="w-10 h-10 text-slate-300" />
                     </div>
                     <div className="mt-5">
-                        <Link href="/admin/analytics" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                        <Link href="/admin/analytics" prefetch={false} className="text-sm font-medium text-blue-600 hover:text-blue-700">
                             进入数据分析
                         </Link>
                     </div>
@@ -183,7 +184,7 @@ export default function AdminDashboardPage() {
                         <Server className="w-10 h-10 text-slate-300" />
                     </div>
                     <div className="mt-5">
-                        <Link href="/admin/logs" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                        <Link href="/admin/logs" prefetch={false} className="text-sm font-medium text-blue-600 hover:text-blue-700">
                             进入系统日志
                         </Link>
                     </div>
@@ -206,12 +207,12 @@ export default function AdminDashboardPage() {
                             <div>
                                 <h3 className="text-base font-bold text-slate-900">用户管理与主管详情</h3>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    用户列表、详情页、主管重点与 intervention 闭环都建立在当前真实用户集合和统一训练证据上。
+                                    用户列表、详情页、主管重点与跟进闭环都建立在当前真实用户集合和统一训练证据上。
                                 </p>
                             </div>
                             <Users className="w-5 h-5 text-blue-600" />
                         </div>
-                        <Link href="/admin/users" className="mt-4 inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
+                        <Link href="/admin/users" prefetch={false} className="mt-4 inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
                             进入用户管理
                         </Link>
                     </GlassCard>
@@ -219,14 +220,14 @@ export default function AdminDashboardPage() {
                     <GlassCard className="p-5 border border-white/80 bg-white/80">
                         <div className="flex items-start justify-between gap-3">
                             <div>
-                                <h3 className="text-base font-bold text-slate-900">数据分析与 manager-lite</h3>
+                                <h3 className="text-base font-bold text-slate-900">数据分析与主管视图</h3>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    not passed、趋势、重复 blocker、证据不足分布和 manager-lite 名单都从 projection-backed analytics 读真实统计。
+                                    未通过趋势、重复训练阻塞、证据不足分布和主管重点名单都读取统一的真实统计。
                                 </p>
                             </div>
                             <Database className="w-5 h-5 text-blue-600" />
                         </div>
-                        <Link href="/admin/analytics" className="mt-4 inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
+                        <Link href="/admin/analytics" prefetch={false} className="mt-4 inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
                             进入数据分析
                         </Link>
                     </GlassCard>
@@ -241,7 +242,7 @@ export default function AdminDashboardPage() {
                             </div>
                             <Server className="w-5 h-5 text-blue-600" />
                         </div>
-                        <Link href="/admin/logs" className="mt-4 inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
+                        <Link href="/admin/logs" prefetch={false} className="mt-4 inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
                             进入系统日志
                         </Link>
                     </GlassCard>
@@ -276,7 +277,7 @@ export default function AdminDashboardPage() {
                             <div>
                                 <h3 className="text-base font-bold text-slate-900">统一告警与动态</h3>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    当前仓库还没有一条可直接复用到首页的统一告警 / 动态数据源；如果未来恢复，应先明确事件来源、过滤口径和 operator 响应动作。
+                                    当前还没有可直接复用到首页的统一告警与动态数据源；如果未来恢复，应先明确事件来源、过滤口径和管理员响应动作。
                                 </p>
                             </div>
                             <Server className="w-5 h-5 text-slate-400" />
@@ -306,8 +307,8 @@ export default function AdminDashboardPage() {
                     </p>
                     <ul className="mt-4 space-y-2 text-sm text-slate-600 list-disc pl-5">
                         <li>组织侧统计优先复用 <code>/admin/users</code> 或 <code>/admin/analytics</code> 的真实集合。</li>
-                        <li>系统侧状态优先复用 <code>api.internal.health()</code>、日志页和后续统一 runtime surfaces。</li>
-                        <li>主管视图优先复用 manager-lite、用户详情连续变化和 intervention 闭环。</li>
+                        <li>系统状态优先复用健康检查、日志页和统一运行状态页面。</li>
+                        <li>主管视图优先复用主管重点名单、用户详情连续变化和跟进闭环。</li>
                     </ul>
                 </GlassCard>
 
@@ -323,7 +324,7 @@ export default function AdminDashboardPage() {
                         <Badge variant="secondary">不再展示示意动态</Badge>
                     </div>
                     <div className="mt-5">
-                        <Link href="/admin/analytics">
+                        <Link href="/admin/analytics" prefetch={false}>
                             <Button className="rounded-full bg-slate-900 text-white">查看真实主管统计面</Button>
                         </Link>
                     </div>

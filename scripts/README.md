@@ -8,9 +8,34 @@ bash scripts/dev-up.sh
 
 默认行为：
 - 自动读取 `backend/.env` 与 `web/.env.local`
-- 默认清理 `3444,3445`，并在 `DATABASE_URL/REDIS_URL` 指向本机时额外清理 `5432,6379`
+- 默认清理 API/前端端口 `3444,3445`；显式启用 Worker/Dispatcher 时再清理 `3446/3447`。当
+  `DATABASE_URL/REDIS_URL` 指向本机时，脚本还会管理 `5432,6379`
 - 自动拉起 PostgreSQL / Redis（`brew services`）
-- 启动 Backend（`uvicorn`）和 Frontend（`next dev`）
+- 启动 Backend（`uvicorn`）和 Frontend（`next dev`）；显式设置
+  `TASK_WORKER_ENABLED=1` 时另起 Durable Task Worker，显式设置
+  `OUTBOX_DISPATCHER_ENABLED=1` 时另起 Outbox Dispatcher
+- Worker probe：`http://127.0.0.1:3446/live`、`/ready`、`/status`
+- Dispatcher probe：`http://127.0.0.1:3447/live`、`/ready`、`/status`
+
+Worker 默认并行数为 4，可用 `TASK_WORKER_MAX_PARALLELISM` 调整；用
+`TASK_WORKER_TASK_TYPES=a.b,c.d` 限定本进程可领取的显式注册任务类型。临时只启动
+API/前端时保持默认 `TASK_WORKER_ENABLED=0`。Slice 1 尚未接入业务 Handler，空 registry 会
+fail closed；后续切片注册至少一个 Handler 后，可用
+`TASK_WORKER_ENABLED=1 bash scripts/dev-up.sh` 一键同时启动。Worker 只在数据库 schema 已到 Alembic head、
+任务类型配置有效且最近一次数据库维护/领取成功后返回 ready。
+
+Outbox Dispatcher 默认同样关闭。生产进程必须由组合根显式配置真实 `EventTransport`，否则
+fail closed。只做本地确定性联调时可显式使用不会外发事件的 fake：
+
+```bash
+ENVIRONMENT=development \
+OUTBOX_DISPATCHER_ENABLED=1 \
+OUTBOX_DISPATCHER_ALLOW_DEV_FAKE=1 \
+bash scripts/dev-up.sh
+```
+
+fake 在 production 环境即使误开也会拒绝启动。`bash scripts/dev-stop.sh` 会先给 Worker 和
+Dispatcher 发送 `SIGTERM`，等待在途任务/批次 drain，再清理进程和 probe 端口。
 
 该入口只用于本地开发和自动化 smoke。`next dev` 会在首次访问路由时即时编译，并显示
 Next.js 的 `Rendering ...` 开发指示器，不应作为公网运行方式。
@@ -38,7 +63,7 @@ bash scripts/dev-smoke-up.sh
 该入口建立在现有 `scripts/dev-up.sh` 之上，只补齐 smoke 需要的最小约定：
 - 固定本地 smoke 管理员账号：`admin@qoder.ai`
 - 固定本地 smoke 密码：`change-me`（可通过 `SMOKE_ADMIN_PASSWORD` 覆盖）
-- 启动后自动执行 `backend/scripts/bootstrap_auth_admin.py`，确保 admin 路由可进入
+- 启动后自动执行 `backend/scripts/bootstrap_auth_admin.py`，写入该账号自己的受管密码哈希；登录不依赖共享密码 fallback
 - 记录 PostgreSQL / Redis 是否原本已在运行，供 teardown 时避免误停用户已有本地依赖
 - `http://localhost:3444/health` 现在返回稳定的 machine-readable readiness payload（包含 `ready=true` 与 `readiness=ready`），供 smoke/轮询脚本直接消费
 
@@ -66,7 +91,7 @@ cd web && npx playwright test
 - admin analytics smoke
 - support/runtime smoke
 
-Playwright 会通过 `web/playwright.config.ts` 的 global setup/teardown 自动调用 `scripts/dev-smoke-up.sh` / `scripts/dev-smoke-stop.sh`，因此无需额外手动拉起测试栈。
+Playwright 会通过 `web/playwright.config.ts` 的 global setup/teardown 自动调用 `scripts/dev-smoke-up.sh` / `scripts/dev-smoke-stop.sh`，因此无需额外手动拉起测试栈。Smoke 前端使用独立的 `web/.next-smoke` 构建目录，避免与 `app-up.sh` 的生产构建缓存交叉污染。
 
 默认使用下列环境变量（必要时可覆盖）：
 - `SMOKE_ADMIN_EMAIL`
@@ -90,14 +115,13 @@ bash scripts/critical-quality-gate.sh
 4. web typecheck、lint、全量 Vitest coverage 自动发现；
 5. dev smoke stack + DB ready + `alembic upgrade head` + smoke bootstrap / seed；
 6. selector 选择的 Playwright：四条关键 spec 保留各自 provider 环境，其余 spec 使用通用 runner；
-7. optional real-provider focused gates；
+7. optional AI Coach real-provider focused gate；
 8. selector 选择的 backend integration/E2E 以 `--cov-append --cov-branch` 合并覆盖率；
 9. changed-line 80% 与关键状态机 branch baseline guard。
 
 说明：
-- 这里的 Playwright 包含 smoke matrix、新人训练 closed-loop E2E 以及 presentation/sales Phase 4 E2E；真实 provider 仍由专项模式或显式开关验证。
-- 默认门禁使用 deterministic local provider，不依赖外部 StepFun 或真实 LLM；真实 provider 由 release/nightly 专项模式验证。
-- realtime 真实 provider 专项模式默认不会在缺凭证时通过；会输出 classified skip 证据并失败。只有人工明确设置 `NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1` 时，缺凭证才可作为可追踪跳过项通过；发布前仍可用 `NEWCOMER_REAL_PROVIDER_REQUIRED=1` 强制缺凭证失败。
+- 这里的 Playwright 包含 smoke matrix、新人训练 closed-loop E2E 以及 presentation/sales Phase 4 E2E；新人首发不包含 Realtime 对练。
+- 默认门禁使用 deterministic local provider，不依赖外部 StepFun 或真实 LLM；新人 AI Coach 的真实 provider 由 release/nightly 专项模式验证。
 - AI Coach 真实 provider 专项模式同样默认 fail-closed；缺 `LLM_API_KEY` / `OPENAI_API_KEY` 时会输出 classified skip 证据并失败，只有人工明确设置 `NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1` 才允许可追踪跳过。
 
 ### 影响测试选择与覆盖率
@@ -153,35 +177,11 @@ cd backend
 生成命令以 FastAPI runtime schema 为权威更新 committed contract；`--check` 只读并在
 语义漂移时返回非零退出码。
 
-真实 provider release/nightly 专项模式：
-
-先运行不联网的 StepFun Realtime 预检；该脚本不会打印 `STEPFUN_API_KEY`：
+独立 Presentation/Sales Realtime 产品在自己的发布流程中可运行以下不联网预检；该脚本不会打印 `STEPFUN_API_KEY`，也不属于新人基础训练首发门禁：
 
 ```bash
 python3 scripts/check_stepfun_realtime_prereqs.py --env-file backend/.env
 ```
-
-若继续强制真实 provider gate：
-
-```bash
-CRITICAL_GATE_MODE=newcomer-real-provider \
-NEWCOMER_REAL_PROVIDER_NAME=stepfun_realtime \
-STEPFUN_REALTIME_MODEL=stepaudio-2.5-realtime \
-STEPFUN_API_KEY=... \
-bash scripts/critical-quality-gate.sh
-```
-
-人工允许缺凭证跳过时必须显式设置：
-
-```bash
-CRITICAL_GATE_MODE=newcomer-real-provider \
-NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1 \
-bash scripts/critical-quality-gate.sh
-```
-
-脚本会把完整输出保存到：
-- `.sisyphus/evidence/task-9-newcomer-real-provider-gate.txt`
-- `.sisyphus/evidence/newcomer-real-provider-gate.json`（仅真实 provider 专项模式或显式开启时生成）
 
 AI Coach 真实 LLM provider release/nightly 专项模式：
 
@@ -263,11 +263,12 @@ bash scripts/dependency-governance.sh status
 
 ## 备份 / 恢复现状基线
 
-当前仓库内可直接引用的 backup / recovery 现状清单见：
+当前仓库内可直接引用的 backup / recovery 与首发重置说明见：
 
-- `docs/setup/backup-recovery-current-state.md`
+- `docs/backup-recovery-runbook.md`
+- `docs/launch-reset-runbook.md`
 
-这份文档只记录当前真实可执行的入口、路径和缺口，用作后续 runbook 编写基线。
+首发 reset 是破坏性流程，只允许按后者的 inspect → dry-run → apply → verify 步骤执行。
 
 ## 常用环境变量
 

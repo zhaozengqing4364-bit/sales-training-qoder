@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 
+from common.db.models import Team, TeamMembership
 from sales_trainer.models import (
     NewcomerTrainingActivityAttempt,
     NewcomerTrainingEnrollment,
@@ -14,6 +15,23 @@ from sales_trainer.services.training_record_service import TrainingRecordService
 
 @pytest.mark.asyncio
 async def test_records_project_activity_identity_and_frozen_titles(test_db, test_user):
+    team_id = str(uuid.uuid4())
+    test_db.add_all(
+        [
+            Team(
+                team_id=team_id,
+                code=f"records-{uuid.uuid4().hex[:8]}",
+                name="销售一组",
+                created_by=str(test_user.user_id),
+            ),
+            TeamMembership(
+                team_id=team_id,
+                user_id=str(test_user.user_id),
+                membership_role="primary",
+                created_by=str(test_user.user_id),
+            ),
+        ]
+    )
     revision = SalesTrainerAssetRevision(
         revision_id=str(uuid.uuid4()),
         resource_type="newcomer_training_path_orchestration",
@@ -65,3 +83,6 @@ async def test_records_project_activity_identity_and_frozen_titles(test_db, test
     assert records[0]["activity_type"] == "quiz"
     assert records[0]["module_title"] == "产品 A"
     assert records[0]["activity_title"] == "产品 A 小测"
+    assert records[0]["user_name"] == test_user.name
+    assert records[0]["user_email"] == test_user.email
+    assert records[0]["team"]["name"] == "销售一组"

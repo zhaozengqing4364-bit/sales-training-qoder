@@ -22,6 +22,7 @@ docs/api-contract/
 ├── learning-content.md     # 学习内容 API 契约
 ├── test-bank.md            # 题库 API 契约
 ├── sales-trainer.md        # 销售训练 MVP API 契约
+├── newcomer-training-v2.md # 新人基础训练分切片实施 API 合同
 ├── api-audit-anomaly-report.md  # 全量路由/端点异常清单 (审计基线)
 └── websocket.md            # WebSocket 消息契约
 ```
@@ -128,3 +129,5 @@ docs/api-contract/
 | 2026-03-14 | 统一契约认证语义为 “Bearer 或 HttpOnly session cookie”，补充训练运行时主语说明 | sessions, replay, agents, personas, analytics, knowledge, support-runtime |
 | 2026-05-28 | 新增销售训练 MVP 基础闭环契约，覆盖 learner/admin 做题、录音上传、转写评分、提示词和操作日志接口 | sales-trainer |
 | 2026-06-15 | 补充提示词治理台中文化、系统模板只读、默认冲突修复、影响查询和场景绑定唯一性契约 | prompt-templates |
+| 2026-07-16 | 冻结新人基础训练 v2 目标命名空间、命令、错误、并发、权限和 ViewModel；明确未实现状态及旧 API 退役点 | newcomer-training-v2 |
+| 2026-07-17 | 挂载 EvidenceDossierV1、Readiness 队列、人工决定、补练、申诉、校准、重建、失效与审计导出合同 | newcomer-training-v2 |

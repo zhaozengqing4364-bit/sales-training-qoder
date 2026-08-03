@@ -22,14 +22,14 @@ os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-import agent.models  # noqa: E402,F401  # Register agent/voice-runtime tables on shared Base metadata.
-import curriculum_practice.models  # noqa: E402,F401  # Register curriculum tables for FK targets.
-import sales_trainer.models  # noqa: E402,F401  # Register sales trainer MVP tables.
-from common.db.models import Base  # noqa: E402
+from common.db.model_registry import Base  # noqa: E402
+from common.db.model_registry.registration import register_all_models  # noqa: E402
 from domain_contributor_bootstrap import register_domain_contributors  # noqa: E402
 from sales_trainer.services.asset_revision_lineage_provider import (  # noqa: E402
     register_sales_trainer_asset_revision_lineage_provider,
 )
+
+register_all_models()
 
 
 def _register_default_test_contributors() -> None:
@@ -136,7 +136,6 @@ async def another_user(test_db: AsyncSession):
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"another_{uuid.uuid4().hex[:8]}",
         name="Another User",
-        department="QA",
         email=f"another_{uuid.uuid4().hex[:6]}@example.com",
         role="user",
     )

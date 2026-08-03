@@ -10,6 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.models import VoiceRuntimeProfile
+from common.db.models import ScoringRuleset
+from curriculum_practice.models import (
+    CaseItem as _CaseItem,
+)
 from curriculum_practice.models import (
     LearningChapter as _LearningChapter,
 )
@@ -19,6 +24,18 @@ from curriculum_practice.models import (
 from curriculum_practice.models import PracticeTemplate as _PracticeTemplate
 from curriculum_practice.models import (
     QuestionItem as _QuestionItem,
+)
+from curriculum_practice.models import RoleProfile as _RoleProfile
+from curriculum_practice.services.asset_reference_reader import (
+    CurriculumAssetReferenceReader,
+)
+from curriculum_practice.services.asset_references import stable_hash
+from curriculum_practice.services.practice_template_revision_metadata import (
+    PRACTICE_TEMPLATE_RESOURCE_TYPE,
+    template_payload_hash,
+)
+from curriculum_practice.services.practice_template_revision_payloads import (
+    template_lifecycle_snapshot,
 )
 
 
@@ -180,6 +197,31 @@ class LearningProgressChapterRef:
     chapter_id: str
 
 
+@dataclass(frozen=True, slots=True)
+class RealtimeBindingAssetSnapshot:
+    template_status: str
+    template_version: int
+    template_name: str | None
+    template_description: str | None
+    template_runtime_profile_id: str | None
+    case_status: str | None
+    case_company_profile: str | None
+    case_success_criteria: tuple[object, ...]
+    role_status: str | None
+    role_name: str | None
+    role_communication_style: str | None
+    ruleset_status: str | None
+    ruleset_display_name: str | None
+    ruleset_description: str | None
+    ruleset_version: str | None
+    ruleset_definition: dict[str, object]
+    runtime_is_active: bool
+    runtime_voice_mode: str | None
+    template_content_hash: str
+    runtime_reference_hash: str
+    governed_assets_hash: str
+
+
 class LearningProgressAdapter:
     """Adapter boundary for curriculum learning progress operations."""
 
@@ -256,6 +298,121 @@ async def published_practice_template_ids(
 
 async def get_practice_template(db: AsyncSession, template_id: str) -> Any:
     return await db.get(_PracticeTemplate, template_id)
+
+
+def practice_template_resource_type() -> str:
+    return PRACTICE_TEMPLATE_RESOURCE_TYPE
+
+
+async def get_realtime_binding_asset_snapshot(
+    db: AsyncSession,
+    template_id: str,
+) -> RealtimeBindingAssetSnapshot | None:
+    result = await db.execute(
+        select(
+            _PracticeTemplate,
+            _CaseItem,
+            _RoleProfile,
+            ScoringRuleset,
+            VoiceRuntimeProfile,
+        )
+        .outerjoin(
+            _CaseItem,
+            _CaseItem.case_item_id == _PracticeTemplate.case_item_id,
+        )
+        .outerjoin(
+            _RoleProfile,
+            _RoleProfile.role_profile_id == _PracticeTemplate.role_profile_id,
+        )
+        .outerjoin(
+            ScoringRuleset,
+            ScoringRuleset.ruleset_id == _PracticeTemplate.scoring_ruleset_id,
+        )
+        .outerjoin(
+            VoiceRuntimeProfile,
+            VoiceRuntimeProfile.id == _PracticeTemplate.runtime_profile_id,
+        )
+        .where(_PracticeTemplate.template_id == template_id)
+    )
+    row = result.one_or_none()
+    if row is None:
+        return None
+    template, case_item, role_profile, ruleset, runtime = row
+    reader = CurriculumAssetReferenceReader(db)
+    runtime_reference = await reader.read_reference(
+        "voice_runtime_profile",
+        str(template.runtime_profile_id),
+    )
+    refs: list[tuple[str, str]] = [
+        ("agent", str(template.agent_id)),
+        ("persona", str(template.persona_id)),
+        ("voice_runtime_profile", str(template.runtime_profile_id)),
+        ("scoring_ruleset", str(template.scoring_ruleset_id)),
+    ]
+    for asset_type, asset_id in (
+        ("case_item", template.case_item_id),
+        ("role_profile", template.role_profile_id),
+        ("learning_content", template.learning_content_id),
+        ("examiner_agent", template.examiner_agent_id),
+    ):
+        if asset_id:
+            refs.append((asset_type, str(asset_id)))
+    refs.extend(
+        ("knowledge_base", str(asset_id))
+        for asset_id in template.knowledge_base_refs or []
+    )
+    governed_assets = {
+        f"{asset_type}:{asset_id}": await reader.read_reference(asset_type, asset_id)
+        for asset_type, asset_id in refs
+    }
+    definition = (
+        dict(ruleset.definition_json)
+        if ruleset is not None and isinstance(ruleset.definition_json, dict)
+        else {}
+    )
+    return RealtimeBindingAssetSnapshot(
+        template_status=str(template.status),
+        template_version=int(template.version or 0),
+        template_name=_optional_str(template.name),
+        template_description=_optional_str(template.description),
+        template_runtime_profile_id=_optional_str(template.runtime_profile_id),
+        case_status=_optional_str(case_item.status) if case_item is not None else None,
+        case_company_profile=(
+            _optional_str(case_item.company_profile) if case_item is not None else None
+        ),
+        case_success_criteria=tuple(case_item.success_criteria or ())
+        if case_item is not None
+        else (),
+        role_status=(
+            _optional_str(role_profile.status) if role_profile is not None else None
+        ),
+        role_name=(
+            _optional_str(role_profile.role_name) if role_profile is not None else None
+        ),
+        role_communication_style=(
+            _optional_str(role_profile.communication_style)
+            if role_profile is not None
+            else None
+        ),
+        ruleset_status=_optional_str(ruleset.status) if ruleset is not None else None,
+        ruleset_display_name=(
+            _optional_str(ruleset.display_name) if ruleset is not None else None
+        ),
+        ruleset_description=(
+            _optional_str(ruleset.description) if ruleset is not None else None
+        ),
+        ruleset_version=_optional_str(ruleset.version) if ruleset is not None else None,
+        ruleset_definition=definition,
+        runtime_is_active=bool(runtime.is_active) if runtime is not None else False,
+        runtime_voice_mode=(
+            _optional_str(runtime.voice_mode) if runtime is not None else None
+        ),
+        template_content_hash=template_payload_hash(
+            template_lifecycle_snapshot(template)
+        ),
+        runtime_reference_hash=stable_hash(runtime_reference or {}),
+        governed_assets_hash=stable_hash(governed_assets),
+    )
 
 
 def create_test_bank_service(db: AsyncSession) -> Any:
@@ -482,6 +639,7 @@ __all__ = [
     "QuestionItemCreate",
     "QuestionItemDTO",
     "QuestionItemUpdate",
+    "RealtimeBindingAssetSnapshot",
     "archive_draft_learning_content",
     "create_learning_content_with_chapters",
     "create_learning_progress_service",
@@ -489,8 +647,10 @@ __all__ = [
     "get_learning_chapter_by_order",
     "get_learning_content",
     "get_question_item",
+    "get_realtime_binding_asset_snapshot",
     "list_learning_chapters",
     "list_published_sales_trainer_questions",
     "project_question_category",
     "project_question_item",
+    "practice_template_resource_type",
 ]

@@ -51,7 +51,7 @@ type CurrentUserRecord = {
     display_name?: unknown;
     email?: unknown;
     role?: unknown;
-    department?: unknown;
+    team?: unknown;
     is_active?: unknown;
     created_at?: unknown;
     avatar_url?: unknown;
@@ -64,7 +64,7 @@ export interface CurrentUser {
     display_name: string;
     email: string;
     role: CurrentUserRole;
-    department?: string;
+    team?: { team_id: string; code: string; name: string } | null;
     is_active: boolean;
     created_at: string;
     avatar_url?: string;
@@ -109,7 +109,12 @@ export function normalizeCurrentUser(input: unknown): CurrentUser {
     const id = toStringValue(raw.id, toStringValue(raw.user_id));
     const displayName = toStringValue(raw.display_name, toStringValue(raw.name, "用户")) || "用户";
     const email = toStringValue(raw.email);
-    const department = toStringValue(raw.department);
+    const teamRecord = raw.team && typeof raw.team === "object"
+        ? raw.team as Record<string, unknown>
+        : null;
+    const teamId = toStringValue(teamRecord?.team_id);
+    const teamCode = toStringValue(teamRecord?.code);
+    const teamName = toStringValue(teamRecord?.name);
     const avatarUrl = toStringValue(raw.avatar_url);
 
     return {
@@ -119,7 +124,9 @@ export function normalizeCurrentUser(input: unknown): CurrentUser {
         display_name: displayName,
         email,
         role: normalizeRole(raw.role),
-        department: department || undefined,
+        team: teamId && teamCode && teamName
+            ? { team_id: teamId, code: teamCode, name: teamName }
+            : null,
         is_active: raw.is_active === false ? false : true,
         created_at: toStringValue(raw.created_at),
         avatar_url: avatarUrl || undefined,

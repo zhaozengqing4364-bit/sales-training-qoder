@@ -16,6 +16,33 @@ DEFAULT_SRC_ROOT = REPO_ROOT / "backend" / "src"
 DEFAULT_POLICY = (
     REPO_ROOT / "docs" / "architecture" / "module-dependency-policy.yaml"
 )
+DEFAULT_FOUNDATION_POLICY = (
+    REPO_ROOT
+    / "docs"
+    / "architecture"
+    / "newcomer-foundation-guard-policy.yaml"
+)
+
+FOUNDATION_PROVIDER_MODULES = {
+    "anthropic",
+    "dashscope",
+    "google.generativeai",
+    "openai",
+}
+FOUNDATION_PROVIDER_INTERNAL_PATHS = {
+    "ai_platform.openai_provider",
+    "ai_platform.provider",
+}
+FOUNDATION_PROVIDER_CALLS = {
+    "get_llm_service",
+    "get_asr_service",
+}
+FOUNDATION_PROVIDER_METHODS = {
+    "apredict",
+}
+FOUNDATION_HTTP_DECORATORS = {"delete", "get", "patch", "post", "put"}
+FOUNDATION_TRANSACTION_METHODS = {"commit", "flush", "rollback"}
+FOUNDATION_MUTATION_METHODS = {"add", "delete", "merge"}
 
 
 def _literal_dynamic_import(node: ast.Call) -> str | None:
@@ -49,6 +76,484 @@ def _imported_modules(path: Path) -> list[tuple[str, int]]:
             if dynamic:
                 modules.append((dynamic, node.lineno))
     return modules
+
+
+def _attribute_chain(node: ast.AST) -> tuple[str, ...]:
+    parts: list[str] = []
+    current = node
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    if isinstance(current, ast.Name):
+        parts.append(current.id)
+    return tuple(reversed(parts))
+
+
+def _foundation_module_paths(
+    policy: dict[str, Any],
+) -> tuple[dict[str, tuple[str, ...]], list[str]]:
+    raw = policy.get("module_paths")
+    if not isinstance(raw, dict):
+        return {}, ["Foundation policy module_paths must be a mapping"]
+    result: dict[str, tuple[str, ...]] = {}
+    violations: list[str] = []
+    for module, paths in raw.items():
+        name = str(module).strip()
+        if not name or not isinstance(paths, list) or not paths:
+            violations.append(
+                f"Foundation module_paths[{module!r}] must be a non-empty list"
+            )
+            continue
+        normalized = tuple(str(path).strip().strip("/") for path in paths)
+        if any(not path for path in normalized):
+            violations.append(
+                f"Foundation module_paths[{name}] contains an empty path"
+            )
+            continue
+        result[name] = normalized
+    return result, violations
+
+
+def _foundation_business_modules(
+    policy: dict[str, Any],
+) -> tuple[set[str], list[str]]:
+    raw = policy.get("business_modules")
+    if not isinstance(raw, list) or not raw:
+        return set(), ["Foundation policy business_modules must be a non-empty list"]
+    modules = [str(item).strip() for item in raw]
+    violations: list[str] = []
+    if any(not item for item in modules):
+        violations.append("Foundation business_modules must contain non-empty names")
+    if len(modules) != len(set(modules)):
+        violations.append("Foundation business_modules must not contain duplicates")
+    return {item for item in modules if item}, violations
+
+
+def _foundation_stable_edges(
+    policy: dict[str, Any],
+) -> tuple[set[Edge], list[str]]:
+    raw = policy.get("stable_edges")
+    if not isinstance(raw, list):
+        return set(), ["Foundation policy stable_edges must be a list"]
+    edges: set[Edge] = set()
+    violations: list[str] = []
+    for index, value in enumerate(raw):
+        edge, violation = _edge(value, context=f"stable_edges[{index}]")
+        if violation:
+            violations.append(violation)
+            continue
+        assert edge is not None
+        if edge in edges:
+            violations.append(
+                f"Duplicate foundation stable dependency: {edge[0]}->{edge[1]}"
+            )
+        edges.add(edge)
+    return edges, violations
+
+
+def _foundation_import_scope(
+    policy: dict[str, Any],
+) -> tuple[set[str], set[str], list[str]]:
+    raw = policy.get("stable_edge_import_scope")
+    if not isinstance(raw, dict):
+        return set(), set(), [
+            "Foundation policy stable_edge_import_scope must be a mapping"
+        ]
+    allowed_raw = raw.get("allowed_path_segments")
+    forbidden_raw = raw.get("forbidden_path_segments")
+    violations: list[str] = []
+    if not isinstance(allowed_raw, list) or not allowed_raw:
+        violations.append(
+            "Foundation stable_edge_import_scope.allowed_path_segments "
+            "must be a non-empty list"
+        )
+        allowed: set[str] = set()
+    else:
+        allowed = {str(item).strip() for item in allowed_raw if str(item).strip()}
+    if not isinstance(forbidden_raw, list) or not forbidden_raw:
+        violations.append(
+            "Foundation stable_edge_import_scope.forbidden_path_segments "
+            "must be a non-empty list"
+        )
+        forbidden: set[str] = set()
+    else:
+        forbidden = {
+            str(item).strip() for item in forbidden_raw if str(item).strip()
+        }
+    return allowed, forbidden, violations
+
+
+def _foundation_source_files(
+    src_root: Path,
+    module_paths: dict[str, tuple[str, ...]],
+    module: str,
+) -> tuple[list[Path], list[str]]:
+    files: list[Path] = []
+    violations: list[str] = []
+    for relative in module_paths.get(module, ()):
+        path = src_root / relative
+        if path.is_file() and path.suffix == ".py":
+            files.append(path)
+            continue
+        if path.is_dir():
+            files.extend(
+                candidate
+                for candidate in sorted(path.rglob("*.py"))
+                if "__pycache__" not in candidate.parts
+            )
+            continue
+        violations.append(
+            f"Foundation module path does not exist: {module}={relative}"
+        )
+    return sorted(set(files)), violations
+
+
+def _foundation_provider_violation(
+    tree: ast.AST,
+    *,
+    location: str,
+) -> list[str]:
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            modules = [node.module]
+        else:
+            modules = []
+        for module in modules:
+            if (
+                module in FOUNDATION_PROVIDER_MODULES
+                or any(module.startswith(f"{item}.") for item in FOUNDATION_PROVIDER_MODULES)
+                or module in FOUNDATION_PROVIDER_INTERNAL_PATHS
+                or any(
+                    module.startswith(f"{item}.")
+                    for item in FOUNDATION_PROVIDER_INTERNAL_PATHS
+                )
+            ):
+                violations.append(
+                    "ARCH_DIRECT_AI_PROVIDER_FORBIDDEN "
+                    f"{location}:{node.lineno} imports {module}"
+                )
+        if not isinstance(node, ast.Call):
+            continue
+        chain = _attribute_chain(node.func)
+        if (
+            (chain and chain[-1] in FOUNDATION_PROVIDER_CALLS)
+            or (chain and chain[-1] in FOUNDATION_PROVIDER_METHODS)
+            or (len(chain) >= 2 and chain[-2:] == ("llm", "apredict"))
+        ):
+            violations.append(
+                "ARCH_DIRECT_AI_PROVIDER_FORBIDDEN "
+                f"{location}:{node.lineno} calls {'.'.join(chain)}"
+            )
+    return violations
+
+
+def _is_provider_call(node: ast.Call) -> bool:
+    chain = _attribute_chain(node.func)
+    return bool(
+        (chain and chain[-1] in FOUNDATION_PROVIDER_CALLS)
+        or (chain and chain[-1] in FOUNDATION_PROVIDER_METHODS)
+        or (len(chain) >= 2 and chain[-2:] == ("llm", "apredict"))
+    )
+
+
+def _is_route_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    for decorator in node.decorator_list:
+        call = decorator.func if isinstance(decorator, ast.Call) else decorator
+        chain = _attribute_chain(call)
+        if chain and chain[-1] in FOUNDATION_HTTP_DECORATORS:
+            return True
+    return False
+
+
+def _is_database_mutation_call(node: ast.Call) -> bool:
+    chain = _attribute_chain(node.func)
+    if not chain:
+        return False
+    method = chain[-1]
+    if method in FOUNDATION_TRANSACTION_METHODS:
+        return True
+    if method not in FOUNDATION_MUTATION_METHODS or len(chain) < 2:
+        return False
+    receiver = chain[-2].lower()
+    return (
+        receiver in {"db", "repo", "repository", "session"}
+        or receiver.endswith("_repo")
+        or receiver.endswith("_repository")
+        or receiver.endswith("_session")
+    )
+
+
+def _foundation_delivery_violations(
+    tree: ast.AST,
+    *,
+    location: str,
+) -> list[str]:
+    violations: list[str] = []
+    functions = (
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and _is_route_function(node)
+    )
+    for function in functions:
+        body_nodes = list(ast.walk(function))
+        has_database_mutation = any(
+            isinstance(node, ast.Call) and _is_database_mutation_call(node)
+            for node in body_nodes
+        )
+        has_provider_io = any(
+            isinstance(node, ast.Call) and _is_provider_call(node)
+            for node in body_nodes
+        )
+        if has_database_mutation and has_provider_io:
+            violations.append(
+                "ARCH_DELIVERY_ORCHESTRATION_FORBIDDEN "
+                f"{location}:{function.lineno} route {function.name} combines "
+                "database mutation and Provider IO"
+            )
+    return violations
+
+
+def _foundation_target_for_import(
+    module: str,
+    module_paths: dict[str, tuple[str, ...]],
+) -> str | None:
+    candidates: list[tuple[int, str]] = []
+    for target, paths in module_paths.items():
+        for path in paths:
+            prefix = path.removesuffix(".py").replace("/", ".")
+            if module == prefix or module.startswith(f"{prefix}."):
+                candidates.append((len(prefix), target))
+    return max(candidates, default=(0, ""))[1] or None
+
+
+def _foundation_composition_root(
+    policy: dict[str, Any],
+    module_paths: dict[str, tuple[str, ...]],
+) -> tuple[str | None, set[Edge], list[str]]:
+    raw_root = policy.get("composition_root")
+    root = str(raw_root).strip() if raw_root is not None else ""
+    violations: list[str] = []
+    if not root:
+        violations.append("Foundation policy composition_root must be non-empty")
+        return None, set(), violations
+    if root not in module_paths:
+        violations.append(
+            f"Foundation composition_root has no module_paths entry: {root}"
+        )
+    raw_edges = policy.get("composition_root_edges")
+    if not isinstance(raw_edges, list):
+        violations.append("Foundation policy composition_root_edges must be a list")
+        return root, set(), violations
+    edges: set[Edge] = set()
+    for index, value in enumerate(raw_edges):
+        edge, violation = _edge(
+            value,
+            context=f"composition_root_edges[{index}]",
+        )
+        if violation:
+            violations.append(violation)
+            continue
+        assert edge is not None
+        if edge[0] != root:
+            violations.append(
+                f"composition_root_edges[{index}] must start with {root}: {edge}"
+            )
+        if edge[1] not in module_paths:
+            violations.append(
+                "composition_root_edges references target without module_paths: "
+                f"{edge[1]}"
+            )
+        if edge in edges:
+            violations.append(
+                f"Duplicate composition root dependency: {edge[0]}->{edge[1]}"
+            )
+        edges.add(edge)
+    return root, edges, violations
+
+
+def _foundation_root_runtime_violations(
+    tree: ast.AST,
+    *,
+    location: str,
+) -> list[str]:
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and _is_database_mutation_call(node):
+            violations.append(
+                "ARCH_COMPOSITION_ROOT_BUSINESS_MUTATION_FORBIDDEN "
+                f"{location}:{node.lineno} calls "
+                f"{'.'.join(_attribute_chain(node.func))}"
+            )
+        if not isinstance(node, ast.Call):
+            continue
+        chain = _attribute_chain(node.func)
+        dynamic_import = _literal_dynamic_import(node)
+        dynamic_lookup = bool(
+            chain
+            and chain[-1] in {"globals", "locals"}
+            or chain
+            and chain[-1] == "getattr"
+            and len(node.args) >= 2
+            and not isinstance(node.args[1], ast.Constant)
+        )
+        if dynamic_import or dynamic_lookup:
+            violations.append(
+                "ARCH_COMPOSITION_ROOT_SERVICE_LOCATOR_FORBIDDEN "
+                f"{location}:{node.lineno} uses dynamic service lookup"
+            )
+    return violations
+
+
+def validate_foundation_repository(
+    *,
+    src_root: Path = DEFAULT_SRC_ROOT,
+    policy_path: Path = DEFAULT_FOUNDATION_POLICY,
+) -> list[str]:
+    try:
+        raw_policy = yaml.safe_load(policy_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [f"Foundation architecture policy does not exist: {policy_path}"]
+    except yaml.YAMLError as exc:
+        return [f"Foundation architecture policy is invalid YAML: {exc}"]
+    if not isinstance(raw_policy, dict):
+        return ["Foundation architecture policy must be a mapping"]
+    policy: dict[str, Any] = raw_policy
+    violations: list[str] = []
+    if policy.get("version") != 1:
+        violations.append("Foundation architecture policy version must be 1")
+    if policy.get("status") != "enforced":
+        violations.append("Foundation architecture policy status must be enforced")
+
+    business_modules, business_violations = _foundation_business_modules(policy)
+    stable_edges, stable_violations = _foundation_stable_edges(policy)
+    module_paths, path_violations = _foundation_module_paths(policy)
+    allowed_segments, forbidden_segments, scope_violations = (
+        _foundation_import_scope(policy)
+    )
+    violations.extend(business_violations)
+    violations.extend(stable_violations)
+    violations.extend(path_violations)
+    violations.extend(scope_violations)
+    composition_root, composition_edges, composition_violations = (
+        _foundation_composition_root(policy, module_paths)
+    )
+    violations.extend(composition_violations)
+
+    temporary = policy.get("temporary_exceptions")
+    if not isinstance(temporary, list):
+        violations.append("Foundation policy temporary_exceptions must be a list")
+    else:
+        for index, item in enumerate(temporary):
+            exception_id = (
+                str(item.get("id") or f"index-{index}")
+                if isinstance(item, dict)
+                else f"index-{index}"
+            )
+            violations.append(
+                f"Foundation temporary exception remains: {exception_id}"
+            )
+
+    orm_segments = {
+        "models",
+        "repositories",
+        "repository",
+        "sqlalchemy",
+        "adapters",
+    }
+    for source in sorted(business_modules):
+        files, file_violations = _foundation_source_files(
+            src_root, module_paths, source
+        )
+        violations.extend(file_violations)
+        for path in files:
+            location = path.relative_to(src_root).as_posix()
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            violations.extend(
+                _foundation_provider_violation(tree, location=location)
+            )
+            violations.extend(
+                _foundation_delivery_violations(tree, location=location)
+            )
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imported = [alias.name for alias in node.names]
+                elif (
+                    isinstance(node, ast.ImportFrom)
+                    and node.level == 0
+                    and node.module
+                ):
+                    imported = [node.module]
+                else:
+                    imported = []
+                for module in imported:
+                    parts = module.split(".")
+                    target = parts[0]
+                    if target not in business_modules or target == source:
+                        continue
+                    if (source, target) not in stable_edges:
+                        violations.append(
+                            "ARCH_FOUNDATION_EDGE_UNDECLARED "
+                            f"{location}:{node.lineno} imports {module}"
+                        )
+                    segment = parts[1] if len(parts) > 1 else ""
+                    if segment in orm_segments:
+                        code = "ARCH_CROSS_MODULE_ORM_FORBIDDEN"
+                    elif segment in forbidden_segments or segment not in allowed_segments:
+                        code = "ARCH_BUSINESS_EDGE_SCOPE_FORBIDDEN"
+                    else:
+                        continue
+                    violations.append(
+                        f"{code} {location}:{node.lineno} imports {module}"
+                    )
+                if source != "newcomer_training" or not isinstance(node, ast.Call):
+                    continue
+                dynamic = _literal_dynamic_import(node)
+                if dynamic:
+                    violations.append(
+                        "ARCH_DYNAMIC_ACTIVITY_IMPORT_FORBIDDEN "
+                        f"{location}:{node.lineno} imports {dynamic}"
+                    )
+
+    if composition_root is not None:
+        root_files, root_file_violations = _foundation_source_files(
+            src_root,
+            module_paths,
+            composition_root,
+        )
+        violations.extend(root_file_violations)
+        for path in root_files:
+            location = path.relative_to(src_root).as_posix()
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            violations.extend(
+                _foundation_root_runtime_violations(tree, location=location)
+            )
+            for module, lineno in _imported_modules(path):
+                target = _foundation_target_for_import(module, module_paths)
+                if target is None or target == composition_root:
+                    continue
+                if (composition_root, target) not in composition_edges:
+                    violations.append(
+                        "ARCH_COMPOSITION_ROOT_EDGE_UNDECLARED "
+                        f"{location}:{lineno} imports {module}"
+                    )
+
+    shared_files, shared_violations = _foundation_source_files(
+        src_root, module_paths, "shared_kernel"
+    )
+    violations.extend(shared_violations)
+    for path in shared_files:
+        location = path.relative_to(src_root).as_posix()
+        for module, lineno in _imported_modules(path):
+            if module.split(".", 1)[0] in business_modules:
+                violations.append(
+                    "ARCH_SHARED_KERNEL_REVERSE_DEPENDENCY "
+                    f"{location}:{lineno} imports {module}"
+                )
+    return sorted(set(violations))
 
 
 def collect_edges(
@@ -397,6 +902,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--src-root", type=Path, default=DEFAULT_SRC_ROOT)
     parser.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
+    parser.add_argument(
+        "--foundation-policy",
+        type=Path,
+        default=DEFAULT_FOUNDATION_POLICY,
+    )
+    parser.add_argument(
+        "--skip-foundation",
+        action="store_true",
+        help="skip the newcomer foundation clean-cut policy",
+    )
     return parser
 
 
@@ -406,6 +921,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         src_root=args.src_root.resolve(),
         policy_path=args.policy.resolve(),
     )
+    if not args.skip_foundation:
+        violations.extend(
+            validate_foundation_repository(
+                src_root=args.src_root.resolve(),
+                policy_path=args.foundation_policy.resolve(),
+            )
+        )
     if violations:
         for violation in violations:
             print(f"[architecture] {violation}")

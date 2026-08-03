@@ -47,7 +47,7 @@ def _question(question_id: str, *, category_id: str, title: str) -> QuestionItem
 
 
 @pytest.mark.asyncio
-async def test_should_create_publish_and_fetch_newcomer_paper_via_api(
+async def test_should_create_publish_and_fetch_sales_trainer_paper_via_api(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
@@ -68,7 +68,7 @@ async def test_should_create_publish_and_fetch_newcomer_paper_via_api(
     await test_db.commit()
 
     create_response = await async_client.post(
-        "/api/v1/admin/newcomer-training/papers",
+        "/api/v1/admin/sales-trainer/papers",
         headers=_auth_headers(admin),
         json={
             "paper_key": "business-skills-api-paper",
@@ -89,13 +89,13 @@ async def test_should_create_publish_and_fetch_newcomer_paper_via_api(
     assert paper["status"] == "draft"
 
     publish_response = await async_client.post(
-        f"/api/v1/admin/newcomer-training/papers/{paper['paper_id']}/publish",
+        f"/api/v1/admin/sales-trainer/papers/{paper['paper_id']}/publish",
         headers=_auth_headers(admin),
     )
     assert publish_response.status_code == 200
 
     learner_response = await async_client.get(
-        f"/api/v1/newcomer-training/papers/{paper['paper_id']}",
+        f"/api/v1/sales-trainer/papers/{paper['paper_id']}",
         headers=_auth_headers(learner),
     )
     assert learner_response.status_code == 200
@@ -105,7 +105,7 @@ async def test_should_create_publish_and_fetch_newcomer_paper_via_api(
 
 
 @pytest.mark.asyncio
-async def test_should_hide_draft_newcomer_paper_from_learner_api(
+async def test_should_hide_draft_sales_trainer_paper_from_learner_api(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
@@ -126,7 +126,7 @@ async def test_should_hide_draft_newcomer_paper_from_learner_api(
     await test_db.commit()
 
     create_response = await async_client.post(
-        "/api/v1/admin/newcomer-training/papers",
+        "/api/v1/admin/sales-trainer/papers",
         headers=_auth_headers(admin),
         json={
             "paper_key": "business-skills-draft-api-paper",
@@ -144,7 +144,7 @@ async def test_should_hide_draft_newcomer_paper_from_learner_api(
     paper_id = create_response.json()["data"]["paper_id"]
 
     learner_response = await async_client.get(
-        f"/api/v1/newcomer-training/papers/{paper_id}",
+        f"/api/v1/sales-trainer/papers/{paper_id}",
         headers=_auth_headers(learner),
     )
 
@@ -153,7 +153,7 @@ async def test_should_hide_draft_newcomer_paper_from_learner_api(
 
 
 @pytest.mark.asyncio
-async def test_should_update_draft_newcomer_paper_via_api(
+async def test_should_update_draft_sales_trainer_paper_via_api(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
@@ -178,7 +178,7 @@ async def test_should_update_draft_newcomer_paper_via_api(
     await test_db.commit()
 
     create_response = await async_client.post(
-        "/api/v1/admin/newcomer-training/papers",
+        "/api/v1/admin/sales-trainer/papers",
         headers=_auth_headers(admin),
         json={
             "paper_key": "business-skills-update-api-paper",
@@ -197,7 +197,7 @@ async def test_should_update_draft_newcomer_paper_via_api(
     paper_id = create_response.json()["data"]["paper_id"]
 
     update_response = await async_client.put(
-        f"/api/v1/admin/newcomer-training/papers/{paper_id}",
+        f"/api/v1/admin/sales-trainer/papers/{paper_id}",
         headers=_auth_headers(admin),
         json={
             "title": "商务技巧已编辑草稿",
@@ -227,7 +227,7 @@ async def test_should_update_draft_newcomer_paper_via_api(
 
 
 @pytest.mark.asyncio
-async def test_should_rollback_published_newcomer_paper_via_api(
+async def test_should_rollback_published_sales_trainer_paper_via_api(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
@@ -253,7 +253,7 @@ async def test_should_rollback_published_newcomer_paper_via_api(
     await test_db.commit()
 
     create_response = await async_client.post(
-        "/api/v1/admin/newcomer-training/papers",
+        "/api/v1/admin/sales-trainer/papers",
         headers=_auth_headers(admin),
         json={
             "paper_key": "business-skills-rollback-api-paper",
@@ -272,14 +272,14 @@ async def test_should_rollback_published_newcomer_paper_via_api(
     paper_id = create_response.json()["data"]["paper_id"]
 
     publish_response = await async_client.post(
-        f"/api/v1/admin/newcomer-training/papers/{paper_id}/publish",
+        f"/api/v1/admin/sales-trainer/papers/{paper_id}/publish",
         headers=_auth_headers(admin),
     )
     assert publish_response.status_code == 200
     initial_revision = await _latest_paper_revision(test_db, paper_id)
 
     update_response = await async_client.put(
-        f"/api/v1/admin/newcomer-training/papers/{paper_id}",
+        f"/api/v1/admin/sales-trainer/papers/{paper_id}",
         headers=_auth_headers(admin),
         json={
             "title": "商务技巧第二版",
@@ -296,13 +296,13 @@ async def test_should_rollback_published_newcomer_paper_via_api(
     update_trace_id = update_response.json()["trace_id"]
 
     republish_response = await async_client.post(
-        f"/api/v1/admin/newcomer-training/papers/{paper_id}/publish",
+        f"/api/v1/admin/sales-trainer/papers/{paper_id}/publish",
         headers=_auth_headers(admin),
     )
     assert republish_response.status_code == 200
     republish_trace_id = republish_response.json()["trace_id"]
     history_response = await async_client.get(
-        f"/api/v1/admin/newcomer-training/papers/{paper_id}/revisions",
+        f"/api/v1/admin/sales-trainer/papers/{paper_id}/revisions",
         headers=_auth_headers(admin),
     )
     assert history_response.status_code == 200
@@ -315,14 +315,14 @@ async def test_should_rollback_published_newcomer_paper_via_api(
     assert history[0]["status"] == "published"
     assert history[1]["is_active"] is False
     second_version = await async_client.get(
-        f"/api/v1/newcomer-training/papers/{paper_id}",
+        f"/api/v1/sales-trainer/papers/{paper_id}",
         headers=_auth_headers(learner),
     )
     assert second_version.status_code == 200
     assert second_version.json()["data"]["questions"][0]["question_id"] == second.question_id
 
     rollback_response = await async_client.post(
-        f"/api/v1/admin/newcomer-training/papers/{paper_id}/rollback",
+        f"/api/v1/admin/sales-trainer/papers/{paper_id}/rollback",
         headers=_auth_headers(admin),
         json={
             "target_revision_id": initial_revision.revision_id,
@@ -333,7 +333,7 @@ async def test_should_rollback_published_newcomer_paper_via_api(
     rollback_trace_id = rollback_response.json()["trace_id"]
 
     rolled_back = await async_client.get(
-        f"/api/v1/newcomer-training/papers/{paper_id}",
+        f"/api/v1/sales-trainer/papers/{paper_id}",
         headers=_auth_headers(learner),
     )
     assert rolled_back.status_code == 200

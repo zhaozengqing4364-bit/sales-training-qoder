@@ -1,5 +1,7 @@
 # Newcomer Training UX Closure Implementation Plan
 
+> **Status: Superseded / Legacy historical plan (2026-07-16).** Do not execute this plan as target work. Use [`../../newcomer-foundation-contract-index.md`](../../newcomer-foundation-contract-index.md) and the Slice 1–8 tasks.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Do not dispatch subagents for this plan.
 
 **Goal:** 完整修复新人训练学员端、路径管理端和运营工作台的易用性、资源治理、发布安全与闭环体验。
@@ -166,4 +168,3 @@
 - [ ] 运行前端 Vitest、TypeScript、ESLint、production build。
 - [ ] 运行新人训练 Playwright 与项目关键质量门禁。
 - [ ] 检查工作树，只提交本任务文件，不包含用户已有修改。
-

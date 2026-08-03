@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "管理工作台、表格、Drawer 和权限模式"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "任务优先和上下文内完成"}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "配置、修订、发布和回滚治理"}
+{"file": ".trellis/spec/backend/newcomer-training-activity-orchestration.md", "reason": "路径编辑、发布与 Enrollment 影响"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "管理 DTO、Capability 和 ViewModel 契约"}
+{"file": ".trellis/tasks/archive/2026-07/07-16-newcomer-sales-foundation-platform/architecture.md", "reason": "管理 API、ReleasePlan 和模块边界"}
+{"file": "docs/newcomer-foundation-contract-index.md", "reason": "切片 0 权威管理 API、权限、ReleasePlan、Enrollment 影响与干净切换合同入口"}
+{"file": "docs/adr/2026-07-16-enrollment-revision-freeze.md", "reason": "直接约束发布影响、Enrollment 预览确认和禁止自动迁移"}
+{"file": "docs/adr/2026-07-16-newcomer-foundation-domain-and-modules.md", "reason": "直接约束管理命令只能调用领域所有者与 ReleasePlan"}

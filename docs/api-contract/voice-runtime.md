@@ -3,6 +3,8 @@
 > 状态：✅ 已实现（2026-02-16 更新）  
 > 前缀：`/api/v1/admin/voice-runtime`
 
+> 首发基线说明（2026-07-15）：下文 `088`、`089` 是首发前历史 revision 的行为证据，现已归档到 `backend/alembic/archive/prelaunch_20260715/`；它们的最终 schema 与默认值已吸收到活动基线 `20260715_0000_001`，新数据库不会逐条执行这些归档 revision。首发后的任何变更必须从当前唯一 head 新增线性 revision，不能修改或重新激活归档历史。
+
 ## Authority boundary（M021/S02 contract sync）
 
 - **live compiled prompt authority**：`VoiceRuntimePolicyService` + `VoiceInstructionCompiler` 会把 `persona_policy`、customer pressure、runtime profile 的 `tool_policy` 编译进 `voice_policy_snapshot.instructions` 与 `instruction_contract_hash`；这条 compiled artifact 才是新的 StepFun / presentation 会话真正执行的实时指令合同。
@@ -68,10 +70,10 @@ interface ToolPolicy {
 - 上游 401：统一分类为 `[STEPFUN_UPSTREAM_REJECTED]`，operator-facing reason 是 `upstream_auth_rejected`，表示本地 learner auth、seed、path/start/WS 链路已经到达上游，但 StepFun 拒绝握手；处理动作是检查 `STEPFUN_API_KEY` 是否有效、是否开通 realtime 权限，以及是否授权对应 `model_name`。
 - 上游 402/403/429：同样属于真实 provider executed failure，不得降级为 local provider 通过；门禁 evidence 必须保留失败分类。
 
-### StepAudio 2.5 migration apply/rollback
+### StepAudio 2.5 首发前 migration 历史契约
 
-- Apply migration：`20260702_1100_088_stepfun_default_model_stepaudio25` 只把 `voice_runtime_profiles.model_name` 的服务端默认值切到 `stepaudio-2.5-realtime`，并仅更新 `is_default=true AND voice_mode='stepfun_realtime' AND model_name='step-audio-2.3'` 的默认 profile。它不得写入、复制或打印 `STEPFUN_API_KEY`。
-- Rollback migration：downgrade 只把同一条件下的默认 profile 从 `stepaudio-2.5-realtime` 回退到 `step-audio-2.3`，并恢复 server default；已经显式配置为其他模型的 profile 不应被覆盖。
+- 历史 apply 行为：归档 revision `20260702_1100_088_stepfun_default_model_stepaudio25` 当时只把 `voice_runtime_profiles.model_name` 的服务端默认值切到 `stepaudio-2.5-realtime`，并仅更新 `is_default=true AND voice_mode='stepfun_realtime' AND model_name='step-audio-2.3'` 的默认 profile；它不得写入、复制或打印 `STEPFUN_API_KEY`。当前空库直接由首发 baseline 建立最终状态。
+- 历史 rollback 行为：该归档 revision 的 downgrade 当时只把同一条件下的默认 profile 从 `stepaudio-2.5-realtime` 回退到 `step-audio-2.3`，并恢复 server default；已经显式配置为其他模型的 profile 不应被覆盖。它不再是首发后的发布回滚入口。
 - Apply/rollback 前后都必须运行 `scripts/check_stepfun_realtime_prereqs.py --env-file backend/.env` 或等价环境预检；预检报告必须只包含 redacted key 状态和 `endpoint_without_secret`。
 - 如果 StepFun 控制台未授权 `stepaudio-2.5-realtime`，这是 provider readiness failure，返回 `[STEPFUN_UPSTREAM_REJECTED]` 或 registry readiness diagnostic；不得把模型自动降级为 legacy/local provider 作为成功。
 
@@ -87,7 +89,7 @@ interface ToolPolicy {
 - observation policy 优先读取冻结的 `voice_policy_snapshot.roleplay_observation_policy`；缺失或非法时回退到 bundled default：同步 `heuristic.enabled=true`、后台 `llm.enabled=false`。
 - 若 policy 开启 `llm.enabled=true`，sink 仍先同步写 `source="heuristic"`，再后台执行 `evaluate_background()` 并写入独立 `source="llm_evaluator"` observation；LLM timeout/失败只允许写 `failed` observation / diagnostic，不得阻断 WS。
 - capture metadata 只能包含 `session_id`、`turn_index`、`source_event_type`、`response_id`、`turn_id`、`instruction_contract_hash`、安全 grounding 摘要和 `trace_id`；不得保存 thinking、secret、Authorization、Cookie、API key、JWT、LLM provider key、StepFun handshake headers 或完整上游 payload。
-- observation migration：`20260702_1530_089_sales_trainer_roleplay_observations` 只创建 append-only 观测表和索引；apply 不回填历史 turn，rollback 只删除该 sidecar 表，不得修改 `practice_sessions`、训练记录或 runtime snapshot。已写入 observation 行属于后台审计数据；非空表 downgrade 默认拒绝执行，只有在完成导出/审批并显式设置 `ALLOW_SALES_TRAINER_ROLEPLAY_OBSERVATION_DESTRUCTIVE_DOWNGRADE=1` 后才允许破坏性删除。业务回滚优先通过停止注入 sink/隐藏读取入口完成。
+- observation 历史 migration：归档 revision `20260702_1530_089_sales_trainer_roleplay_observations` 当时只创建 append-only 观测表和索引；首发 baseline 已直接包含该最终结构。该归档 revision 的 apply 不回填历史 turn，rollback 只删除 sidecar 表且不得修改 `practice_sessions`、训练记录或 runtime snapshot。首发后不得通过重新执行归档 downgrade 删除数据；业务回滚优先停止注入 sink/隐藏读取入口，若未来确需 schema 变更必须新增受审查 revision。
 - 读取入口在 `GET /api/v1/admin/sales-trainer/training-records/realtime-roleplay/{session_id}/observations`，权限和对象级范围由 sales trainer training records contract 约束。
 
 ### 接口

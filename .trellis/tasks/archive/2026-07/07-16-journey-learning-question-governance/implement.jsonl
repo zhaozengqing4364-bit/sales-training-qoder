@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/newcomer-training-activity-orchestration.md", "reason": "路径、Activity、Attempt 和版本编排"}
+{"file": ".trellis/spec/backend/sales-trainer-learning-topic-governance.md", "reason": "学习内容与题目治理现有规范"}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "测验阈值、尝试和发布规则配置化"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "修订冻结、幂等与迁移"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "学员 Journey 与管理审核体验"}
+{"file": ".trellis/tasks/archive/2026-07/07-16-newcomer-sales-foundation-platform/research/current-state.md", "reason": "题目生成和学习内容现状证据"}
+{"file": "docs/newcomer-foundation-contract-index.md", "reason": "切片 0 权威 Path/Stage/Activity、Enrollment 冻结、事件与 API 合同入口"}
+{"file": "docs/adr/2026-07-16-newcomer-foundation-domain-and-modules.md", "reason": "直接约束 Path/Stage/Activity、learning 所有权与跨域端口"}
+{"file": "docs/adr/2026-07-16-enrollment-revision-freeze.md", "reason": "直接约束 Cohort/Enrollment 冻结与显式迁移"}

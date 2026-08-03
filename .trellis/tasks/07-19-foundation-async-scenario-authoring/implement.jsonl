@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/newcomer-training-activity-orchestration.md", "reason": "三段异步 Assignment 合同"}
+{"file": ".trellis/spec/backend/competency-evidence-readiness.md", "reason": "场景证据与复核"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "场景双视角编辑"}
+{"file": ".trellis/spec/frontend/newcomer-foundation-view-models.md", "reason": "隐藏评估信息"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "客户数据和部分成功"}
+{"file": ".trellis/tasks/07-19-newcomer-training-content-authoring-closure/research/current-state-gap.md", "reason": "异步与 Realtime 边界"}

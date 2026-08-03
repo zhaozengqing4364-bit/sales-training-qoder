@@ -1,11 +1,11 @@
 # Backup / Recovery Baseline Runbook
 
-最后更新：2026-04-14  
+最后更新：2026-07-15
 适用范围：当前仓库可见的本地开发 / 轻量手工运维场景
 
-> 当前基线只描述**今天仓库里真实能执行的路径**：本地脚本、PostgreSQL/Redis 标准工具、文件归档、Alembic、老库修复脚本、管理员账号重建。
+> 当前基线只描述**今天仓库里真实能执行的路径**：本地脚本、PostgreSQL/Redis 标准工具、文件归档、Alembic 和管理员账号重建。首发 schema 已切换为新的单 root baseline；旧开发数据库不再 repair/stamp，统一重建。
 >
-> 本次文档已按当前仓库实物复核以下 repo-local 引用：`scripts/dev-up.sh`、`scripts/dev-stop.sh`、`scripts/recovery_drill_baseline.py`、`scripts/recovery_drill_runner.py`、`scripts/recovery-drill-baseline.py`、`scripts/recovery-drill-runner.py`、`backend/src/main.py`、`backend/scripts/repair_legacy_schema.py`、`backend/scripts/bootstrap_auth_admin.py`、`backend/src/common/db/session.py`、`backend/src/common/config.py`、`backend/src/common/storage/document.py`、`backend/src/common/knowledge/vector_store.py`、`backend/src/admin/api/admin.py`、`docs/setup/auth-local.md`。
+> 本次文档已按当前仓库实物复核以下 repo-local 引用：`scripts/dev-up.sh`、`scripts/dev-stop.sh`、`scripts/recovery_drill_baseline.py`、`scripts/recovery_drill_runner.py`、`backend/src/launch_reset/`、`backend/scripts/bootstrap_auth_admin.py`、`backend/src/common/db/session.py`、`docs/launch-reset-runbook.md`、`docs/setup/auth-local.md`。
 >
 > 当前仓库**没有** repo-native 的一键备份平台、OSS 批量导出脚本、统一灾备编排或明确值班名单；这些缺口会在文末的 **Follow-up（非当前基线）** 单列，不混入当前基线步骤。
 
@@ -77,14 +77,14 @@ python3 scripts/recovery-drill-runner.py run --continue-on-failure
 | 备份产物目录（建议） | 当前仓库无固定目录；最小基线建议放到本机或挂载盘的 `./.dev/backup-evidence/<YYYYMMDD-HHMM>/`，不要提交到 Git | 备份目录、截图、命令回显 |
 | Deploy health 证据 | systemd/nginx 健康检查回显 | 同一发布 / 恢复记录 |
 | Drill automation 证据 | `./.dev/recovery-drills/<timestamp>/summary.json` + 同目录逐 drill `*.log` | 同一发布 / 恢复记录 |
-| 恢复验证证据 | `/health` 回包、`alembic upgrade head` 输出、必要时 legacy repair / 管理员重建回显 | 同一工单 / 恢复演练记录 |
+| 恢复验证证据 | `/health` 回包、`alembic upgrade head` 输出、管理员重建回显 | 同一工单 / 恢复演练记录 |
 
 ### 1.1 数据库 authority line（执行恢复/启动时必须遵守）
 
 - `cd backend && venv/bin/python -m alembic upgrade head` 是唯一的 forward schema migration authority；恢复后的 schema 对齐和 CI 都应先走这里。
-- `cd backend && python scripts/repair_legacy_schema.py --database-url <DATABASE_URL>` 是一次性 legacy repair authority；只在发现历史 `personas.persona_policy` / `knowledge_documents` drift 时显式执行。
 - `cd backend && python scripts/bootstrap_auth_admin.py ...` 只负责账号 bootstrap，不拥有 schema authority。
-- `backend/src/common/db/session.py` 里的 `init_db()` 只是 startup/bootstrap 入口：它仍会 `create_all()`，但 compatibility guard 只允许在 `development` / `test` / `testing` 做自动补齐；非开发环境发现 legacy drift 会 fail-fast 并要求你回到 Alembic / repair script。
+- `backend/src/common/db/session.py` 的启动入口只读校验数据库 revision 精确等于唯一 Alembic head，不执行 `create_all()`、repair 或 stamp。
+- 归档 revision 对应的旧开发库不能直接升级到首发 head；按 `docs/launch-reset-runbook.md` 从空库重建。
 - `scripts/dev-up.sh` 只负责拉起本地服务，不会先执行 `alembic upgrade head`；因此“能启动”不等于“迁移已经完成”。
 
 ## 2. 执行前先确认的环境事实
@@ -122,7 +122,7 @@ printf 'ALI_OSS_ENDPOINT=%s\n' "${ALI_OSS_ENDPOINT:-<unset>}"
 
 | 数据面 | 当前最小频率 | 当前可执行方式 | 当前风险说明 |
 |---|---|---|---|
-| PostgreSQL 主库 | 每周至少一次；每次执行 `alembic upgrade head`、`repair_legacy_schema.py`、`reset_db.py`、大版本发布前必须额外执行一次 | 手工 `pg_dump` | 仓库内没有自动调度或保留策略 |
+| PostgreSQL 主库 | 每周至少一次；每次执行 `alembic upgrade head`、launch reset 或大版本发布前必须额外执行一次 | 手工 `pg_dump` | 仓库内没有自动调度或保留策略 |
 | Redis 会话恢复状态 | 需要保留活跃会话可恢复能力时，在重启/迁移前执行一次；否则可接受丢失最近 30 分钟 reconnect 状态 | 手工 `redis-cli --rdb` | Redis 只承载短 TTL 会话快照，不是长期业务主数据 |
 | 本地文档 / 向量库 / 上传目录 | 每周至少一次；知识库大批量导入或 PPT 上传后额外执行一次 | 手工 `tar` 归档 | 当前目录分散，且存在相对路径/绝对路径并存 |
 | OSS 音频对象 | 当前仓库内**无**批量备份入口；至少每季度确认 bucket 配置与代表性对象可读 | 仓库内仅能验证 `object_key`/签名能力，不能批量导出 | 当前是已知缺口 |
@@ -231,13 +231,7 @@ cd backend
 alembic upgrade head
 ```
 
-如果是老环境、升级后仍存在 `personas.persona_policy` 或 `knowledge_documents` legacy drift，再执行：
-
-```bash
-python scripts/repair_legacy_schema.py --database-url "${DATABASE_URL}"
-```
-
-这一步是**显式 repair authority**，不是 startup 自动补洞的替代写法。只有在你已经确认目标 revision 的前提下，才使用 `--stamp-revision <revision>`。
+只有备份本身已经属于当前首发 baseline 或其后续线性 revision，才允许执行上述升级。归档历史对应的旧开发库不支持 repair/stamp 到新 head；需要在隔离环境读取旧配置，并按首发 reset runbook 重建，不能改写 `alembic_version` 伪装兼容。
 
 ### 5.4 恢复本地目录
 
@@ -313,7 +307,7 @@ cd backend
 alembic upgrade head
 ```
 
-预期：无报错；如果已经是最新 revision，应表现为 no-op / 最新版本。若随后 startup 仍抛出 legacy personas / knowledge_documents drift 错误，说明需要回到 `python scripts/repair_legacy_schema.py --database-url "${DATABASE_URL}"` 这一显式 repair 入口，而不是依赖 `init_db()` 自动补齐。
+预期：无报错；如果已经是最新 revision，应表现为 no-op。随后启动只读校验同一 head；任何 revision 不一致都应停止并按对应版本恢复或重建，不能由 startup 自动补齐。
 
 ### 6.3 管理员入口可重新建立
 
@@ -345,7 +339,7 @@ done
 以下命令可从仓库根目录直接执行，用于后续 M019 slices 或人工排查时快速确认 authority 线没有漂移：
 
 ```bash
-rg -n "alembic upgrade head|repair_legacy_schema|bootstrap_auth_admin|init_db|startup" \
+rg -n "alembic upgrade head|launch_reset|bootstrap_auth_admin|verify_database_schema" \
   docs/backup-recovery-runbook.md \
   .github/workflows
 
@@ -354,7 +348,7 @@ backend/venv/bin/python -m pytest -c backend/pyproject.toml \
   backend/tests/unit/common/test_db_session_compatibility.py -q
 ```
 
-第一条命令确认文档 / CI 入口仍把 Alembic、repair script、bootstrap、`init_db()` 写在正确 authority 线上；第二条命令确认非开发环境 startup 不再静默修补 legacy drift，同时 development/test bootstrap 兼容 proof 仍然存在。
+第一条命令确认文档 / CI 入口仍把 Alembic、launch reset、账号 bootstrap 和只读 startup verifier 写在正确 authority 线上；第二条命令确认未迁移数据库会失败且匹配 head 时不执行 DDL。
 
 ### 6.7 WebSocket runtime state / restart / drain guidance
 

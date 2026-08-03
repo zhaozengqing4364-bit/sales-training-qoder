@@ -78,7 +78,7 @@ export function AdminIndexShell({
     return (
         <div
             className={cn(
-                "space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500",
+                "space-y-6 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[var(--duration-tooltip)]",
                 className,
             )}
         >
@@ -121,6 +121,7 @@ export function AdminDetailShell({
             <div className="space-y-4">
                 <Link
                     href={backHref}
+                    prefetch={false}
                     className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
                 >
                     <ArrowLeft className="h-4 w-4" />
@@ -141,6 +142,7 @@ export function AdminDetailShell({
                             <Link
                                 key={tab.href}
                                 href={tab.href}
+                                prefetch={false}
                                 className={cn(
                                     "rounded-full px-4 py-2 text-sm font-medium transition-colors",
                                     tab.isActive
@@ -183,6 +185,7 @@ export function AdminFormShell({
             <div className="space-y-4">
                 <Link
                     href={backHref}
+                    prefetch={false}
                     className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
                 >
                     <ArrowLeft className="h-4 w-4" />
@@ -220,7 +223,7 @@ export function PolicyPageShell({
     return (
         <div
             className={cn(
-                "space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20",
+                "space-y-6 pb-20 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[var(--duration-tooltip)]",
                 className,
             )}
         >

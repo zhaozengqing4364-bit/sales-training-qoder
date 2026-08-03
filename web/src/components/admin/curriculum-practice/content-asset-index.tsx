@@ -335,7 +335,7 @@ export function ContentAssetIndex({ assetType }: ContentAssetIndexProps) {
                                 <div className="flex flex-wrap gap-2">
                                     {item.status === "draft" ? (
                                         <Button variant="outline" asChild>
-                                            <Link href={`${meta.basePath}/${recordId(item)}/edit`}>编辑资产</Link>
+                                            <Link href={`${meta.basePath}/${recordId(item)}/edit`} prefetch={false}>编辑资产</Link>
                                         </Button>
                                     ) : item.status === "published" ? (
                                         <Button

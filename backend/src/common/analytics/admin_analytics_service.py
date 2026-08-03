@@ -26,6 +26,7 @@ from common.analytics.history_service import (
 )
 from common.db.models import PracticeSession, SessionStatus, User
 from common.error_handling.result import Result
+from common.teams import TeamSummary, active_primary_teams_by_user_ids
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,7 @@ class LeaderboardEntry:
     rank: int
     user_id: str
     user_name: str
-    department: str | None
+    team: TeamSummary | None
     total_sessions: int
     average_score: float
     best_score: float
@@ -181,6 +182,7 @@ class ProjectionAnalyticsRecord:
 
     session: PracticeSession
     summary: HistorySessionSummary
+    team: TeamSummary | None = None
 
 
 def _get_time_range_start(time_range: str) -> datetime:
@@ -338,12 +340,12 @@ class AdminAnalyticsService:
         )
 
     @staticmethod
-    def _resolve_department(record: ProjectionAnalyticsRecord) -> str:
-        user = getattr(record.session, "user", None)
-        department = getattr(user, "department", None) if user is not None else None
-        if isinstance(department, str) and department.strip():
-            return department.strip()
-        return "未分配部门"
+    def _resolve_team_name(record: ProjectionAnalyticsRecord) -> str:
+        return record.team.name if record.team else "未分配团队"
+
+    @staticmethod
+    def _team_payload(record: ProjectionAnalyticsRecord) -> dict[str, str] | None:
+        return record.team.to_dict() if record.team else None
 
     @staticmethod
     def _extract_degraded_reasons(summary: HistorySessionSummary) -> list[str]:
@@ -407,7 +409,7 @@ class AdminAnalyticsService:
         cls,
         records: list[ProjectionAnalyticsRecord],
         *,
-        include_department_count: bool,
+        include_team_count: bool,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
         grouped: dict[str, dict[str, Any]] = {}
@@ -432,7 +434,7 @@ class AdminAnalyticsService:
                 if isinstance(payload.get("issue_text"), str)
                 else None
             )
-            department = cls._resolve_department(record)
+            team_key = record.team.team_id if record.team else "__unassigned__"
             session_start = cls._coerce_utc(record.summary.start_time)
 
             bucket = grouped.setdefault(
@@ -443,13 +445,13 @@ class AdminAnalyticsService:
                     "issue_text": issue_text,
                     "count": 0,
                     "user_ids": set(),
-                    "departments": set(),
+                    "teams": set(),
                     "latest_start_time": session_start,
                 },
             )
             bucket["count"] += 1
             bucket["user_ids"].add(str(record.session.user_id))
-            bucket["departments"].add(department)
+            bucket["teams"].add(team_key)
             if session_start >= bucket["latest_start_time"]:
                 bucket["latest_start_time"] = session_start
                 bucket["issue_type"] = issue_type
@@ -474,8 +476,8 @@ class AdminAnalyticsService:
                 "count": int(bucket["count"]),
                 "user_count": len(bucket["user_ids"]),
             }
-            if include_department_count:
-                item["department_count"] = len(bucket["departments"])
+            if include_team_count:
+                item["team_count"] = len(bucket["teams"])
             buckets.append(item)
         return buckets
 
@@ -494,11 +496,10 @@ class AdminAnalyticsService:
                 PracticeSession.user_id,
                 func.max(PracticeSession.start_time).label("last_session_at"),
                 User.name,
-                User.department,
             )
             .join(User, User.user_id == PracticeSession.user_id)
             .where(PracticeSession.status == SessionStatus.COMPLETED.value)
-            .group_by(PracticeSession.user_id, User.name, User.department)
+            .group_by(PracticeSession.user_id, User.name)
         )
         if normalized_scenario_type:
             query = query.where(
@@ -506,15 +507,20 @@ class AdminAnalyticsService:
             )
 
         rows = (await db.execute(query)).all()
+        teams_by_user_id = await active_primary_teams_by_user_ids(
+            db,
+            [row.user_id for row in rows],
+        )
         payload: list[dict[str, Any]] = []
         for row in rows:
             if row.last_session_at is None:
                 continue
+            team = teams_by_user_id.get(str(row.user_id))
             payload.append(
                 {
                     "user_id": str(row.user_id),
                     "user_name": row.name,
-                    "department": row.department,
+                    "team": team.to_dict() if team else None,
                     "last_session_at": cls._coerce_utc(row.last_session_at),
                 }
             )
@@ -543,7 +549,7 @@ class AdminAnalyticsService:
                 {
                     "user_id": user_id,
                     "user_name": cls._resolve_user_name(latest_record),
-                    "department": cls._resolve_department(latest_record),
+                    "team": cls._team_payload(latest_record),
                     "overall_result": latest_record.summary.overall_result or "fail",
                     "session_id": str(latest_record.session.session_id),
                     "session_start_time": cls._coerce_utc(
@@ -574,7 +580,7 @@ class AdminAnalyticsService:
                 {
                     "user_id": row["user_id"],
                     "user_name": row["user_name"],
-                    "department": row["department"],
+                    "team": row["team"],
                     "last_session_at": last_session_at.isoformat(),
                     "inactive_days": days_inactive,
                 }
@@ -615,7 +621,7 @@ class AdminAnalyticsService:
                 {
                     "user_id": user_id,
                     "user_name": cls._resolve_user_name(latest_record),
-                    "department": cls._resolve_department(latest_record),
+                    "team": cls._team_payload(latest_record),
                     "pass_gain": round(gain * 100, 2),
                     "baseline_pass_rate": round(baseline_pass_rate * 100, 2),
                     "current_pass_rate": round(current_pass_rate * 100, 2),
@@ -632,15 +638,16 @@ class AdminAnalyticsService:
         }
 
     @classmethod
-    def _build_department_issue_buckets(
+    def _build_team_issue_buckets(
         cls,
         records: list[ProjectionAnalyticsRecord],
     ) -> list[dict[str, Any]]:
         completed_records = cls._completed_records(records)
         blocked_records = cls._blocked_evaluable_records(records)
 
-        by_department: dict[str, dict[str, list[Any]]] = defaultdict(
+        by_team: dict[str, dict[str, Any]] = defaultdict(
             lambda: {
+                "team": None,
                 "completed": [],
                 "blocked": [],
                 "not_evaluable": [],
@@ -649,47 +656,49 @@ class AdminAnalyticsService:
         )
 
         for record in completed_records:
-            department = cls._resolve_department(record)
-            by_department[department]["completed"].append(record)
+            team_key = record.team.team_id if record.team else "__unassigned__"
+            by_team[team_key]["team"] = cls._team_payload(record)
+            by_team[team_key]["completed"].append(record)
             if record.summary.evaluable is False:
-                by_department[department]["not_evaluable"].append(record.summary)
+                by_team[team_key]["not_evaluable"].append(record.summary)
             if cls._extract_degraded_reasons(record.summary):
-                by_department[department]["degraded"].append(record.summary)
+                by_team[team_key]["degraded"].append(record.summary)
 
         for record in blocked_records:
-            department = cls._resolve_department(record)
-            by_department[department]["blocked"].append(record)
+            team_key = record.team.team_id if record.team else "__unassigned__"
+            by_team[team_key]["team"] = cls._team_payload(record)
+            by_team[team_key]["blocked"].append(record)
 
-        ranked_departments = sorted(
-            by_department,
-            key=lambda department: (
-                -len(by_department[department]["blocked"]),
-                -len(by_department[department]["completed"]),
-                department,
+        ranked_teams = sorted(
+            by_team,
+            key=lambda team_key: (
+                -len(by_team[team_key]["blocked"]),
+                -len(by_team[team_key]["completed"]),
+                str((by_team[team_key]["team"] or {}).get("name") or "未分配团队"),
             ),
         )
 
         payload: list[dict[str, Any]] = []
-        for department in ranked_departments:
-            department_records = by_department[department]
+        for team_key in ranked_teams:
+            team_records = by_team[team_key]
             payload.append(
                 {
-                    "department": department,
-                    "session_count": len(department_records["completed"]),
+                    "team": team_records["team"],
+                    "session_count": len(team_records["completed"]),
                     "evaluable_sessions": len(
-                        cls._evaluable_records(department_records["completed"])
+                        cls._evaluable_records(team_records["completed"])
                     ),
-                    "not_evaluable_sessions": len(department_records["not_evaluable"]),
+                    "not_evaluable_sessions": len(team_records["not_evaluable"]),
                     "issue_buckets": cls._build_blocker_family_buckets(
-                        department_records["blocked"],
-                        include_department_count=False,
+                        team_records["blocked"],
+                        include_team_count=False,
                     ),
                     "degradation_breakdown": {
                         "not_evaluable_reasons": cls._build_reason_distribution(
-                            department_records["not_evaluable"]
+                            team_records["not_evaluable"]
                         ),
                         "degraded_reasons": cls._build_degraded_reason_distribution(
-                            department_records["degraded"]
+                            team_records["degraded"]
                         ),
                     },
                 }
@@ -716,7 +725,7 @@ class AdminAnalyticsService:
 
         cohort_issue_buckets = cls._build_blocker_family_buckets(
             blocked_records,
-            include_department_count=True,
+            include_team_count=True,
         )
         repeated_blocker_families = [
             bucket for bucket in cohort_issue_buckets if int(bucket["count"]) >= 2
@@ -747,8 +756,11 @@ class AdminAnalyticsService:
                 "evaluable_sessions": len(evaluable_records),
                 "not_evaluable_sessions": len(not_evaluable_records),
                 "degraded_sessions": len(degraded_summaries),
-                "active_departments": len(
-                    {cls._resolve_department(record) for record in completed_records}
+                "active_teams": len(
+                    {
+                        record.team.team_id if record.team else "__unassigned__"
+                        for record in completed_records
+                    }
                 ),
                 "at_risk_users": len(at_risk_user_ids),
                 "improving_users": len(manager_lists["improving"]),
@@ -768,7 +780,7 @@ class AdminAnalyticsService:
                 else None,
             },
             "cohort_issue_buckets": cohort_issue_buckets,
-            "department_issue_buckets": cls._build_department_issue_buckets(records),
+            "team_issue_buckets": cls._build_team_issue_buckets(records),
             "repeated_blocker_families": repeated_blocker_families,
             "degradation_breakdown": {
                 "not_evaluable_reasons": not_evaluable_reasons,
@@ -841,9 +853,17 @@ class AdminAnalyticsService:
             db,
             sessions=sessions,
         )
+        teams_by_user_id = await active_primary_teams_by_user_ids(
+            db,
+            [session.user_id for session in sessions],
+        )
 
         records = [
-            ProjectionAnalyticsRecord(session=session, summary=summary)
+            ProjectionAnalyticsRecord(
+                session=session,
+                summary=summary,
+                team=teams_by_user_id.get(str(session.user_id)),
+            )
             for session, summary in zip(sessions, summaries, strict=False)
         ]
         logger.info(
@@ -1171,9 +1191,7 @@ class AdminAnalyticsService:
                         scenario_type
                     ),
                     "cohort_issue_bucket_count": len(payload["cohort_issue_buckets"]),
-                    "department_issue_bucket_count": len(
-                        payload["department_issue_buckets"]
-                    ),
+                    "team_issue_bucket_count": len(payload["team_issue_buckets"]),
                     "not_passed_count": len(manager_lists["not_passed"]),
                     "inactive_streak_count": len(manager_lists["inactive_streak"]),
                     "improving_count": len(manager_lists["improving"]),
@@ -1354,12 +1372,10 @@ class AdminAnalyticsService:
                 first_session = user_records[0].session
                 user = getattr(first_session, "user", None)
                 user_name = None
-                department = None
                 if user is not None:
                     user_name = getattr(user, "name", None) or getattr(
                         user, "email", None
                     )
-                    department = getattr(user, "department", None)
                 if not user_name:
                     user_name = "Unknown"
 
@@ -1384,7 +1400,7 @@ class AdminAnalyticsService:
                     {
                         "user_id": user_id,
                         "user_name": str(user_name),
-                        "department": department,
+                        "team": self._team_payload(user_records[0]),
                         "total_sessions": len(user_records),
                         "average_score": self._round_score(
                             score_summary["average_score"], digits=1

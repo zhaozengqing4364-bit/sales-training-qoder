@@ -42,7 +42,7 @@ wss://api.your-domain.com/ws/sales?session_id={session_id}&token={jwt_token}
 ```bash
 backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_websocket_status_contract.py -x -q
 npm --prefix web test -- --run src/lib/api/client.auth.test.ts src/lib/auth-handler.test.ts
-rg -n "Authorization|query token|cookie|CSRF|shared password|session expired" docs/setup/auth-local.md docs/api-contract/websocket.md web/src/lib/auth-handler.ts
+rg -n "Authorization|query token|cookie|CSRF|managed password|session expired" docs/setup/auth-local.md docs/api-contract/websocket.md web/src/lib/auth-handler.ts
 ```
 
 ## 连接建立

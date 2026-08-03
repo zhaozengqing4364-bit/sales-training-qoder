@@ -132,7 +132,6 @@ async def _upsert_owner(db: AsyncSession, summary: SeedSummary) -> User:
             email=OWNER_EMAIL,
             name="COO路径扩展管理员",
             role="admin",
-            department="销售训练演示部",
             is_active=True,
             wechat_user_id=_wechat_id(OWNER_EMAIL),
         )

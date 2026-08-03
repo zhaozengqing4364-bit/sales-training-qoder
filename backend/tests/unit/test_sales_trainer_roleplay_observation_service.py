@@ -16,14 +16,13 @@ from sales_trainer.services.roleplay_observation_service import (
 )
 
 
-def _user(role: str = "user", *, department: str | None = "销售一部") -> User:
+def _user(role: str = "user") -> User:
     return User(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"roleplay-observation-{role}-{uuid.uuid4().hex[:8]}",
         name=f"Roleplay Observation {role}",
         email=f"roleplay-observation-{role}-{uuid.uuid4().hex[:8]}@example.com",
         role=role,
-        department=department,
     )
 
 

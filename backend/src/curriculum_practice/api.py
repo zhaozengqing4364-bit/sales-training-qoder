@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 import os
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -39,6 +39,7 @@ from curriculum_practice.schemas import (
     LearningChapterUpdate,
     LearningContentCreate,
     LearningContentListResponse,
+    LearningContentSummaryListResponse,
     LearningContentUpdate,
     PracticeTemplateCreate,
     PracticeTemplateListResponse,
@@ -79,6 +80,7 @@ from curriculum_practice.services.learner_profiles import LearnerProfileService
 from curriculum_practice.services.learning_content_serializers import (
     serialize_chapter,
     serialize_learning_content,
+    serialize_learning_content_summary,
 )
 from curriculum_practice.services.learning_contents import (
     SERVER_ERROR as LEARNING_CONTENT_SERVICE_FAILED,
@@ -1023,6 +1025,7 @@ async def archive_question(
 @learning_content_router.get("", response_model=None)
 async def list_learning_contents(
     status: str | None = Query(default=None, pattern="^(draft|published|archived)$"),
+    view: Literal["full", "summary"] = Query(default="full"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | JSONResponse:
@@ -1038,6 +1041,13 @@ async def list_learning_contents(
             server_message="LearningContent 列表读取失败。",
         )
     items = items_result.value or []
+    if view == "summary":
+        return _success(
+            LearningContentSummaryListResponse(
+                items=[serialize_learning_content_summary(item) for item in items],
+                total=len(items),
+            )
+        )
     serialized_items = []
     for item in items:
         serialized_result = await serialize_learning_content(service, item)

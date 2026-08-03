@@ -36,7 +36,7 @@ describe("Admin layout shells", () => {
     });
 
     it("renders AdminIndexShell with header, context bar, and main content", () => {
-        render(
+        const view = render(
             <AdminIndexShell
                 header={<div>Header</div>}
                 contextBar={<AdminContextBar>Checklist</AdminContextBar>}
@@ -48,6 +48,8 @@ describe("Admin layout shells", () => {
         expect(screen.getByText("Header")).toBeTruthy();
         expect(screen.getByText("Checklist")).toBeTruthy();
         expect(screen.getByText("Main table")).toBeTruthy();
+        expect(view.container.firstElementChild?.className).not.toContain("duration-500");
+        expect(view.container.firstElementChild?.className).not.toContain("slide-in-from-bottom");
     });
 
     it("renders AdminDetailShell with back link and active tab", () => {

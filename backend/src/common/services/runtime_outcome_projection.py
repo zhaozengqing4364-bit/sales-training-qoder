@@ -7,8 +7,9 @@ from typing import Any
 from sqlalchemy import literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.db.models import PracticeSession, User
+from common.db.models import PracticeSession
 from common.db.typing import json_dict_or_empty, json_dict_value, orm_scalar
+from common.teams import TeamDataScope
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +73,7 @@ class RuntimeOutcomeProjectionService:
         owner: str,
         record_type: str,
         user_id: str | None = None,
-        team_department: str | None = None,
+        team_scope: TeamDataScope | None = None,
     ) -> Any:
         stmt = select(
             literal(record_type).label("record_type"),
@@ -81,9 +82,8 @@ class RuntimeOutcomeProjectionService:
         ).where(*_completed_external_binding_filters(owner=owner))
         if user_id:
             stmt = stmt.where(PracticeSession.user_id == user_id)
-        if team_department is not None:
-            stmt = stmt.join(User, PracticeSession.user_id == User.user_id)
-            stmt = stmt.where(User.department == team_department)
+        if team_scope is not None and not team_scope.unrestricted:
+            stmt = stmt.where(PracticeSession.user_id.in_(team_scope.learner_ids))
         return stmt
 
     async def get_completed_external_binding(

@@ -51,7 +51,7 @@ describe("read-models", () => {
                     issue_text: "价值表达还停留在功能层。",
                     count: 2,
                     user_count: 2,
-                    department_count: 1,
+                    team_count: 1,
                 },
                 top_degraded_reason: null,
             },
@@ -62,7 +62,7 @@ describe("read-models", () => {
                     issue_text: "缺少客户案例证据。",
                     count: 3,
                     user_count: 2,
-                    department_count: 1,
+                    team_count: 1,
                 },
             ],
             repeated_blocker_families: [],
@@ -92,7 +92,11 @@ describe("read-models", () => {
         expect(formatAdminUserStatusLabel("custom_status")).toBe("custom_status");
         expect(formatAdminUserStatusLabel()).toBe("未知状态");
 
-        expect(formatAdminUserRoleLabel("support")).toBe("支持角色");
+        expect(formatAdminUserRoleLabel("support")).toBe("技术支持");
+        expect(formatAdminUserRoleLabel("user")).toBe("学员");
+        expect(formatAdminUserRoleLabel("admin")).toBe("平台管理员");
+        expect(formatAdminUserRoleLabel("training_manager")).toBe("培训管理员");
+        expect(formatAdminUserRoleLabel("training_manager", { isTeamLeader: true })).toBe("销售组长");
         expect(formatAdminUserRoleLabel("custom_role")).toBe("custom_role");
         expect(formatAdminUserRoleLabel()).toBe("未分配角色");
 

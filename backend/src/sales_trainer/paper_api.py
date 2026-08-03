@@ -40,12 +40,6 @@ sales_trainer_paper_router = APIRouter(
 sales_trainer_admin_paper_router = APIRouter(
     prefix="/admin/sales-trainer", tags=["admin-sales-trainer-papers"]
 )
-newcomer_paper_router = APIRouter(
-    prefix="/newcomer-training", tags=["newcomer-training-papers"]
-)
-newcomer_admin_paper_router = APIRouter(
-    prefix="/admin/newcomer-training", tags=["admin-newcomer-training-papers"]
-)
 
 
 def _api_error(
@@ -309,24 +303,19 @@ async def submit_exam_paper_attempt(
     return await _learner_submit_exam_paper_attempt(payload, current_user, db)
 
 
-for paper_admin_router in (
+add_paper_admin_routes(
     sales_trainer_admin_paper_router,
-    newcomer_admin_paper_router,
-):
-    add_paper_admin_routes(
-        paper_admin_router,
-        list_handler=admin_list_exam_papers,
-        create_handler=admin_create_exam_paper,
-        update_handler=admin_update_exam_paper,
-        revisions_handler=admin_list_exam_paper_revisions,
-        publish_handler=admin_publish_exam_paper,
-        archive_handler=admin_archive_exam_paper,
-        rollback_handler=admin_rollback_exam_paper,
-    )
+    list_handler=admin_list_exam_papers,
+    create_handler=admin_create_exam_paper,
+    update_handler=admin_update_exam_paper,
+    revisions_handler=admin_list_exam_paper_revisions,
+    publish_handler=admin_publish_exam_paper,
+    archive_handler=admin_archive_exam_paper,
+    rollback_handler=admin_rollback_exam_paper,
+)
 
-for paper_learner_router in (sales_trainer_paper_router, newcomer_paper_router):
-    add_paper_learner_routes(
-        paper_learner_router,
-        get_handler=get_exam_paper,
-        submit_handler=submit_exam_paper_attempt,
-    )
+add_paper_learner_routes(
+    sales_trainer_paper_router,
+    get_handler=get_exam_paper,
+    submit_handler=submit_exam_paper_attempt,
+)

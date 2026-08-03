@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import LoginPage from "./page";
 
-const { pushMock, loginMock, getProvidersMock, devLoginMock, toastErrorMock } = vi.hoisted(() => ({
+const { pushMock, loginMock, changeTemporaryPasswordMock, getProvidersMock, devLoginMock, toastErrorMock } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     loginMock: vi.fn(),
+    changeTemporaryPasswordMock: vi.fn(),
     getProvidersMock: vi.fn(),
     devLoginMock: vi.fn(),
     toastErrorMock: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@/lib/api/client", async () => {
             auth: {
                 ...actual.api.auth,
                 login: loginMock,
+                changeTemporaryPassword: changeTemporaryPasswordMock,
                 getProviders: getProvidersMock,
                 devLogin: devLoginMock,
             },
@@ -67,6 +69,7 @@ describe("LoginPage", () => {
     beforeEach(() => {
         pushMock.mockReset();
         loginMock.mockReset();
+        changeTemporaryPasswordMock.mockReset();
         getProvidersMock.mockReset();
         devLoginMock.mockReset();
         toastErrorMock.mockReset();
@@ -96,6 +99,8 @@ describe("LoginPage", () => {
         expect(await screen.findByRole("button", { name: /开发者快速登录/i }))
             .toBeTruthy();
         expect(screen.getByText(/仅 development 环境可用的开发者登录。/i)).toBeTruthy();
+        expect(screen.getByText("登录新人销售训练平台，继续当前训练任务")).toBeTruthy();
+        expect(screen.queryByText("AI")).toBeNull();
     });
 
     it("provides explicit accessible labels for the login fields", async () => {
@@ -201,6 +206,31 @@ describe("LoginPage", () => {
         expect(devLoginMock).toHaveBeenCalledTimes(1);
     });
 
+    it("coalesces rapid repeated developer-login clicks into one request", async () => {
+        let resolveLogin: (() => void) | undefined;
+        devLoginMock.mockImplementation(() => new Promise((resolve) => {
+            resolveLogin = () => resolve({
+                access_token: "dev-token",
+                token_type: "bearer",
+                user: {
+                    user_id: "dev-1",
+                    email: "dev@example.com",
+                    name: "Developer",
+                    role: "admin",
+                },
+            });
+        }));
+        render(<LoginPage />);
+
+        const button = await screen.findByRole("button", { name: /开发者快速登录/i });
+        fireEvent.click(button);
+        fireEvent.click(button);
+
+        expect(devLoginMock).toHaveBeenCalledTimes(1);
+        resolveLogin?.();
+        await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
+    });
+
     it("redirects training_manager to /team after password login", async () => {
         loginMock.mockResolvedValue({
             token: "mgr-token",
@@ -225,6 +255,59 @@ describe("LoginPage", () => {
         await waitFor(() => {
             expect(pushMock).toHaveBeenCalledWith("/team");
         });
+    });
+
+    it("reconciles an unconfirmed password change by logging in with the new password", async () => {
+        loginMock
+            .mockResolvedValueOnce({
+                token: "temporary-token",
+                requires_password_change: true,
+                user: {
+                    id: "mgr-1",
+                    name: "王经理",
+                    email: "manager@test.com",
+                    role: "training_manager",
+                },
+            })
+            .mockResolvedValueOnce({
+                token: "business-token",
+                requires_password_change: false,
+                user: {
+                    id: "mgr-1",
+                    name: "王经理",
+                    email: "manager@test.com",
+                    role: "training_manager",
+                },
+            });
+        changeTemporaryPasswordMock.mockRejectedValue(new Error("密码修改超时，请重试。"));
+
+        render(<LoginPage />);
+
+        fireEvent.change(screen.getByLabelText("邮箱地址"), {
+            target: { value: "manager@test.com" },
+        });
+        fireEvent.change(screen.getByLabelText("密码"), {
+            target: { value: "temporary-password" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /^登录/ }));
+
+        await screen.findByPlaceholderText("设置新密码");
+        fireEvent.change(screen.getByPlaceholderText("设置新密码"), {
+            target: { value: "NewPassword2026" },
+        });
+        fireEvent.change(screen.getByPlaceholderText("再次输入新密码"), {
+            target: { value: "NewPassword2026" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /保存新密码并进入/ }));
+
+        await waitFor(() => {
+            expect(loginMock).toHaveBeenLastCalledWith({
+                email: "manager@test.com",
+                password: "NewPassword2026",
+            });
+            expect(pushMock).toHaveBeenCalledWith("/team");
+        });
+        expect(screen.queryByText("密码修改超时，请重试。")).toBeNull();
     });
 
     it("redirects training_manager to /team after dev login", async () => {

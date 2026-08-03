@@ -106,6 +106,16 @@ async def test_should_create_list_read_and_update_learning_content_draft(
     assert list_response.status_code == 200
     assert list_response.json()["data"]["total"] == 1
 
+    summary_list_response = await async_client.get(
+        "/api/v1/curriculum/learning-contents?view=summary",
+        headers=admin_headers,
+    )
+    assert summary_list_response.status_code == 200
+    summary_item = summary_list_response.json()["data"]["items"][0]
+    assert summary_item["title"] == "售前试点七章讲义"
+    assert "chapters" not in summary_item
+    assert "revision_state" not in summary_item
+
     content_id = created["learning_content_id"]
     read_response = await async_client.get(
         f"/api/v1/curriculum/learning-contents/{content_id}",

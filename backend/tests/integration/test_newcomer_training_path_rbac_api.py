@@ -13,13 +13,11 @@ async def _create_user(
     test_db: AsyncSession,
     *,
     role: str,
-    department: str = "销售一部",
 ) -> User:
     user = User(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"newcomer-rbac-{uuid.uuid4().hex[:8]}",
         name=role,
-        department=department,
         email=f"{role}-{uuid.uuid4().hex[:6]}@example.com",
         role=role,
         is_active=True,
@@ -42,7 +40,7 @@ async def test_should_enforce_granular_sales_trainer_rbac(
     test_db: AsyncSession,
 ) -> None:
     content_admin = await _create_user(test_db, role="content_admin")
-    training_lead = await _create_user(test_db, role="support", department="华东销售")
+    training_lead = await _create_user(test_db, role="support")
     ops_user = await _create_user(test_db, role="operations")
     learner = await _create_user(test_db, role="user")
 
@@ -59,7 +57,7 @@ async def test_should_enforce_granular_sales_trainer_rbac(
     assert content_settings.status_code == 403
 
     training_records = await async_client.get(
-        "/api/v1/admin/sales-trainer/audio-submissions",
+        "/api/v1/admin/newcomer-training/audio-assessments/queue",
         headers=_auth_headers(training_lead),
     )
     assert training_records.status_code == 200

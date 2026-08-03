@@ -26,10 +26,7 @@ def test_auth_transport_matrix_marks_formal_and_compatibility_paths() -> None:
     assert AUTH_TRANSPORT_MATRIX["login_credentials"]["formal"] == [
         "user_hashed_password"
     ]
-    assert AUTH_TRANSPORT_MATRIX["login_credentials"]["compatibility"] == [
-        "auth_user_passwords_json",
-        "auth_shared_password",
-    ]
+    assert AUTH_TRANSPORT_MATRIX["login_credentials"]["compatibility"] == []
 
 
 def test_http_auth_prefers_bearer_then_cookie_alias_then_request_cookie() -> None:

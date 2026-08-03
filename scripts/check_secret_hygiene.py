@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import sys
+import zipfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -32,6 +33,7 @@ EXCLUDED_REPORT_NAME_MARKERS = (
     "secret-hygiene",
     "secret_hygiene",
 )
+MAX_ARCHIVE_MEMBER_BYTES = 20 * 1024 * 1024
 
 SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
@@ -212,6 +214,29 @@ def scan_paths(
 ) -> list[Finding]:
     findings: list[Finding] = []
     for path in iter_files(root, paths, exclude_paths=exclude_paths):
+        if path.suffix.lower() == ".zip":
+            try:
+                with zipfile.ZipFile(path) as archive:
+                    for member in archive.infolist():
+                        if member.is_dir() or member.file_size > MAX_ARCHIVE_MEMBER_BYTES:
+                            continue
+                        try:
+                            text = archive.read(member).decode("utf-8")
+                        except UnicodeDecodeError:
+                            continue
+                        try:
+                            display_path = path.relative_to(root)
+                        except ValueError:
+                            display_path = path
+                        findings.extend(
+                            scan_text(
+                                Path(f"{display_path.as_posix()}::{member.filename}"),
+                                text,
+                            )
+                        )
+            except zipfile.BadZipFile:
+                continue
+            continue
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:

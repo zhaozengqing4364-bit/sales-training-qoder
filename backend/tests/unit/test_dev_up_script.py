@@ -163,6 +163,54 @@ def test_dev_up_binds_backend_to_all_interfaces_by_default(tmp_path: Path) -> No
     assert "--host 0.0.0.0" in result.stdout
 
 
+def test_dev_up_summary_redacts_database_and_redis_credentials() -> None:
+    result = run_bash(
+        "\n".join(
+            [
+                "set -euo pipefail",
+                f"source {shlex.quote(str(DEV_UP_SCRIPT))}",
+                "EFFECTIVE_DATABASE_URL=postgresql+asyncpg://dev:database-secret@db.internal:5432/sales_training",
+                "EFFECTIVE_REDIS_URL=redis://:redis-secret@cache.internal:6379/0",
+                "print_summary",
+            ]
+        )
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "database-secret" not in result.stdout
+    assert "redis-secret" not in result.stdout
+    assert "postgresql+asyncpg://[REDACTED]@db.internal:5432/sales_training" in result.stdout
+    assert "redis://[REDACTED]@cache.internal:6379/0" in result.stdout
+
+
+def test_dev_up_defaults_browser_api_to_same_origin_frontend_proxy(
+    tmp_path: Path,
+) -> None:
+    isolated_root = tmp_path / "repo"
+    isolated_scripts = isolated_root / "scripts"
+    isolated_scripts.mkdir(parents=True)
+    isolated_script = isolated_scripts / "dev-up.sh"
+    isolated_script.write_text(DEV_UP_SCRIPT.read_text())
+
+    result = run_bash(
+        "\n".join(
+            [
+                "set -euo pipefail",
+                "unset NEXT_PUBLIC_API_URL NEXT_PUBLIC_WS_URL",
+                f"source {shlex.quote(str(isolated_script))}",
+                "resolve_effective_env",
+                "printf '%s\\n%s\\n' \"${EFFECTIVE_FRONTEND_API_URL}\" \"${EFFECTIVE_FRONTEND_WS_URL}\"",
+            ]
+        )
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert result.stdout.splitlines() == [
+        "http://localhost:3445/api/v1",
+        "ws://localhost:3445",
+    ]
+
+
 def test_dev_smoke_up_resets_generated_frontend_dev_state_before_start(
     tmp_path: Path,
 ) -> None:
@@ -178,7 +226,7 @@ def test_dev_smoke_up_resets_generated_frontend_dev_state_before_start(
                 f"source {shlex.quote(str(sourceable_script))}",
                 f"ROOT_DIR={shlex.quote(str(ROOT_DIR))}",
                 "rm() { printf 'rm %s\\n' \"$*\"; }",
-                "bash() { printf 'bash %s api=%s ws=%s\\n' \"$*\" \"${NEXT_PUBLIC_API_URL:-}\" \"${NEXT_PUBLIC_WS_URL:-}\"; }",
+                "bash() { printf 'bash %s api=%s ws=%s dist=%s\\n' \"$*\" \"${NEXT_PUBLIC_API_URL:-}\" \"${NEXT_PUBLIC_WS_URL:-}\" \"${NEXT_DIST_DIR:-}\"; }",
                 "start_local_stack",
             ]
         )
@@ -186,9 +234,10 @@ def test_dev_smoke_up_resets_generated_frontend_dev_state_before_start(
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert result.stdout.splitlines() == [
-        f"rm -rf {ROOT_DIR / 'web' / '.next' / 'dev'}",
+        f"rm -rf {ROOT_DIR / 'web' / '.next-smoke'}",
         (
             f"bash {ROOT_DIR / 'scripts' / 'dev-up.sh'} "
-            "api=http://localhost:3444/api/v1 ws=ws://localhost:3444"
+            "api=http://localhost:3444/api/v1 ws=ws://localhost:3444 "
+            "dist=.next-smoke"
         ),
     ]

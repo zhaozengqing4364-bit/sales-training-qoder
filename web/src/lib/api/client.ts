@@ -1970,6 +1970,7 @@ async function apiUpload<T>(
         skipSessionExpiredHandling?: boolean;
         timeoutMs?: number;
         timeoutMessage?: string;
+        headers?: HeadersInit;
     } = {},
 ): Promise<T> {
     const url = `${resolveApiBaseUrl()}${endpoint}`;
@@ -1978,6 +1979,7 @@ async function apiUpload<T>(
         skipSessionExpiredHandling = false,
         timeoutMs,
         timeoutMessage,
+        headers: requestHeaders,
     } = options;
     const abortContext = createRequestAbortContext({
         externalSignal: signal,
@@ -1990,7 +1992,7 @@ async function apiUpload<T>(
     try {
         const resolvedCredentials = "include";
         const headers = attachCsrfHeader(
-            createHeaders(undefined, false),
+            createHeaders(requestHeaders, false),
             {
                 method: "POST",
                 credentials: resolvedCredentials,
@@ -2185,8 +2187,6 @@ const salesTrainerDomain = createSalesTrainerDomain({
 });
 const newcomerTrainingDomain = createNewcomerTrainingDomain({
     request: apiFetch,
-    upload: apiUpload,
-    stream: apiStream,
 });
 const supportRuntimeDomain = createSupportRuntimeDomain({ request: apiFetch });
 const adminSalesTrainerDomain = createAdminSalesTrainerDomain({
@@ -2196,6 +2196,7 @@ const adminSalesTrainerDomain = createAdminSalesTrainerDomain({
 });
 const adminNewcomerTrainingDomain = createAdminNewcomerTrainingDomain({
     request: apiFetch,
+    upload: apiUpload,
 });
 
 export const api = {

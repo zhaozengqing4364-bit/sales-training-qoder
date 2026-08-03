@@ -114,7 +114,6 @@ async def _upsert_user(
             email=normalized_email,
             name=name,
             role=role,
-            department=DEPARTMENT,
             is_active=True,
             wechat_user_id=_wechat_id(normalized_email),
         )
@@ -124,7 +123,6 @@ async def _upsert_user(
         summary.updated += 1
         user.name = name
         user.role = role
-        user.department = DEPARTMENT
         user.is_active = True
         if not user.wechat_user_id:
             user.wechat_user_id = _wechat_id(normalized_email)

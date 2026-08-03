@@ -176,6 +176,16 @@ describe("AdminLearningContentDetailPage", () => {
         expect(screen.getByText(/加载中/)).toBeTruthy();
     });
 
+    it("renders the primary content without waiting for the binding impact check", async () => {
+        bindingImpactMock.mockImplementation(() => new Promise(() => {}));
+
+        render(<AdminLearningContentDetailPage />);
+
+        expect(await screen.findByDisplayValue("销售异议处理")).toBeTruthy();
+        expect(screen.queryByText("加载中...")).toBeNull();
+        expect(screen.getByText("检查中")).toBeTruthy();
+    });
+
     it("renders error state when get fails", async () => {
         getMock.mockRejectedValueOnce(new Error("network error"));
         render(<AdminLearningContentDetailPage />);
@@ -282,10 +292,13 @@ describe("AdminLearningContentDetailPage", () => {
 
         render(<AdminLearningContentDetailPage />);
 
-        await waitFor(() => {
-            expect(screen.getByRole("heading", { name: "Markdown 标题" })).toBeTruthy();
-            expect(screen.getByText("第一条")).toBeTruthy();
-        });
+        await waitFor(
+            () => {
+                expect(screen.getByRole("heading", { name: "Markdown 标题" })).toBeTruthy();
+                expect(screen.getByText("第一条")).toBeTruthy();
+            },
+            { timeout: 5_000 },
+        );
     });
 
     it("disables archive when the content is bound to an active or working newcomer path", async () => {

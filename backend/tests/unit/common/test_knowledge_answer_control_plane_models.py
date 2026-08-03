@@ -54,11 +54,11 @@ def practice_session(db_session: Session) -> PracticeSession:
 
 
 @pytest.fixture
-def knowledge_control_plane_migration_path() -> Path:
+def launch_baseline_path() -> Path:
     versions_dir = Path(__file__).resolve().parents[3] / "alembic" / "versions"
-    matches = sorted(versions_dir.glob("*_knowledge_answer_control_plane.py"))
-    assert matches, "knowledge answer control plane migration file is missing"
-    return matches[-1]
+    matches = sorted(versions_dir.glob("*_launch_baseline.py"))
+    assert len(matches) == 1, "the active migration path must have one launch baseline"
+    return matches[0]
 
 
 def _create_config_version(db_session: Session, version_name: str = "baseline-v1"):
@@ -73,10 +73,10 @@ def _create_config_version(db_session: Session, version_name: str = "baseline-v1
     return config_version
 
 
-def test_control_plane_migration_file_declares_expected_tables(
-    knowledge_control_plane_migration_path: Path,
+def test_launch_baseline_declares_knowledge_control_plane_tables(
+    launch_baseline_path: Path,
 ):
-    migration_source = knowledge_control_plane_migration_path.read_text(encoding="utf-8")
+    migration_source = launch_baseline_path.read_text(encoding="utf-8")
 
     for table_name in (
         "knowledge_config_versions",
@@ -91,18 +91,19 @@ def test_control_plane_migration_file_declares_expected_tables(
         assert f'"{table_name}"' in migration_source
 
 
-def test_control_plane_migration_revises_latest_backend_revision(
-    knowledge_control_plane_migration_path: Path,
+def test_launch_baseline_is_the_active_migration_root(
+    launch_baseline_path: Path,
 ):
     spec = importlib.util.spec_from_file_location(
-        "knowledge_answer_control_plane_migration",
-        knowledge_control_plane_migration_path,
+        "launch_baseline_migration",
+        launch_baseline_path,
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    assert module.down_revision == "20260328_1000_022"
+    assert module.revision == "20260715_0000_001"
+    assert module.down_revision is None
 
 
 def test_config_version_model_tracks_version_name_and_status(db_session: Session):

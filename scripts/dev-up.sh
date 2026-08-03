@@ -11,6 +11,17 @@ BACKEND_PORT="${BACKEND_PORT:-3444}"
 BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 # 0 = 稳定模式（推荐，避免 WebSocket 1006）；1 = uvicorn --reload
 BACKEND_UVICORN_RELOAD="${BACKEND_UVICORN_RELOAD:-0}"
+# Slice 1 尚无业务 Handler；默认不伪装空 Worker ready。后续切片注册 Handler 后可改为 1。
+TASK_WORKER_ENABLED="${TASK_WORKER_ENABLED:-0}"
+TASK_WORKER_PROBE_HOST="${TASK_WORKER_PROBE_HOST:-127.0.0.1}"
+TASK_WORKER_PROBE_PORT="${TASK_WORKER_PROBE_PORT:-3446}"
+TASK_WORKER_MAX_PARALLELISM="${TASK_WORKER_MAX_PARALLELISM:-4}"
+TASK_WORKER_POLL_SECONDS="${TASK_WORKER_POLL_SECONDS:-1}"
+OUTBOX_DISPATCHER_ENABLED="${OUTBOX_DISPATCHER_ENABLED:-0}"
+OUTBOX_DISPATCHER_PROBE_HOST="${OUTBOX_DISPATCHER_PROBE_HOST:-127.0.0.1}"
+OUTBOX_DISPATCHER_PROBE_PORT="${OUTBOX_DISPATCHER_PROBE_PORT:-3447}"
+OUTBOX_DISPATCHER_BATCH_SIZE="${OUTBOX_DISPATCHER_BATCH_SIZE:-100}"
+OUTBOX_DISPATCHER_POLL_SECONDS="${OUTBOX_DISPATCHER_POLL_SECONDS:-1}"
 LOG_LEVEL="${LOG_LEVEL:-}"
 FRONTEND_PORT="${FRONTEND_PORT:-3445}"
 FRONTEND_MODE="${FRONTEND_MODE:-development}"
@@ -309,6 +320,12 @@ resolve_ports_to_clean() {
   fi
 
   local ports=("${BACKEND_PORT}" "${FRONTEND_PORT}")
+  if [[ "${TASK_WORKER_ENABLED}" == "1" ]]; then
+    ports+=("${TASK_WORKER_PROBE_PORT}")
+  fi
+  if [[ "${OUTBOX_DISPATCHER_ENABLED}" == "1" ]]; then
+    ports+=("${OUTBOX_DISPATCHER_PROBE_PORT}")
+  fi
 
   PORTS_TO_CLEAN="$(IFS=','; printf '%s' "${ports[*]}")"
 }
@@ -549,6 +566,82 @@ start_backend() {
   log "Backend 已启动：http://localhost:${BACKEND_PORT}"
 }
 
+start_task_worker() {
+  if [[ "${TASK_WORKER_ENABLED}" != "1" ]]; then
+    warn "TASK_WORKER_ENABLED=${TASK_WORKER_ENABLED}，跳过 Durable Task Worker"
+    return
+  fi
+  local python_bin
+  python_bin="$(resolve_python_bin)" || die "未找到 Python 解释器，请先配置后端环境"
+
+  log "启动 Durable Task Worker，probe=${TASK_WORKER_PROBE_HOST}:${TASK_WORKER_PROBE_PORT}，parallelism=${TASK_WORKER_MAX_PARALLELISM}"
+  (
+    cd "${ROOT_DIR}/backend"
+    nohup setsid env \
+      DATABASE_URL="${EFFECTIVE_DATABASE_URL}" \
+      REDIS_URL="${EFFECTIVE_REDIS_URL}" \
+      LOG_LEVEL="${LOG_LEVEL}" \
+      TASK_WORKER_PROBE_HOST="${TASK_WORKER_PROBE_HOST}" \
+      TASK_WORKER_PROBE_PORT="${TASK_WORKER_PROBE_PORT}" \
+      TASK_WORKER_MAX_PARALLELISM="${TASK_WORKER_MAX_PARALLELISM}" \
+      TASK_WORKER_POLL_SECONDS="${TASK_WORKER_POLL_SECONDS}" \
+      TASK_WORKER_TASK_TYPES="${TASK_WORKER_TASK_TYPES:-}" \
+      PYTHONPATH="${ROOT_DIR}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
+      "${python_bin}" -m task_runtime.worker_main \
+      >"${LOG_DIR}/task-worker.log" 2>&1 < /dev/null &
+    echo $! > "${PID_DIR}/task-worker.pid"
+  )
+
+  if ! wait_for_http_ok "http://127.0.0.1:${TASK_WORKER_PROBE_PORT}/ready" 45; then
+    tail -n 80 "${LOG_DIR}/task-worker.log" >&2 || true
+    local worker_pid
+    worker_pid="$(cat "${PID_DIR}/task-worker.pid" 2>/dev/null || true)"
+    if [[ -n "${worker_pid}" ]]; then
+      kill "${worker_pid}" >/dev/null 2>&1 || true
+    fi
+    die "Durable Task Worker 启动失败，请查看日志 ${LOG_DIR}/task-worker.log"
+  fi
+  log "Durable Task Worker 已就绪：http://127.0.0.1:${TASK_WORKER_PROBE_PORT}/status"
+}
+
+start_outbox_dispatcher() {
+  if [[ "${OUTBOX_DISPATCHER_ENABLED}" != "1" ]]; then
+    warn "OUTBOX_DISPATCHER_ENABLED=${OUTBOX_DISPATCHER_ENABLED}，跳过 Outbox Dispatcher"
+    return
+  fi
+  local python_bin
+  python_bin="$(resolve_python_bin)" || die "未找到 Python 解释器，请先配置后端环境"
+
+  log "启动 Outbox Dispatcher，probe=${OUTBOX_DISPATCHER_PROBE_HOST}:${OUTBOX_DISPATCHER_PROBE_PORT}，batch=${OUTBOX_DISPATCHER_BATCH_SIZE}"
+  (
+    cd "${ROOT_DIR}/backend"
+    nohup setsid env \
+      DATABASE_URL="${EFFECTIVE_DATABASE_URL}" \
+      LOG_LEVEL="${LOG_LEVEL}" \
+      ENVIRONMENT="${ENVIRONMENT:-development}" \
+      OUTBOX_DISPATCHER_ALLOW_DEV_FAKE="${OUTBOX_DISPATCHER_ALLOW_DEV_FAKE:-0}" \
+      OUTBOX_DISPATCHER_PROBE_HOST="${OUTBOX_DISPATCHER_PROBE_HOST}" \
+      OUTBOX_DISPATCHER_PROBE_PORT="${OUTBOX_DISPATCHER_PROBE_PORT}" \
+      OUTBOX_DISPATCHER_BATCH_SIZE="${OUTBOX_DISPATCHER_BATCH_SIZE}" \
+      OUTBOX_DISPATCHER_POLL_SECONDS="${OUTBOX_DISPATCHER_POLL_SECONDS}" \
+      PYTHONPATH="${ROOT_DIR}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
+      "${python_bin}" -m task_runtime.outbox_main \
+      >"${LOG_DIR}/outbox-dispatcher.log" 2>&1 < /dev/null &
+    echo $! > "${PID_DIR}/outbox-dispatcher.pid"
+  )
+
+  if ! wait_for_http_ok "http://127.0.0.1:${OUTBOX_DISPATCHER_PROBE_PORT}/ready" 45; then
+    tail -n 80 "${LOG_DIR}/outbox-dispatcher.log" >&2 || true
+    local dispatcher_pid
+    dispatcher_pid="$(cat "${PID_DIR}/outbox-dispatcher.pid" 2>/dev/null || true)"
+    if [[ -n "${dispatcher_pid}" ]]; then
+      kill "${dispatcher_pid}" >/dev/null 2>&1 || true
+    fi
+    die "Outbox Dispatcher 启动失败，请查看日志 ${LOG_DIR}/outbox-dispatcher.log"
+  fi
+  log "Outbox Dispatcher 已就绪：http://127.0.0.1:${OUTBOX_DISPATCHER_PROBE_PORT}/status"
+}
+
 _launch_frontend_process() {
   (
     cd "${ROOT_DIR}/web"
@@ -623,15 +716,21 @@ print_summary() {
 - Backend listen: ${BACKEND_HOST}:${BACKEND_PORT}
 - Backend Docs: http://localhost:${BACKEND_PORT}/docs
 - Backend reload: $([[ "${BACKEND_UVICORN_RELOAD}" == "1" ]] && echo "开启（--reload）" || echo "关闭（稳定模式，适合语音 WebSocket）")
+- Durable Task Worker: $([[ "${TASK_WORKER_ENABLED}" == "1" ]] && echo "http://127.0.0.1:${TASK_WORKER_PROBE_PORT}/status" || echo "未启动")
+- Outbox Dispatcher: $([[ "${OUTBOX_DISPATCHER_ENABLED}" == "1" ]] && echo "http://127.0.0.1:${OUTBOX_DISPATCHER_PROBE_PORT}/status" || echo "未启动")
 - DATABASE_URL: ${safe_database_url}
 - REDIS_URL: ${safe_redis_url}
 
 日志文件：
 - ${LOG_DIR}/backend.log
+- ${LOG_DIR}/task-worker.log
+- ${LOG_DIR}/outbox-dispatcher.log
 - ${LOG_DIR}/frontend.log
 
 常用命令：
 - 查看后端日志：tail -f ${LOG_DIR}/backend.log
+- 查看 Worker 日志：tail -f ${LOG_DIR}/task-worker.log
+- 查看 Outbox 日志：tail -f ${LOG_DIR}/outbox-dispatcher.log
 - 查看前端日志：tail -f ${LOG_DIR}/frontend.log
 - 一键停止：bash ${ROOT_DIR}/scripts/dev-stop.sh
 SUMMARY
@@ -659,6 +758,8 @@ main() {
   start_infra_services
   verify_infra_ports
   start_backend
+  start_task_worker
+  start_outbox_dispatcher
   start_frontend
   print_summary
 }

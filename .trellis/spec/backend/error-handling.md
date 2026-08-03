@@ -287,22 +287,23 @@ Delivery is explicit and testable.
 
 ---
 
-## Scenario: Newcomer learner activity errors (`learner_api._error`)
+## Scenario: Foundation learner activity errors (`foundation_learner_api._error`)
 
 ### 1. Scope / Trigger
 
-- Trigger: learner submits audio / quiz / other activity evidence via `sales_trainer/orchestration/learner_api.py`.
-- Scope: typed business errors vs unexpected exceptions; client-safe Chinese `message`; structured logs with `trace_id`.
+- Trigger: learner executes a typed Foundation activity command via `foundation_learner_api.py`.
+- Scope: `NewcomerTrainingError` / `TaskRuntimeError`, stable HTTP mapping, client-safe Chinese `message`, structured `details` and the global unexpected-exception boundary.
 
 ### 2. Signatures
 
-- `_error(exc, *, trace_id) -> JSONResponse`
-- Business shapes: `NewcomerOrchestrationError`, `AudioSubmissionServiceError`, `MaterialServiceError`, `EffectiveAudioTrainingConfigError` (or duck-types with `code`/`message`/`status_code`).
+- `_error(exc: NewcomerTrainingError | TaskRuntimeError) -> JSONResponse`
+- Business shapes are closed domain errors with `code`/`message`/`status_code` and optional safe `details`; unexpected exceptions are not duck-typed into a business success path.
 
 ### 3. Contracts
 
-- Business errors: return original `code` + **client-safe** Chinese `message` + HTTP status; never forward env var names, secret keys, absolute paths, or raw `str(CosConfigError|OssConfigError)`.
-- Unexpected errors: categorize into 上传失败 / 请求无效 / 服务暂不可用 / 通用失败; log `exc_info` + `trace_id` + `error_type` + truncated `exception_message`; response still includes `trace_id`.
+- Business errors: return original `code` + **client-safe** Chinese `message` + HTTP status and safe structured details. Domain constructors must never accept Provider exceptions, env var names, secret keys, absolute paths or raw configuration dumps as public messages.
+- Task errors use a closed public status mapping; inaccessible and missing tasks both avoid disclosing object existence.
+- Unexpected exceptions bypass `_error`, reach the global handler, are logged server-side with request context and stack, and return only the generic fallback plus `trace_id`; raw exception text is never returned.
 - Frontend (`web/src/lib/api/client.ts`): prefer backend Chinese `message` over generic `API_ERROR_MESSAGE_MAP` when the message is already Chinese user copy.
 
 ### 4. Validation & Error Matrix
@@ -310,24 +311,25 @@ Delivery is explicit and testable.
 | Case | Client message | Log |
 |---|---|---|
 | Typed business error with safe Chinese message | Keep message | Normal |
-| Typed business error whose message looks like env/config dump | Replace with safe Chinese fallback | `warning` with original server text |
-| Unexpected upload-ish exception | 上传失败类中文 | `error` + `exc_info` |
-| Unexpected other exception | 服务暂不可用 / 请重试 + `trace_id` | `error` + `exc_info` |
+| Missing/inaccessible task | Stable 404-safe task message | Normal |
+| Idempotency/state conflict | Stable 409 message | Normal |
+| Unexpected exception | Generic fallback + `trace_id`, no exception text | Server error + stack |
 
 ### 5. Good / Bad
 
-- Good: COS not configured → learner sees「对象存储暂不可用…」, logs keep detail.
-- Bad: `getattr(exc, "message", "训练操作失败，请重试。")` for all exceptions (hides root cause and may leak config strings).
+- Good: Provider adapter maps a failure to a typed domain error with fixed safe copy; detailed Provider diagnostics remain in the invocation/task audit.
+- Bad: duck-type arbitrary exceptions by reading `.message`, or include raw Provider/configuration text in `details`.
 
 ### 6. Tests Required
 
-- `backend/tests/unit/test_newcomer_learner_api_errors.py` — business passthrough, unsafe message scrub, unexpected categorization.
+- `backend/tests/unit/newcomer_training/test_foundation_learner_api_errors.py` — domain envelope, safe details and closed Task status mapping.
+- `backend/tests/unit/test_error_handling_middleware.py` — global unexpected exception redaction and trace behavior.
 - Frontend: runner/client tests assert Chinese backend message is shown.
 
 ### 7. Wrong vs Correct
 
-- Wrong: always return「训练操作失败，请重试」and skip `exc_info`.
-- Correct: preserve actionable business messages; categorize unexpected failures; never leak COS/OSS env names to learners.
+- Wrong: catch `Exception` in a Foundation route and synthesize a domain result from `str(exc)`.
+- Correct: catch only declared domain/task errors locally; let the global handler redact and trace unexpected defects.
 
 ---
 

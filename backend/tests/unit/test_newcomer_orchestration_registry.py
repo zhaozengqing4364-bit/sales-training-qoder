@@ -11,13 +11,12 @@ class _Handler:
         self.type_key = type_key
 
 
-def test_should_register_exactly_six_handlers() -> None:
+def test_should_register_only_remaining_legacy_handlers() -> None:
     keys = (
         "lesson",
         "quiz",
         "audio_assessment",
         "realtime_roleplay",
-        "ai_coach",
         "assignment",
     )
     registry = ActivityTypeRegistry([_Handler(key) for key in keys])

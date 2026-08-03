@@ -10,8 +10,21 @@ import {
     shouldTreatAsAbnormalCloseBurst,
     toCloseReasonMessage,
 } from "./transport";
+import { resolveWebSocketBaseUrl } from "./types";
 
 describe("websocket transport helpers", () => {
+    it("routes loopback websocket configuration through the current frontend origin", () => {
+        expect(resolveWebSocketBaseUrl(
+            "ws://localhost:3445",
+            { hostname: "186.241.123.157", port: "3445", protocol: "http:" },
+        )).toBe("ws://186.241.123.157:3445");
+
+        expect(resolveWebSocketBaseUrl(
+            "ws://localhost:3445",
+            { hostname: "app.example.com", port: "", protocol: "https:" },
+        )).toBe("wss://app.example.com");
+    });
+
     it("builds the runtime websocket url from transport inputs", () => {
         const url = buildPracticeWebSocketUrl({
             baseUrl: "ws://localhost:3444/api/v1",

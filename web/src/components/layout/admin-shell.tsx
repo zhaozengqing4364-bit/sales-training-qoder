@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, Shield } from "lucide-react";
 
@@ -13,7 +12,6 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { isAuthenticationError } from "@/lib/api/client";
 import { authHandler } from "@/lib/auth-handler";
 import { cn } from "@/lib/utils";
-import { salesTrainerAdminCapabilitiesQueryOptions } from "@/lib/query/sales-trainer-admin";
 import {
     canUseAdminConsoleRole,
     shouldStayInSalesTrainerAdmin,
@@ -21,7 +19,7 @@ import {
 } from "@/lib/auth/current-user";
 
 const SALES_TRAINER_ADMIN_PREFIX = "/admin/sales-trainer";
-const SALES_TRAINER_MANAGER_ENTRY = "/admin/newcomer-training/path";
+const SALES_TRAINER_MANAGER_ENTRY = "/admin/newcomer-training/resources";
 
 function canUseAdminShell(role: string): boolean {
     return canUseAdminConsoleRole(role);
@@ -29,11 +27,6 @@ function canUseAdminShell(role: string): boolean {
 
 function isSalesTrainerManagerRole(role: string): boolean {
     return shouldStayInSalesTrainerAdmin(role);
-}
-
-function SalesTrainerCapabilitiesPreloader() {
-    useQuery(salesTrainerAdminCapabilitiesQueryOptions());
-    return null;
 }
 
 export function AdminShell({
@@ -106,16 +99,10 @@ export function AdminShell({
     }, []);
 
     return (
-        <div className="flex bg-[#FAFAF9] min-h-screen text-slate-900 selection:bg-blue-100 selection:text-blue-900 relative overflow-hidden">
-            <SalesTrainerCapabilitiesPreloader />
-            <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-[-10%] left-[-10%] w-[800px] h-[800px] bg-blue-100/40 rounded-full blur-[120px] opacity-60" />
-                <div className="absolute bottom-[-10%] right-[-10%] w-[800px] h-[800px] bg-purple-100/40 rounded-full blur-[120px] opacity-60" />
-            </div>
-
+        <div className="relative flex min-h-screen overflow-hidden bg-[#FAFAF9] text-slate-900 selection:bg-blue-100 selection:text-blue-900">
             <AdminSidebar currentUser={effectiveUser} />
 
-            <div className="md:hidden fixed top-0 left-0 right-0 z-40 p-4 flex items-center justify-between bg-white/70 backdrop-blur-xl border-b border-white/50 shadow-sm">
+            <div className="fixed left-0 right-0 top-0 z-40 flex items-center justify-between border-b border-slate-200/80 bg-white/95 p-4 shadow-sm md:hidden">
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center shadow-md">
                         <Shield className="w-4 h-4 text-yellow-300" strokeWidth={2} />
@@ -135,7 +122,7 @@ export function AdminShell({
 
             <main
                 className={cn(
-                    "flex-1 p-4 md:p-8 relative z-10 overflow-y-auto h-screen scroll-smooth mt-16 md:mt-0",
+                    "flex-1 p-4 md:p-8 relative z-10 overflow-y-auto h-screen mt-16 md:mt-0",
                     isCollapsed ? "md:ml-28" : "md:ml-80",
                 )}
             >

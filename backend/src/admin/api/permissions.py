@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Final
+from typing import Any, Final
 
 from fastapi import Depends
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.roles import (
@@ -36,6 +38,8 @@ CONFIG_AUDIT_READ_PERMISSION: Final = "config_audit.read"
 CONFIG_ASSET_EXPORT_PERMISSION: Final = "config_asset.export"
 CONFIG_ASSET_IMPORT_PERMISSION: Final = "config_asset.import"
 SCORING_RULESET_DRY_RUN_PERMISSION: Final = "scoring_ruleset.dry_run"
+TASK_RUNTIME_READ_PERMISSION: Final = "task_runtime.read"
+TASK_RUNTIME_OPERATE_PERMISSION: Final = "task_runtime.operate"
 
 DEFAULT_ADMIN_ROLE_PERMISSIONS: Final[dict[str, frozenset[str]]] = {
     ROLE_ADMIN: frozenset(
@@ -55,6 +59,8 @@ DEFAULT_ADMIN_ROLE_PERMISSIONS: Final[dict[str, frozenset[str]]] = {
             CONFIG_ASSET_EXPORT_PERMISSION,
             CONFIG_ASSET_IMPORT_PERMISSION,
             SCORING_RULESET_DRY_RUN_PERMISSION,
+            TASK_RUNTIME_READ_PERMISSION,
+            TASK_RUNTIME_OPERATE_PERMISSION,
         }
     ),
     ROLE_CONTENT_ADMIN: frozenset(
@@ -89,14 +95,29 @@ DEFAULT_ADMIN_ROLE_PERMISSIONS: Final[dict[str, frozenset[str]]] = {
 }
 
 
-async def _ensure_default_role_permissions(db: AsyncSession) -> None:
-    result = await db.execute(select(AdminRolePermission.id).limit(1))
-    if result.scalar_one_or_none() is not None:
-        return
-    for role, permissions in DEFAULT_ADMIN_ROLE_PERMISSIONS.items():
-        for permission in permissions:
-            db.add(AdminRolePermission(role=role, permission=permission))
+async def _insert_default_role_permission(
+    db: AsyncSession,
+    *,
+    role: str,
+    permission: str,
+) -> bool:
+    if permission not in DEFAULT_ADMIN_ROLE_PERMISSIONS.get(role, frozenset()):
+        return False
+    dialect_name = db.get_bind().dialect.name
+    statement: Any
+    if dialect_name == "postgresql":
+        statement = postgresql_insert(AdminRolePermission)
+    elif dialect_name == "sqlite":
+        statement = sqlite_insert(AdminRolePermission)
+    else:  # pragma: no cover - production and tests use PostgreSQL/SQLite
+        raise RuntimeError(f"不支持的权限存储数据库：{dialect_name}")
+    await db.execute(
+        statement.values(role=role, permission=permission).on_conflict_do_nothing(
+            index_elements=["role", "permission"]
+        )
+    )
     await db.flush()
+    return True
 
 
 async def user_has_admin_permission(
@@ -107,7 +128,25 @@ async def user_has_admin_permission(
     role = admin_permission_role_for(getattr(user, "role", None))
     if not role:
         return False
-    await _ensure_default_role_permissions(db)
+    if await user_has_persisted_admin_permission(db, user, permission):
+        return True
+    return await _insert_default_role_permission(
+        db,
+        role=role,
+        permission=permission,
+    )
+
+
+async def user_has_persisted_admin_permission(
+    db: AsyncSession,
+    user: User,
+    permission: str,
+) -> bool:
+    """Read an exact persisted mapping without inferring defaults from a role."""
+
+    role = admin_permission_role_for(getattr(user, "role", None))
+    if not role:
+        return False
     result = await db.execute(
         select(AdminRolePermission.id)
         .where(AdminRolePermission.role == role)

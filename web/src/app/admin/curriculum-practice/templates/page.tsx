@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 
-import { AdminContextBar, AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
-import { CurriculumConfigChecklist } from "@/components/admin/curriculum-config-checklist";
+import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { TemplateList } from "@/components/admin/curriculum-practice/template-list";
 import { TemplateRuntimeDossierPreview } from "@/components/admin/curriculum-practice/template-runtime-dossier-preview";
 import { Badge } from "@/components/ui/badge";
@@ -97,10 +96,6 @@ export default function AdminPracticeTemplatesPage() {
         }
     };
 
-    if (loading) {
-        return <div className="rounded-2xl border border-slate-100 bg-white/80 p-8 text-slate-600">正在加载课程训练模板...</div>;
-    }
-
     if (error) {
         return (
             <GlassCard className="space-y-4 border border-amber-200 bg-amber-50/80 p-8">
@@ -116,7 +111,7 @@ export default function AdminPracticeTemplatesPage() {
             header={(
                 <AdminPageHeader
                     title="课程训练模板"
-                    description="管理 PracticeTemplate 骨架、发布门禁和运行时引用。列表页仅展示模板状态与发布操作。"
+                    description="管理课程训练模板、发布检查和角色配置。列表页展示模板状态与发布操作。"
                     primaryAction={(
                         <Button className="rounded-full" onClick={() => router.push("/admin/curriculum-practice/templates/new")}>
                             <Plus className="mr-2 h-4 w-4" />
@@ -124,14 +119,9 @@ export default function AdminPracticeTemplatesPage() {
                         </Button>
                     )}
                     secondaryActions={(
-                        <Button variant="outline" onClick={loadTemplates}>刷新模板</Button>
+                        <Button variant="outline" onClick={loadTemplates} disabled={loading}>刷新模板</Button>
                     )}
                 />
-            )}
-            contextBar={(
-                <AdminContextBar>
-                    <CurriculumConfigChecklist />
-                </AdminContextBar>
             )}
         >
             <ConfirmDialog
@@ -189,15 +179,21 @@ export default function AdminPracticeTemplatesPage() {
                 />
             )}
 
-            <TemplateList
-                items={items}
-                busyTemplateId={busyTemplateId}
-                previewLoadingTemplateId={previewLoadingTemplateId}
-                onEdit={(template) => router.push(`/admin/curriculum-practice/templates/${template.template_id}/edit`)}
-                onPreview={(template) => { void handlePreviewRuntimeDossier(template); }}
-                onPublish={(template) => setConfirmTarget({ type: "publish", template })}
-                onArchive={(template) => setConfirmTarget({ type: "archive", template })}
-            />
+            {loading ? (
+                <div role="status" aria-live="polite" className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500">
+                    正在加载课程训练模板…
+                </div>
+            ) : (
+                <TemplateList
+                    items={items}
+                    busyTemplateId={busyTemplateId}
+                    previewLoadingTemplateId={previewLoadingTemplateId}
+                    onEdit={(template) => router.push(`/admin/curriculum-practice/templates/${template.template_id}/edit`)}
+                    onPreview={(template) => { void handlePreviewRuntimeDossier(template); }}
+                    onPublish={(template) => setConfirmTarget({ type: "publish", template })}
+                    onArchive={(template) => setConfirmTarget({ type: "archive", template })}
+                />
+            )}
         </AdminIndexShell>
     );
 }

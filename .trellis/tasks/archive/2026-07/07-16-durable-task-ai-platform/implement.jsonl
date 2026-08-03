@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "放置任务运行时、端口和适配器"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "任务、Lease、Outbox 与事务约束"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "任务和 Provider 失败分类"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "任务、调用与审计可观测性"}
+{"file": ".trellis/spec/backend/prompt-template-governance.md", "reason": "Prompt 修订、Contract Hash 和模型策略"}
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "AI/Task 运行时契约真源"}
+{"file": ".trellis/tasks/archive/2026-07/07-16-newcomer-sales-foundation-platform/architecture.md", "reason": "目标 Task Runtime 与 AI Platform 设计"}
+{"file": "docs/newcomer-foundation-contract-index.md", "reason": "切片 0 权威 ADR、状态、事件、AI、权限、迁移与测试合同入口"}
+{"file": "docs/adr/2026-07-16-governed-ai-and-durable-tasks.md", "reason": "直接约束 AIInvocation、Task/Outbox 真源、重试取消与正式结果边界"}

@@ -10,6 +10,7 @@ from agent.models import Persona
 from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.schemas import (
     CaseItemCreate,
+    CaseItemResponse,
     RoleProfileCreate,
     RoleProfileResponse,
 )
@@ -59,6 +60,39 @@ def _role_profile_payload(
         "voice_style_hint": "语速偏快，语调克制",
         "content_hash": content_hash,
     }
+
+
+def test_should_read_legacy_case_item_without_hiding_it_from_remediation() -> None:
+    payload = _case_item_payload()
+    payload["allowed_disclosure_policy"] = {
+        "roleplay": {"situation_code": "first_visit"},
+    }
+    response = CaseItemResponse.model_validate(
+        payload
+        | {
+            "case_item_id": "legacy-case-item",
+            "status": "published",
+            "version": 1,
+            "published_at": "2026-05-13T00:00:00Z",
+            "created_at": "2026-05-13T00:00:00Z",
+            "updated_at": "2026-05-13T00:00:00Z",
+        }
+    )
+
+    assert response.case_item_id == "legacy-case-item"
+    assert response.allowed_disclosure_policy["roleplay"] == {
+        "situation_code": "first_visit"
+    }
+
+
+def test_should_still_reject_new_case_item_without_disclosure_phases() -> None:
+    payload = _case_item_payload()
+    payload["allowed_disclosure_policy"] = {
+        "roleplay": {"situation_code": "first_visit"},
+    }
+
+    with pytest.raises(ValidationError, match="phases must contain at least one phase"):
+        CaseItemCreate.model_validate(payload)
 
 
 def test_should_reject_role_profile_input_voice_id_and_voice_sample_url() -> None:

@@ -199,6 +199,10 @@ class PasswordResetService:
             raise InvalidResetPasswordTokenError("missing active user")
 
         user.hashed_password = pwd_context.hash(new_password)
+        user.credential_status = "active"
+        user.temporary_password_expires_at = None
+        user.password_changed_at = now
+        user.credential_version = int(getattr(user, "credential_version", 1)) + 1
         reset_token.used_at = now
         await self.db.commit()
 

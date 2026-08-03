@@ -1,0 +1,197 @@
+version: 1
+status: enforced
+accepted_on: 2026-07-16
+enforcement_owner: cleanup-quality-rollout
+enforcement_slice: 8
+
+target_modules:
+  - newcomer_training
+  - learning
+  - audio_assessment
+  - ai_coach
+  - competency_evidence
+  - readiness
+  - identity_access
+  - ai_platform
+  - task_runtime
+  - knowledge
+  - storage
+  - configuration_governance
+  - observability
+  - shared_kernel
+  - application_root
+
+business_modules:
+  - newcomer_training
+  - learning
+  - audio_assessment
+  - ai_coach
+  - competency_evidence
+  - readiness
+
+module_paths:
+  newcomer_training:
+    - newcomer_training
+  learning:
+    - learning
+  audio_assessment:
+    - audio_assessment
+  ai_coach:
+    - ai_coach
+  competency_evidence:
+    - competency_evidence
+  readiness:
+    - readiness
+  identity_access:
+    - common/auth
+  ai_platform:
+    - ai_platform
+  task_runtime:
+    - task_runtime
+  knowledge:
+    - common/knowledge
+  storage:
+    - common/storage.py
+    - common/cos
+    - common/oss
+  configuration_governance:
+    - prompt_templates
+  observability:
+    - common/monitoring
+  shared_kernel:
+    - common
+  application_root:
+    - newcomer_foundation_composition.py
+    - foundation_audio_governance_composition.py
+    - foundation_competency_composition.py
+    - foundation_ai_composition.py
+    - foundation_audio_ai_provider.py
+    - foundation_question_generation.py
+    - foundation_readiness_composition.py
+    - foundation_release_composition.py
+    - foundation_task_bootstrap.py
+
+platform_modules:
+  - identity_access
+  - ai_platform
+  - task_runtime
+  - knowledge
+  - storage
+  - configuration_governance
+  - observability
+  - shared_kernel
+
+layer_rule: delivery -> application -> domain_or_ports
+adapter_rule: adapters implement ports; application_root performs concrete composition
+
+stable_edge_import_scope:
+  meaning: an allowed edge permits contracts, ports, immutable public DTOs, and identifiers only
+  allowed_path_segments:
+    - contracts
+    - ports
+    - public
+    - identifiers
+  forbidden_path_segments:
+    - models
+    - repositories
+    - repository
+    - sqlalchemy
+    - adapters
+    - services
+    - internal
+  note: stable_edges never allow foreign ORM, repository, table, adapter, or internal service imports
+
+composition_root: application_root
+composition_root_edges:
+  - [application_root, newcomer_training]
+  - [application_root, learning]
+  - [application_root, audio_assessment]
+  - [application_root, ai_coach]
+  - [application_root, competency_evidence]
+  - [application_root, readiness]
+  - [application_root, identity_access]
+  - [application_root, ai_platform]
+  - [application_root, task_runtime]
+  - [application_root, knowledge]
+  - [application_root, storage]
+  - [application_root, configuration_governance]
+  - [application_root, observability]
+  - [application_root, shared_kernel]
+composition_root_rule:
+  may_import_concrete_adapters: true
+  may_construct_providers: true
+  may_own_business_rules: false
+  may_mutate_business_orm: false
+  note: concrete adapter/provider imports are allowed only for wiring and lifecycle registration
+
+forbidden_detectors:
+  - id: cross_module_orm
+    scope: business_modules
+    match: import another business module's models, repository, sqlalchemy adapter, or table
+    applies_even_when_edge_is_stable: true
+    failure_code: ARCH_CROSS_MODULE_ORM_FORBIDDEN
+  - id: business_edge_contract_scope
+    scope: business_modules
+    match: import another business module outside its contracts, ports, public DTOs, or identifiers
+    applies_even_when_edge_is_stable: true
+    failure_code: ARCH_BUSINESS_EDGE_SCOPE_FORBIDDEN
+  - id: shared_kernel_reverse_dependency
+    scope: shared_kernel
+    match: import any target business module or provider implementation
+    failure_code: ARCH_SHARED_KERNEL_REVERSE_DEPENDENCY
+  - id: dynamic_activity_import
+    scope: newcomer_training
+    match: import_module/__import__ or string module/class locator used for ActivityRuntime
+    failure_code: ARCH_DYNAMIC_ACTIVITY_IMPORT_FORBIDDEN
+  - id: direct_ai_provider
+    scope: business_modules
+    match: provider SDK, raw HTTP AI endpoint, .llm.apredict, or provider construction outside ai_platform adapter
+    failure_code: ARCH_DIRECT_AI_PROVIDER_FORBIDDEN
+  - id: controller_transaction_or_external_io
+    scope: delivery
+    match: ORM mutation plus commit/rollback or external provider call in one route/controller
+    failure_code: ARCH_DELIVERY_ORCHESTRATION_FORBIDDEN
+
+stable_edges:
+  - [newcomer_training, shared_kernel]
+  - [newcomer_training, identity_access]
+  - [newcomer_training, learning]
+  - [newcomer_training, audio_assessment]
+  - [newcomer_training, ai_coach]
+  - [newcomer_training, competency_evidence]
+  - [learning, shared_kernel]
+  - [learning, task_runtime]
+  - [learning, ai_platform]
+  - [learning, competency_evidence]
+  - [audio_assessment, shared_kernel]
+  - [audio_assessment, storage]
+  - [audio_assessment, task_runtime]
+  - [audio_assessment, ai_platform]
+  - [audio_assessment, competency_evidence]
+  - [ai_coach, shared_kernel]
+  - [ai_coach, task_runtime]
+  - [ai_coach, ai_platform]
+  - [ai_coach, competency_evidence]
+  - [competency_evidence, shared_kernel]
+  - [readiness, shared_kernel]
+  - [readiness, identity_access]
+  - [readiness, competency_evidence]
+  - [readiness, task_runtime]
+  - [ai_platform, shared_kernel]
+  - [task_runtime, shared_kernel]
+  - [storage, shared_kernel]
+  - [configuration_governance, shared_kernel]
+  - [observability, shared_kernel]
+
+temporary_exceptions: []
+
+required_failure_probes:
+  - inject_cross_module_models_import
+  - inject_cross_module_internal_service_import
+  - inject_shared_kernel_business_import
+  - inject_literal_dynamic_activity_import
+  - inject_business_provider_sdk_import
+
+integration_note: >-
+  Slice 8 enforces this policy through architecture_dependency_guard.py and its
+  canonical quality-gate invocation. Stable failure probes prevent allowlist drift.

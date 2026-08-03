@@ -22,6 +22,23 @@ function log(overrides: Partial<SalesTrainerOperationLog>): SalesTrainerOperatio
 }
 
 describe("buildOperationLogDisplay", () => {
+    it("keeps opaque identifiers and internal placeholders out of the business summary", () => {
+        const display = buildOperationLogDisplay(log({
+            actor_id: "8f1ca46a-22c3-4c9d-98bf-21f071dcaa2a",
+            action: "seed.e2e.phase_4",
+            target_type: "runtime_profile",
+            target_id: "1b7fc3b4-a182-4f0c-a0f3-6e145305aefc",
+            metadata: { reason: "3" },
+        }));
+
+        expect(display.actorLabel).toBe("管理员");
+        expect(display.actionLabel).toBe("系统操作已记录");
+        expect(display.targetLabel).toBe("相关训练内容");
+        expect(display.summaryLines).toEqual(["操作已记录，暂无补充说明。"]);
+        expect(display.actorLabel).not.toContain("8f1ca46a");
+        expect(display.summaryLines.join(" ")).not.toContain("原因：3");
+    });
+
     it("summarizes revision publish and rollback with before after lineage", () => {
         const publish = buildOperationLogDisplay(log({
             action: "audio_score_prompt_revision_published",
@@ -29,6 +46,8 @@ describe("buildOperationLogDisplay", () => {
             metadata: {
                 before_revision_id: "prompt-revision-1",
                 after_revision_id: "prompt-revision-2",
+                before_revision_no: 1,
+                after_revision_no: 2,
                 trace_id: "trace-prompt",
                 future_only: true,
                 reason: "发布新版评分 prompt",
@@ -36,10 +55,10 @@ describe("buildOperationLogDisplay", () => {
         }));
 
         expect(publish.actionLabel).toBe("录音评分标准修订已发布");
-        expect(publish.summaryLines).toContain("修订：prompt-revision-1 → prompt-revision-2");
+        expect(publish.summaryLines).toContain("修订：v1 → v2");
         expect(publish.summaryLines).toContain("影响范围：只影响后续学员");
         expect(publish.summaryLines).toContain("原因：发布新版评分 prompt");
-        expect(publish.summaryLines).toContain("追踪号：trace-prompt");
+        expect(publish.summaryLines.join(" ")).not.toContain("trace-prompt");
 
         const rollback = buildOperationLogDisplay(log({
             action: "newcomer_path_config.rollback",
@@ -55,7 +74,7 @@ describe("buildOperationLogDisplay", () => {
 
         expect(rollback.actionLabel).toBe("路径配置已回滚");
         expect(rollback.targetLabel).toBe("新人训练路径配置");
-        expect(rollback.summaryLines).toContain("修订：path-revision-5 → path-revision-3");
+        expect(rollback.summaryLines).toContain("修订版本已更新");
         expect(rollback.summaryLines).toContain("影响范围：只影响后续学员");
         expect(rollback.summaryLines).toContain("原因：回滚到稳定版本");
     });
@@ -77,7 +96,7 @@ describe("buildOperationLogDisplay", () => {
         expect(binding.actionLabel).toBe("专题内容绑定已变更");
         expect(binding.targetLabel).toBe("新人训练路径关卡");
         expect(binding.summaryLines).toContain("变更字段：专题内容");
-        expect(binding.summaryLines).toContain("修订：path-revision-2 → path-revision-3");
+        expect(binding.summaryLines).toContain("修订版本已更新");
         expect(binding.summaryLines).toContain("影响范围：只影响后续学员");
 
         const regrade = buildOperationLogDisplay(log({
@@ -100,5 +119,26 @@ describe("buildOperationLogDisplay", () => {
         expect(regrade.summaryLines).toContain("原始评分：88");
         expect(regrade.summaryLines).toContain("重评结果：42");
         expect(regrade.summaryLines).toContain("目标修订：v2");
+    });
+
+    it("keeps trace ids, error codes, and raw training stages in technical details", () => {
+        const display = buildOperationLogDisplay(log({
+            metadata: {
+                trace_id: "trace-internal-1",
+                error_code: "[PROVIDER_TIMEOUT]",
+            },
+            training_context: {
+                path_revision_no: 3,
+                training_stage: "needs_remediation",
+                learner_level: null,
+                role_level: null,
+            },
+        }));
+
+        expect(display.summaryLines).toContain("结果：处理失败，技术原因仅在详情中展示");
+        expect(display.summaryLines).toContain("训练阶段：需补练");
+        expect(display.summaryLines.join(" ")).not.toContain("trace-internal-1");
+        expect(display.summaryLines.join(" ")).not.toContain("PROVIDER_TIMEOUT");
+        expect(display.rawJson).toContain("trace-internal-1");
     });
 });

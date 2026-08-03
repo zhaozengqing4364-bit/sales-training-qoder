@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/newcomer-training-activity-orchestration.md", "reason": "Quiz 冻结与发布合同"}
+{"file": ".trellis/spec/backend/prompt-template-governance.md", "reason": "AI 出题与简答治理"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "题库审核与测验编辑"}
+{"file": ".trellis/spec/frontend/newcomer-foundation-view-models.md", "reason": "题目安全投影"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "批量、审核与恢复"}
+{"file": ".trellis/tasks/07-19-newcomer-training-content-authoring-closure/research/current-state-gap.md", "reason": "当前题库 Authoring 缺口"}

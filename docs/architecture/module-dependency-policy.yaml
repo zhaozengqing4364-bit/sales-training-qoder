@@ -58,7 +58,6 @@ temporary_edges:
       - curriculum_practice
       - presentation_coach
       - sales_bot
-      - sales_trainer
       - support
     owner: platform-architecture
     reason: >-

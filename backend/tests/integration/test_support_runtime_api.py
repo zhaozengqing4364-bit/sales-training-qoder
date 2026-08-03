@@ -34,7 +34,6 @@ async def _create_user(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"support_{uuid.uuid4().hex[:8]}",
         name=email.split("@")[0],
-        department="Support",
         email=email,
         role=role,
         is_active=is_active,

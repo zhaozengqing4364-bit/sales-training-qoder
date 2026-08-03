@@ -19,7 +19,6 @@ async def _create_user(test_db: AsyncSession, *, role: str, name: str) -> User:
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"ppt_delete_{uuid.uuid4().hex[:10]}",
         name=name,
-        department="QA",
         email=f"{name.lower().replace(' ', '_')}_{uuid.uuid4().hex[:6]}@example.com",
         role=role,
         is_active=True,

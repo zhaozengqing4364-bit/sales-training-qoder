@@ -29,10 +29,12 @@ class RealtimeRoleplayActivityHandler:
         self, context: ActivityExecutionContext, *, actor: User, client_token: str
     ) -> NewcomerTrainingActivityAttempt:
         await self.start_session(context, actor=actor, client_token=client_token)
-        attempt = await self._attempts.latest_for_activity(
-            enrollment_id=context.enrollment_id,
-            activity_id=context.activity.activity_id,
-        )
+        attempt = context.latest_attempt
+        if not context.latest_attempt_loaded:
+            attempt = await self._attempts.latest_for_activity(
+                enrollment_id=context.enrollment_id,
+                activity_id=context.activity.activity_id,
+            )
         if attempt is None:
             raise RuntimeError("realtime start returned without activity attempt")
         return attempt

@@ -3,8 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import dynamic from "next/dynamic";
 import {
     AlertTriangle,
     ArrowLeft,
@@ -28,7 +27,32 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { debug } from "@/lib/debug";
-import { markdownComponents } from "@/components/sales-trainer/coo-markdown-components";
+
+const LearningContentMarkdownPreview = dynamic(
+    () => import("@/components/admin/learning-contents/learning-content-markdown-preview"),
+    {
+        loading: () => (
+            <p className="text-sm text-slate-500" role="status">
+                正在显示正文…
+            </p>
+        ),
+        ssr: false,
+    },
+);
+
+function DeferredLearningContentMarkdownPreview({ content }: { content: string }) {
+    const [showRichPreview, setShowRichPreview] = useState(false);
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => setShowRichPreview(true), 600);
+        return () => window.clearTimeout(timeoutId);
+    }, []);
+
+    if (!showRichPreview) {
+        return <div className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{content}</div>;
+    }
+    return <LearningContentMarkdownPreview content={content} />;
+}
 
 const STATUS_LABELS: Record<string, string> = {
     draft: "草稿",
@@ -146,9 +170,12 @@ export default function AdminLearningContentDetailPage() {
     const loadContent = useCallback(async () => {
         setIsLoading(true);
         setError(null);
+        setBindingImpact(null);
         setBindingImpactError(null);
+        const contentRequest = api.learningContents.get(contentId);
+        const bindingImpactRequest = api.learningContents.getBindingImpact(contentId);
         try {
-            const data = await api.learningContents.get(contentId);
+            const data = await contentRequest;
             setContent(data);
             setTitle(data.title);
             setSummary(data.summary ?? "");
@@ -157,14 +184,6 @@ export default function AdminLearningContentDetailPage() {
             setSafetyFlagged(data.safety_flagged);
             setActionError(null);
             setPublishGateErrors(null);
-            try {
-                const impact = await api.learningContents.getBindingImpact(contentId);
-                setBindingImpact(impact);
-            } catch (impactError) {
-                debug.error("Failed to load learning content binding impact:", impactError);
-                setBindingImpact(null);
-                setBindingImpactError(getApiErrorMessage(impactError));
-            }
         } catch (err) {
             debug.error("Failed to load learning content:", err);
             setError(getApiErrorMessage(err));
@@ -172,6 +191,15 @@ export default function AdminLearningContentDetailPage() {
             setBindingImpact(null);
         } finally {
             setIsLoading(false);
+        }
+
+        try {
+            const impact = await bindingImpactRequest;
+            setBindingImpact(impact);
+        } catch (impactError) {
+            debug.error("Failed to load learning content binding impact:", impactError);
+            setBindingImpact(null);
+            setBindingImpactError(getApiErrorMessage(impactError));
         }
     }, [contentId]);
 
@@ -336,7 +364,7 @@ export default function AdminLearningContentDetailPage() {
             SORTED_CHAPTERS[index]?.order_index,
             SORTED_CHAPTERS[targetIndex]?.order_index,
         ].filter((order): order is number => typeof order === "number");
-        if (impactUnitsForOrders(affectedOrders).length > 0) {
+        if (impactUnitsForOrders().length > 0) {
             setConfirmAction({
                 type: "reorder-chapter",
                 chapterIds: newOrder,
@@ -461,9 +489,9 @@ export default function AdminLearningContentDetailPage() {
         ...(bindingImpact?.active_bindings ?? []),
         ...(bindingImpact?.working_bindings ?? []),
     ];
-    const impactUnitsForOrders = (_orders: number[]) => allBindings;
+    const impactUnitsForOrders = () => allBindings;
     const confirmImpactUnits = confirmAction && "affectedOrders" in confirmAction
-        ? impactUnitsForOrders(confirmAction.affectedOrders)
+        ? impactUnitsForOrders()
         : [];
     const impactDescription = confirmImpactUnits.length
         ? `会影响训练活动：${confirmImpactUnits.map((binding) => binding.activity_title).join("；")}。`
@@ -487,7 +515,7 @@ export default function AdminLearningContentDetailPage() {
               : `确定要发布「${content?.title ?? "当前学习内容"}」吗？发布前会再次执行章节与安全门禁检查。`;
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-6 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[var(--duration-tooltip)]">
             <ConfirmDialog
                 open={!!confirmAction}
                 onOpenChange={(open) => {
@@ -623,12 +651,12 @@ export default function AdminLearningContentDetailPage() {
                             </div>
                         ) : null}
                         <div className="mt-4 flex flex-wrap gap-2">
-                            <Link href="/admin/newcomer-training/path" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                            <Link href="/admin/newcomer-training/paths" prefetch={false} className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
                                 路径配置
                                 <ExternalLink className="h-3.5 w-3.5" />
                             </Link>
-                            <Link href="/admin/sales-trainer/questions/drafts" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                                题目草稿箱
+                            <Link href="/admin/sales-trainer/questions" prefetch={false} className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                                管理测验题目
                                 <ExternalLink className="h-3.5 w-3.5" />
                             </Link>
                         </div>
@@ -924,12 +952,10 @@ export default function AdminLearningContentDetailPage() {
                                                         </div>
                                                         <div className="max-h-[520px] overflow-auto rounded-xl border border-slate-100 bg-slate-50/70 p-5">
                                                             {selectedChapter.content ? (
-                                                                <ReactMarkdown
-                                                                    remarkPlugins={[remarkGfm]}
-                                                                    components={markdownComponents}
-                                                                >
-                                                                    {selectedChapter.content}
-                                                                </ReactMarkdown>
+                                                                <DeferredLearningContentMarkdownPreview
+                                                                    key={selectedChapter.chapter_id}
+                                                                    content={selectedChapter.content}
+                                                                />
                                                             ) : (
                                                                 <p className="text-sm text-slate-500">暂无正文</p>
                                                             )}

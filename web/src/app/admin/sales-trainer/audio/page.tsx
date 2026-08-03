@@ -26,11 +26,6 @@ const AUDIO_MANAGEMENT_SECTIONS = [
         description: "查看录音上传、转写状态、重试入口和文件访问。",
         href: "/admin/sales-trainer/audio/submissions",
     },
-    {
-        title: "评分结果",
-        description: "查看录音评分结论、AI 反馈和历史快照。",
-        href: "/admin/sales-trainer/audio/results",
-    },
 ] as const;
 
 export default function SalesTrainerAudioManagementPage() {
@@ -73,9 +68,9 @@ export default function SalesTrainerAudioManagementPage() {
                                 这些入口用于批量治理和历史检索；配置单个录音活动时优先在路径编辑器内就地完成。
                             </p>
                         </div>
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                             {AUDIO_MANAGEMENT_SECTIONS.map((section) => (
-                                <Link key={section.href} href={section.href}>
+                                <Link key={section.href} href={section.href} prefetch={false}>
                                     <GlassCard className="h-full p-5 transition hover:border-slate-300 hover:bg-white">
                                         <h3 className="text-lg font-black text-slate-950">{section.title}</h3>
                                         <p className="mt-3 text-sm leading-6 text-slate-600">{section.description}</p>

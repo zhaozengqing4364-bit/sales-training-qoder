@@ -1,0 +1,116 @@
+{
+  "routes": [
+    {
+      "id": "L-01",
+      "label": "新人训练首页",
+      "path": "/newcomer-training",
+      "critical": true,
+      "expectText": [
+        {}
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "L-02",
+      "label": "内容学习活动",
+      "path": "/newcomer-training/activities/lesson-product_knowledge",
+      "critical": true,
+      "expectText": [
+        "当前任务",
+        "为什么要做",
+        "怎么完成",
+        "完成标准",
+        "开始学习"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    }
+  ],
+  "results": [
+    {
+      "id": "L-01",
+      "label": "新人训练首页",
+      "path": "/newcomer-training",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/newcomer-training",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 897,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-01-desktop-newcomer-training.png"
+    },
+    {
+      "id": "L-01",
+      "label": "新人训练首页",
+      "path": "/newcomer-training",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/newcomer-training",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 820,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-01-mobile-newcomer-training.png"
+    },
+    {
+      "id": "L-02",
+      "label": "内容学习活动",
+      "path": "/newcomer-training/activities/lesson-product_knowledge",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/lesson-product_knowledge",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 404,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-02-desktop-newcomer-training-activities-lesson-product-knowledge.png"
+    },
+    {
+      "id": "L-02",
+      "label": "内容学习活动",
+      "path": "/newcomer-training/activities/lesson-product_knowledge",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/lesson-product_knowledge",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 349,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/L-02-mobile-newcomer-training-activities-lesson-product-knowledge.png"
+    }
+  ]
+}

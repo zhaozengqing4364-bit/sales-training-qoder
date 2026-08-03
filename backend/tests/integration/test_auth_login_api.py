@@ -23,6 +23,7 @@ from common.auth.service import (
     AUTH_SESSION_COOKIE_NAME,
     get_wecom_oauth_return_to_cookie_name,
     get_wecom_oauth_state_cookie_name,
+    pwd_context,
     verify_token,
 )
 from common.db.models import User
@@ -34,13 +35,15 @@ async def _create_user(
     email: str,
     role: str,
     is_active: bool,
+    password: str | None = "Password123!",
 ) -> User:
     user = User(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"login_{uuid.uuid4().hex[:8]}",
         name=email.split("@")[0],
-        department="QA",
         email=email,
+        hashed_password=pwd_context.hash(password) if password else None,
+        credential_status="active" if password else "reset_required",
         role=role,
         is_active=is_active,
     )
@@ -139,6 +142,44 @@ async def test_login_sets_http_only_cookie_and_cookie_auth_works(
 
 
 @pytest.mark.asyncio
+async def test_temporary_password_can_be_replaced_with_bearer_without_cookie(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    user = await _create_user(
+        test_db,
+        email="temporary-bearer@example.com",
+        role="admin",
+        is_active=True,
+        password="Temporary123!",
+    )
+    user.credential_status = "temporary"
+    user.temporary_password_expires_at = datetime.now(UTC) + timedelta(hours=1)
+    await test_db.commit()
+
+    login_response = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": "Temporary123!"},
+    )
+    assert login_response.status_code == 200
+    assert login_response.json()["data"]["requires_password_change"] is True
+    temporary_token = login_response.json()["data"]["token"]
+
+    async_client.cookies.clear()
+    change_response = await async_client.post(
+        "/api/v1/auth/change-temporary-password",
+        json={"new_password": "Permanent456!"},
+        headers={"Authorization": f"Bearer {temporary_token}"},
+    )
+
+    assert change_response.status_code == 200
+    body = change_response.json()["data"]
+    assert body["requires_password_change"] is False
+    claims = verify_token(body["token"])
+    assert claims["scope"] == "business"
+
+
+@pytest.mark.asyncio
 async def test_login_in_non_development_forces_secure_session_and_csrf_cookies(
     async_client,
     test_db: AsyncSession,
@@ -229,7 +270,7 @@ async def test_logout_requires_matching_csrf_header_for_cookie_session(
 
 
 @pytest.mark.asyncio
-async def test_login_shared_password_fallback_exposes_compatibility_diagnostic_header(
+async def test_login_uses_managed_password_and_exposes_no_compatibility_mode(
     async_client,
     test_db: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -249,8 +290,8 @@ async def test_login_shared_password_fallback_exposes_compatibility_diagnostic_h
     )
 
     assert response.status_code == 200
-    assert response.headers.get("X-Auth-Compatibility-Mode") == "shared_password"
-    assert response.headers.get("X-Auth-Authority") == "compatibility_env_password"
+    assert response.headers.get("X-Auth-Compatibility-Mode") is None
+    assert response.headers.get("X-Auth-Authority") == "managed_user_password"
 
 
 @pytest.mark.asyncio
@@ -338,7 +379,7 @@ async def test_login_unknown_email_returns_same_secure_error_code(
 
 
 @pytest.mark.asyncio
-async def test_login_returns_503_when_credentials_not_configured(
+async def test_login_unknown_user_is_rejected_when_legacy_env_passwords_are_absent(
     async_client,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -350,10 +391,10 @@ async def test_login_returns_503_when_credentials_not_configured(
         json={"email": "auth-missing-config@example.com", "password": "whatever"},
     )
 
-    assert response.status_code == 503
+    assert response.status_code == 401
     body = response.json()
     assert body["success"] is False
-    assert body["error"] == "[AUTH_SERVICE_UNAVAILABLE]"
+    assert body["error"] == "[INVALID_CREDENTIALS]"
     assert "trace_id" in body
 
 
@@ -363,7 +404,14 @@ async def test_auth_providers_report_explicit_dev_fallback_when_wecom_is_not_con
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "development")
-    for key in ("WECOM_CORP_ID", "WECOM_SECRET", "WECOM_AGENT_ID", "WECHAT_CORP_ID", "WECHAT_SECRET", "WECHAT_AGENT_ID"):
+    for key in (
+        "WECOM_CORP_ID",
+        "WECOM_SECRET",
+        "WECOM_AGENT_ID",
+        "WECHAT_CORP_ID",
+        "WECHAT_SECRET",
+        "WECHAT_AGENT_ID",
+    ):
         monkeypatch.delenv(key, raising=False)
 
     response = await async_client.get("/api/v1/auth/providers")
@@ -376,7 +424,9 @@ async def test_auth_providers_report_explicit_dev_fallback_when_wecom_is_not_con
     assert payload["data"]["wecom"]["configured"] is False
     assert "未配置" in payload["data"]["wecom"]["message"]
     assert payload["data"]["dev_fallback"]["enabled"] is True
-    assert payload["data"]["dev_fallback"]["login_url"].endswith("/api/v1/auth/dev-login")
+    assert payload["data"]["dev_fallback"]["login_url"].endswith(
+        "/api/v1/auth/dev-login"
+    )
     assert "development" in payload["data"]["dev_fallback"]["message"].lower()
 
 
@@ -399,19 +449,43 @@ async def test_wecom_callback_exchanges_code_sets_cookie_and_redirects_to_fronte
         if request.url.path == "/cgi-bin/gettoken":
             assert request.url.params["corpid"] == "corp-id"
             assert request.url.params["corpsecret"] == "corp-secret"
-            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "access_token": "token-123", "expires_in": 7200})
+            return httpx.Response(
+                200,
+                json={
+                    "errcode": 0,
+                    "errmsg": "ok",
+                    "access_token": "token-123",
+                    "expires_in": 7200,
+                },
+            )
         if request.url.path == "/cgi-bin/auth/getuserinfo":
             assert request.url.params["code"] == "callback-code-1"
-            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "userid": "wecom-user-1"})
+            return httpx.Response(
+                200, json={"errcode": 0, "errmsg": "ok", "userid": "wecom-user-1"}
+            )
         if request.url.path == "/cgi-bin/user/get":
             assert request.url.params["userid"] == "wecom-user-1"
-            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "userid": "wecom-user-1", "name": "企业微信成员", "department": [42], "email": "wecom-user@example.com"})
-        raise AssertionError(f"unexpected WeCom request: {request.method} {request.url}")
+            return httpx.Response(
+                200,
+                json={
+                    "errcode": 0,
+                    "errmsg": "ok",
+                    "userid": "wecom-user-1",
+                    "name": "企业微信成员",
+                    "department": [42],
+                    "email": "wecom-user@example.com",
+                },
+            )
+        raise AssertionError(
+            f"unexpected WeCom request: {request.method} {request.url}"
+        )
 
     transport = httpx.MockTransport(handler)
     monkeypatch.setattr(
         "common.auth.service._create_wecom_http_client",
-        lambda: httpx.AsyncClient(transport=transport, base_url="https://qyapi.weixin.qq.com"),
+        lambda: httpx.AsyncClient(
+            transport=transport, base_url="https://qyapi.weixin.qq.com"
+        ),
     )
 
     start_response = await async_client.get(
@@ -436,7 +510,9 @@ async def test_wecom_callback_exchanges_code_sets_cookie_and_redirects_to_fronte
 
     set_cookie_headers = callback_response.headers.get_list("set-cookie")
     session_cookie_header = next(
-        header for header in set_cookie_headers if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
+        header
+        for header in set_cookie_headers
+        if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
     )
     assert "HttpOnly" in session_cookie_header
     session_token = callback_response.cookies.get(AUTH_SESSION_COOKIE_NAME)
@@ -449,13 +525,14 @@ async def test_wecom_callback_exchanges_code_sets_cookie_and_redirects_to_fronte
     assert me_payload["success"] is True
     assert me_payload["data"]["email"] == "wecom-user@example.com"
     assert me_payload["data"]["display_name"] == "企业微信成员"
+    assert me_payload["data"]["team"] is None
 
     stored_user = (
         await test_db.execute(select(User).where(User.wechat_user_id == "wecom-user-1"))
     ).scalar_one()
     assert stored_user.email == "wecom-user@example.com"
     assert stored_user.name == "企业微信成员"
-    assert stored_user.department == "42"
+    assert "department" not in stored_user.__table__.columns
     assert str(stored_user.last_login)
 
     assert seen_paths == [
@@ -466,7 +543,7 @@ async def test_wecom_callback_exchanges_code_sets_cookie_and_redirects_to_fronte
 
 
 @pytest.mark.asyncio
-async def test_login_user_specific_password_mapping_isolation(
+async def test_legacy_user_password_mapping_is_ignored(
     async_client,
     test_db: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -495,22 +572,24 @@ async def test_login_user_specific_password_mapping_isolation(
         is_active=True,
     )
 
-    success_response = await async_client.post(
+    mapped_password_response = await async_client.post(
         "/api/v1/auth/login",
         json={"email": admin_user.email, "password": "AdminPass123!"},
     )
-    assert success_response.status_code == 200
+    assert mapped_password_response.status_code == 401
 
-    fail_response = await async_client.post(
+    managed_password_response = await async_client.post(
         "/api/v1/auth/login",
-        json={"email": admin_user.email, "password": "UserPass123!"},
+        json={"email": admin_user.email, "password": "Password123!"},
     )
-    assert fail_response.status_code == 401
-    assert fail_response.json()["error"] == "[INVALID_CREDENTIALS]"
+    assert managed_password_response.status_code == 200
+    assert managed_password_response.headers["X-Auth-Authority"] == (
+        "managed_user_password"
+    )
 
 
 @pytest.mark.asyncio
-async def test_login_falls_back_to_shared_password_when_user_not_in_override_map(
+async def test_login_never_falls_back_to_shared_environment_password(
     async_client,
     test_db: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -537,10 +616,8 @@ async def test_login_falls_back_to_shared_password_when_user_not_in_override_map
         json={"email": target_user.email, "password": "SharedPass123!"},
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["success"] is True
-    assert payload["data"]["user"]["role"] == "admin"
+    assert response.status_code == 401
+    assert response.json()["error"] == "[INVALID_CREDENTIALS]"
 
 
 @pytest.mark.asyncio
@@ -608,7 +685,6 @@ async def test_dev_login_normalizes_legacy_dev_user_role_to_admin(
         wechat_user_id="dev_wechat_user",
         email="dev@example.com",
         name="Developer",
-        department="Development",
         role="user",
         is_active=True,
     )
@@ -628,7 +704,7 @@ async def test_dev_login_normalizes_legacy_dev_user_role_to_admin(
     persisted = refreshed.scalars().first()
     assert persisted is not None
     assert persisted.role == "admin"
-    assert persisted.department == "新人训练路径"
+    assert "department" not in persisted.__table__.columns
 
 
 @pytest.mark.asyncio
@@ -784,6 +860,7 @@ async def test_reset_password_rejects_expired_token_and_preserves_new_login_boun
         email="auth-reset-expired@example.com",
         role="user",
         is_active=True,
+        password="OriginalPass123!",
     )
 
     forgot_response = await async_client.post(
@@ -841,6 +918,7 @@ async def test_reset_password_success_sets_managed_password_and_rejects_reuse(
         email="auth-reset-managed@example.com",
         role="user",
         is_active=True,
+        password="OriginalPass123!",
     )
     user_email = user.email
 
@@ -892,7 +970,8 @@ def test_auth_recovery_request_path_keeps_runtime_ddl_out_of_handlers() -> None:
     ).read_text(encoding="utf-8")
 
     assert (
-        AUTH_FORMALIZATION_SURFACE["runtime_ddl_owner"] == "common.db.session.init_db"
+        AUTH_FORMALIZATION_SURFACE["runtime_schema_authority"]
+        == "alembic-only; startup verification is read-only"
     )
     assert "PasswordResetService" in auth_api_source
     for forbidden_snippet in ("create_all(", "CREATE TABLE", "create table"):

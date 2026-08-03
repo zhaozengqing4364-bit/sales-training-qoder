@@ -12,6 +12,7 @@ from common.cos.signing import CosConfigError, get_cos_signing_service
 from common.db.models import User
 from common.monitoring.logger import get_trace_id
 from common.oss.signing import OssConfigError, get_oss_signing_service
+from common.teams.policy import TeamDataScope
 from sales_trainer.models import (
     NewcomerTrainingEnrollment,
     SalesTrainerAssetRevision,
@@ -621,7 +622,7 @@ class SalesTrainerMaterialService:
         record_type: str,
         record_id: str,
         viewer: User,
-        team_department: str | None,
+        team_scope: TeamDataScope,
     ) -> MaterialFileAccess:
         if record_type != "audio_submission":
             raise MaterialServiceError(
@@ -635,7 +636,7 @@ class SalesTrainerMaterialService:
             record_type,
             record_id,
             viewer=viewer,
-            team_department=team_department,
+            team_scope=team_scope,
         )
         if record is None:
             raise MaterialServiceError(

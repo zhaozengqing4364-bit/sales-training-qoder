@@ -18,6 +18,31 @@ function statusVariant(status: string): "green" | "orange" | "gray" {
     return "gray";
 }
 
+function statusLabel(status: string): string {
+    return { draft: "草稿", published: "已发布", archived: "已归档" }[status] ?? "状态待确认";
+}
+
+function modeLabel(mode: string): string {
+    return {
+        learning: "引导学习",
+        expert_qa: "专家问答",
+        examiner: "考核对练",
+        customer_roleplay: "客户实战对练",
+        mixed_path: "组合训练",
+    }[mode] ?? "自定义训练";
+}
+
+function scenarioLabel(scenarioType: string): string {
+    return { sales: "销售沟通", presentation: "演示讲解" }[scenarioType] ?? "自定义场景";
+}
+
+function bindingLabel(item: PracticeTemplateRecord): string | null {
+    if (item.case_item_id && item.role_profile_id) return "客户案例和角色档案已绑定";
+    if (item.case_item_id) return "客户案例已绑定，角色档案待补充";
+    if (item.role_profile_id) return "角色档案已绑定，客户案例待补充";
+    return null;
+}
+
 interface TemplateListProps {
     items: PracticeTemplateRecord[];
     busyTemplateId: string | null;
@@ -41,7 +66,7 @@ export function TemplateList({
         <GlassCard className="space-y-4 p-6">
             <div className="flex items-center justify-between">
                 <h2 className="text-xl font-black text-slate-900">模板列表</h2>
-                <Badge variant="gray">{items.length} templates</Badge>
+                <Badge variant="gray">{items.length} 个模板</Badge>
             </div>
             <div className="grid gap-3">
                 {items.map((item) => (
@@ -50,16 +75,11 @@ export function TemplateList({
                             <div className="space-y-2">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h3 className="font-bold text-slate-900">{item.name}</h3>
-                                    <Badge variant={statusVariant(item.status)}>{item.status} · v{item.version}</Badge>
+                                    <Badge variant={statusVariant(item.status)}>{statusLabel(item.status)} · v{item.version}</Badge>
                                 </div>
                                 <ContentAssetStatusGuide status={item.status} compact />
-                                <p className="text-sm text-slate-600">{item.mode} · {item.scenario_type}</p>
-                                <p className="text-xs text-slate-500">
-                                    agent: {item.agent_id} · persona: {item.persona_id} · runtime: {item.runtime_profile_id}
-                                </p>
-                                {(item.case_item_id || item.role_profile_id) && (
-                                    <p className="text-xs text-slate-500">case: {item.case_item_id ?? "未绑定"} · role: {item.role_profile_id ?? "未绑定"}</p>
-                                )}
+                                <p className="text-sm text-slate-600">{modeLabel(item.mode)} · {scenarioLabel(item.scenario_type)}</p>
+                                {bindingLabel(item) ? <p className="text-xs text-slate-500">{bindingLabel(item)}</p> : null}
                                 {item.description ? <p className="text-sm text-slate-600">{item.description}</p> : null}
                             </div>
                             <div className="flex flex-wrap gap-2">

@@ -21,22 +21,29 @@ class StrictModel(BaseModel):
 
 
 class LessonConfig(StrictModel):
-    learning_content_id: str = Field(min_length=1, max_length=36)
+    learning_content_id: str = Field(max_length=36)
     completion_mode: Literal["all_chapters", "learner_confirmed"] = "all_chapters"
 
 
 class QuizConfig(StrictModel):
-    exam_paper_id: str = Field(min_length=1, max_length=36)
+    exam_paper_id: str = Field(max_length=36)
     pass_score: float = Field(ge=0, le=100)
     max_attempts: int | None = Field(default=None, ge=1, le=100)
 
 
 class AudioAssessmentConfig(StrictModel):
-    scoring_rubric_id: str = Field(min_length=1, max_length=36)
-    material_id: str | None = Field(default=None, min_length=1, max_length=36)
+    scoring_rubric_id: str = Field(max_length=36)
+    material_id: str | None = Field(default=None, max_length=36)
     pass_score: float = Field(ge=0, le=100)
     max_attempts: int | None = Field(default=None, ge=1, le=100)
     example_transcript: str | None = Field(default=None, max_length=8000)
+
+    @field_validator("material_id")
+    @classmethod
+    def normalize_material_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
 
     @field_validator("example_transcript")
     @classmethod
@@ -47,8 +54,8 @@ class AudioAssessmentConfig(StrictModel):
 
 
 class RealtimeRoleplayConfig(StrictModel):
-    practice_template_id: str = Field(min_length=1, max_length=36)
-    runtime_profile_id: str = Field(min_length=1, max_length=120)
+    practice_template_id: str = Field(max_length=36)
+    runtime_profile_id: str = Field(max_length=120)
     completion_mode: Literal["session_completed", "scored"] = "session_completed"
     practice_template_revision_id: str | None = Field(
         default=None,
@@ -75,7 +82,7 @@ class RealtimeRoleplayConfig(StrictModel):
 
 
 class AiCoachActivityConfig(StrictModel):
-    coach_profile_id: str = Field(min_length=1, max_length=120)
+    coach_profile_id: str = Field(max_length=120)
     completion_mode: Literal["session_completed", "goal_reached"] = "session_completed"
 
 

@@ -1,5 +1,7 @@
 # 新人训练完整闭环优化总计划
 
+> **历史 / Superseded（2026-07-16）：** 本任务关于 Realtime 首发、Phase/Module 和 Enrollment rollout 的决策已由 [`../07-16-foundation-contracts-baseline/prd.md`](../07-16-foundation-contracts-baseline/prd.md) 及 [`../../../docs/newcomer-foundation-contract-index.md`](../../../docs/newcomer-foundation-contract-index.md) 取代。本文只保留历史证据，不得作为新实现权威。
+
 ## Goal
 
 把新人训练路径从“已有异步训练骨架”升级为可长期运营的完整闭环系统：角色、学员等级、训练阶段都可区分；内容、配置、权限、训练、报告、可视化、审计和测试形成闭环；前后端契约紧密一致；没有伪成功、死数据、不可流通数据和靠前端隐藏的权限。

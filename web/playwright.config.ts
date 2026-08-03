@@ -5,6 +5,7 @@ import { defineConfig, devices } from "@playwright/test";
 const repoRoot = path.resolve(__dirname, "..");
 const evidenceRoot = path.join(repoRoot, ".sisyphus", "evidence");
 const evidencePrefix = process.env.SMOKE_EVIDENCE_PREFIX || "task-9";
+const traceMode = process.env.SMOKE_CAPTURE_TRACE === "1" ? "retain-on-failure" : "off";
 
 export default defineConfig({
   testDir: path.join(__dirname, "tests", "e2e"),
@@ -27,7 +28,9 @@ export default defineConfig({
   ],
   use: {
     baseURL: process.env.SMOKE_WEB_BASE_URL || "http://localhost:3445",
-    trace: "retain-on-failure",
+    // Browser traces persist response headers and cookies. Keep them opt-in so
+    // routine evidence capture cannot write session tokens into the workspace.
+    trace: traceMode,
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     actionTimeout: 15_000,

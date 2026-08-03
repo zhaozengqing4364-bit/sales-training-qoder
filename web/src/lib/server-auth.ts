@@ -7,7 +7,9 @@ import { buildTraceHeaders } from "@/lib/observability/trace-context";
 
 const DEFAULT_API_BASE_URL = "http://localhost:3444/api/v1";
 const SERVER_API_BASE_URL = (
-    process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_BASE_URL
+    process.env.SERVER_API_URL
+    || process.env.NEXT_PUBLIC_API_URL
+    || DEFAULT_API_BASE_URL
 ).replace(/\/+$/, "");
 const SERVER_SESSION_TIMEOUT_MS = 8_000;
 

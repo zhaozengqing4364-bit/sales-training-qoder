@@ -16,6 +16,11 @@ import type {
     SalesTrainerAudioScorePromptUpdateRequest,
 } from "@/lib/api/types";
 
+type SubmitFeedback = {
+    tone: "success" | "warning" | "error";
+    message: string;
+};
+
 export default function EditSalesTrainerScoreStandardPage() {
     const params = useParams<{ id: string }>();
     const pathname = usePathname();
@@ -28,6 +33,7 @@ export default function EditSalesTrainerScoreStandardPage() {
     const [adminCapabilities, setAdminCapabilities] = useState<SalesTrainerAdminCapabilities | null>(null);
     const [capabilityError, setCapabilityError] = useState<string | null>(null);
     const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+    const [submitFeedback, setSubmitFeedback] = useState<SubmitFeedback | null>(null);
     const canAccessScorePromptForm = isSalesTrainerAdminPathAllowedForCapabilities(pathname, adminCapabilities);
 
     const loadCapabilities = useCallback(async () => {
@@ -90,12 +96,35 @@ export default function EditSalesTrainerScoreStandardPage() {
             return;
         }
         setIsSubmitting(true);
+        setSubmitFeedback(null);
+        let revisionSaved = false;
         try {
             await api.admin.salesTrainer.updateScorePrompt(params.id, payload);
-            toast.success("录音评分标准修订已保存，发布后只影响后续评分");
-            setIsSubmitting(false);
+            revisionSaved = true;
+            const published = await api.admin.salesTrainer.publishScorePrompt(params.id);
+            setItems((current) => current.map((item) => (
+                item.prompt_id === published.prompt_id ? published : item
+            )));
+            setSubmitFeedback({
+                tone: "success",
+                message: "评分标准已保存并发布。后续录音评分将使用本修订；已提交录音仍保留原评分快照。",
+            });
+            toast.success("录音评分标准已保存并发布");
         } catch (submitError) {
-            toast.error(getApiErrorMessage(submitError));
+            const message = getApiErrorMessage(submitError);
+            if (revisionSaved) {
+                setSubmitFeedback({
+                    tone: "warning",
+                    message: `修订已保存，但发布未完成：${message}。当前评分仍使用上一已发布版本，可直接重试“保存并发布”。`,
+                });
+            } else {
+                setSubmitFeedback({
+                    tone: "error",
+                    message: `评分标准保存失败：${message}。当前输入已保留，可修正后重试。`,
+                });
+            }
+            toast.error(message);
+        } finally {
             setIsSubmitting(false);
         }
     }
@@ -106,7 +135,7 @@ export default function EditSalesTrainerScoreStandardPage() {
                 ? "/admin/sales-trainer/audio/score-standards"
                 : "/admin/sales-trainer/score-standards"}
             title={prompt ? `编辑评分标准：${prompt.name}` : "编辑评分标准"}
-            description="已发布评分标准也可以直接编辑；保存会生成待发布修订，发布后只影响后续学员和后续评分。"
+            description="保存并发布会生成可审计的新修订，并立即用于后续学员和后续评分；历史提交继续使用原快照。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
         >
             {isCapabilityLoading ? (
@@ -130,12 +159,26 @@ export default function EditSalesTrainerScoreStandardPage() {
                     onRetry={() => void loadPrompt()}
                 />
             ) : prompt ? (
-                <SalesTrainerScorePromptForm
-                    mode="edit"
-                    initialPrompt={prompt}
-                    isSubmitting={isSubmitting}
-                    onSubmit={(payload) => void handleSubmit(payload as SalesTrainerAudioScorePromptUpdateRequest)}
-                />
+                <div className="space-y-4">
+                    {submitFeedback ? (
+                        <div
+                            role={submitFeedback.tone === "success" ? "status" : "alert"}
+                            className={submitFeedback.tone === "success"
+                                ? "rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+                                : submitFeedback.tone === "warning"
+                                    ? "rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                                    : "rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"}
+                        >
+                            {submitFeedback.message}
+                        </div>
+                    ) : null}
+                    <SalesTrainerScorePromptForm
+                        mode="edit"
+                        initialPrompt={prompt}
+                        isSubmitting={isSubmitting}
+                        onSubmit={(payload) => void handleSubmit(payload as SalesTrainerAudioScorePromptUpdateRequest)}
+                    />
+                </div>
             ) : (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                     未找到对应录音评分标准。

@@ -167,12 +167,6 @@ def build_report(env: dict[str, str]) -> dict[str, object]:
         "model_in_local_allowlist": model in LOCAL_ALLOWED_REALTIME_MODELS,
         "model_in_public_realtime_docs": model in PUBLIC_REALTIME_MODELS,
         "endpoint_without_secret": endpoint,
-        "next_gate_command": (
-            "set -a; . backend/.env; set +a; "
-            "CRITICAL_GATE_MODE=newcomer-real-provider "
-            "NEWCOMER_REAL_PROVIDER_REQUIRED=1 "
-            "bash scripts/critical-quality-gate.sh"
-        ),
     }
 
 

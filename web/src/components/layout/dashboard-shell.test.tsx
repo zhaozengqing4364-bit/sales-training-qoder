@@ -129,6 +129,8 @@ describe("DashboardShell learner help entry", () => {
         );
 
         expect(screen.getByRole("button", { name: "帮助与反馈" })).toBeTruthy();
+        expect(screen.getAllByText("新人销售训练")).toHaveLength(2);
+        expect(screen.queryByText("AI 销售教练")).toBeNull();
 
         fireEvent.click(screen.getByRole("button", { name: /menu/i }));
 

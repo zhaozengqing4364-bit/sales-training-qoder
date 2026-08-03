@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "状态机、AI schema 和集成测试"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "有类型训练卡和工作区组件"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "保存优先、SSE 和恢复状态"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "检查工作区布局和 AI 信息表达"}

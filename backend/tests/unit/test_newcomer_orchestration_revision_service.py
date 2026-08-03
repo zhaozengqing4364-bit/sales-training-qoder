@@ -8,7 +8,9 @@ from common.db.models import User
 from sales_trainer.orchestration.contracts import TrainingPathPayload
 from sales_trainer.orchestration.errors import NewcomerOrchestrationError
 from sales_trainer.orchestration.graph import PathIssue
+from sales_trainer.orchestration.repository import EnrollmentRepository
 from sales_trainer.orchestration.revision_service import TrainingPathRevisionService
+from sales_trainer.services.operation_log_service import OperationLogService
 
 
 class _ResourceValidator:
@@ -202,3 +204,47 @@ async def test_should_publish_candidate_atomically_after_validation(test_db):
     assert result.revision.payload_json["title"] == "直接发布候选"
     assert await service.working_revision() is None
     assert (await service.active_revision()).revision_id == result.revision.revision_id
+
+
+@pytest.mark.asyncio
+async def test_should_sync_all_active_enrollments_when_new_path_is_published(test_db):
+    actor = await _admin(test_db)
+    learner = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"sync-learner-{uuid.uuid4().hex[:8]}",
+        name="同步学员",
+        email=f"sync-{uuid.uuid4().hex[:8]}@example.com",
+        role="user",
+    )
+    test_db.add(learner)
+    await test_db.flush()
+    service = TrainingPathRevisionService(
+        test_db, resource_validator=_ResourceValidator()
+    )
+    first = await service.save_draft(
+        payload=_payload("版本一"), actor=actor, reason="版本一"
+    )
+    await service.publish(actor=actor, reason="发布版本一")
+    enrollment = await EnrollmentRepository(test_db).get_or_create(
+        learner_id=str(learner.user_id),
+        path_id="default",
+        path_revision_id=str(first.revision_id),
+    )
+    second = await service.save_draft(
+        payload=_payload("版本二"), actor=actor, reason="版本二"
+    )
+
+    result = await service.publish(actor=actor, reason="同步全员")
+    await test_db.refresh(enrollment)
+
+    assert enrollment.path_revision_id == result.revision.revision_id
+    assert enrollment.path_revision_id == second.revision_id
+    logs, _ = await OperationLogService(test_db).list_logs(
+        target_type="newcomer_training_path",
+        target_id=str(result.revision.revision_id),
+    )
+    publish_log = next(
+        log for log in logs if log.action == "newcomer_path.published"
+    )
+    assert publish_log.metadata_json["rollout_scope"] == "all_active_learners"
+    assert publish_log.metadata_json["synced_enrollment_count"] == 1

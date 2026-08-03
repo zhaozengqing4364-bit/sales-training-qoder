@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -30,6 +31,7 @@ resolve_effective_base = MODULE.resolve_effective_base
 runner_paths = MODULE.runner_paths
 select_tests = MODULE.select_tests
 validate_codegraph_payload = MODULE.validate_codegraph_payload
+validate_policy_targets = MODULE.validate_policy_targets
 
 POLICY_PATH = REPO_ROOT / "docs" / "architecture" / "quality-test-selection-policy.yaml"
 EXPECTED_BACKEND_INTEGRATION_CRITICAL = {
@@ -43,15 +45,12 @@ EXPECTED_BACKEND_INTEGRATION_CRITICAL = {
     "backend/tests/integration/test_admin_model_configs_api.py",
     "backend/tests/integration/test_scoring_rulesets_api.py",
     "backend/tests/integration/test_supervisor_retraining_api.py",
-    "backend/tests/integration/test_business_etiquette_quiz_api.py",
-    "backend/tests/integration/test_business_etiquette_ai_coach_progress_api.py",
-    "backend/tests/integration/test_newcomer_training_journey_api.py",
-    "backend/tests/integration/test_newcomer_training_path_article_api.py",
-    "backend/tests/integration/test_newcomer_training_path_config_api.py",
-    "backend/tests/integration/test_newcomer_training_path_material_api.py",
+    "backend/tests/integration/test_learning_content_api.py",
+    "backend/tests/integration/test_learning_progress_api.py",
+    "backend/tests/integration/newcomer_training/test_foundation_release_migration.py",
+    "backend/tests/integration/newcomer_training/test_journey_learning_postgres.py",
     "backend/tests/integration/test_newcomer_training_path_rbac_api.py",
     "backend/tests/integration/test_practice_session_object_permissions.py",
-    "backend/tests/integration/test_sales_trainer_persisted_path_unlock.py",
 }
 EXPECTED_PLAYWRIGHT_CRITICAL = {
     "web/tests/e2e/smoke.spec.ts",
@@ -84,6 +83,31 @@ def test_repo_policy_preserves_the_complete_critical_baseline() -> None:
         EXPECTED_PLAYWRIGHT_CRITICAL
     )
     assert policy.families["backend_e2e"].critical == ()
+
+
+def test_repo_policy_only_references_existing_runner_targets() -> None:
+    validate_policy_targets(_policy())
+
+
+def test_should_reject_missing_static_policy_target() -> None:
+    policy = _policy()
+    integration = policy.families["backend_integration"]
+    broken = replace(
+        policy,
+        families={
+            **policy.families,
+            "backend_integration": replace(
+                integration,
+                critical=(
+                    *integration.critical,
+                    "backend/tests/integration/test_deleted_contract.py",
+                ),
+            ),
+        },
+    )
+
+    with pytest.raises(ValueError, match="missing configured test target"):
+        validate_policy_targets(broken)
 
 
 def _context(
@@ -130,11 +154,11 @@ def test_should_select_critical_baseline_and_deterministic_path_rules() -> None:
 
     integration = manifest["selected"]["backend_integration"]
     assert integration == sorted(integration)
-    assert "backend/tests/integration/test_newcomer_training_path_config_api.py" in integration
+    assert "backend/tests/integration/test_newcomer_training_path_unit_revision_api.py" in integration
     assert "web/tests/e2e/newcomer-training-closed-loop.spec.ts" in manifest["selected"]["playwright"]
     assert manifest["selection_mode"] == "selected"
     reasons = manifest["reasons"][
-        "backend/tests/integration/test_newcomer_training_path_config_api.py"
+        "backend/tests/integration/test_learning_progress_api.py"
     ]
     assert "critical-baseline" in reasons
     assert "path-policy:sales-trainer-path" in reasons
@@ -220,7 +244,7 @@ def test_should_keep_policy_selection_when_codegraph_is_missing() -> None:
 
     assert manifest["selection_mode"] == "selected"
     assert manifest["degraded_reasons"] == ["command-missing"]
-    assert "backend/tests/integration/test_newcomer_training_path_config_api.py" in (
+    assert "backend/tests/integration/test_newcomer_training_path_unit_revision_api.py" in (
         manifest["selected"]["backend_integration"]
     )
 

@@ -184,7 +184,7 @@ const baseStatsResponse = {
         user_id: "user-1",
         display_name: "张三",
         email: "zhangsan@example.com",
-        department: "销售一部",
+        team: { team_id: "team-sales", code: "sales", name: "销售一组" },
         role: "user",
         is_active: true,
         status: "active",

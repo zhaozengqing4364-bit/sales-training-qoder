@@ -4,15 +4,13 @@ import { type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-    Home,
-    BarChart2,
     Activity,
+    Bell,
+    BookOpenCheck,
     Settings,
     User,
-    Sparkles,
     PanelLeftClose,
     PanelLeftOpen,
-    LayoutGrid,
     LogOut,
     History,
     Users,
@@ -47,17 +45,16 @@ interface UserInfo {
     display_name?: string;
     email?: string;
     role: string;
-    department?: string;
+    team?: { team_id: string; code: string; name: string } | null;
 }
 
 type SidebarFooterSlot = ReactNode | ((options: { isCollapsed: boolean }) => ReactNode);
 
 export const navItems = [
-    { label: "首页", icon: Home, href: "/" },
-    { label: "训练模式", icon: LayoutGrid, href: "/training" },
-    { label: "新人训练路径", icon: Sparkles, href: "/newcomer-training" },
-    { label: "排行榜", icon: BarChart2, href: "/leaderboard" },
-    { label: "历史记录", icon: History, href: "/history" },
+    { label: "当前训练", icon: BookOpenCheck, href: "/newcomer-training" },
+    { label: "训练历史", icon: History, href: "/history?source=newcomer-training" },
+    { label: "通知与任务", icon: Bell, href: "/newcomer-training/notifications" },
+    { label: "个人资料", icon: User, href: "/profile" },
 ];
 
 function resolveSidebarFooterSlot(
@@ -131,7 +128,7 @@ export function SidebarContent({
                 )}
             >
                 <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform duration-300 shrink-0">
-                    <Sparkles className="w-6 h-6 text-yellow-300" strokeWidth={1.5} />
+                    <BookOpenCheck className="w-6 h-6" strokeWidth={1.5} />
                 </div>
                 <div
                     className={cn(
@@ -139,8 +136,8 @@ export function SidebarContent({
                         isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100",
                     )}
                 >
-                    <span className="font-bold text-xl text-slate-900 tracking-tight leading-none whitespace-nowrap">AI 销售教练</span>
-                    <span className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold mt-1.5 ml-0.5 whitespace-nowrap">平台</span>
+                    <span className="font-bold text-xl text-slate-900 tracking-tight leading-none whitespace-nowrap">新人销售训练</span>
+                    <span className="text-xs tracking-[0.2em] text-slate-500 font-semibold mt-1.5 ml-0.5 whitespace-nowrap">学习工作台</span>
                 </div>
             </div>
 
@@ -251,7 +248,7 @@ export function SidebarContent({
 
 function SidebarUser({ isCollapsed, userInfo }: { isCollapsed: boolean; userInfo: UserInfo | null }) {
     const displayName = userInfo?.display_name || userInfo?.name || "用户";
-    const department = userInfo?.department || "未设置部门";
+    const teamName = userInfo?.team?.name || "未分配团队";
 
     if (isCollapsed) {
         return (
@@ -284,7 +281,7 @@ function SidebarUser({ isCollapsed, userInfo }: { isCollapsed: boolean; userInfo
                     </div>
                     <div className="flex flex-col min-w-0">
                         <span className="text-sm font-bold text-slate-800 truncate">{displayName}</span>
-                        <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-1.5 py-0.5 rounded-full w-fit truncate">{department}</span>
+                        <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-1.5 py-0.5 rounded-full w-fit truncate">{teamName}</span>
                     </div>
                     <div className="ml-auto mr-2 text-slate-300 group-hover:text-red-400 transition-colors shrink-0">
                         <LogOut className="w-4 h-4" />
@@ -319,7 +316,7 @@ function UserProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
         user: "普通用户",
     };
     const role = roleMap[userInfo?.role || "user"] || (userInfo?.role || "普通用户");
-    const department = userInfo?.department || "未设置部门";
+    const teamName = userInfo?.team?.name || "未分配团队";
 
     return (
         <DialogContent>
@@ -341,8 +338,8 @@ function UserProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
                         <span className="text-xs font-bold bg-blue-100 text-blue-600 px-2 py-1 rounded-full">{role}</span>
                     </div>
                     <div className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border border-slate-100">
-                        <span className="text-sm font-medium text-slate-700">部门</span>
-                        <span className="text-sm text-slate-900">{department}</span>
+                        <span className="text-sm font-medium text-slate-700">团队</span>
+                        <span className="text-sm text-slate-900">{teamName}</span>
                     </div>
                 </div>
             </div>
@@ -381,7 +378,7 @@ export function NavLink({
     if (item.href === "/") {
         isActive = pathname === "/" || pathname === "/dashboard";
     } else {
-        isActive = pathname.startsWith(item.href);
+        isActive = pathname.startsWith(item.href.split("?", 1)[0]);
     }
 
     const linkContent = (

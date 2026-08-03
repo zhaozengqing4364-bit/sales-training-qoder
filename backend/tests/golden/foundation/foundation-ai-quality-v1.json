@@ -1,0 +1,433 @@
+{
+  "contract_version": "foundation_ai_quality_v1",
+  "thresholds": {
+    "minimum_schema_validity_rate": 1.0,
+    "minimum_invalid_rejection_rate": 1.0,
+    "minimum_evidence_coverage_rate": 1.0,
+    "maximum_factual_error_rate": 0.0,
+    "maximum_hallucination_reference_rate": 0.0,
+    "minimum_degradation_contract_rate": 1.0,
+    "minimum_stability_rate": 1.0,
+    "maximum_total_cost_minor_units": 20
+  },
+  "cases": [
+    {
+      "case_id": "question_generation_grounded_single_choice",
+      "capability": "question_generation",
+      "business_purpose": "newcomer_question_generation",
+      "prompt_template_id": "foundation-question-generation-gold",
+      "prompt_revision_id": "foundation-question-generation-gold-v1",
+      "output_schema_version": "question-generation-output-v1",
+      "expected_behavior": "accept",
+      "instruction": "来源 anchor-1 内容：客户担心交付风险时，应先澄清具体风险及其对业务上线的影响，再给出有依据的回应。基于该来源生成且仅生成一道单选题；只能使用提供的来源，不得承诺无依据结果。",
+      "output": {
+        "questions": [
+          {
+            "question_type": "single_choice",
+            "stem": "客户最关心交付风险时，销售首先应该做什么？",
+            "options": [
+              {
+                "option_id": "clarify",
+                "text": "确认客户具体担忧及其业务影响",
+                "is_correct": true
+              },
+              {
+                "option_id": "promise",
+                "text": "立即承诺最低价格和最快交付",
+                "is_correct": false
+              }
+            ],
+            "reference_answer": null,
+            "rubric": null,
+            "explanation": "先澄清风险及影响，才能给出有依据的回应。",
+            "difficulty": "medium",
+            "competency_keys": [
+              "customer_understanding"
+            ],
+            "source_anchor_ids": [
+              "anchor-1"
+            ]
+          }
+        ]
+      },
+      "allowed_evidence_refs": [
+        "anchor-1"
+      ],
+      "required_phrases": [
+        "澄清",
+        "风险"
+      ],
+      "forbidden_phrases": [
+        "保证100%"
+      ],
+      "formal_result": false,
+      "formal_scoring": false,
+      "usage": {
+        "input_tokens": 120,
+        "output_tokens": 100,
+        "cost_minor_units": 1,
+        "currency": "CNY"
+      },
+      "max_cost_minor_units": 4
+    },
+    {
+      "case_id": "short_answer_scoring_rubric_evidence",
+      "capability": "short_answer_scoring",
+      "business_purpose": "newcomer_short_answer_scoring",
+      "prompt_template_id": "foundation-short-answer-scoring-gold",
+      "prompt_revision_id": "foundation-short-answer-scoring-gold-v1",
+      "output_schema_version": "short-answer-output-v1",
+      "expected_behavior": "accept",
+      "instruction": "评估 question_revision_id=question-short-rev-1，满分 1 分。冻结标准为：回答明确指出延期会影响客户上线计划则得 1 分。学员回答：延期会影响客户原定的上线计划。依据该标准逐条说明评分依据；不得把失败调用写成零分。",
+      "output": {
+        "answers": [
+          {
+            "question_revision_id": "question-short-rev-1",
+            "awarded_points": 1.0,
+            "max_points": 1.0,
+            "rubric_evidence": [
+              {
+                "criterion": "识别风险",
+                "met": true,
+                "reason": "回答明确说明了延期对客户上线计划的影响。"
+              }
+            ],
+            "confidence": 0.9
+          }
+        ]
+      },
+      "required_phrases": [
+        "上线计划"
+      ],
+      "forbidden_phrases": [
+        "固定零分"
+      ],
+      "formal_result": true,
+      "formal_scoring": true,
+      "usage": {
+        "input_tokens": 90,
+        "output_tokens": 70,
+        "cost_minor_units": 1,
+        "currency": "CNY"
+      },
+      "max_cost_minor_units": 4
+    },
+    {
+      "case_id": "audio_scoring_transcript_evidence",
+      "capability": "audio_scoring",
+      "business_purpose": "foundation_audio_scoring",
+      "prompt_template_id": "foundation-audio-scoring",
+      "prompt_revision_id": "foundation-audio-scoring-v1",
+      "output_schema_version": "audio-scoring-output-v1",
+      "expected_behavior": "accept",
+      "instruction": "冻结评分维度只有 structure，判断表达是否按客户目标、方案价值、下一步的顺序展开。依据转写评分；每个维度必须引用转写原文片段，模型不得直接决定正式达标。",
+      "output": {
+        "dimension_scores": [
+          {
+            "dimension_key": "structure",
+            "score": 88,
+            "uncertainty": 0.08
+          }
+        ],
+        "evidence_spans": [
+          {
+            "dimension_key": "structure",
+            "segment_sequence": 1,
+            "quote": "先确认客户目标",
+            "rationale": "先目标后价值，表达结构清晰。"
+          }
+        ],
+        "missing_points": [],
+        "uncertainty": 0.08,
+        "feedback": [
+          "继续保留明确的下一步。"
+        ],
+        "recommended_remediation": [],
+        "critical_flags": []
+      },
+      "transcript": "我们先确认客户目标，再说明方案价值和下一步。",
+      "required_phrases": [
+        "先目标后价值"
+      ],
+      "forbidden_phrases": [
+        "foundation_ready"
+      ],
+      "formal_result": true,
+      "formal_scoring": true,
+      "usage": {
+        "input_tokens": 180,
+        "output_tokens": 110,
+        "cost_minor_units": 1,
+        "currency": "CNY"
+      },
+      "max_cost_minor_units": 4
+    },
+    {
+      "case_id": "coach_cards_grounded_closed_union",
+      "capability": "coach_card_generation",
+      "business_purpose": "foundation_coach_card_generation",
+      "prompt_template_id": "foundation-coach-card-generation",
+      "prompt_revision_id": "foundation-coach-card-generation-v1",
+      "output_schema_version": "coach-card-generation-output-v1",
+      "expected_behavior": "accept",
+      "instruction": "source-1 内容：面对模糊需求时，应先澄清客户目标和业务影响，再给出回应并约定下一步。基于该来源生成三张不同类型的训练卡，类型分别为 single_choice、ordering、short_answer_rewrite；一次只交付本轮卡片，不得输出 HTML 或外部指令。",
+      "output": {
+        "cards": [
+          {
+            "card_type": "single_choice",
+            "prompt": "面对模糊需求时，第一步怎么做？",
+            "source_ref_ids": [
+              "source-1"
+            ],
+            "options": [
+              {
+                "option_id": "confirm",
+                "text": "澄清目标和影响"
+              },
+              {
+                "option_id": "promise",
+                "text": "立即承诺结果"
+              }
+            ],
+            "correct_option_ids": [
+              "confirm"
+            ]
+          },
+          {
+            "card_type": "ordering",
+            "prompt": "排列需求沟通步骤。",
+            "source_ref_ids": [
+              "source-1"
+            ],
+            "items": [
+              {
+                "item_id": "clarify",
+                "text": "澄清目标"
+              },
+              {
+                "item_id": "respond",
+                "text": "给出回应"
+              }
+            ],
+            "correct_order_ids": [
+              "clarify",
+              "respond"
+            ]
+          },
+          {
+            "card_type": "short_answer_rewrite",
+            "prompt": "请把回应改写为客户语言。",
+            "source_ref_ids": [
+              "source-1"
+            ],
+            "instruction": "说明目标、影响和下一步。",
+            "reference_points": [
+              "客户目标",
+              "业务影响",
+              "下一步"
+            ]
+          }
+        ],
+        "generation_strategy": "从识别、排序和表达三个角度逐步训练。"
+      },
+      "allowed_evidence_refs": [
+        "source-1"
+      ],
+      "required_phrases": [
+        "三个角度"
+      ],
+      "forbidden_phrases": [
+        "<script"
+      ],
+      "formal_result": false,
+      "formal_scoring": false,
+      "usage": {
+        "input_tokens": 210,
+        "output_tokens": 180,
+        "cost_minor_units": 1,
+        "currency": "CNY"
+      },
+      "max_cost_minor_units": 4
+    },
+    {
+      "case_id": "coach_evaluation_answer_and_source_evidence",
+      "capability": "coach_answer_evaluation",
+      "business_purpose": "foundation_coach_answer_evaluation",
+      "prompt_template_id": "foundation-coach-response-evaluation",
+      "prompt_revision_id": "foundation-coach-response-evaluation-v1",
+      "output_schema_version": "coach-answer-evaluation-output-v1",
+      "expected_behavior": "accept",
+      "instruction": "训练要求：先确认客户上线目标和业务影响，再确认决策时间、参与人和下一步。学员回答：我会先确认客户的上线目标和业务影响，再询问决策时间和参与人，最后约定下一步。来源 source-1 包含同样要求。评估该回答，evidence_from_answer 必须逐字引用学员回答，分别给出缺失点、改进行动和来源；mastered 只是模型草稿，领域规则最终计算。",
+      "output": {
+        "score_percent": 94,
+        "mastered": true,
+        "evidence_from_answer": [
+          "先询问决策时间和参与人"
+        ],
+        "missing_points": [],
+        "misconception": null,
+        "feedback": "回答覆盖了客户目标、业务影响、决策安排和下一步。",
+        "improvement_action": "继续用开放式问题确认各项信息。",
+        "next_suggestion": "进入下一张训练卡。",
+        "uncertainty": 0.12,
+        "source_ref_ids": [
+          "source-1"
+        ]
+      },
+      "repeat_outputs": [
+        {
+          "score_percent": 94,
+          "mastered": true,
+          "evidence_from_answer": [
+            "先询问决策时间和参与人"
+          ],
+          "missing_points": [],
+          "misconception": null,
+          "feedback": "回答覆盖了客户目标、业务影响、决策安排和下一步。",
+          "improvement_action": "继续用开放式问题确认各项信息。",
+          "next_suggestion": "进入下一张训练卡。",
+          "uncertainty": 0.12,
+          "source_ref_ids": [
+            "source-1"
+          ]
+        }
+      ],
+      "allowed_evidence_refs": [
+        "source-1"
+      ],
+      "required_phrases": [
+        "决策时间"
+      ],
+      "forbidden_phrases": [
+        "正式达标"
+      ],
+      "formal_result": false,
+      "formal_scoring": false,
+      "usage": {
+        "input_tokens": 140,
+        "output_tokens": 120,
+        "cost_minor_units": 1,
+        "currency": "CNY"
+      },
+      "max_cost_minor_units": 4
+    },
+    {
+      "case_id": "readiness_summary_separates_fact_inference_recommendation",
+      "capability": "readiness_dossier_summary",
+      "business_purpose": "foundation_readiness_summary",
+      "prompt_template_id": "foundation-readiness-summary-gold",
+      "prompt_revision_id": "foundation-readiness-summary-gold-v1",
+      "output_schema_version": "readiness-summary-output-v1",
+      "expected_behavior": "accept",
+      "instruction": "evidence-1 内容：当前一次录音显示学员能先澄清客户目标，但尚无其他客户场景证据。只基于该证据总结档案；事实必须引用证据，并把计算、推断、建议和局限分开且各至少一条。不得授予 foundation_ready。",
+      "output": {
+        "facts": [
+          {
+            "text": "当前录音证据显示学员能先澄清客户目标。",
+            "evidence_ids": [
+              "evidence-1"
+            ]
+          }
+        ],
+        "calculations": [
+          "当前有效证据 1 条"
+        ],
+        "inferences": [
+          "在相似场景中可能保持同样的澄清顺序"
+        ],
+        "recommendations": [
+          "人工复核时继续核对异议处理证据"
+        ],
+        "limitations": [
+          "当前仅有一条录音证据，不能代表所有客户场景"
+        ]
+      },
+      "allowed_evidence_refs": [
+        "evidence-1"
+      ],
+      "required_phrases": [
+        "不能代表所有客户场景"
+      ],
+      "forbidden_phrases": [
+        "已授予foundation_ready"
+      ],
+      "formal_result": false,
+      "formal_scoring": false,
+      "usage": {
+        "input_tokens": 160,
+        "output_tokens": 130,
+        "cost_minor_units": 1,
+        "currency": "CNY"
+      },
+      "max_cost_minor_units": 4
+    },
+    {
+      "case_id": "invalid_question_schema_is_rejected",
+      "capability": "question_generation",
+      "business_purpose": "newcomer_question_generation",
+      "prompt_template_id": "foundation-question-generation-gold",
+      "prompt_revision_id": "foundation-question-generation-gold-v1",
+      "output_schema_version": "question-generation-output-v1",
+      "expected_behavior": "reject",
+      "instruction": "非法输出必须被 schema 门禁拒绝，不得写入候选题。",
+      "output": {
+        "questions": [
+          {
+            "question_type": "single_choice",
+            "stem": "这个非法单选题只有一个选项，应被拒绝。",
+            "options": [
+              {
+                "option_id": "only",
+                "text": "唯一选项",
+                "is_correct": true
+              }
+            ],
+            "reference_answer": null,
+            "rubric": null,
+            "explanation": "非法合同示例。",
+            "difficulty": "easy",
+            "competency_keys": [
+              "customer_understanding"
+            ],
+            "source_anchor_ids": [
+              "anchor-1"
+            ]
+          }
+        ]
+      },
+      "allowed_evidence_refs": [
+        "anchor-1"
+      ],
+      "formal_result": false,
+      "formal_scoring": false,
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_minor_units": 0,
+        "currency": "CNY"
+      },
+      "max_cost_minor_units": 0
+    },
+    {
+      "case_id": "provider_timeout_degrades_without_formal_result",
+      "capability": "readiness_dossier_summary",
+      "business_purpose": "foundation_readiness_summary",
+      "prompt_template_id": "foundation-readiness-summary-gold",
+      "prompt_revision_id": "foundation-readiness-summary-gold-v1",
+      "output_schema_version": "readiness-summary-output-v1",
+      "expected_behavior": "degrade",
+      "instruction": "Provider 超时时保留确定性档案和人工复核入口，不生成 AI 正式结果。",
+      "output": null,
+      "failure_code": "provider_timeout",
+      "formal_result": false,
+      "formal_scoring": false,
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_minor_units": 0,
+        "currency": "CNY"
+      },
+      "max_cost_minor_units": 0
+    }
+  ]
+}

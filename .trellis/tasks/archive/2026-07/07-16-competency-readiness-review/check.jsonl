@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "stale、冲突、重评和复核错误语义"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "证据重建、并发和权限测试"}
+{"file": ".trellis/spec/frontend/domain-locality-and-report-view-models.md", "reason": "档案和队列 ViewModel 边界"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "检查证据表达和正式决策体验"}

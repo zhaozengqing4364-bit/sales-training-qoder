@@ -102,15 +102,11 @@ def can_manage_sales_trainer_prompts(user: User) -> bool:
 
 
 def can_view_sales_trainer_records(user: User) -> bool:
-    return (
-        is_sales_trainer_admin(user)
-        or is_sales_trainer_manager(user)
-        or is_sales_trainer_ops(user)
-    )
+    return is_sales_trainer_admin(user) or is_sales_trainer_manager(user)
 
 
 def can_view_sales_trainer_global_records(user: User) -> bool:
-    return is_sales_trainer_admin(user) or is_sales_trainer_ops(user)
+    return is_sales_trainer_admin(user)
 
 
 def can_retry_sales_trainer_jobs(user: User) -> bool:
@@ -118,7 +114,7 @@ def can_retry_sales_trainer_jobs(user: User) -> bool:
 
 
 def can_regrade_sales_trainer_history(user: User) -> bool:
-    return is_sales_trainer_admin(user) or is_sales_trainer_ops(user)
+    return is_sales_trainer_admin(user)
 
 
 def can_view_sales_trainer_logs(user: User) -> bool:
@@ -157,17 +153,6 @@ def can_publish_newcomer_training_path(user: User) -> bool:
 
 def can_learn_newcomer_training_path(user: User) -> bool:
     return can_enter_sales_trainer_learning_path(user)
-
-
-def team_scope_department(user: User) -> str | None:
-    if is_sales_trainer_admin(user):
-        return None
-    if is_sales_trainer_ops(user):
-        return None
-    if not is_sales_trainer_manager(user):
-        return "__NO_ACCESS__"
-    department = str(getattr(user, "department", "") or "").strip()
-    return department or "__NO_DEPARTMENT__"
 
 
 def sales_trainer_admin_role_label(role: str) -> str:

@@ -116,6 +116,10 @@ async def complete_training_task_endpoint(
     task = await get_training_task(db, task_id, current_user)
     if task is None:
         raise _error(404, "[TRAINING_TASK_NOT_FOUND]")
+    if not can_manage_training_tasks(current_user) and str(task.assignee_id) != str(
+        current_user.user_id
+    ):
+        raise _error(403, "[ROLE_REQUIRED]")
     try:
         updated = await complete_training_task(db, task, payload)
     except LookupError as exc:
@@ -127,7 +131,9 @@ async def complete_training_task_endpoint(
     except ValueError as exc:
         await db.rollback()
         raise _error(409, str(exc)) from exc
-    return _success(TrainingTaskResponse.model_validate(updated).model_dump(mode="json"))
+    return _success(
+        TrainingTaskResponse.model_validate(updated).model_dump(mode="json")
+    )
 
 
 async def _mark_terminal_endpoint(
@@ -150,7 +156,9 @@ async def _mark_terminal_endpoint(
     except ValueError as exc:
         await db.rollback()
         raise _error(409, str(exc)) from exc
-    return _success(TrainingTaskResponse.model_validate(updated).model_dump(mode="json"))
+    return _success(
+        TrainingTaskResponse.model_validate(updated).model_dump(mode="json")
+    )
 
 
 @router.post("/{task_id}/cancel")
@@ -203,7 +211,9 @@ async def update_training_task_endpoint(
     except ValueError as exc:
         await db.rollback()
         raise _error(400, str(exc)) from exc
-    return _success(TrainingTaskResponse.model_validate(updated).model_dump(mode="json"))
+    return _success(
+        TrainingTaskResponse.model_validate(updated).model_dump(mode="json")
+    )
 
 
 @router.post("/{task_id}/start-session")
@@ -216,6 +226,10 @@ async def start_training_task_session_endpoint(
     task = await get_training_task(db, task_id, current_user)
     if task is None:
         raise _error(404, "[TRAINING_TASK_NOT_FOUND]")
+    if not can_manage_training_tasks(current_user) and str(task.assignee_id) != str(
+        current_user.user_id
+    ):
+        raise _error(403, "[ROLE_REQUIRED]")
     try:
         updated_task, session = await start_training_task_session(
             db,

@@ -19,11 +19,13 @@ from admin.api.interventions import router as admin_interventions_router
 from admin.api.knowledge_answer_config import router as knowledge_answer_config_router
 from admin.api.model_configs import router as model_configs_router
 from admin.api.presentation_ai import router as presentation_ai_router
+from admin.api.provisioning import router as admin_provisioning_router
 from admin.api.rag_profiles import router as rag_profiles_router
 from admin.api.release_verification import router as release_verification_router
 from admin.api.scoring_rulesets import router as admin_scoring_rulesets_router
 from admin.api.settings import router as admin_settings_router
 from admin.api.system_logs import router as admin_system_logs_router
+from admin.api.teams import router as admin_teams_router
 from admin.api.training_records import router as admin_training_records_router
 from admin.api.users import router as admin_users_router
 from admin.api.voice_runtime import router as voice_runtime_router
@@ -58,6 +60,15 @@ from curriculum_practice.api import router as curriculum_practice_router
 from curriculum_practice.api import study_router as curriculum_study_router
 from domain_contributor_bootstrap import register_domain_contributors
 from evaluation.api import router as evaluation_router
+from foundation_admin_api import router as newcomer_training_admin_router
+from foundation_learner_api import router as newcomer_training_router
+from foundation_readiness_api import (
+    admin_router as newcomer_readiness_admin_router,
+)
+from foundation_readiness_api import (
+    learner_router as newcomer_readiness_learner_router,
+)
+from foundation_task_bootstrap import register_foundation_api_tasks
 from presentation_coach.api import presentations
 from prompt_templates.api.routes import router as prompt_templates_router
 from prompt_templates.api.routes import scenario_router as scenario_prompts_router
@@ -65,6 +76,7 @@ from sales_bot.api.scenarios import router as scenarios_router
 from sales_trainer.router_registration import register_sales_trainer_routers
 from supervisor.api import router as supervisor_router
 from support.api.runtime_status import router as support_runtime_router
+from task_runtime.api import router as task_runtime_router
 
 
 def _build_knowledge_bases_alias_router() -> APIRouter:
@@ -95,6 +107,7 @@ def _build_knowledge_bases_alias_router() -> APIRouter:
 def register_routers(app: FastAPI) -> None:
     """Mount all non-WebSocket API routers on the FastAPI app."""
     register_domain_contributors()
+    register_foundation_api_tasks()
     app.include_router(
         presentations.router,
         prefix="/api/v1",
@@ -140,6 +153,26 @@ def register_routers(app: FastAPI) -> None:
         tags=["scenarios"],
         dependencies=[Depends(require_role(["admin", "user"]))],
     )
+    app.include_router(
+        newcomer_training_router,
+        prefix="/api/v1",
+        tags=["newcomer-training"],
+    )
+    app.include_router(
+        newcomer_readiness_learner_router,
+        prefix="/api/v1",
+        tags=["newcomer-training-readiness"],
+    )
+    app.include_router(
+        newcomer_training_admin_router,
+        prefix="/api/v1",
+        tags=["admin-newcomer-training"],
+    )
+    app.include_router(
+        newcomer_readiness_admin_router,
+        prefix="/api/v1",
+        tags=["admin-newcomer-training-readiness"],
+    )
     register_sales_trainer_routers(app)
     app.include_router(
         admin_presentations_router,
@@ -183,6 +216,18 @@ def register_routers(app: FastAPI) -> None:
         dependencies=[Depends(get_current_admin_user)],
     )
     app.include_router(
+        admin_teams_router,
+        prefix="/api/v1",
+        tags=["admin-teams"],
+        dependencies=[Depends(get_current_admin_user)],
+    )
+    app.include_router(
+        admin_provisioning_router,
+        prefix="/api/v1",
+        tags=["admin-user-provisioning"],
+        dependencies=[Depends(get_current_admin_user)],
+    )
+    app.include_router(
         admin_training_records_router,
         prefix="/api/v1",
         tags=["admin-training-records"],
@@ -207,6 +252,11 @@ def register_routers(app: FastAPI) -> None:
         config_assets_router,
         prefix="/api/v1/admin",
         tags=["admin-config-assets"],
+    )
+    app.include_router(
+        task_runtime_router,
+        prefix="/api/v1/admin",
+        tags=["admin-task-runtime"],
     )
     app.include_router(
         audit_trail_router,

@@ -453,6 +453,29 @@ def discover_family_tests(policy: SelectionPolicy, family: str) -> list[str]:
     )
 
 
+def validate_policy_targets(policy: SelectionPolicy) -> None:
+    """Fail before manifest generation when a configured runner target is stale."""
+    configured: list[tuple[str, str]] = []
+    for family, config in policy.families.items():
+        configured.extend((family, path) for path in config.critical)
+    for rule in policy.path_rules:
+        for family, paths in rule.selected.items():
+            configured.extend((family, path) for path in paths)
+
+    missing: list[str] = []
+    repo_root = policy.repo_root.resolve()
+    for family, path in sorted(set(configured)):
+        checked = runner_paths(family, [path])[0]
+        candidate = (repo_root / checked).resolve()
+        if repo_root not in candidate.parents or not candidate.is_file():
+            missing.append(f"{family}:{checked}")
+    if missing:
+        raise ValueError(
+            "selection policy contains missing configured test target(s): "
+            + ", ".join(missing)
+        )
+
+
 def select_tests(
     policy: SelectionPolicy,
     context: SelectorContext,
@@ -718,6 +741,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(path)
         return 0
     policy = load_policy(args.policy)
+    validate_policy_targets(policy)
     base = args.base
     if args.mode == "local" and not base:
         upstream = subprocess.run(

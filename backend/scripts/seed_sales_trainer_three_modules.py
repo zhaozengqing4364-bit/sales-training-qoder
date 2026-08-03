@@ -118,7 +118,6 @@ async def _upsert_user(
             email=normalized_email,
             name=name,
             role=role,
-            department="销售训练演示部",
             is_active=True,
             wechat_user_id=_wechat_id(normalized_email),
         )

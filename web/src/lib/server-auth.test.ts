@@ -14,6 +14,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("server auth boundary", () => {
+    const originalServerApiUrl = process.env.SERVER_API_URL;
+    const originalPublicApiUrl = process.env.NEXT_PUBLIC_API_URL;
+
     beforeEach(() => {
         vi.resetModules();
         vi.restoreAllMocks();
@@ -24,6 +27,48 @@ describe("server auth boundary", () => {
 
     afterEach(() => {
         vi.useRealTimers();
+        if (originalServerApiUrl === undefined) {
+            delete process.env.SERVER_API_URL;
+        } else {
+            process.env.SERVER_API_URL = originalServerApiUrl;
+        }
+        if (originalPublicApiUrl === undefined) {
+            delete process.env.NEXT_PUBLIC_API_URL;
+        } else {
+            process.env.NEXT_PUBLIC_API_URL = originalPublicApiUrl;
+        }
+    });
+
+    it("uses the internal API URL for server-side session validation", async () => {
+        process.env.SERVER_API_URL = "http://127.0.0.1:3444/api/v1";
+        process.env.NEXT_PUBLIC_API_URL = "http://localhost:3445/api/v1";
+        headersMock.mockResolvedValue(new Headers({ cookie: "session=abc123" }));
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    success: true,
+                    data: {
+                        id: "user-1",
+                        display_name: "管理员",
+                        email: "admin@test.com",
+                        role: "admin",
+                    },
+                }),
+                {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                },
+            ),
+        );
+        vi.stubGlobal("fetch", fetchMock);
+
+        const { getServerSessionUser } = await import("./server-auth");
+        await getServerSessionUser();
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            "http://127.0.0.1:3444/api/v1/users/me",
+            expect.any(Object),
+        );
     });
 
     it("forwards the incoming cookie header when fetching the current user", async () => {

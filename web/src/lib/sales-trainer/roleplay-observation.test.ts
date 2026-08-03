@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+    LegacySalesTrainerTrainingRecord,
     SalesTrainerRealtimeRecordVoicePolicySnapshot,
     SalesTrainerRoleplayObservationSessionResponse,
-    SalesTrainerTrainingRecord,
 } from "@/lib/api/types";
 
 import {
@@ -31,7 +31,7 @@ function realtimeRecord(
             },
         },
     },
-): SalesTrainerTrainingRecord {
+): LegacySalesTrainerTrainingRecord {
     return {
         record_id: "record-rt-1",
         record_type: "realtime_roleplay_session",
@@ -46,7 +46,6 @@ function realtimeRecord(
         user_id: "learner-1",
         user_name: "张三",
         user_email: "zhangsan@example.com",
-        user_department: "销售一部",
         status: "scored",
         score: 82,
         max_score: 100,

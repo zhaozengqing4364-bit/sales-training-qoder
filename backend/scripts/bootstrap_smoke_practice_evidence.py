@@ -15,6 +15,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -44,6 +45,7 @@ SMOKE_PERSONA_NAME = "Smoke Phase 4 Budget Buyer"
 SMOKE_TEMPLATE_NAME = "Smoke Phase 4 Sales Curriculum Template"
 SMOKE_TRAINING_TASK_TITLE = "Smoke Phase 4 Sales Curriculum Task"
 SMOKE_RUNTIME_PROFILE_ID = "smoke-runtime-profile"
+SMOKE_RUNTIME_PROFILE_NAME = "Smoke Phase 4 StepFun Runtime Profile"
 SMOKE_RULESET_ID = "smoke-sales-ruleset"
 SMOKE_KNOWLEDGE_BASE_ID = "kb-smoke-1"
 SMOKE_CASE_ITEM_ID = "smoke-phase4-case-item"
@@ -85,10 +87,10 @@ def _make_effectiveness_snapshot() -> dict[str, object]:
     }
 
 
-def _make_voice_policy_snapshot() -> dict[str, object]:
+def _make_voice_policy_snapshot(runtime_profile_id: str) -> dict[str, object]:
     return {
         "voice_mode": "stepfun_realtime",
-        "runtime_profile_id": "smoke-runtime-profile",
+        "runtime_profile_id": runtime_profile_id,
         "instruction_contract_hash": "smoke-contract-hash",
         "network_access_mode": "off",
         "resolved_at": datetime.now(UTC).isoformat(),
@@ -164,6 +166,73 @@ def _make_stage_summaries() -> list[dict[str, object]]:
             "summary": "下一步动作明确，但仍可补充更具体的决策人和时间。",
         },
     ]
+
+
+async def _get_or_create_runtime_profile(
+    db: AsyncSession,
+) -> VoiceRuntimeProfile:
+    runtime_profile = await db.get(VoiceRuntimeProfile, SMOKE_RUNTIME_PROFILE_ID)
+    if runtime_profile is not None:
+        if runtime_profile.name == SMOKE_RUNTIME_PROFILE_NAME:
+            return runtime_profile
+        named_result = await db.execute(
+            select(VoiceRuntimeProfile).where(
+                VoiceRuntimeProfile.name == SMOKE_RUNTIME_PROFILE_NAME
+            )
+        )
+        named_profile = named_result.scalar_one_or_none()
+        if named_profile is not None:
+            return named_profile
+        runtime_profile.name = SMOKE_RUNTIME_PROFILE_NAME
+        return runtime_profile
+
+    named_result = await db.execute(
+        select(VoiceRuntimeProfile).where(
+            VoiceRuntimeProfile.name == SMOKE_RUNTIME_PROFILE_NAME
+        )
+    )
+    runtime_profile = named_result.scalar_one_or_none()
+    if runtime_profile is not None:
+        return runtime_profile
+
+    runtime_profile = VoiceRuntimeProfile(
+        id=SMOKE_RUNTIME_PROFILE_ID,
+        name=SMOKE_RUNTIME_PROFILE_NAME,
+    )
+    db.add(runtime_profile)
+    await db.flush()
+    return runtime_profile
+
+
+async def _get_or_create_scoring_ruleset(db: AsyncSession) -> ScoringRuleset:
+    ruleset = await db.get(ScoringRuleset, SMOKE_RULESET_ID)
+    if ruleset is not None:
+        if ruleset.scenario_type == "sales" and ruleset.version == "smoke-phase4-v1":
+            return ruleset
+
+    natural_key_result = await db.execute(
+        select(ScoringRuleset).where(
+            ScoringRuleset.scenario_type == "sales",
+            ScoringRuleset.version == "smoke-phase4-v1",
+        )
+    )
+    natural_key_ruleset = natural_key_result.scalar_one_or_none()
+    if natural_key_ruleset is not None:
+        return natural_key_ruleset
+    if ruleset is not None:
+        raise RuntimeError(
+            "Smoke scoring ruleset ID is already bound to a different scenario/version."
+        )
+
+    ruleset = ScoringRuleset(
+        ruleset_id=SMOKE_RULESET_ID,
+        scenario_type="sales",
+        version="smoke-phase4-v1",
+        display_name="Smoke Phase 4 Sales Scoring Ruleset",
+    )
+    db.add(ruleset)
+    await db.flush()
+    return ruleset
 
 
 async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, str]:
@@ -263,14 +332,7 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
             )
             await db.flush()
 
-        runtime_profile = await db.get(VoiceRuntimeProfile, SMOKE_RUNTIME_PROFILE_ID)
-        if runtime_profile is None:
-            runtime_profile = VoiceRuntimeProfile(
-                id=SMOKE_RUNTIME_PROFILE_ID,
-                name="Smoke Phase 4 StepFun Runtime Profile",
-            )
-            db.add(runtime_profile)
-            await db.flush()
+        runtime_profile = await _get_or_create_runtime_profile(db)
         runtime_profile.description = "Deterministic local StepFun profile for smoke E2E flows"
         runtime_profile.is_active = True
         runtime_profile.voice_mode = "stepfun_realtime"
@@ -302,16 +364,7 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
         knowledge_base.document_count = max(int(knowledge_base.document_count or 0), 1)
         knowledge_base.total_chunks = max(int(knowledge_base.total_chunks or 0), 1)
 
-        ruleset = await db.get(ScoringRuleset, SMOKE_RULESET_ID)
-        if ruleset is None:
-            ruleset = ScoringRuleset(
-                ruleset_id=SMOKE_RULESET_ID,
-                scenario_type="sales",
-                version="smoke-phase4-v1",
-                display_name="Smoke Phase 4 Sales Scoring Ruleset",
-            )
-            db.add(ruleset)
-            await db.flush()
+        ruleset = await _get_or_create_scoring_ruleset(db)
         ruleset.status = "published"
         ruleset.is_active = True
         ruleset.description = "Deterministic scoring ruleset for local realtime smoke flows."
@@ -384,7 +437,7 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
                 mode="customer_roleplay",
                 agent_id=str(agent.id),
                 persona_id=str(persona.id),
-                runtime_profile_id=SMOKE_RUNTIME_PROFILE_ID,
+                runtime_profile_id=str(runtime_profile.id),
                 voice_mode="stepfun_realtime",
                 scoring_ruleset_id=SMOKE_RULESET_ID,
                 knowledge_base_refs=[SMOKE_KNOWLEDGE_BASE_ID],
@@ -404,7 +457,7 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
         else:
             template.agent_id = str(agent.id)
             template.persona_id = str(persona.id)
-            template.runtime_profile_id = SMOKE_RUNTIME_PROFILE_ID
+            template.runtime_profile_id = str(runtime_profile.id)
             template.scoring_ruleset_id = SMOKE_RULESET_ID
             template.knowledge_base_refs = [SMOKE_KNOWLEDGE_BASE_ID]
             template.case_item_id = SMOKE_CASE_ITEM_ID
@@ -466,7 +519,9 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
         session.accuracy_score = 84.0
         session.completeness_score = 80.0
         session.effectiveness_snapshot = _make_effectiveness_snapshot()
-        session.voice_policy_snapshot = _make_voice_policy_snapshot()
+        session.voice_policy_snapshot = _make_voice_policy_snapshot(
+            str(runtime_profile.id)
+        )
         session.report_status = "completed"
         session.report_error = None
 

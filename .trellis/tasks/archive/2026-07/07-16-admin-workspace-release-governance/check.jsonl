@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "发布编译器和运行时契约一致"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "管理页面状态、权限和测试门禁"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "实际渲染、批量操作和高风险交互检查"}

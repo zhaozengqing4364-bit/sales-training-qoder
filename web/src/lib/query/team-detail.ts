@@ -19,7 +19,7 @@ export const teamDetailQueryKeys = {
 export function teamDetailQueryOptions(learnerId: string) {
     return queryOptions({
         queryKey: teamDetailQueryKeys.detail(learnerId),
-        queryFn: () => api.admin.newcomerTraining.getLearnerJourney(learnerId),
+        queryFn: () => api.admin.newcomerTraining.getLearner(learnerId),
         ...teamDetailQueryDefaults,
     });
 }

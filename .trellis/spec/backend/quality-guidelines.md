@@ -16,8 +16,8 @@ Reference: `backend/pyproject.toml`, `backend/tests/AGENTS.md`, `backend/AGENTS.
 
 ```
 backend/tests/
-├── unit/           # Fast, isolated, mock external APIs
-├── integration/    # DB + service layer (in-memory SQLite)
+├── unit/           # Fast, isolated, fake external boundaries
+├── integration/    # DB + service layer; real PostgreSQL when semantics require it
 ├── contract/       # API shape vs docs/api-contract/
 ├── performance/    # Latency / concurrency NFRs
 ├── e2e/
@@ -52,6 +52,13 @@ Examples: `tests/integration/test_sales_flow.py`, `tests/contract/test_admin_gov
 
 - Fake/stub dependencies — no real StepFun, DashScope, or PostgreSQL in unit tests.
 - Parametrize edge cases — see `tests/unit/test_session_control_adapter.py`.
+
+### Durable Task and governed AI test boundary
+
+- Lease recovery, `SKIP LOCKED`, fencing, concurrent idempotency, Outbox effect-once, budget/rate windows, migration and query plans require isolated real PostgreSQL. SQLite or mocked sessions cannot prove these contracts.
+- Fake only true external boundaries: Provider, ASR, object storage, clock and controlled sleeper. Deterministic fakes must implement the same public Port and must never be selected implicitly by a production composition root.
+- A Task/AI platform slice runs focused unit/contract, its PostgreSQL suites, migration roundtrip, Mypy, Ruff, route/OpenAPI checks and shell syntax. The full repository gate remains the final rollout slice unless a shared change cannot be validated locally.
+- Fault tests include crash before/after external response, stale owner/lease, late result, schema-invalid output, budget/rate rejection, missing registry/transport, database commit failure, SIGTERM drain and duplicate delivery.
 
 ---
 
@@ -226,7 +233,7 @@ From `backend/AGENTS.md` and `.kiro/steering/backend-principles.md`:
 - Adding integration test dependencies to unit tests — slows CI and flakes on network.
 - Changing response shape without updating `tests/contract/` and `docs/api-contract/`.
 - Mutating singleton collaborators such as `get_connection_manager().send_json` or `.connect` in a test without restoring them. If a test must replace a singleton method, use `monkeypatch` or add an autouse fixture in the affected suite that restores `ConnectionManager.<method>.__get__(manager, ConnectionManager)` and clears `active_connections` before and after each test.
-- For Sales Trainer learner-record workflows, do not gate review or learner-scope write actions with content-management permission. Training managers need to reach the service so object-level department scope can decide; content admins configure assets but should not implicitly review learner dossiers.
+- For Sales Trainer learner-record workflows, do not gate review or learner-scope write actions with content-management permission. Training managers need to reach the service so explicit Team membership/scope policy can decide; content admins configure assets but should not implicitly review learner dossiers.
 
 ---
 

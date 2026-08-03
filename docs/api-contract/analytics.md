@@ -173,7 +173,7 @@ GET /api/v1/admin/interventions/lists?time_range=30d&limit=20&inactive_days=7
       {
         "user_id": "u_1",
         "user_name": "张三",
-        "department": "销售一部",
+        "team": {"team_id": "team_1", "code": "sales-one", "name": "销售一组"},
         "overall_result": "fail",
         "session_id": "s_1",
         "session_start_time": "2026-02-21T09:00:00+00:00"
@@ -183,7 +183,7 @@ GET /api/v1/admin/interventions/lists?time_range=30d&limit=20&inactive_days=7
       {
         "user_id": "u_2",
         "user_name": "李四",
-        "department": "销售二部",
+        "team": {"team_id": "team_2", "code": "sales-two", "name": "销售二组"},
         "last_session_at": "2026-02-10T11:00:00+00:00",
         "inactive_days": 11
       }
@@ -192,7 +192,7 @@ GET /api/v1/admin/interventions/lists?time_range=30d&limit=20&inactive_days=7
       {
         "user_id": "u_3",
         "user_name": "王五",
-        "department": "销售三部",
+        "team": {"team_id": "team_3", "code": "sales-three", "name": "销售三组"},
         "pass_gain": 18.5,
         "baseline_pass_rate": 40,
         "current_pass_rate": 58.5

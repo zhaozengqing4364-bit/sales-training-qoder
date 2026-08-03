@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from common.jobs.persistent_task_contract import (
+    ALLOWED_STATUS_TRANSITIONS,
     PERSISTENT_TASK_REQUIRED_COLUMNS,
     PERSISTENT_TASK_TABLE_NAME,
     PersistentTaskStatus,
@@ -18,6 +19,8 @@ from common.jobs.persistent_task_contract import (
     require_transition,
     retry_delay_seconds,
 )
+from task_runtime.contracts import TaskState
+from task_runtime.state_machine import ALLOWED_TASK_TRANSITIONS
 
 
 def test_should_define_first_process_local_task_types() -> None:
@@ -30,21 +33,21 @@ def test_should_define_first_process_local_task_types() -> None:
 
 
 def test_should_lock_minimum_persistent_task_table_contract() -> None:
-    assert PERSISTENT_TASK_TABLE_NAME == "persistent_tasks"
+    assert PERSISTENT_TASK_TABLE_NAME == "durable_tasks"
     assert {
         "task_id",
         "task_type",
-        "business_key",
-        "idempotency_key",
-        "payload_json",
-        "status",
+        "organization_id",
+        "resource_type",
+        "resource_id",
+        "idempotency_key_hash",
+        "input_artifact_id",
+        "state",
         "attempt_count",
         "max_attempts",
         "next_run_at",
-        "lease_owner",
-        "lease_expires_at",
         "last_error_code",
-        "dead_letter_reason",
+        "fence_generation",
         "trace_id",
     }.issubset(set(PERSISTENT_TASK_REQUIRED_COLUMNS))
 
@@ -53,6 +56,22 @@ def test_should_allow_expected_success_path() -> None:
     assert can_transition("queued", "running")
     assert can_transition(PersistentTaskStatus.RUNNING, PersistentTaskStatus.SUCCEEDED)
     assert is_terminal_status("succeeded")
+
+
+def test_legacy_import_surface_reuses_the_seven_state_canonical_lifecycle() -> None:
+    assert PersistentTaskStatus is TaskState
+    assert {item.value for item in PersistentTaskStatus} == {
+        "queued",
+        "running",
+        "retry_wait",
+        "cancel_requested",
+        "cancelled",
+        "succeeded",
+        "dead_letter",
+    }
+    assert can_transition("queued", "cancel_requested")
+    assert not can_transition("queued", "cancelled")
+    assert ALLOWED_STATUS_TRANSITIONS is ALLOWED_TASK_TRANSITIONS
 
 
 def test_should_reject_transition_out_of_terminal_status() -> None:

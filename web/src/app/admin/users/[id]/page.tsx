@@ -450,7 +450,7 @@ export default function UserDetailPage() {
                                 {user.display_name || user.email || "未知用户"}
                             </h1>
                             <p className="text-slate-500 text-sm text-pretty">
-                                {user.department || "未设置部门"} · {user.email}
+                                {user.team?.name || "未分配团队"} · {user.email}
                             </p>
                         </div>
                     </div>

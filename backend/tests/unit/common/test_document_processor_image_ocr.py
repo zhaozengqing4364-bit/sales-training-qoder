@@ -10,6 +10,7 @@ import common.knowledge.processor as processor_module
 from common.error_handling.result import Result
 from common.knowledge.models import DocumentStatus
 from common.knowledge.processor import DocumentProcessor, ParsedElement, ParseResult
+from common.storage import DocumentStorageService
 
 
 def test_extract_text_from_docx_images_deduplicates_same_blob(monkeypatch):
@@ -377,3 +378,47 @@ async def test_process_document_surfaces_structured_parse_empty_error(monkeypatc
     assert result["status"] == DocumentStatus.FAILED.value
     assert result["chunk_count"] == 0
     assert "[PARSE_EMPTY_STRUCTURED_DOC]" in str(result["error_message"])
+
+
+@pytest.mark.asyncio
+async def test_parse_document_artifact_stops_before_embedding(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    processor = DocumentProcessor()
+    storage = DocumentStorageService(str(tmp_path))
+    source_path = tmp_path / "sources" / "handbook.txt"
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.write_text("新人销售训练材料正文", encoding="utf-8")
+    monkeypatch.setattr(
+        processor,
+        "_parse_document",
+        AsyncMock(
+            return_value=ParseResult(
+                content="新人销售训练材料正文",
+                elements=[
+                    ParsedElement(
+                        element_type="paragraph",
+                        text="新人销售训练材料正文",
+                    )
+                ],
+                metrics={"paragraph_count": 1},
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        processor_module,
+        "get_document_storage_service",
+        lambda: storage,
+    )
+
+    result = await processor.parse_document_artifact(
+        file_path=str(source_path),
+        file_type="txt",
+    )
+
+    assert result["status"] == DocumentStatus.READY.value
+    assert result["chunk_count"] == 1
+    artifact = storage.load_parse_artifact(source_path)
+    assert artifact is not None
+    assert artifact["content"] == "新人销售训练材料正文"

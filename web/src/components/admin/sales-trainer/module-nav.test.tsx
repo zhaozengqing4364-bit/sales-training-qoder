@@ -1,14 +1,18 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SalesTrainerAdminCapabilities } from "@/lib/api/types";
 import { SalesTrainerAdminModuleNav } from "./module-nav";
 
+const prefetchMock = vi.hoisted(() => vi.fn());
 vi.mock("next/link", () => ({
-    default: ({ href, children, ...props }: { href: string; children: ReactNode }) => (
-        <a href={href} {...props}>{children}</a>
+    default: ({ href, children, prefetch, ...props }: { href: string; children: ReactNode; prefetch?: boolean }) => (
+        <a href={href} data-prefetch={String(prefetch)} {...props}>{children}</a>
     ),
+}));
+vi.mock("next/navigation", () => ({
+    useRouter: () => ({ prefetch: prefetchMock }),
 }));
 
 const FULL_ACCESS: SalesTrainerAdminCapabilities = {
@@ -51,5 +55,26 @@ describe("SalesTrainerAdminModuleNav", () => {
         expect(pathLink.className).toContain("transition-colors");
         expect(pathLink.className).toContain("duration-[var(--duration-press)]");
         expect(pathLink.className).toContain("ease-[var(--ease-out)]");
+    });
+
+    it("keeps question navigation on existing routes without eager prefetch", () => {
+        prefetchMock.mockReset();
+        render(
+            <SalesTrainerAdminModuleNav
+                currentPath="/admin/sales-trainer/questions"
+                capabilities={FULL_ACCESS}
+            />,
+        );
+
+        const questionLink = screen.getByRole("link", { name: /题目列表/ });
+        expect(questionLink.getAttribute("href")).toBe("/admin/sales-trainer/questions");
+        expect(questionLink.getAttribute("data-prefetch")).toBe("false");
+        expect(screen.getByRole("link", { name: /题目分类/ }).getAttribute("href"))
+            .toBe("/admin/sales-trainer/questions/categories");
+        expect(screen.queryByRole("link", { name: /资料导入/ })).toBeNull();
+        expect(screen.queryByRole("link", { name: /能力点/ })).toBeNull();
+
+        fireEvent.mouseEnter(questionLink);
+        expect(prefetchMock).not.toHaveBeenCalled();
     });
 });

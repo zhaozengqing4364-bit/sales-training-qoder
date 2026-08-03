@@ -112,6 +112,92 @@ class DocumentProcessor:
         self._paddle_ocr_instance: Any | None = None
         self._paddle_ocr_init_failed = False
 
+    async def parse_document_artifact(
+        self,
+        *,
+        file_path: str,
+        file_type: str,
+    ) -> dict[str, Any]:
+        """Parse and persist a structured artifact without embedding or indexing it."""
+
+        phase_timings: dict[str, float] = {
+            "parse_ms": 0.0,
+            "chunk_ms": 0.0,
+            "embed_ms": 0.0,
+            "store_ms": 0.0,
+        }
+        parse_result: ParseResult | None = None
+        artifact_path: str | None = None
+        try:
+            parse_started_at = time.monotonic()
+            parse_result = await self._parse_document(file_path, file_type)
+            phase_timings["parse_ms"] = round(
+                (time.monotonic() - parse_started_at) * 1000,
+                1,
+            )
+            if parse_result is None:
+                return self._build_failure_result(
+                    "[PARSE_READ_FAILED] 无法读取材料内容。",
+                    phase_timings=phase_timings,
+                )
+            parse_error = self._validate_parse_result(parse_result)
+            if parse_error is not None:
+                return self._build_failure_result(
+                    parse_error,
+                    phase_timings=phase_timings,
+                    parse_result=parse_result,
+                )
+            chunk_started_at = time.monotonic()
+            chunks = (
+                self._build_parent_child_chunks(parse_result)
+                if self.chunking_strategy == "parent_child"
+                else self._build_chunks_from_parse_result(parse_result)
+            )
+            phase_timings["chunk_ms"] = round(
+                (time.monotonic() - chunk_started_at) * 1000,
+                1,
+            )
+            if not chunks:
+                return self._build_failure_result(
+                    "[PARSE_EMPTY_STRUCTURED_DOC] 材料中没有可用内容。",
+                    phase_timings=phase_timings,
+                    parse_result=parse_result,
+                )
+            artifact_path = get_document_storage_service().save_parse_artifact(
+                file_path,
+                parse_result.to_artifact(
+                    file_type=file_type,
+                    chunks=chunks,
+                    phase_timings=phase_timings,
+                ),
+            )
+            if artifact_path is None:
+                return self._build_failure_result(
+                    "[PARSE_ARTIFACT_SAVE_FAILED] 解析结果保存失败。",
+                    phase_timings=phase_timings,
+                    parse_result=parse_result,
+                )
+            return {
+                "status": DocumentStatus.READY.value,
+                "chunk_count": len(chunks),
+                "error_message": None,
+                "phase_timings": phase_timings,
+                "parse_warnings": list(parse_result.warnings),
+                "parse_metrics": dict(parse_result.metrics),
+                "artifact_path": artifact_path,
+            }
+        except Exception as exc:  # noqa: BLE001 - converted to a durable task result
+            logger.error(
+                "Source document artifact parsing failed",
+                error_type=type(exc).__name__,
+            )
+            return self._build_failure_result(
+                "[PARSE_UNEXPECTED_FAILURE] 材料解析暂时失败。",
+                phase_timings=phase_timings,
+                parse_result=parse_result,
+                artifact_path=artifact_path,
+            )
+
     async def process_document(
         self,
         doc_id: str,

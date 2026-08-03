@@ -3,12 +3,14 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import UsersPage from "./page";
+import { ApiRequestError } from "@/lib/api/client";
 
 const {
     pushMock,
     successToastMock,
     errorToastMock,
     getUsersMock,
+    getTeamsMock,
     getOperatingPackMock,
     createUserMock,
     updateUserMock,
@@ -19,11 +21,13 @@ const {
     listPracticeTemplatesMock,
     batchAssignMock,
     updateUserRoleMock,
+    getUserMock,
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     successToastMock: vi.fn(),
     errorToastMock: vi.fn(),
     getUsersMock: vi.fn(),
+    getTeamsMock: vi.fn(),
     getOperatingPackMock: vi.fn(),
     createUserMock: vi.fn(),
     updateUserMock: vi.fn(),
@@ -34,6 +38,7 @@ const {
     listPracticeTemplatesMock: vi.fn(),
     batchAssignMock: vi.fn(),
     updateUserRoleMock: vi.fn(),
+    getUserMock: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -82,7 +87,23 @@ vi.mock("@/components/ui/mobile-table-card", () => ({
 }));
 
 vi.mock("@/components/ui/confirm-dialog", () => ({
-    ConfirmDialog: () => null,
+    ConfirmDialog: ({ open, title, confirmText = "确认", isLoading, confirmDisabled, onConfirm, children }: {
+        open: boolean;
+        title: string;
+        confirmText?: string;
+        isLoading?: boolean;
+        confirmDisabled?: boolean;
+        onConfirm: () => void;
+        children?: ReactNode;
+    }) => open ? (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            {children}
+            <button disabled={isLoading || confirmDisabled} onClick={onConfirm}>
+                {isLoading ? "处理中..." : confirmText}
+            </button>
+        </section>
+    ) : null,
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -94,9 +115,11 @@ vi.mock("@/lib/api/client", async () => {
             admin: {
                 ...actual.api.admin,
                 getUsers: getUsersMock,
+                getTeams: getTeamsMock,
                 createUser: createUserMock,
                 updateUser: updateUserMock,
                 updateUserRole: updateUserRoleMock,
+                getUser: getUserMock,
                 suspendUser: suspendUserMock,
                 activateUser: activateUserMock,
                 deleteUser: deleteUserMock,
@@ -121,16 +144,28 @@ describe("UsersPage", () => {
         successToastMock.mockReset();
         errorToastMock.mockReset();
         getUsersMock.mockReset();
+        getTeamsMock.mockReset();
         getOperatingPackMock.mockReset();
         createUserMock.mockReset();
         updateUserMock.mockReset();
         updateUserRoleMock.mockReset();
+        getUserMock.mockReset();
         suspendUserMock.mockReset();
         activateUserMock.mockReset();
         deleteUserMock.mockReset();
         exportUsersMock.mockReset();
         listPracticeTemplatesMock.mockReset();
         batchAssignMock.mockReset();
+
+        suspendUserMock.mockResolvedValue({ status: "inactive", changed: true });
+        activateUserMock.mockResolvedValue({ status: "active", changed: true });
+        getUserMock.mockResolvedValue({
+            id: "u1",
+            display_name: "张三",
+            role: "user",
+            status: "active",
+            credential_version: 1,
+        });
 
         getUsersMock.mockResolvedValue({
             items: [],
@@ -139,6 +174,7 @@ describe("UsersPage", () => {
             page_size: 10,
             has_more: false,
         });
+        getTeamsMock.mockResolvedValue({ items: [], total: 0 });
         listPracticeTemplatesMock.mockResolvedValue({
             items: [],
             total: 0,
@@ -156,7 +192,7 @@ describe("UsersPage", () => {
                 evaluable_sessions: 0,
                 not_evaluable_sessions: 0,
                 degraded_sessions: 0,
-                active_departments: 0,
+                active_teams: 0,
                 at_risk_users: 0,
                 improving_users: 0,
                 top_issue_family: null,
@@ -165,7 +201,7 @@ describe("UsersPage", () => {
                 top_degraded_reason: null,
             },
             cohort_issue_buckets: [],
-            department_issue_buckets: [],
+            team_issue_buckets: [],
             repeated_blocker_families: [],
             degradation_breakdown: {
                 not_evaluable_reasons: [],
@@ -189,11 +225,19 @@ describe("UsersPage", () => {
         expect(screen.getByText("当前没有显著回升成员。")).toBeTruthy();
     });
 
-    it("renders department filter dropdown with unique departments from loaded users", async () => {
+    it("renders the Team filter from authoritative active Team records", async () => {
+        getTeamsMock.mockResolvedValue({
+            items: [
+                { team_id: "team-sales", code: "sales", name: "销售组", is_active: true, leader_user_ids: [], leaders: [], members: [], member_count: 0 },
+                { team_id: "team-tech", code: "tech", name: "技术组", is_active: true, leader_user_ids: [], leaders: [], members: [], member_count: 0 },
+                { team_id: "team-retired", code: "retired", name: "已停用组", is_active: false, leader_user_ids: [], leaders: [], members: [], member_count: 0 },
+            ],
+            total: 3,
+        });
         getUsersMock.mockResolvedValue({
             items: [
-                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
-                { id: "2", user_id: "u2", display_name: "李四", department: "技术部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "1", user_id: "u1", display_name: "张三", team: { team_id: "team-sales", code: "sales", name: "销售组" }, role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "2", user_id: "u2", display_name: "李四", team: { team_id: "team-tech", code: "tech", name: "技术组" }, role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
             ],
             total: 2,
             page: 1,
@@ -207,18 +251,25 @@ describe("UsersPage", () => {
             expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
         });
 
-        const deptSelect = screen.getByRole("combobox", { name: /部门筛选/i });
-        expect(deptSelect).toBeTruthy();
-        expect(deptSelect.querySelector("option[value='all']")).toBeTruthy();
-        expect(deptSelect.querySelector("option[value='销售部']")).toBeTruthy();
-        expect(deptSelect.querySelector("option[value='技术部']")).toBeTruthy();
+        const teamSelect = screen.getByRole("combobox", { name: /团队筛选/i });
+        await waitFor(() => expect(teamSelect.querySelector("option[value='team-sales']")).toBeTruthy());
+        expect(teamSelect.querySelector("option[value='all']")).toBeTruthy();
+        expect(teamSelect.querySelector("option[value='team-tech']")).toBeTruthy();
+        expect(teamSelect.querySelector("option[value='team-retired']")).toBeNull();
     });
 
-    it("filters displayed users by selected department", async () => {
+    it("passes the selected Team id to the server-side user filter", async () => {
+        getTeamsMock.mockResolvedValue({
+            items: [
+                { team_id: "team-sales", code: "sales", name: "销售组", is_active: true, leader_user_ids: [], leaders: [], members: [], member_count: 0 },
+                { team_id: "team-tech", code: "tech", name: "技术组", is_active: true, leader_user_ids: [], leaders: [], members: [], member_count: 0 },
+            ],
+            total: 2,
+        });
         getUsersMock.mockResolvedValue({
             items: [
-                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
-                { id: "2", user_id: "u2", display_name: "李四", department: "技术部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "1", user_id: "u1", display_name: "张三", team: { team_id: "team-sales", code: "sales", name: "销售组" }, role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "2", user_id: "u2", display_name: "李四", team: { team_id: "team-tech", code: "tech", name: "技术组" }, role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
             ],
             total: 2,
             page: 1,
@@ -233,17 +284,29 @@ describe("UsersPage", () => {
         });
         expect(screen.getAllByText("李四").length).toBeGreaterThanOrEqual(1);
 
-        const deptSelect = screen.getByRole("combobox", { name: /部门筛选/i });
-        fireEvent.change(deptSelect, { target: { value: "销售部" } });
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "1", user_id: "u1", display_name: "张三", team: { team_id: "team-sales", code: "sales", name: "销售组" }, role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 10,
+            has_more: false,
+        });
+        const teamSelect = screen.getByRole("combobox", { name: /团队筛选/i });
+        await waitFor(() => expect(teamSelect.querySelector("option[value='team-sales']")).toBeTruthy());
+        fireEvent.change(teamSelect, { target: { value: "team-sales" } });
 
-        expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
-        expect(screen.queryAllByText("李四").length).toBe(0);
+        await waitFor(() => expect(getUsersMock).toHaveBeenLastCalledWith(expect.objectContaining({
+            team_id: "team-sales",
+        })));
+        await waitFor(() => expect(screen.queryAllByText("李四")).toHaveLength(0));
     });
 
     it("renders multi-select checkboxes when users are loaded", async () => {
         getUsersMock.mockResolvedValue({
             items: [
-                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "1", user_id: "u1", display_name: "张三", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
             ],
             total: 1,
             page: 1,
@@ -265,8 +328,8 @@ describe("UsersPage", () => {
     it("shows batch assign button when users are selected", async () => {
         getUsersMock.mockResolvedValue({
             items: [
-                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
-                { id: "2", user_id: "u2", display_name: "李四", department: "技术部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "1", user_id: "u1", display_name: "张三", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "2", user_id: "u2", display_name: "李四", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
             ],
             total: 2,
             page: 1,
@@ -293,12 +356,102 @@ describe("UsersPage", () => {
         expect(screen.getAllByText(/批量分配训练任务/).length).toBeGreaterThanOrEqual(1);
     });
 
+    it("uses reversible account status language and removes physical delete action", async () => {
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "u1", display_name: "张三", email: "zhang@example.com", role: "user", status: "active", is_active: true, credential_version: 1, created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 1,
+        });
+
+        render(<UsersPage />);
+
+        expect((await screen.findAllByRole("button", { name: /停用账户/ })).length).toBeGreaterThan(0);
+        expect(screen.queryByRole("button", { name: /删除用户/ })).toBeNull();
+        expect(screen.queryByText(/不可撤销/)).toBeNull();
+    });
+
+    it("keeps account mutation loading scoped to the target account", async () => {
+        let releaseSuspend: (() => void) | undefined;
+        suspendUserMock.mockImplementation(() => new Promise((resolve) => {
+            releaseSuspend = () => resolve({ status: "inactive", changed: true });
+        }));
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "u1", display_name: "张三", role: "user", status: "active", is_active: true, credential_version: 1, created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "u2", display_name: "李四", role: "user", status: "active", is_active: true, credential_version: 1, created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 2,
+        });
+
+        render(<UsersPage />);
+        const suspendButtons = await screen.findAllByRole("button", { name: /停用账户/ });
+        fireEvent.click(suspendButtons[0]);
+        fireEvent.change(screen.getByLabelText("操作原因"), { target: { value: "员工离职" } });
+        fireEvent.click(screen.getByRole("button", { name: "确认停用" }));
+
+        await waitFor(() => expect(suspendUserMock).toHaveBeenCalled());
+        expect(screen.getByRole("button", { name: "处理中..." }).hasAttribute("disabled")).toBe(true);
+        expect(suspendButtons.some((button) => !button.hasAttribute("disabled"))).toBe(true);
+
+        releaseSuspend?.();
+    });
+
+    it("reconciles authoritative status after a possible-write timeout", async () => {
+        suspendUserMock.mockRejectedValue(new ApiRequestError({
+            status: 0,
+            errorCode: "[REQUEST_TIMEOUT]",
+            message: "账户停用请求超时",
+        }));
+        getUserMock.mockResolvedValue({
+            id: "u1",
+            display_name: "张三",
+            role: "user",
+            status: "inactive",
+            credential_version: 2,
+        });
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "u1", display_name: "张三", role: "user", status: "active", is_active: true, credential_version: 1, created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 1,
+        });
+
+        render(<UsersPage />);
+        fireEvent.click((await screen.findAllByRole("button", { name: /停用账户/ }))[0]);
+        fireEvent.change(screen.getByLabelText("操作原因"), { target: { value: "员工离职" } });
+        fireEvent.click(screen.getByRole("button", { name: "确认停用" }));
+
+        expect(await screen.findByText("停用响应超时，但已核对：账号状态已经生效。")).toBeTruthy();
+        expect(getUserMock).toHaveBeenCalledWith("u1");
+        expect(screen.queryByLabelText("操作原因")).toBeNull();
+    });
+
+    it("selects only the clicked learner when the API returns canonical id without legacy user_id", async () => {
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "u1", display_name: "张三", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "u2", display_name: "李四", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 2,
+        });
+
+        render(<UsersPage />);
+
+        const zhangCheckboxes = await screen.findAllByRole("checkbox", { name: "选择 张三" });
+        fireEvent.click(zhangCheckboxes[0]);
+
+        expect(screen.getByText("已选择 1 位学员")).toBeTruthy();
+        expect(screen.getAllByRole("checkbox", { name: "选择 张三" }).every((checkbox) => (checkbox as HTMLInputElement).checked)).toBe(true);
+        expect(screen.getAllByRole("checkbox", { name: "选择 李四" }).every((checkbox) => !(checkbox as HTMLInputElement).checked)).toBe(true);
+    });
+
     it("sends user_id payload and renders assigned/skipped/failed result from batch assign", async () => {
         getUsersMock.mockResolvedValue({
             items: [
-                { id: "row-1", user_id: "uid-01", display_name: "张三", email: "zhang@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
-                { id: "row-2", user_id: "uid-02", display_name: "李四", email: "li@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
-                { id: "row-3", user_id: "uid-03", display_name: "王五", email: "wang@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "uid-01", display_name: "张三", email: "zhang@test.com", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "uid-02", display_name: "李四", email: "li@test.com", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "uid-03", display_name: "王五", email: "wang@test.com", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
             ],
             total: 3,
             page: 1,
@@ -414,7 +567,7 @@ describe("UsersPage", () => {
     it("updates profile fields separately from role changes", async () => {
         getUsersMock.mockResolvedValue({
             items: [
-                { id: "row-1", user_id: "uid-01", display_name: "张三", email: "old@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "row-1", user_id: "uid-01", display_name: "张三", email: "old@test.com", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
             ],
             total: 1, page: 1, page_size: 10, has_more: false,
         });
@@ -438,8 +591,8 @@ describe("UsersPage", () => {
         const emailInput = screen.getByDisplayValue("old@test.com");
         fireEvent.change(emailInput, { target: { value: "new@test.com" } });
 
-        // Change role to admin — click the edit dialog's "管理员" role card (index 1: after create dialog's card at index 0)
-        const adminRoles = screen.getAllByText("管理员");
+        // Change role to admin — click the edit dialog's "平台管理员" role card (index 1: after create dialog's card at index 0)
+        const adminRoles = screen.getAllByText("平台管理员");
         fireEvent.click(adminRoles[1]);
 
         fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
@@ -448,7 +601,6 @@ describe("UsersPage", () => {
             expect(updateUserMock).toHaveBeenCalledWith("row-1", {
                 name: "张三新",
                 email: "new@test.com",
-                department: "销售部",
             });
         });
         expect(updateUserRoleMock).toHaveBeenCalledWith("row-1", { role: "admin" });
@@ -457,7 +609,7 @@ describe("UsersPage", () => {
     it("refreshes list with partial-failure message when profile update succeeds but role update fails", async () => {
         getUsersMock.mockResolvedValue({
             items: [
-                { id: "row-1", user_id: "uid-01", display_name: "张三", email: "old@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "row-1", user_id: "uid-01", display_name: "张三", email: "old@test.com", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
             ],
             total: 1, page: 1, page_size: 10, has_more: false,
         });
@@ -471,15 +623,16 @@ describe("UsersPage", () => {
         });
 
         fireEvent.click(screen.getByRole("button", { name: "编辑权限" }));
-        const adminRoles = screen.getAllByText("管理员");
+        const adminRoles = screen.getAllByText("平台管理员");
         fireEvent.click(adminRoles[1]);
 
         fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
 
         await waitFor(() => {
-            expect(updateUserMock).toHaveBeenCalledWith("row-1", expect.objectContaining({
-                department: "销售部",
-            }));
+            expect(updateUserMock).toHaveBeenCalledWith("row-1", {
+                name: "张三",
+                email: "old@test.com",
+            });
             expect(updateUserRoleMock).toHaveBeenCalledWith("row-1", { role: "admin" });
         });
 
@@ -491,10 +644,10 @@ describe("UsersPage", () => {
         expect(errorToastMock).not.toHaveBeenCalled();
     });
 
-    it("renders department column in the user table", async () => {
+    it("shows an explicit unassigned state when a learner has no Team", async () => {
         getUsersMock.mockResolvedValue({
             items: [
-                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "1", user_id: "u1", display_name: "张三", team: null, role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
             ],
             total: 1, page: 1, page_size: 10, has_more: false,
         });
@@ -506,8 +659,35 @@ describe("UsersPage", () => {
         });
 
         const headers = screen.getAllByRole("columnheader");
-        const deptHeader = headers.find(h => h.textContent === "部门");
-        expect(deptHeader).toBeTruthy();
-        expect(screen.getAllByText("销售部").length).toBeGreaterThanOrEqual(1);
+        expect(headers.find((header) => header.textContent === "团队")).toBeTruthy();
+        expect(screen.getAllByText("未分配").length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("labels a training manager as sales leader only when an explicit team relationship exists", async () => {
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "lead-1", display_name: "李组长", role: "training_manager", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "manager-1", display_name: "王培训", role: "training_manager", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 2,
+        });
+        getTeamsMock.mockResolvedValue({
+            items: [{
+                team_id: "team-1",
+                code: "east",
+                name: "华东组",
+                is_active: true,
+                leader_user_ids: ["lead-1"],
+                leaders: [{ user_id: "lead-1", name: "李组长", assignment_role: "primary" }],
+                members: [],
+                member_count: 0,
+            }],
+            total: 1,
+        });
+
+        render(<UsersPage />);
+
+        expect((await screen.findAllByText("销售组长")).length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText("培训管理员").length).toBeGreaterThanOrEqual(1);
     });
 });

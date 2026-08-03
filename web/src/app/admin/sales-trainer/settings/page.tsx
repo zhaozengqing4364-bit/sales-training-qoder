@@ -12,6 +12,13 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { SalesTrainerSettings } from "@/lib/api/types";
+import {
+    formatAsrMode,
+    formatAsrModel,
+    formatFallbackReason,
+    formatPolicySource,
+    formatStorageBackend,
+} from "@/lib/sales-trainer/settings-presentation";
 import { useSalesTrainerAdminRouteAccess } from "@/lib/sales-trainer/use-admin-route-access";
 
 
@@ -66,7 +73,7 @@ export default function SalesTrainerSettingsPage() {
             header={(
                 <AdminPageHeader
                     title="新人训练路径配置"
-                    description="展示存储、ASR 和评分服务的健康状态；密钥仍由部署环境管理，页面不展示密钥值。"
+                    description="展示存储、语音识别和评分服务的健康状态；密钥仍由部署环境管理，页面不展示密钥值。"
                     secondaryActions={(
                         <div className="flex flex-wrap items-center gap-2">
                             <Button asChild variant="outline" className="rounded-full">
@@ -104,7 +111,7 @@ export default function SalesTrainerSettingsPage() {
                     <GlassCard className="space-y-4 p-6">
                         <h2 className="text-lg font-bold text-slate-900">音频上传</h2>
                         <div className="space-y-3 text-sm">
-                            <div className="flex justify-between gap-4"><span className="text-slate-500">存储后端</span><span className="font-medium">{settings.storage_backend}</span></div>
+                            <div className="flex justify-between gap-4"><span className="text-slate-500">存储方式</span><span className="font-medium">{formatStorageBackend(settings.storage_backend)}</span></div>
                             <div className="flex justify-between gap-4"><span className="text-slate-500">浏览器直传</span><StatusBadge ok={settings.direct_upload_supported} /></div>
                             <div className="flex justify-between gap-4"><span className="text-slate-500">COS 配置</span><StatusBadge ok={settings.cos_configured} /></div>
                             <div className="flex justify-between gap-4"><span className="text-slate-500">COS 公共读</span><StatusBadge ok={settings.cos_public_read} /></div>
@@ -114,8 +121,8 @@ export default function SalesTrainerSettingsPage() {
                     <GlassCard className="space-y-4 p-6">
                         <h2 className="text-lg font-bold text-slate-900">识别与评分</h2>
                         <div className="space-y-3 text-sm">
-                            <div className="flex justify-between gap-4"><span className="text-slate-500">ASR 模式</span><span className="font-medium">{settings.asr_mode}</span></div>
-                            <div className="flex justify-between gap-4"><span className="text-slate-500">ASR 模型</span><span className="font-medium">{settings.asr_model}</span></div>
+                            <div className="flex justify-between gap-4"><span className="text-slate-500">识别方式</span><span className="font-medium">{formatAsrMode(settings.asr_mode)}</span></div>
+                            <div className="flex justify-between gap-4"><span className="text-slate-500">识别模型</span><span className="font-medium">{formatAsrModel(settings.asr_model)}</span></div>
                             <div className="flex justify-between gap-4"><span className="text-slate-500">DashScope</span><StatusBadge ok={settings.dashscope_configured} /></div>
                             <div className="flex justify-between gap-4"><span className="text-slate-500">Deucate</span><StatusBadge ok={settings.deucate_configured} /></div>
                             <div className="flex justify-between gap-4"><span className="text-slate-500">Deucate 模型</span><span className="font-medium">{settings.deucate_model || "未设置"}</span></div>
@@ -131,7 +138,7 @@ export default function SalesTrainerSettingsPage() {
                     </GlassCard>
                     <GlassCard className="space-y-4 p-6 lg:col-span-2">
                         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                            <h2 className="text-lg font-bold text-slate-900">阶段 2 训练闭环策略</h2>
+                            <h2 className="text-lg font-bold text-slate-900">训练闭环策略</h2>
                             {settings.phase2_policy?.management_entry ? (
                                 <Link href={settings.phase2_policy.management_entry}>
                                     <Button variant="outline" size="sm">打开策略治理</Button>
@@ -143,10 +150,10 @@ export default function SalesTrainerSettingsPage() {
                             <div><span className="block text-slate-500">重复训练阈值</span><span className="font-medium">{policyValue(settings.phase2_policy?.repeat_practice_threshold)}</span></div>
                             <div><span className="block text-slate-500">看板记录上限</span><span className="font-medium">{policyValue(settings.phase2_policy?.dashboard_record_limit)}</span></div>
                             <div><span className="block text-slate-500">兜底状态</span><StatusBadge ok={!settings.phase2_policy?.fallback_applied} /></div>
-                            <div><span className="block text-slate-500">来源</span><span className="font-medium">{policyValue(settings.phase2_policy?.source)}</span></div>
+                            <div><span className="block text-slate-500">来源</span><span className="font-medium">{formatPolicySource(settings.phase2_policy?.source)}</span></div>
                             <div><span className="block text-slate-500">策略版本</span><span className="font-medium">{policyValue(settings.phase2_policy?.version)}</span></div>
                             <div><span className="block text-slate-500">配置版本</span><span className="font-medium">{policyValue(settings.phase2_policy?.config_version)}</span></div>
-                            <div><span className="block text-slate-500">兜底原因</span><span className="font-medium">{policyValue(settings.phase2_policy?.fallback_reason)}</span></div>
+                            <div><span className="block text-slate-500">默认策略说明</span><span className="font-medium">{formatFallbackReason(settings.phase2_policy?.fallback_reason)}</span></div>
                         </div>
                     </GlassCard>
                 </div>

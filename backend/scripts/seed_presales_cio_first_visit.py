@@ -273,7 +273,6 @@ async def _upsert_user(
     email: str,
     name: str,
     role: str,
-    department: str,
 ) -> User:
     user = await _first(db, select(User).where(User.email == email))
     if user is None:
@@ -282,7 +281,6 @@ async def _upsert_user(
             email=email,
             name=name,
             role=role,
-            department=department,
             is_active=True,
             wechat_user_id=_wechat_id(email),
         )
@@ -292,7 +290,6 @@ async def _upsert_user(
         counters["updated"] += 1
         user.name = name
         user.role = role
-        user.department = department
         user.is_active = True
         if not user.wechat_user_id:
             user.wechat_user_id = _wechat_id(email)
@@ -2482,7 +2479,6 @@ async def seed_presales_cio_first_visit(db: AsyncSession) -> dict[str, Any]:
         email=OWNER_EMAIL,
         name="制造业 CIO 样板管理员",
         role="admin",
-        department="presales",
     )
     learner = await _upsert_user(
         db,
@@ -2490,7 +2486,6 @@ async def seed_presales_cio_first_visit(db: AsyncSession) -> dict[str, Any]:
         email=LEARNER_EMAIL,
         name="制造业 CIO 样板学员",
         role="user",
-        department="presales",
     )
     await db.flush()
 

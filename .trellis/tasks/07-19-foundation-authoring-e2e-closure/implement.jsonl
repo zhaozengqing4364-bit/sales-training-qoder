@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/newcomer-training-activity-orchestration.md", "reason": "最终活动发布合同"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端验收证据"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "浏览器与可访问性证据"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "真实页面状态验收"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "验收矩阵真值"}
+{"file": ".trellis/tasks/07-19-newcomer-training-content-authoring-closure/research/current-state-gap.md", "reason": "防止重复假闭环"}

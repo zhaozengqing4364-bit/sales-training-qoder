@@ -123,6 +123,7 @@ export function SalesTrainerAdminModuleNav({
                         <Link
                             key={item.href}
                             href={item.href}
+                            prefetch={false}
                             className={cn(
                                 "inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition-colors duration-[var(--duration-press)] ease-[var(--ease-out)]",
                                 isActive

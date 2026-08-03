@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import User
+from common.db.schemas import AssetGovernanceSummary
 from common.db.session import get_db
 from common.knowledge.contributors import build_registered_knowledge_governance_summary
 from common.monitoring.logger import get_logger
@@ -376,7 +377,13 @@ async def list_knowledge_bases(
             enriched_items.append(item)
         else:
             enriched_items.append(
-                item.model_copy(update={"governance_summary": governance_summary})
+                item.model_copy(
+                    update={
+                        "governance_summary": AssetGovernanceSummary.model_validate(
+                            governance_summary
+                        )
+                    }
+                )
             )
 
     return {

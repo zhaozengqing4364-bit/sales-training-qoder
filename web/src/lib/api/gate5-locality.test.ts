@@ -34,7 +34,10 @@ describe("Gate 5 frontend domain locality", () => {
             "utf8",
         );
         const readinessPage = fs.readFileSync(
-            path.resolve(process.cwd(), "src/app/admin/sales-trainer/readiness/[learnerId]/page.tsx"),
+            path.resolve(
+                process.cwd(),
+                "src/app/admin/newcomer-training/reviews/[learnerId]/review-dossier-workspace.tsx",
+            ),
             "utf8",
         );
 

@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "场景状态和证据测试"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "预览与部分状态测试"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Scenario 到 Evidence 链路"}

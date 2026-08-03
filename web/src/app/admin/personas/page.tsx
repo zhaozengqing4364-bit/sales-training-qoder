@@ -614,7 +614,7 @@ export default function PersonasPage() {
                                                             ? "处理中..."
                                                             : normalizePersonaStatus(p.status) === "active" ? "停用" : "启用"}
                                                     </Button>
-                                                    <Link href={`/admin/personas/${p.id}`}>
+                                                    <Link href={`/admin/personas/${p.id}`} prefetch={false}>
                                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full">
                                                             <Edit2 className="w-4 h-4" />
                                                         </Button>

@@ -30,7 +30,10 @@ from admin.api.security_inventory import (
 )
 from admin.api.system_logs import router as admin_system_logs_router
 from admin.api.training_records import router as admin_training_records_router
-from admin.api.users import _assert_admin_demotion_keeps_active_admin
+from admin.api.users import (
+    _assert_admin_deactivation_keeps_active_admin,
+    _assert_admin_demotion_keeps_active_admin,
+)
 
 # Import Agent models so Base.metadata has all FK targets used by common models.
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # noqa: F401
@@ -41,6 +44,9 @@ from common.db.models import (
     PracticeSession,
     Scenario,
     SystemLog,
+    Team,
+    TeamLeaderAssignment,
+    TeamMembership,
     User,
 )
 from common.db.session import get_db
@@ -56,8 +62,16 @@ ADMIN_SECURITY_BASELINE_WATCH_ROUTE_PROOFS = (
     ("admin.api.admin", admin_presentations_router, "/api/v1/admin/presentations"),
     ("admin.api.analytics", admin_analytics_router, "/api/v1/admin/analytics/overview"),
     ("admin.api.system_logs", admin_system_logs_router, "/api/v1/admin/system-logs"),
-    ("admin.api.training_records", admin_training_records_router, "/api/v1/admin/training-records"),
-    ("admin.api.governance", admin_governance_router, "/api/v1/governance/permissions-matrix"),
+    (
+        "admin.api.training_records",
+        admin_training_records_router,
+        "/api/v1/admin/training-records",
+    ),
+    (
+        "admin.api.governance",
+        admin_governance_router,
+        "/api/v1/governance/permissions-matrix",
+    ),
     (
         "admin.api.release_verification",
         release_verification_router,
@@ -115,7 +129,6 @@ async def admin_user(db_session: AsyncSession) -> User:
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"admin_{uuid.uuid4().hex[:8]}",
         name="Admin Tester",
-        department="Ops",
         email="admin@example.com",
         role="admin",
         is_active=True,
@@ -133,7 +146,6 @@ async def non_admin_user(db_session: AsyncSession) -> User:
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"user_{uuid.uuid4().hex[:8]}",
         name="Normal Tester",
-        department="Sales",
         email="user@example.com",
         role="user",
         is_active=True,
@@ -208,7 +220,9 @@ async def test_system_logs_api_returns_shared_redaction_policy_and_safe_diagnost
     )
     await db_session.commit()
 
-    response = await async_client.get("/api/v1/admin/system-logs", headers=admin_headers)
+    response = await async_client.get(
+        "/api/v1/admin/system-logs", headers=admin_headers
+    )
 
     assert response.status_code == 200
     payload = response.json()["data"]
@@ -235,7 +249,10 @@ async def test_system_logs_api_returns_shared_redaction_policy_and_safe_diagnost
         {"key": "target_user_id", "value": "user-456"},
         {"key": "trace_id", "value": "trace-123"},
     ]
-    assert item["details"] == "error_code=USER_UPDATE_FAILED · phase=persist · session_id=session-123 · target_user_id=user-456 · trace_id=trace-123"
+    assert (
+        item["details"]
+        == "error_code=USER_UPDATE_FAILED · phase=persist · session_id=session-123 · target_user_id=user-456 · trace_id=trace-123"
+    )
     assert "Password123" not in json.dumps(item, ensure_ascii=False)
     assert "secret-reset-token" not in json.dumps(item, ensure_ascii=False)
     assert "admin@example.com" not in json.dumps(item, ensure_ascii=False)
@@ -252,11 +269,8 @@ async def test_admin_user_lifecycle_and_audit_log_fields(
     create_response = await async_client.post(
         "/api/v1/admin/users",
         json={
-            "username": "story-user",
             "email": "story-user@example.com",
-            "password": "Password123",
             "name": "Story User",
-            "department": "Enablement",
             "role": "user",
             "audit_reason": "initial onboarding",
         },
@@ -270,8 +284,7 @@ async def test_admin_user_lifecycle_and_audit_log_fields(
         f"/api/v1/admin/users/{user_id}",
         json={
             "name": "Story User Updated",
-            "department": "Sales Ops",
-            "audit_reason": "department restructure",
+            "audit_reason": "display name correction",
         },
         headers=admin_headers,
     )
@@ -285,6 +298,14 @@ async def test_admin_user_lifecycle_and_audit_log_fields(
     )
     assert delete_response.status_code == 200
     assert delete_response.json()["success"] is True
+    assert delete_response.json()["data"] == {
+        "user_id": user_id,
+        "status": "inactive",
+        "changed": True,
+        "credential_version": 2,
+        "deactivated": True,
+        "deleted": False,
+    }
 
     detail_response = await async_client.get(
         f"/api/v1/admin/users/{user_id}",
@@ -329,6 +350,72 @@ async def test_admin_user_lifecycle_and_audit_log_fields(
         if log.action == "admin.user.updated":
             assert details["before"]["name"] == "Story User"
             assert details["after"]["name"] == "Story User Updated"
+
+
+@pytest.mark.asyncio
+async def test_deactivate_is_idempotent_and_never_physically_deletes_user(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    non_admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """Compatibility DELETE must remain an audited, idempotent soft deactivation."""
+    original_version = int(non_admin_user.credential_version or 1)
+    first = await async_client.request(
+        "DELETE",
+        f"/api/v1/admin/users/{non_admin_user.user_id}",
+        json={
+            "audit_reason": "employee offboarding",
+            "expected_credential_version": original_version,
+        },
+        headers=admin_headers,
+    )
+    assert first.status_code == 200
+    assert first.json()["data"]["changed"] is True
+    assert first.json()["data"]["deleted"] is False
+
+    await db_session.refresh(non_admin_user)
+    deactivated_version = non_admin_user.credential_version
+    assert non_admin_user.is_active is False
+
+    second = await async_client.request(
+        "DELETE",
+        f"/api/v1/admin/users/{non_admin_user.user_id}",
+        json={
+            "audit_reason": "safe retry after response loss",
+            "expected_credential_version": deactivated_version,
+        },
+        headers=admin_headers,
+    )
+    assert second.status_code == 200
+    assert second.json()["data"]["changed"] is False
+
+    await db_session.refresh(non_admin_user)
+    assert non_admin_user.credential_version == deactivated_version
+    assert (
+        await db_session.execute(
+            select(User).where(User.user_id == non_admin_user.user_id)
+        )
+    ).scalar_one() is non_admin_user
+
+
+@pytest.mark.asyncio
+async def test_account_status_change_rejects_stale_credential_version(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    non_admin_user: User,
+) -> None:
+    response = await async_client.post(
+        f"/api/v1/admin/users/{non_admin_user.user_id}/suspend",
+        json={
+            "audit_reason": "employee offboarding",
+            "expected_credential_version": 999,
+        },
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "[ACCOUNT_STATUS_CONFLICT]"
 
 
 @pytest.mark.asyncio
@@ -387,10 +474,13 @@ def test_admin_security_baseline_inventory_is_closed_and_scoped() -> None:
     assert explicit_router_proof_families <= watch_route_families
     assert baseline_route_families == {"admin.api.users"}
     assert set(ADMIN_PERMISSION_POSITIVE_CONTROL) == (
-        baseline_route_families | (watch_route_families - explicit_router_proof_families)
+        baseline_route_families
+        | (watch_route_families - explicit_router_proof_families)
     )
     assert watch_route_families.isdisjoint(baseline_route_families)
-    assert all("admin" in entry.allowed_roles for entry in ADMIN_ROUTE_PERMISSION_MATRIX)
+    assert all(
+        "admin" in entry.allowed_roles for entry in ADMIN_ROUTE_PERMISSION_MATRIX
+    )
     assert all(
         any(code in entry.non_admin_deny_path for code in ADMIN_DENY_ERROR_CODES)
         for entry in ADMIN_ROUTE_PERMISSION_MATRIX
@@ -413,11 +503,15 @@ async def test_admin_router_modules_require_admin_even_without_main_router_guard
     path: str,
 ) -> None:
     """Each watch-list admin router should carry its own admin dependency."""
-    async with await _create_isolated_router_client(router=router, db_session=db_session) as client:
+    async with await _create_isolated_router_client(
+        router=router, db_session=db_session
+    ) as client:
         response = await client.get(path, headers=user_headers)
 
     assert route_family in {
-        entry.route_family for entry in ADMIN_ROUTE_PERMISSION_MATRIX if entry.priority == "watch"
+        entry.route_family
+        for entry in ADMIN_ROUTE_PERMISSION_MATRIX
+        if entry.priority == "watch"
     }
     assert response.status_code == 403
     assert response.json()["detail"].get("error") in ADMIN_DENY_ERROR_CODES
@@ -433,11 +527,8 @@ async def test_create_user_duplicate_email_returns_error_code(
     response = await async_client.post(
         "/api/v1/admin/users",
         json={
-            "username": "duplicate-user",
             "email": non_admin_user.email,
-            "password": "Password123",
             "name": "Duplicate User",
-            "department": "QA",
             "role": "user",
             "audit_reason": "duplicate check",
         },
@@ -449,6 +540,171 @@ async def test_create_user_duplicate_email_returns_error_code(
 
 
 @pytest.mark.asyncio
+async def test_create_learner_assigns_team_atomically_and_team_filter_is_authoritative(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    team = Team(
+        team_id=str(uuid.uuid4()),
+        code="launch-sales",
+        name="首发销售组",
+        created_by=str(admin_user.user_id),
+    )
+    db_session.add(team)
+    await db_session.commit()
+
+    response = await async_client.post(
+        "/api/v1/admin/users",
+        json={
+            "name": "Launch Learner",
+            "email": "launch-learner@example.com",
+            "role": "user",
+            "team_id": str(team.team_id),
+            "audit_reason": "首发开户",
+        },
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    created = response.json()["data"]
+    assert created["team"] == {
+        "team_id": str(team.team_id),
+        "code": "launch-sales",
+        "name": "首发销售组",
+    }
+    membership = await db_session.scalar(
+        select(TeamMembership).where(TeamMembership.user_id == created["id"])
+    )
+    assert membership is not None
+    assert membership.effective_to is None
+
+    filtered = await async_client.get(
+        "/api/v1/admin/users",
+        params={"team_id": str(team.team_id)},
+        headers=admin_headers,
+    )
+    assert filtered.status_code == 200
+    assert filtered.json()["data"]["total"] == 1
+    assert [item["id"] for item in filtered.json()["data"]["items"]] == [
+        created["id"]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_non_learner_rejects_team_membership(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    team = Team(
+        team_id=str(uuid.uuid4()),
+        code="manager-only",
+        name="主管团队",
+        created_by=str(admin_user.user_id),
+    )
+    db_session.add(team)
+    await db_session.commit()
+
+    response = await async_client.post(
+        "/api/v1/admin/users",
+        json={
+            "name": "Manager",
+            "email": "manager-membership@example.com",
+            "role": "training_manager",
+            "team_id": str(team.team_id),
+        },
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "[TEAM_MEMBERSHIP_REQUIRES_LEARNER_ROLE]"
+
+
+@pytest.mark.asyncio
+async def test_created_user_must_replace_one_time_temporary_password(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "CompatibilityOnly123!")
+    create_response = await async_client.post(
+        "/api/v1/admin/users",
+        json={
+            "name": "New Sales Lead",
+            "email": "New.Lead@Example.COM",
+            "role": "training_manager",
+            "audit_reason": "onboarding",
+        },
+        headers=admin_headers,
+    )
+    assert create_response.status_code == 200
+    created = create_response.json()["data"]
+    temporary_password = created["temporary_password"]
+    assert created["email"] == "new.lead@example.com"
+    assert created["credential_status"] == "temporary"
+
+    stored = (
+        await db_session.execute(
+            select(User).where(User.email == "new.lead@example.com")
+        )
+    ).scalar_one()
+    assert stored.hashed_password != temporary_password
+    assert stored.role == "training_manager"
+
+    login_response = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": "NEW.LEAD@EXAMPLE.COM", "password": temporary_password},
+    )
+    assert login_response.status_code == 200
+    assert login_response.json()["data"]["requires_password_change"] is True
+    assert (await async_client.get("/api/v1/users/me")).status_code == 403
+
+    change_response = await async_client.post(
+        "/api/v1/auth/change-temporary-password",
+        json={"new_password": "PermanentPassword456!"},
+        headers={"Authorization": f"Bearer {login_response.json()['data']['token']}"},
+    )
+    assert change_response.status_code == 200
+    assert (await async_client.get("/api/v1/users/me")).status_code == 200
+
+    old_password_response = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": "new.lead@example.com", "password": temporary_password},
+    )
+    assert old_password_response.status_code == 401
+
+    new_password_response = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": "new.lead@example.com", "password": "PermanentPassword456!"},
+    )
+    assert new_password_response.status_code == 200
+    assert new_password_response.json()["data"]["requires_password_change"] is False
+
+    reset_response = await async_client.post(
+        f"/api/v1/admin/users/{created['id']}/reset-temporary-password",
+        json={"audit_reason": "credential delivery was lost"},
+        headers=admin_headers,
+    )
+    assert reset_response.status_code == 200
+    reset_data = reset_response.json()["data"]
+    assert reset_data["temporary_password"] != temporary_password
+    assert reset_data["credential_status"] == "temporary"
+    assert "temporary_password" not in json.dumps(
+        (
+            await db_session.execute(
+                select(SystemLog).where(
+                    SystemLog.action == "admin.user.temporary_password.reset"
+                )
+            )
+        ).scalar_one().details
+    )
+
+
+@pytest.mark.asyncio
 async def test_multiple_updates_keep_list_and_detail_consistent(
     async_client: AsyncClient,
     admin_headers: dict[str, str],
@@ -457,11 +713,8 @@ async def test_multiple_updates_keep_list_and_detail_consistent(
     create_response = await async_client.post(
         "/api/v1/admin/users",
         json={
-            "username": "concurrency-user",
             "email": "concurrency-user@example.com",
-            "password": "Password123",
             "name": "Concurrency User",
-            "department": "Dept-0",
             "role": "user",
             "audit_reason": "create for concurrency test",
         },
@@ -474,7 +727,6 @@ async def test_multiple_updates_keep_list_and_detail_consistent(
         f"/api/v1/admin/users/{user_id}",
         json={
             "name": "Concurrency A",
-            "department": "Dept-A",
             "audit_reason": "update A",
         },
         headers=admin_headers,
@@ -483,7 +735,6 @@ async def test_multiple_updates_keep_list_and_detail_consistent(
         f"/api/v1/admin/users/{user_id}",
         json={
             "name": "Concurrency B",
-            "department": "Dept-B",
             "audit_reason": "update B",
         },
         headers=admin_headers,
@@ -505,15 +756,13 @@ async def test_multiple_updates_keep_list_and_detail_consistent(
     )
     assert list_response.status_code == 200
     list_user = next(
-        item
-        for item in list_response.json()["data"]["items"]
-        if item["id"] == user_id
+        item for item in list_response.json()["data"]["items"] if item["id"] == user_id
     )
 
     assert detail_user["display_name"] == "Concurrency B"
-    assert detail_user["department"] == "Dept-B"
+    assert detail_user["team"] is None
     assert list_user["display_name"] == detail_user["display_name"]
-    assert list_user["department"] == detail_user["department"]
+    assert list_user["team"] == detail_user["team"]
 
 
 @pytest.mark.asyncio
@@ -540,7 +789,6 @@ async def test_list_users_role_filter_applies_before_pagination_and_total(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"role_filter_user_{uuid.uuid4().hex[:8]}",
         name="Second Role Filter User",
-        department="Sales",
         email="second-role-filter-user@example.com",
         role="user",
         is_active=True,
@@ -550,7 +798,6 @@ async def test_list_users_role_filter_applies_before_pagination_and_total(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"role_filter_support_{uuid.uuid4().hex[:8]}",
         name="Role Filter Support",
-        department="Support",
         email="role-filter-support@example.com",
         role="support",
         is_active=True,
@@ -597,11 +844,8 @@ async def test_admin_can_update_user_role_and_persist_audit_fields(
     create_response = await async_client.post(
         "/api/v1/admin/users",
         json={
-            "username": "role-user",
             "email": "role-user@example.com",
-            "password": "Password123",
             "name": "Role User",
-            "department": "Enablement",
             "role": "user",
             "audit_reason": "seed role update test",
         },
@@ -632,9 +876,7 @@ async def test_admin_can_update_user_role_and_persist_audit_fields(
     )
     assert list_response.status_code == 200
     list_user = next(
-        item
-        for item in list_response.json()["data"]["items"]
-        if item["id"] == user_id
+        item for item in list_response.json()["data"]["items"] if item["id"] == user_id
     )
     assert list_user["role"] == "admin"
 
@@ -657,6 +899,72 @@ async def test_admin_can_update_user_role_and_persist_audit_fields(
     assert details["reason"] == "promote for incident handling"
     assert details["before"]["role"] == "user"
     assert details["after"]["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_role_transition_retires_incompatible_team_relationships_in_same_transaction(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    team = Team(
+        team_id=str(uuid.uuid4()),
+        code="role-transition",
+        name="角色切换组",
+        created_by=str(admin_user.user_id),
+    )
+    db_session.add(team)
+    await db_session.commit()
+
+    created_response = await async_client.post(
+        "/api/v1/admin/users",
+        json={
+            "name": "Role Transition",
+            "email": "role-transition@example.com",
+            "role": "user",
+            "team_id": str(team.team_id),
+        },
+        headers=admin_headers,
+    )
+    assert created_response.status_code == 200
+    user_id = created_response.json()["data"]["id"]
+
+    promoted = await async_client.put(
+        f"/api/v1/admin/users/{user_id}/role",
+        json={"role": "training_manager", "audit_reason": "改任培训管理员"},
+        headers=admin_headers,
+    )
+    assert promoted.status_code == 200
+    membership = await db_session.scalar(
+        select(TeamMembership).where(TeamMembership.user_id == user_id)
+    )
+    assert membership is not None
+    assert membership.effective_to is not None
+
+    db_session.add(
+        TeamLeaderAssignment(
+            team_id=str(team.team_id),
+            leader_user_id=user_id,
+            assignment_role="primary",
+            created_by=str(admin_user.user_id),
+        )
+    )
+    await db_session.commit()
+
+    reassigned = await async_client.put(
+        f"/api/v1/admin/users/{user_id}/role",
+        json={"role": "admin", "audit_reason": "改任平台管理员"},
+        headers=admin_headers,
+    )
+    assert reassigned.status_code == 200
+    leadership = await db_session.scalar(
+        select(TeamLeaderAssignment).where(
+            TeamLeaderAssignment.leader_user_id == user_id
+        )
+    )
+    assert leadership is not None
+    assert leadership.effective_to is not None
 
 
 @pytest.mark.asyncio
@@ -702,7 +1010,6 @@ async def test_last_admin_demotion_guard_recounts_inside_current_transaction(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"only_admin_{uuid.uuid4().hex[:8]}",
         name="Only Admin",
-        department="Ops",
         email=f"only-admin-{uuid.uuid4().hex[:8]}@example.com",
         role="admin",
         is_active=True,
@@ -732,7 +1039,6 @@ async def test_last_admin_demotion_guard_allows_when_backup_admin_exists(
                 user_id=str(uuid.uuid4()),
                 wechat_user_id=f"primary_admin_{uuid.uuid4().hex[:8]}",
                 name="Primary Admin",
-                department="Ops",
                 email=f"primary-admin-{uuid.uuid4().hex[:8]}@example.com",
                 role="admin",
                 is_active=True,
@@ -741,7 +1047,6 @@ async def test_last_admin_demotion_guard_allows_when_backup_admin_exists(
                 user_id=str(uuid.uuid4()),
                 wechat_user_id=f"backup_admin_{uuid.uuid4().hex[:8]}",
                 name="Backup Admin",
-                department="Ops",
                 email=f"backup-admin-{uuid.uuid4().hex[:8]}@example.com",
                 role="admin",
                 is_active=True,
@@ -758,6 +1063,32 @@ async def test_last_admin_demotion_guard_allows_when_backup_admin_exists(
 
 
 @pytest.mark.asyncio
+async def test_last_admin_deactivation_guard_rejects_removing_only_active_admin(
+    db_session: AsyncSession,
+) -> None:
+    only_admin = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"deactivation_admin_{uuid.uuid4().hex[:8]}",
+        name="Only Active Admin",
+        email=f"deactivation-admin-{uuid.uuid4().hex[:8]}@example.com",
+        role="admin",
+        is_active=True,
+    )
+    db_session.add(only_admin)
+    await db_session.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _assert_admin_deactivation_keeps_active_admin(
+            db_session,
+            target_role="admin",
+            target_is_active=True,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "[CANNOT_REMOVE_LAST_ADMIN]"
+
+
+@pytest.mark.asyncio
 async def test_update_user_endpoint_rejects_role_changes(
     async_client: AsyncClient,
     admin_headers: dict[str, str],
@@ -766,11 +1097,8 @@ async def test_update_user_endpoint_rejects_role_changes(
     create_response = await async_client.post(
         "/api/v1/admin/users",
         json={
-            "username": "update-user-role-blocked",
             "email": "update-user-role-blocked@example.com",
-            "password": "Password123",
             "name": "Role Blocked",
-            "department": "QA",
             "role": "user",
             "audit_reason": "seed role-block test",
         },
@@ -787,6 +1115,22 @@ async def test_update_user_endpoint_rejects_role_changes(
 
     assert response.status_code == 400
     assert "[ROLE_UPDATE_REQUIRES_DEDICATED_ENDPOINT]" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_update_user_endpoint_rejects_account_status_changes(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    non_admin_user: User,
+) -> None:
+    response = await async_client.put(
+        f"/api/v1/admin/users/{non_admin_user.user_id}",
+        json={"is_active": False, "audit_reason": "bypass attempt"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "[ACCOUNT_STATUS_REQUIRES_DEDICATED_ENDPOINT]"
 
 
 @pytest.mark.asyncio
@@ -830,7 +1174,9 @@ async def test_promoted_user_can_access_admin_api_immediately_with_same_token(
     non_admin_user: User,
 ) -> None:
     """Role promotion should be immediately effective in RBAC checks."""
-    before_response = await async_client.get("/api/v1/admin/users", headers=user_headers)
+    before_response = await async_client.get(
+        "/api/v1/admin/users", headers=user_headers
+    )
     assert before_response.status_code == 403
     assert before_response.json()["detail"] == ROLE_REQUIRED_DETAIL
 
@@ -968,10 +1314,14 @@ async def test_user_sessions_completed_rows_expose_projection_backed_preview_fie
     assert payload["has_more"] is False
 
     completed_row = next(
-        item for item in payload["items"] if item["session_id"] == str(completed_session.session_id)
+        item
+        for item in payload["items"]
+        if item["session_id"] == str(completed_session.session_id)
     )
     in_progress_row = next(
-        item for item in payload["items"] if item["session_id"] == str(in_progress_session.session_id)
+        item
+        for item in payload["items"]
+        if item["session_id"] == str(in_progress_session.session_id)
     )
 
     assert completed_row["scores"]["overall"] == 50.0
@@ -1284,7 +1634,10 @@ async def test_admin_progress_and_stats_follow_projection_backed_supervisor_snap
     assert stats_payload["statistics"]["completed_sessions"] == 4
     assert stats_payload["statistics"]["evaluable_sessions"] == 3
     assert stats_payload["statistics"]["not_evaluable_sessions"] == 1
-    assert stats_payload["statistics"]["score_basis"] == "session_evidence_projection_evaluable_only"
+    assert (
+        stats_payload["statistics"]["score_basis"]
+        == "session_evidence_projection_evaluable_only"
+    )
 
     progress_day = progress_day_response.json()["data"]
     assert progress_day["granularity"] == "day"
@@ -1300,13 +1653,22 @@ async def test_admin_progress_and_stats_follow_projection_backed_supervisor_snap
         "2026-03-02",
         "2026-03-09",
     ]
-    assert [point["average_score"] for point in progress_week["trend_data"]] == [60.0, 40.0]
+    assert [point["average_score"] for point in progress_week["trend_data"]] == [
+        60.0,
+        40.0,
+    ]
     assert progress_week["trend_data"][0]["sessions_count"] == 3
     assert progress_week["trend_data"][0]["evaluable_session_count"] == 2
     assert progress_week["trend_data"][0]["not_evaluable_session_count"] == 1
     assert progress_week["trend_data"][0]["overall_result"] == "fail"
-    assert progress_week["trend_data"][0]["main_issue"]["issue_type"] == "objection_response"
-    assert progress_week["trend_data"][0]["next_goal"]["goal_type"] == "objection_response_drill"
+    assert (
+        progress_week["trend_data"][0]["main_issue"]["issue_type"]
+        == "objection_response"
+    )
+    assert (
+        progress_week["trend_data"][0]["next_goal"]["goal_type"]
+        == "objection_response_drill"
+    )
     assert progress_week["not_evaluable_session_count"] == 1
     assert progress_week["non_completed_session_count"] == 1
     assert progress_week["repeated_main_issues"] == [
@@ -1571,7 +1933,8 @@ async def test_user_sessions_expose_latest_manager_intervention_results_on_proje
     assert response.status_code == 200
     payload = response.json()["data"]
     intervention_results = {
-        item["intervention_id"]: item for item in payload["manager_intervention_results"]
+        item["intervention_id"]: item
+        for item in payload["manager_intervention_results"]
     }
 
     improved_result = intervention_results[str(improved_intervention.intervention_id)]
@@ -1579,7 +1942,10 @@ async def test_user_sessions_expose_latest_manager_intervention_results_on_proje
     assert improved_result["note"] == "优先补 ROI 和客户案例证据。"
     assert improved_result["status"] == "improved"
     assert improved_result["reason"] == "issue_family_shifted"
-    assert improved_result["summary"] == "最近一次可评估训练的主问题已转向其他家族，说明这个主管重点已有改善。"
+    assert (
+        improved_result["summary"]
+        == "最近一次可评估训练的主问题已转向其他家族，说明这个主管重点已有改善。"
+    )
     assert improved_result["session_id"] == str(improved_session.session_id)
     assert improved_result["session_start_time"] == improved_start.isoformat()
     assert improved_result["overall_result"] == "fail"
@@ -1591,7 +1957,10 @@ async def test_user_sessions_expose_latest_manager_intervention_results_on_proje
     assert thin_result["note"] == "观察后续异议处理是否改善。"
     assert thin_result["status"] == "not_evaluable"
     assert thin_result["reason"] == "session_not_evaluable"
-    assert thin_result["summary"] == "最近一次已完成训练证据不足，暂时还不能判断这个主管重点是否改善。"
+    assert (
+        thin_result["summary"]
+        == "最近一次已完成训练证据不足，暂时还不能判断这个主管重点是否改善。"
+    )
     assert thin_result["session_id"] == str(thin_session.session_id)
     assert thin_result["evaluable"] is False
     assert thin_result["not_evaluable_reason"] == "INSUFFICIENT_TURN_DATA"
@@ -1601,7 +1970,10 @@ async def test_user_sessions_expose_latest_manager_intervention_results_on_proje
     assert pending_result["note"] == "等待下一次完整训练结果。"
     assert pending_result["status"] == "pending"
     assert pending_result["reason"] == "no_completed_session_after_intervention"
-    assert pending_result["summary"] == "主管重点建立后，还没有新的已完成训练可用于判断结果。"
+    assert (
+        pending_result["summary"]
+        == "主管重点建立后，还没有新的已完成训练可用于判断结果。"
+    )
     assert pending_result["session_id"] is None
     assert pending_result["main_issue"] is None
 

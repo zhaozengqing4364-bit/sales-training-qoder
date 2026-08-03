@@ -91,6 +91,12 @@ from .identity import (
 from .identity import (
     PasswordResetToken as PasswordResetToken,
 )
+from .identity import ProvisioningBatch as ProvisioningBatch
+from .identity import ProvisioningRow as ProvisioningRow
+from .identity import ProvisioningTeamExecution as ProvisioningTeamExecution
+from .identity import Team as Team
+from .identity import TeamLeaderAssignment as TeamLeaderAssignment
+from .identity import TeamMembership as TeamMembership
 from .identity import (
     User as User,
 )
@@ -217,6 +223,12 @@ __all__ = [
     "UserTrainingPreference",
     "UserPresentationProgress",
     "PasswordResetToken",
+    "Team",
+    "TeamMembership",
+    "TeamLeaderAssignment",
+    "ProvisioningBatch",
+    "ProvisioningTeamExecution",
+    "ProvisioningRow",
     "BusinessRuleConfig",
     "BusinessRuleConfigAuditLog",
     "ConfigBundle",

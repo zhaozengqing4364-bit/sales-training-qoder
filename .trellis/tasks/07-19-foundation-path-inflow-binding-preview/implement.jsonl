@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/newcomer-training-activity-orchestration.md", "reason": "Path 和 ReleasePlan 合同"}
+{"file": ".trellis/spec/backend/domain-ownership-and-evaluation-ports.md", "reason": "公开领域端口"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "路径三栏与 Drawer"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "dirty 与往返上下文"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "快建到发布闭包"}
+{"file": ".trellis/tasks/07-19-newcomer-training-content-authoring-closure/research/current-state-gap.md", "reason": "前端只快建两类资源的缺口"}

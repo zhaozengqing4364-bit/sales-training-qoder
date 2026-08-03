@@ -8,6 +8,7 @@ import yaml
 from scripts.architecture_dependency_guard import (
     collect_edges,
     strongly_connected_components,
+    validate_foundation_repository,
     validate_repository,
 )
 
@@ -403,3 +404,339 @@ def test_should_reject_duplicate_packages_and_missing_package_directory(
 
     assert "Policy packages must not contain duplicates" in violations
     assert "Declared package directory is missing: beta" in violations
+
+
+def _foundation_policy() -> dict[str, object]:
+    return {
+        "version": 1,
+        "status": "enforced",
+        "business_modules": [
+            "newcomer_training",
+            "learning",
+            "audio_assessment",
+        ],
+        "stable_edges": [
+            ["newcomer_training", "learning"],
+            ["newcomer_training", "audio_assessment"],
+        ],
+        "stable_edge_import_scope": {
+            "allowed_path_segments": ["contracts", "ports", "public", "identifiers"],
+            "forbidden_path_segments": [
+                "models",
+                "repositories",
+                "repository",
+                "sqlalchemy",
+                "adapters",
+                "services",
+                "internal",
+            ],
+        },
+        "module_paths": {
+            "newcomer_training": ["newcomer_training"],
+            "learning": ["learning"],
+            "audio_assessment": ["audio_assessment"],
+            "shared_kernel": ["common"],
+            "application_root": ["foundation_composition.py"],
+        },
+        "composition_root": "application_root",
+        "composition_root_edges": [
+            ["application_root", "newcomer_training"],
+            ["application_root", "learning"],
+            ["application_root", "audio_assessment"],
+            ["application_root", "shared_kernel"],
+        ],
+        "temporary_exceptions": [],
+    }
+
+
+def test_foundation_guard_should_allow_contract_scoped_business_imports(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src"
+    _write(
+        src / "newcomer_training" / "application.py",
+        "from learning.contracts import LearningActor\n",
+    )
+    _write(src / "learning" / "contracts.py", "class LearningActor: ...\n")
+    _write(src / "audio_assessment" / "__init__.py", "")
+    _write(src / "common" / "__init__.py", "")
+    _write(src / "foundation_composition.py", "")
+    policy_path = tmp_path / "foundation-policy.yaml"
+    _write_policy(policy_path, _foundation_policy())
+
+    assert (
+        validate_foundation_repository(src_root=src, policy_path=policy_path) == []
+    )
+
+
+@pytest.mark.parametrize(
+    ("import_line", "expected_code"),
+    [
+        (
+            "from audio_assessment.models import AudioArtifact\n",
+            "ARCH_CROSS_MODULE_ORM_FORBIDDEN",
+        ),
+        (
+            "from learning.services.internal import QuestionWriter\n",
+            "ARCH_BUSINESS_EDGE_SCOPE_FORBIDDEN",
+        ),
+    ],
+)
+def test_foundation_guard_should_reject_cross_business_internal_imports(
+    tmp_path: Path,
+    import_line: str,
+    expected_code: str,
+) -> None:
+    src = tmp_path / "src"
+    _write(src / "newcomer_training" / "application.py", import_line)
+    _write(src / "learning" / "__init__.py", "")
+    _write(src / "audio_assessment" / "__init__.py", "")
+    _write(src / "common" / "__init__.py", "")
+    _write(src / "foundation_composition.py", "")
+    policy_path = tmp_path / "foundation-policy.yaml"
+    _write_policy(policy_path, _foundation_policy())
+
+    violations = validate_foundation_repository(
+        src_root=src,
+        policy_path=policy_path,
+    )
+
+    assert any(expected_code in violation for violation in violations)
+    assert any("newcomer_training/application.py:1" in violation for violation in violations)
+
+
+def test_foundation_guard_should_reject_shared_kernel_reverse_dependency(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src"
+    _write(
+        src / "common" / "bridge.py",
+        "from newcomer_training.contracts import PathRevisionDraft\n",
+    )
+    _write(src / "newcomer_training" / "contracts.py", "")
+    _write(src / "learning" / "__init__.py", "")
+    _write(src / "audio_assessment" / "__init__.py", "")
+    _write(src / "foundation_composition.py", "")
+    policy_path = tmp_path / "foundation-policy.yaml"
+    _write_policy(policy_path, _foundation_policy())
+
+    violations = validate_foundation_repository(
+        src_root=src,
+        policy_path=policy_path,
+    )
+
+    assert any("ARCH_SHARED_KERNEL_REVERSE_DEPENDENCY" in item for item in violations)
+
+
+def test_foundation_guard_should_reject_literal_dynamic_activity_import(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src"
+    _write(
+        src / "newcomer_training" / "registry.py",
+        'from importlib import import_module\nimport_module("learning.activities.lesson")\n',
+    )
+    _write(src / "learning" / "__init__.py", "")
+    _write(src / "audio_assessment" / "__init__.py", "")
+    _write(src / "common" / "__init__.py", "")
+    _write(src / "foundation_composition.py", "")
+    policy_path = tmp_path / "foundation-policy.yaml"
+    _write_policy(policy_path, _foundation_policy())
+
+    violations = validate_foundation_repository(
+        src_root=src,
+        policy_path=policy_path,
+    )
+
+    assert any("ARCH_DYNAMIC_ACTIVITY_IMPORT_FORBIDDEN" in item for item in violations)
+
+
+@pytest.mark.parametrize(
+    "provider_source",
+    [
+        "import openai\n",
+        "from ai_platform.openai_provider import OpenAICompatibleProvider\n",
+        "result = service.llm.apredict('answer')\n",
+    ],
+)
+def test_foundation_guard_should_reject_direct_business_provider_access(
+    tmp_path: Path,
+    provider_source: str,
+) -> None:
+    src = tmp_path / "src"
+    _write(src / "learning" / "question_generation.py", provider_source)
+    _write(src / "newcomer_training" / "__init__.py", "")
+    _write(src / "audio_assessment" / "__init__.py", "")
+    _write(src / "common" / "__init__.py", "")
+    _write(src / "foundation_composition.py", "")
+    policy_path = tmp_path / "foundation-policy.yaml"
+    _write_policy(policy_path, _foundation_policy())
+
+    violations = validate_foundation_repository(
+        src_root=src,
+        policy_path=policy_path,
+    )
+
+    assert any("ARCH_DIRECT_AI_PROVIDER_FORBIDDEN" in item for item in violations)
+
+
+def test_foundation_guard_should_fail_when_policy_is_not_enforced_or_keeps_exceptions(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src"
+    for package in ("newcomer_training", "learning", "audio_assessment", "common"):
+        _write(src / package / "__init__.py", "")
+    _write(src / "foundation_composition.py", "")
+    policy = _foundation_policy()
+    policy["status"] = "design_only_not_enforced"
+    policy["temporary_exceptions"] = [
+        {
+            "id": "legacy",
+            "owner": "owner",
+            "reason": "legacy",
+            "retire_when": "deleted",
+            "expires_on": "2026-10-31",
+        }
+    ]
+    policy_path = tmp_path / "foundation-policy.yaml"
+    _write_policy(policy_path, policy)
+
+    violations = validate_foundation_repository(
+        src_root=src,
+        policy_path=policy_path,
+    )
+
+    assert any("Foundation architecture policy status must be enforced" in item for item in violations)
+    assert any("Foundation temporary exception remains: legacy" in item for item in violations)
+
+
+def test_foundation_guard_should_reject_delivery_transaction_with_provider_io(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src"
+    _write(
+        src / "newcomer_training" / "api.py",
+        """
+from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.post("/attempts")
+async def submit_attempt(db, provider, row):
+    db.add(row)
+    await provider.apredict("score")
+    await db.commit()
+""",
+    )
+    _write(src / "learning" / "__init__.py", "")
+    _write(src / "audio_assessment" / "__init__.py", "")
+    _write(src / "common" / "__init__.py", "")
+    _write(src / "foundation_composition.py", "")
+    policy_path = tmp_path / "foundation-policy.yaml"
+    _write_policy(policy_path, _foundation_policy())
+
+    violations = validate_foundation_repository(
+        src_root=src,
+        policy_path=policy_path,
+    )
+
+    assert any(
+        "ARCH_DELIVERY_ORCHESTRATION_FORBIDDEN" in item
+        and "newcomer_training/api.py:7" in item
+        for item in violations
+    )
+
+
+def test_foundation_guard_should_accept_declared_composition_root_edges(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src"
+    _write(src / "newcomer_training" / "__init__.py", "")
+    _write(src / "learning" / "__init__.py", "")
+    _write(src / "audio_assessment" / "__init__.py", "")
+    _write(src / "common" / "__init__.py", "")
+    _write(
+        src / "foundation_composition.py",
+        """
+from newcomer_training.application import PathEnrollmentService
+from learning.models import LearningUnit
+from audio_assessment.storage import LocalAudioStorage
+from common.db.session import get_db
+
+def build_services(db):
+    return PathEnrollmentService(db), LearningUnit, LocalAudioStorage, get_db
+""",
+    )
+    policy_path = tmp_path / "foundation-policy.yaml"
+    _write_policy(policy_path, _foundation_policy())
+
+    assert (
+        validate_foundation_repository(src_root=src, policy_path=policy_path) == []
+    )
+
+
+def test_foundation_guard_should_reject_undeclared_composition_root_target(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src"
+    _write(src / "newcomer_training" / "__init__.py", "")
+    _write(src / "learning" / "__init__.py", "")
+    _write(src / "audio_assessment" / "__init__.py", "")
+    _write(src / "common" / "__init__.py", "")
+    _write(src / "foundation_composition.py", "from readiness.models import ReadinessDossier\n")
+    _write(src / "readiness" / "models.py", "class ReadinessDossier: ...\n")
+    policy = _foundation_policy()
+    module_paths = policy["module_paths"]
+    assert isinstance(module_paths, dict)
+    module_paths["readiness"] = ["readiness"]
+    policy_path = tmp_path / "foundation-policy.yaml"
+    _write_policy(policy_path, policy)
+
+    violations = validate_foundation_repository(
+        src_root=src,
+        policy_path=policy_path,
+    )
+
+    assert any("ARCH_COMPOSITION_ROOT_EDGE_UNDECLARED" in item for item in violations)
+
+
+@pytest.mark.parametrize(
+    ("root_source", "expected_code"),
+    [
+        (
+            """
+async def mutate_business_state(db, entity):
+    db.add(entity)
+    await db.commit()
+""",
+            "ARCH_COMPOSITION_ROOT_BUSINESS_MUTATION_FORBIDDEN",
+        ),
+        (
+            """
+def locate_service(service_name):
+    return globals()[service_name]
+""",
+            "ARCH_COMPOSITION_ROOT_SERVICE_LOCATOR_FORBIDDEN",
+        ),
+    ],
+)
+def test_foundation_guard_should_reject_composition_root_runtime_behavior(
+    tmp_path: Path,
+    root_source: str,
+    expected_code: str,
+) -> None:
+    src = tmp_path / "src"
+    _write(src / "newcomer_training" / "__init__.py", "")
+    _write(src / "learning" / "__init__.py", "")
+    _write(src / "audio_assessment" / "__init__.py", "")
+    _write(src / "common" / "__init__.py", "")
+    _write(src / "foundation_composition.py", root_source)
+    policy_path = tmp_path / "foundation-policy.yaml"
+    _write_policy(policy_path, _foundation_policy())
+
+    violations = validate_foundation_repository(
+        src_root=src,
+        policy_path=policy_path,
+    )
+
+    assert any(expected_code in item for item in violations)

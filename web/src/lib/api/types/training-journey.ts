@@ -66,7 +66,7 @@ export type TrainingJourneyRoleCapabilityKey =
 export interface TrainingJourneyRoleCapability {
     capability_key: TrainingJourneyRoleCapabilityKey;
     allowed: boolean;
-    scope: "own" | "department" | "global" | "none";
+    scope: "own" | "team" | "global" | "none";
     reason_code?: string | null;
 }
 
@@ -249,7 +249,11 @@ export interface TrainingJourneyResponse {
     journey_id: string;
     learner_id: string;
     learner_name?: string | null;
-    department?: string | null;
+    team?: {
+        team_id: string;
+        code: string;
+        name: string;
+    } | null;
     path_key: "newcomer_training_path_v1";
     path_revision_id: string;
     path_revision_no: number;
@@ -301,7 +305,7 @@ export type ReadinessWorkbenchGroupKey =
 export interface ReadinessDossierLearner {
     learner_id: string;
     name: string | null;
-    department: string | null;
+    team: { team_id: string; code: string; name: string } | null;
 }
 
 export interface ReadinessDossierPath {
@@ -509,7 +513,6 @@ export interface ReadinessWorkbenchResponse {
     groups: Record<ReadinessWorkbenchGroupKey, ReadinessWorkbenchGroup>;
     summary: ReadinessWorkbenchSummary;
     filters: {
-        department: string | null;
         limit: number;
         offset: number;
     };
@@ -594,156 +597,4 @@ export interface RealtimeRoleplayStartResponse {
     runtime_registry: RealtimeRoleplayRuntimeRegistrySnapshot;
     provider_readiness_snapshot: RealtimeRoleplayProviderReadinessSnapshot;
     external_binding: RealtimeRoleplayExternalBindingSnapshot;
-}
-
-export interface TrainingJourneyListQuery {
-    department?: string;
-    training_stage?: TrainingJourneyStage;
-    module_key?: string;
-    learner_level?: string;
-    role_level?: string;
-    limit?: number;
-    offset?: number;
-}
-
-export interface TrainingJourneyListResponse {
-    items: TrainingJourneyResponse[];
-    total: number;
-    limit: number;
-    offset: number;
-}
-
-export interface TrainingJourneyAnalyticsQuery {
-    department?: string;
-    training_stage?: TrainingJourneyStage;
-    module_key?: string;
-    learner_level?: string;
-    role_level?: string;
-    limit?: number;
-}
-
-export interface TrainingJourneyAnalyticsSummary {
-    learner_count: number;
-    loaded_learner_count: number;
-    passed_learner_count: number;
-    risk_learner_count: number;
-    pass_rate: number | null;
-}
-
-export interface TrainingJourneyAnalyticsFunnelEntry {
-    stage: TrainingJourneyStage;
-    learner_count: number;
-    rate: number | null;
-}
-
-export interface TrainingJourneyAnalyticsModuleSummary {
-    module_key: string;
-    title: string;
-    kind?: TrainingJourneyModuleKind | TrainingJourneyModuleType | string | null;
-    module_type?: TrainingJourneyModuleType | string | null;
-    learner_count: number;
-    passed_count: number;
-    failed_count: number;
-    status_counts: Record<string, number>;
-    pass_rate: number | null;
-    average_score?: number | null;
-}
-
-export interface TrainingJourneyAnalyticsLearningTopicSummary {
-    topic_key: string;
-    source_module_key?: string | null;
-    title: string;
-    learner_count: number;
-    completed_count: number;
-    needs_remediation_count: number;
-    status_counts: Record<string, number>;
-    completion_rate: number | null;
-    average_unit_score?: number | null;
-    blocking_required_path: boolean;
-}
-
-export interface TrainingJourneyAnalyticsWeaknessHeatmapEntry {
-    heatmap_key: string;
-    module_key: string;
-    title: string;
-    kind?: TrainingJourneyModuleKind | TrainingJourneyModuleType | string | null;
-    module_type?: TrainingJourneyModuleType | string | null;
-    learner_count: number;
-    risk_count: number;
-    passed_count: number;
-    status_counts: Record<string, number>;
-    risk_rate: number | null;
-    pass_rate: number | null;
-    average_score?: number | null;
-}
-
-export interface TrainingJourneyAnalyticsTrendPoint {
-    date: string;
-    outcome_count: number;
-    passed_outcome_count: number;
-    risk_outcome_count: number;
-    active_learner_count: number;
-    pass_rate: number | null;
-    average_score?: number | null;
-}
-
-export interface TrainingJourneyAnalyticsLevelSummary {
-    key: string;
-    label: string;
-    learner_count: number;
-    passed_count?: number;
-    pass_rate?: number | null;
-    source?: TrainingJourneyLearnerLevelSource | string | null;
-}
-
-export interface TrainingJourneyAnalyticsRiskLearner {
-    learner_id: string;
-    learner_name?: string | null;
-    department?: string | null;
-    training_stage: TrainingJourneyStage;
-    risk_reasons: string[];
-    risk_module_count: number;
-    risk_module_keys?: string[];
-}
-
-export interface TrainingJourneyRoleplayObservationAggregate {
-    status?: string | null;
-    total_session_count?: number | null;
-    observed_session_count?: number | null;
-    legacy_fallback_session_count?: number | null;
-    not_persisted_session_count?: number | null;
-    manual_review_session_count?: number | null;
-    llm_disabled_session_count?: number | null;
-    llm_timeout_session_count?: number | null;
-    observation_count?: number | null;
-    signal_count?: number | null;
-    source_counts?: Record<string, number> | null;
-    status_counts?: Record<string, number> | null;
-    generated_at?: string | null;
-    fallback_applied?: boolean;
-    fallback_reason?: string | null;
-    readonly [key: string]: unknown;
-}
-
-export interface TrainingJourneyAnalyticsResponse {
-    generated_at: string;
-    summary: TrainingJourneyAnalyticsSummary;
-    funnel: TrainingJourneyAnalyticsFunnelEntry[];
-    module_summaries: TrainingJourneyAnalyticsModuleSummary[];
-    learning_topic_summaries?: TrainingJourneyAnalyticsLearningTopicSummary[];
-    weakness_heatmap: TrainingJourneyAnalyticsWeaknessHeatmapEntry[];
-    trend_data: TrainingJourneyAnalyticsTrendPoint[];
-    learner_level_summaries: TrainingJourneyAnalyticsLevelSummary[];
-    role_level_summaries: TrainingJourneyAnalyticsLevelSummary[];
-    risk_learners: TrainingJourneyAnalyticsRiskLearner[];
-    additive_observation?: TrainingJourneyRoleplayObservationAggregate | null;
-    roleplay_observation_aggregate?: TrainingJourneyRoleplayObservationAggregate | null;
-    filters: {
-        department?: string | null;
-        training_stage?: TrainingJourneyStage | null;
-        module_key?: string | null;
-        learner_level?: string | null;
-        role_level?: string | null;
-        limit: number;
-    };
 }

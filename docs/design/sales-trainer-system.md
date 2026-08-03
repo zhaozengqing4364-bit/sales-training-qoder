@@ -1,8 +1,10 @@
 # 石犀销售训练 MVP — 设计方案 v4
 
-> 状态：P0/P1 基础闭环已实现；2026-05-28 已按后台架构重设计完成“销售训练”一级业务域、销售训练专属题库、录音评分标准路由、COS/OSS 浏览器直传优先路径、配置健康页和操作记录闭环；培训负责人/团队范围按 `SALES_TRAINER_MANAGER_ROLES` + `users.department` 落地；录音文件识别已接入 DashScope Paraformer + COS/HTTP URL 路径；真实 COS + DashScope 文件识别 + Deucate 评分端到端 smoke 已通过  
-> 最后更新：2026-05-28  
+> 状态：P0/P1 基础闭环已实现；2026-07-15 起培训负责人使用 `training_manager` 角色，人员范围只由显式 Team leader/membership 关系决定，`User.department` 已退役；录音文件识别已接入 DashScope Paraformer + COS/HTTP URL 路径；真实 COS + DashScope 文件识别 + Deucate 评分端到端 smoke 已通过
+> 最后更新：2026-07-15
 > 目标：先落地基础训练闭环，不做完整客户模拟系统。
+
+> Migration 口径：本文 2026-05-27/28 的 `070`—`072` 记录是首发前问题与验证历史。自 2026-07-15 起，这些 revision 已只读归档，最终结构由活动首发基线 `20260715_0000_001` 从空 PostgreSQL 一次建立；不得把下文的旧 revision 号理解为当前 Alembic head 或现行升级入口。
 
 ---
 
@@ -86,7 +88,7 @@
 | `deucate.model_config` | Deucate 调用参数 | 由部署环境配置 | Deucate 评分客户端 | 模型配置 | provider/model 必填 | admin | 配置非法则评分失败并记录 |
 | `quiz.enabled_question_types` | 做题模块启用题型 | 当前题库可支持的题型 | 做题服务 | 后台配置 | 只能包含受支持类型 | admin | 不支持题型不展示 |
 | `quiz.pass_threshold` | 做题通过线 | 不配置则仅返回分数不判通过 | 做题服务 | 后台训练单元配置 | 非负数字 | admin/培训负责人 | 非法则拒绝保存/发布 |
-| `sales_trainer.manager_roles` | 配置销售训练培训负责人角色 | `support` | 销售训练权限模块 | 环境配置或系统配置 | 逗号分隔角色列表 | admin | 缺失时使用 `support`，团队范围按 `users.department` 过滤 |
+| `sales_trainer.manager_roles` | 配置销售训练培训负责人角色 | `training_manager` | 销售训练权限模块 | 环境配置或系统配置 | 只接受受信任的培训负责人角色 | admin | 缺失时使用 `training_manager`；对象范围由 Team policy fail closed |
 
 ### 2.4 当前无法确认的信息
 
@@ -281,8 +283,8 @@ SalesTrainerQuizService
 
 - [x] 已实现音频提交记录、元数据、状态、转写和最新评分结果查询。
 - [x] 已实现 `source_page` 上传来源页面留存；multipart 上传页面写入 `sales_trainer_audio_upload`，对象存储注册接口也支持可选来源。
-- [x] 已实现学员端/管理端授权播放与下载 URL；后端验证 owner/admin/同部门培训负责人后，本地文件返回 `FileResponse`，OSS 文件返回短期签名 URL 重定向。
-- [x] P0 权限已覆盖 admin、本人和培训负责人团队范围；培训负责人角色默认 `support`，可通过 `SALES_TRAINER_MANAGER_ROLES` 配置，团队范围按 `users.department` 过滤。
+- [x] 已实现学员端/管理端授权播放与下载 URL；后端验证 owner、平台管理员或负责该显式 Team 的培训负责人后，本地文件返回 `FileResponse`，对象存储文件返回短期签名 URL 重定向。
+- [x] P0 权限已覆盖 admin、本人和培训负责人 Team 范围；培训负责人角色为 `training_manager`，缺少有效 leader/membership 关系时 fail closed。
 
 #### AI 评分结果留存
 
@@ -726,7 +728,7 @@ web/src/app/admin/sales-trainer/
 
 - [x] P0 已实现本人数据访问边界：学员只能看自己的音频/做题记录。
 - [x] P0 已实现 admin 后台访问边界。
-- [x] 已实现“培训负责人”角色和团队范围读取：默认 `support` 为销售训练培训负责人，`SALES_TRAINER_MANAGER_ROLES` 可调整角色列表；后台音频、评分结果、操作日志按 `users.department` 限定同部门范围，无部门时不放大全局权限。
+- [x] 已实现“培训负责人”角色和团队范围读取：`training_manager` 只通过当前有效的 `TeamLeaderAssignment` 取得 Team，再通过 `TeamMembership` 取得学员范围；后台音频、评分结果和 Journey 共用对象级 Team policy。
 
 ### 8.2 留存策略
 
@@ -804,7 +806,7 @@ P0 的验收闭环：
 | 6 API 设计 | 路由函数返回类型标注为 `dict | JSONResponse`，FastAPI 导入时尝试生成无效 response field。 | 移除路由函数上的联合返回类型标注，保留运行时返回结构。 |
 | 3.1 做题模块 | 判断题用 `bool(answer_payload)` 判分会把字符串 `"false"` 错判为真。 | 新增严格布尔解析，支持 `true/false`、`1/0`、`对/错`。 |
 | 3.3 Deucate 评分模块 | 非 JSON 返回未按设计重试。 | Deucate 返回 `[DEUCATE_RESPONSE_INVALID]` 时重试 1 次。 |
-| 4 数据库设计 | 新增 migration 后 Alembic head 测试仍期望旧 head。 | 将 migration graph 测试期望更新为当前单一 head；最新为 `20260528_1600_072`。 |
+| 4 数据库设计 | 当时新增 migration 后 Alembic head 测试仍期望旧 head。 | 2026-05-28 当时把测试更新到 `20260528_1600_072`；该 revision 现已归档，当前活动 head 为首发基线 `20260715_0000_001`。 |
 | 10 分期交付 | 只跑销售训练小范围测试时，仓库全局 coverage 阈值按全项目统计，功能断言 8 个全过但 coverage 总值 31% 低于 48%。 | 对本次变更使用 `--no-cov` 复跑范围测试作为功能验证；全量 coverage 应在全仓测试或 CI 中评估。 |
 | 3.1 做题模块 | `question_type_unsupported` 未落地，声明为客观题但缺结构时会静默降级为 `short_answer`。 | 新增 `QuestionBankAdapter.unsupported_reason()`，后台创建/发布 quiz 单元时阻断并写 `question_type_unsupported` 操作记录。 |
 | 3.2 录音上传原子能力 | 前端已拼接授权文件 URL，但后端缺少 `/file` 文件读取接口，播放/下载无法闭环。 | 新增学员端和管理端音频文件访问接口；owner/admin 授权后本地返回文件，OSS 返回短期签名 URL。 |
@@ -818,8 +820,8 @@ P0 的验收闭环：
 | 7 前端页面 | 全量 `npm run lint` 仍存在非 sales-trainer 范围的 `web/src/app/(user)/practice/[sessionId]/page.tsx` React Compiler memoization error。 | 本次未改 practice 页；已用 sales-trainer 目标路径 ESLint、TypeScript 和专项测试验证本次交付范围。该全局 lint 残留需另行修复。 |
 | 3.4 后台留存模块 | 设计要求音频留存“上传来源页面”，API 契约也有 `source_page`，但模型、迁移、schema 和前端上传链路未保存该字段。 | 新增 `sales_trainer_audio_submissions.source_page`，multipart 上传和注册接口均支持来源页面；学员录音上传页提交 `sales_trainer_audio_upload`，管理端列表/详情展示来源。 |
 | 3.4 AI 评分结果留存 | 设计要求保存“转写文本快照”，API 契约也有 `transcript_snapshot`，但评分结果表未保存当次评分文本。 | 新增 `sales_trainer_audio_score_results.transcript_snapshot`，评分成功或失败记录均保存调用 Deucate 时使用的转写文本，并在 API 返回。 |
-| 8.1 权限 | 培训负责人团队范围初版查询 AI 评分结果时未 join `users` 表，却按 `User.department` 过滤，团队范围查询会生成无效 SQL。 | `list_score_results()` 在团队范围过滤时显式 join `SalesTrainerAudioSubmission -> User`，回归测试覆盖同部门可见、跨部门不可见。 |
-| 8.1 权限 | 培训负责人访问跨部门音频详情时，服务层抛出 `[ACCESS_DENIED]`，但详情接口未捕获，导致全局异常而不是统一错误响应。 | `admin_get_audio_submission` 捕获 `AudioSubmissionServiceError` 并返回统一错误包，跨部门详情访问稳定返回 403。 |
+| 8.1 权限 | 旧实现曾按 `User.department` 过滤评分结果，既可能生成错误 SQL，也形成第二套授权权威。 | 首发契约移除 `User.department`；列表和详情统一接收 `TeamDataScope`，覆盖本 Team 可见、跨 Team 隐藏、无关系 fail closed。 |
+| 8.1 权限 | 培训负责人访问跨 Team 音频详情时，服务层拒绝需要稳定映射为对象级不可见。 | 详情接口统一执行 Team scope 并返回不存在语义，避免泄露对象是否存在；回归测试覆盖跨 Team 访问。 |
 | 7 前端页面 | `/admin` 布局只允许 `admin`，导致已授权的培训负责人 `support` 无法进入销售训练管理页。 | 服务端布局允许 `admin/support` 进入；客户端 `AdminShell` 将 `support` 限定到 `/admin/sales-trainer/**`，侧边栏只展示销售训练入口。 |
 | 7 前端页面 | 前端测试发现 `admin-sidebar.tsx` 中误用了 Python 风格的命名参数语法 `*, expanded`，导致 TypeScript 解析失败。 | 改为 TypeScript options 参数 `{ expanded?: boolean }`，相关布局测试和 ESLint 通过。 |
 | 12.2 验证方式 | 当前沙箱中 `UV_CACHE_DIR=/private/tmp/uv-cache uv run pytest ...` 触发 uv 的 macOS `system-configuration` panic，无法作为测试证据。 | 改用仓库已有 `backend/.venv/bin/python -m pytest ...` 跑同一组后端专项测试，取得 14 passed 的可复现验证结果。 |
@@ -934,7 +936,7 @@ P0 的验收闭环：
 - 修复状态：已修复。
 - 回归验证结果：`npx vitest run 'src/lib/api/sales-trainer.test.ts' 'src/app/(dashboard)/sales-trainer/audio/[unitId]/page.test.tsx'` 通过，2 files passed，8 tests passed；`npx eslint 'src/lib/api/sales-trainer.test.ts' 'src/app/(dashboard)/sales-trainer/audio/[unitId]/page.test.tsx'` 通过。
 
-#### 问题：本地后端数据库未升级到销售训练题库 scope migration
+#### 历史问题（2026-05-28）：本地后端数据库未升级到销售训练题库 scope migration
 
 - 发现时间：2026-05-28 17:42:11 CST
 - 复现入口：`http://localhost:3445/admin/sales-trainer/questions/categories`
@@ -942,9 +944,9 @@ P0 的验收闭环：
 - 期望结果：分类页展示 `sales_trainer` 范围分类，默认分类可用于新建题目。
 - 实际结果：页面提示“销售训练题目分类读取失败”，新建题目页分类下拉无可用分类。
 - 严重程度：阻塞级。分类读取失败会阻断销售训练题库新建题目和训练单元绑定流程。
-- 根因判断：当前 3444 后端连接的本地数据库 Alembic 版本停留在 `20260528_1500_071`，尚未应用 `20260528_1600_072_sales_trainer_question_scope.py`，真实运行库缺少 `question_categories.usage_scope` / `question_items.usage_scope` 及默认销售训练分类。
-- 修复方案：对当前本地后端库执行 `./.venv/bin/alembic upgrade head`，应用 `20260528_1600_072` 迁移。
-- 修复状态：已修复本地运行库；代码层已有 Alembic 单一 head 与 scope migration 专项测试覆盖。
+- 当时根因：3444 后端连接的本地数据库 Alembic 版本停留在 `20260528_1500_071`，尚未应用 `20260528_1600_072_sales_trainer_question_scope.py`，运行库缺少 `question_categories.usage_scope` / `question_items.usage_scope` 及默认销售训练分类。
+- 当时修复：对该本地库执行 `./.venv/bin/alembic upgrade head` 并应用 `20260528_1600_072`。首发基线切换后，旧开发库不再原地升级，必须按 launch reset runbook 从空库重建到 `20260715_0000_001`。
+- 修复状态：历史问题已关闭；当前由首发 baseline、单一 head 与 schema parity 测试覆盖。
 - 回归验证结果：浏览器刷新分类页后展示“销售训练题库”和“Goal验收分类”，无错误提示；随后创建 `Goal验收单选题` 并发布成功。
 
 #### 问题：未配置做题通过线时满分结果显示为“未通过”
@@ -978,11 +980,11 @@ P0 的验收闭环：
 - 发现时间：2026-05-28 18:17:20 CST
 - 复现入口：`http://localhost:3445/admin/sales-trainer/audio-submissions`
 - 复现步骤：完成一次录音上传、转写、评分后，进入后台“学员录音”列表。
-- 期望结果：业务人员能直接看到学员姓名、邮箱或部门，并保留 `user_id` 作为审计标识。
+- 期望结果：业务人员能直接看到学员姓名、邮箱和当前显式 Team，并保留 `user_id` 作为审计标识。
 - 实际结果：“用户”列只显示裸 `user_id` UUID，业务人员需要额外查用户表才能知道是谁上传。
 - 严重程度：一般级。功能可用但不够好用，影响后台查询和运营排查效率。
 - 根因判断：`AudioSubmissionResponse` 只返回稳定外键 `user_id`，前端也直接渲染该字段，缺少面向后台人员的用户摘要字段。
-- 修复方案：后端录音提交响应兼容增加 `user_name`、`user_email`、`user_department`；前端列表和详情页优先显示姓名/邮箱/部门，并保留 `user_id` 小字审计。
+- 修复方案：后端录音提交响应提供 `user_name`、`user_email` 与 Team 摘要；前端列表和详情页优先显示业务身份与 Team，并保留 `user_id` 小字审计，不再返回 `user_department`。
 - 修复状态：已修复。
 - 回归验证结果：浏览器刷新 `http://localhost:3445/admin/sales-trainer/audio-submissions` 后用户列显示 `Developer · dev@example.com`，下方保留 `user_id`；`./.venv/bin/python -m pytest tests/integration/test_sales_trainer_api.py --no-cov` 通过，9 passed，1 warning；`npx eslint 'src/app/admin/sales-trainer/audio-submissions/page.tsx' 'src/app/admin/sales-trainer/audio-submissions/[submissionId]/page.tsx' 'src/lib/api/types.ts'` 通过；`npx tsc --noEmit --pretty false` 通过。
 

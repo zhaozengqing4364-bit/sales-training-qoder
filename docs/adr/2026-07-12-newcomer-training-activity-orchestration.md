@@ -1,13 +1,14 @@
 # ADR：新人训练采用活动编排与不可变发布修订
 
 - 日期：2026-07-12
-- 状态：Accepted
+- 状态：Superseded（2026-07-16；仅保留为当前 Legacy 实现决策记录）
+- 取代者：[`2026-07-16-newcomer-foundation-product-boundary.md`](./2026-07-16-newcomer-foundation-product-boundary.md)、[`2026-07-16-newcomer-foundation-domain-and-modules.md`](./2026-07-16-newcomer-foundation-domain-and-modules.md)
 
 ## 决策
 
 新人训练使用模块化单体内的独立领域模块，聚合结构固定为 `TrainingPath → Phase → Module → Activity`。活动能力采用六类封闭 Handler/Renderer 注册表；标题、产品、课程和材料全部配置化。
 
-路径草稿可编辑，发布 revision 不可变。学员首次进入创建 enrollment 并固定 revision；所有 attempt 与外部会话冻结活动和资源快照。
+路径草稿可编辑，发布 revision 不可变。学员首次进入创建 enrollment；enrollment 的发布切换语义由 [ADR 2026-07-13](./2026-07-13-newcomer-training-live-enrollment-rollout.md) 取代。所有 attempt 与外部会话继续冻结活动和资源快照。实时对练在路径草稿保存时额外冻结模板版本、内容哈希、运行配置哈希和学员准备信息；发布或启动时发现绑定漂移必须显式阻断，禁止静默读取可变的当前配置。
 
 管理端采用左侧大纲、中间单对象编辑、右侧预览校验的聚焦编辑器。缺少内容、试卷、材料或评分标准时在当前抽屉内创建、发布并绑定。
 
@@ -21,13 +22,14 @@
 - 后端执行器按封闭类型分派，未知类型拒绝。
 - 权限、对象范围、幂等、审计、并发和资源发布状态在服务端验证。
 - AI/StepAudio 参数集中治理，可追踪、可降级，密钥不进入业务数据。
+- 浏览器重试同一逻辑写入必须复用幂等 token；响应丢失不能变成第二次提交或第二个实时会话。
 
 ## 被拒绝方案
 
 - V1/V2 双轨：原型未发布，双轨只会制造第二套真相。
 - 固定产品模块枚举：无法实现无代码扩展。
 - 通用脚本活动：扩大远程代码执行和治理风险。
-- 学员永远读取最新路径：会破坏成绩与证据的历史解释。
+- 学员永远读取最新路径且同时改写历史 attempt：会破坏成绩与证据的历史解释。
 
 ## 后果
 

@@ -694,7 +694,7 @@ class TestAnalyticsContract:
             assert data.get("score_basis") == "session_evidence_projection_evaluable_only"
             assert isinstance(data.get("weekly_summary", {}), dict)
             assert isinstance(data.get("cohort_issue_buckets", []), list)
-            assert isinstance(data.get("department_issue_buckets", []), list)
+            assert isinstance(data.get("team_issue_buckets", []), list)
             assert isinstance(data.get("repeated_blocker_families", []), list)
             assert isinstance(data.get("degradation_breakdown", {}), dict)
             weekly_summary = data.get("weekly_summary", {})

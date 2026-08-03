@@ -7,7 +7,7 @@ import { BookOpen, Plus, RefreshCcw } from "lucide-react";
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { LearningContentIndexTable } from "@/components/admin/learning-contents/learning-content-index-table";
 import { api } from "@/lib/api/client";
-import type { LearningContent } from "@/lib/api/types";
+import type { LearningContentSummary } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -15,12 +15,12 @@ import { debug } from "@/lib/debug";
 
 export default function AdminLearningContentsPage() {
     const router = useRouter();
-    const [items, setItems] = useState<LearningContent[]>([]);
+    const [items, setItems] = useState<LearningContentSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
-    const [deleteTarget, setDeleteTarget] = useState<LearningContent | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<LearningContentSummary | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
     const loadData = async () => {

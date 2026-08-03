@@ -19,6 +19,8 @@ const LOOPBACK_HOST_FALLBACK_MAP: Record<string, string> = {
 };
 
 const DEFAULT_API_BASE_URL = 'http://localhost:3444/api/v1';
+const CSRF_COOKIE_NAME = 'app_csrf';
+const CSRF_HEADER_NAME = 'X-CSRF-Token';
 
 type TelemetryEventType = 'custom' | 'error' | 'performance';
 
@@ -94,13 +96,47 @@ function getLoopbackFallbackUrl(url: string): string | null {
     }
 }
 
+function readCookie(name: string): string | null {
+    if (typeof document === 'undefined') return null;
+    const prefix = `${encodeURIComponent(name)}=`;
+    const entry = document.cookie
+        .split(';')
+        .map((value) => value.trim())
+        .find((value) => value.startsWith(prefix));
+    if (!entry) return null;
+    const value = entry.slice(prefix.length);
+    try {
+        return decodeURIComponent(value);
+    } catch {
+        return value;
+    }
+}
+
+function isSameOriginTarget(targetUrl: string): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+        return new URL(targetUrl, window.location.href).origin === window.location.origin;
+    } catch {
+        return false;
+    }
+}
+
+function csrfTokenFor(targetUrl: string): string | null {
+    if (!isSameOriginTarget(targetUrl)) return null;
+    return readCookie(CSRF_COOKIE_NAME);
+}
+
 async function fetchTelemetry(targetUrl: string, body: string): Promise<void> {
+    const headers = new Headers({ 'Content-Type': 'application/json' });
+    const csrfToken = csrfTokenFor(targetUrl);
+    if (csrfToken) headers.set(CSRF_HEADER_NAME, csrfToken);
     try {
         await fetch(targetUrl, {
             method: 'POST',
             body,
             keepalive: true,
-            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            headers,
         });
     } catch (error) {
         if (!(error instanceof TypeError)) {
@@ -116,7 +152,8 @@ async function fetchTelemetry(targetUrl: string, body: string): Promise<void> {
             method: 'POST',
             body,
             keepalive: true,
-            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            headers,
         });
     }
 }
@@ -128,7 +165,14 @@ export function postTelemetryEvent(eventType: TelemetryEventType, body: string):
     }
 
     const beaconBody = new Blob([body], { type: 'application/json' });
-    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+    // Cookie-authenticated same-origin writes require the double-submit CSRF
+    // header, which sendBeacon cannot attach. Use keepalive fetch in that case.
+    if (
+        isSameOriginTarget(targetUrl)
+        && !csrfTokenFor(targetUrl)
+        && typeof navigator !== 'undefined'
+        && typeof navigator.sendBeacon === 'function'
+    ) {
         const accepted = navigator.sendBeacon(targetUrl, beaconBody);
         if (accepted) {
             return;

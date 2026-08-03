@@ -3,6 +3,16 @@
 > Executable Gate 6 contract for consumer-proven compatibility deletion, closed runtime factories,
 > root-only cross-domain composition, and evidence-backed retention.
 
+> **Newcomer target status (2026-07-16):** existing Gate 6 retention rules remain current runtime truth. New foundation migration follows `docs/architecture/newcomer-foundation-clean-cut.md`; Slice 0 performs no deletion.
+
+## Newcomer Foundation Clean-Cut Addendum
+
+- Each slice establishes and verifies one new writer, then removes the corresponding Legacy writer in that slice. Permanent dual-write, dual-read, forwarding API facade, and unbounded flags are forbidden.
+- A temporary read-only comparison needs owner, exact consumers, `retire_when`, expiry, metrics, and a deletion test; it cannot write or repair business data.
+- Phase/Module payloads, realtime newcomer registration, automatic Enrollment rollout, subtype routes, the v1 seed, direct Provider calls, and duplicate frontend entrances are migration inventory—not retained target surfaces.
+- Historical data may use a named read-only Legacy Adapter only when the migration matrix records audit value. Development-only data is rebuilt through guarded launch reset.
+- Root composition explicitly registers five target ActivityRuntime adapters and AI/Task adapters; target domain modules never import current `sales_trainer` concrete implementations.
+
 ## 1. Scope / Trigger
 
 Apply this contract when a change:

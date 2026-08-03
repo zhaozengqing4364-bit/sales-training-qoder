@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "冻结模块边界"}
+{"file": ".trellis/spec/backend/compatibility-retirement-and-root-composition.md", "reason": "定义 Legacy 退役"}
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "保持 OpenAPI 与合同真值"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "保证 inventory 只读安全"}
+{"file": ".trellis/tasks/07-19-newcomer-training-content-authoring-closure/research/current-state-gap.md", "reason": "合同更正的事实基线"}

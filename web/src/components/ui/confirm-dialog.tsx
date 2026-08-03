@@ -22,7 +22,9 @@ interface ConfirmDialogProps {
     variant?: "danger" | "warning" | "default";
     onConfirm: () => void;
     isLoading?: boolean;
+    confirmDisabled?: boolean;
     icon?: ReactNode;
+    children?: ReactNode;
 }
 
 export function ConfirmDialog({
@@ -35,7 +37,9 @@ export function ConfirmDialog({
     variant = "default",
     onConfirm,
     isLoading = false,
+    confirmDisabled = false,
     icon,
+    children,
 }: ConfirmDialogProps) {
     const variantStyles = {
         danger: "bg-red-600 hover:bg-red-700 text-white",
@@ -63,6 +67,7 @@ export function ConfirmDialog({
                         </div>
                     </div>
                 </DialogHeader>
+                {children}
                 <DialogFooter className="mt-4">
                     <Button
                         variant="ghost"
@@ -77,7 +82,7 @@ export function ConfirmDialog({
                         onClick={() => {
                             onConfirm();
                         }}
-                        disabled={isLoading}
+                        disabled={isLoading || confirmDisabled}
                     >
                         {isLoading ? "处理中..." : confirmText}
                     </Button>

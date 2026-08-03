@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowRight, BookOpenCheck, Eye, EyeOff, Loader2 } from "lucide-react";
 
-import { api, getApiErrorMessage } from "@/lib/api/client";
+import { ApiRequestError, api, getApiErrorMessage } from "@/lib/api/client";
 import { REMEMBER_EMAIL_STORAGE_KEY } from "@/lib/auth/clear-client-auth-state";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -81,17 +81,32 @@ function getAuthErrorMessageFromLocation(): string {
     return AUTH_ERROR_MESSAGE_MAP[authError] || "登录失败，请稍后重试。";
 }
 
+function isUnconfirmedPasswordChange(error: unknown): boolean {
+    if (error instanceof ApiRequestError) {
+        return error.errorCode === "[REQUEST_TIMEOUT]" || error.errorCode === "[NETWORK_ERROR]";
+    }
+    const message = error instanceof Error ? error.message : "";
+    return /超时|network|failed to fetch/i.test(message);
+}
+
+function routeAfterLogin(role: string | undefined): string {
+    return role?.trim().toLowerCase() === "training_manager" ? "/team" : "/";
+}
+
 export default function LoginPage() {
     const router = useRouter();
     const toast = useToast();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [requiresPasswordChange, setRequiresPasswordChange] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [rememberEmail, setRememberEmail] = useState(false);
     const [isPasswordLoginLoading, setIsPasswordLoginLoading] = useState(false);
     const [isDevLoginLoading, setIsDevLoginLoading] = useState(false);
     const [error, setError] = useState("");
     const [providerState, setProviderState] = useState<AuthProviderState>(DEFAULT_PROVIDER_STATE);
+    const devLoginInFlight = useRef(false);
     const normalizedEmail = email.trim();
     const forgotPasswordHref = normalizedEmail
         ? `/forgot-password?email=${encodeURIComponent(normalizedEmail)}`
@@ -157,14 +172,53 @@ export default function LoginPage() {
             } else {
                 window.localStorage.removeItem(REMEMBER_EMAIL_STORAGE_KEY);
             }
-            const role = response?.user?.role?.trim().toLowerCase();
-            router.push(role === "training_manager" ? "/team" : "/");
+            if (response.requires_password_change) {
+                setRequiresPasswordChange(true);
+                setPassword("");
+                return;
+            }
+            router.push(routeAfterLogin(response?.user?.role));
         } catch (err: unknown) {
             const message = getApiErrorMessage(err);
             setError(message);
             if (message.includes("超时")) {
                 toast.error("登录超时，请重试");
             }
+        } finally {
+            setIsPasswordLoginLoading(false);
+        }
+    };
+
+    const handleTemporaryPasswordChange = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError("");
+        if (password !== confirmPassword) {
+            setError("两次输入的新密码不一致。");
+            return;
+        }
+        setIsPasswordLoginLoading(true);
+        try {
+            const response = await api.auth.changeTemporaryPassword(password);
+            router.push(routeAfterLogin(response?.user?.role));
+        } catch (err: unknown) {
+            if (isUnconfirmedPasswordChange(err)) {
+                try {
+                    const reconciled = await api.auth.login({
+                        email: normalizedEmail,
+                        password,
+                    });
+                    if (!reconciled.requires_password_change) {
+                        router.push(routeAfterLogin(reconciled?.user?.role));
+                        return;
+                    }
+                } catch {
+                    // The original write may still be pending or may not have reached the server.
+                    // Keep both password fields intact so the user can recover in place.
+                }
+                setError("密码修改结果暂未确认。新密码输入已保留，请再次提交；若仍失败，请刷新后使用刚设置的新密码登录。");
+                return;
+            }
+            setError(getApiErrorMessage(err));
         } finally {
             setIsPasswordLoginLoading(false);
         }
@@ -178,16 +232,20 @@ export default function LoginPage() {
     };
 
     const handleDevLogin = async () => {
-        if (!providerState.devFallback.enabled || !providerState.devFallback.loginUrl) {
+        if (
+            devLoginInFlight.current ||
+            !providerState.devFallback.enabled ||
+            !providerState.devFallback.loginUrl
+        ) {
             return;
         }
 
+        devLoginInFlight.current = true;
         setIsDevLoginLoading(true);
         setError("");
         try {
             const response = await api.auth.devLogin();
-            const role = response?.user?.role?.trim().toLowerCase();
-            router.push(role === "training_manager" ? "/team" : "/");
+            router.push(routeAfterLogin(response?.user?.role));
         } catch (err) {
             const message = getApiErrorMessage(err);
             setError(message);
@@ -195,6 +253,7 @@ export default function LoginPage() {
                 toast.error("登录超时，请重试");
             }
         } finally {
+            devLoginInFlight.current = false;
             setIsDevLoginLoading(false);
         }
     };
@@ -209,10 +268,10 @@ export default function LoginPage() {
             <GlassCard className="w-full max-w-md p-8 md:p-12 animate-in fade-in zoom-in-95 duration-500 border-white/40 shadow-card">
                 <div className="mb-10 text-center">
                     <div className="w-14 h-14 rounded-2xl bg-slate-900 mx-auto flex items-center justify-center text-white text-xl font-bold shadow-xl shadow-slate-900/20 mb-6">
-                        AI
+                        <BookOpenCheck className="h-6 w-6" aria-hidden="true" />
                     </div>
                     <h1 className="text-2xl font-bold text-slate-900 tracking-tight">欢迎回来</h1>
-                    <p className="text-slate-500 mt-2">登录 AI 智能练习平台 开始训练</p>
+                    <p className="text-slate-500 mt-2">登录新人销售训练平台，继续当前训练任务</p>
                 </div>
 
                 <div className="space-y-4">
@@ -264,7 +323,7 @@ export default function LoginPage() {
                         <div className="absolute top-1/2 left-0 w-full border-t border-slate-200 -z-0" />
                     </div>
 
-                    <form method="post" onSubmit={handleLogin} className="space-y-4">
+                    <form method="post" onSubmit={requiresPasswordChange ? handleTemporaryPasswordChange : handleLogin} className="space-y-4">
                         {error && (
                             <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm flex items-center">
                                 <AlertCircle className="w-4 h-4 mr-2" />
@@ -281,25 +340,26 @@ export default function LoginPage() {
                                 className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full px-6"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
+                                disabled={requiresPasswordChange}
                                 required
                             />
                         </div>
                         <div className="space-y-2">
-                            <div className="flex justify-end">
+                            {!requiresPasswordChange && <div className="flex justify-end">
                                 <Link
                                     href={forgotPasswordHref}
                                     className="text-xs text-slate-500 hover:text-slate-900 transition-colors"
                                 >
                                     忘记密码？
                                 </Link>
-                            </div>
-                            <label className="sr-only" htmlFor="login-password">密码</label>
+                            </div>}
+                            <label className="sr-only" htmlFor="login-password">{requiresPasswordChange ? "新密码" : "密码"}</label>
                             <div className="relative">
                                 <Input
                                     id="login-password"
                                     type={showPassword ? "text" : "password"}
-                                    autoComplete="current-password"
-                                    placeholder="••••••••"
+                                    autoComplete={requiresPasswordChange ? "new-password" : "current-password"}
+                                    placeholder={requiresPasswordChange ? "设置新密码" : "••••••••"}
                                     className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full pl-6 pr-14"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
@@ -315,8 +375,20 @@ export default function LoginPage() {
                                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                 </button>
                             </div>
+                            {requiresPasswordChange && (
+                                <Input
+                                    id="confirm-password"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    placeholder="再次输入新密码"
+                                    className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full px-6"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    required
+                                />
+                            )}
                         </div>
-                        <div className="flex items-start gap-3 rounded-2xl border border-slate-200/70 bg-white/50 p-3">
+                        {!requiresPasswordChange && <div className="flex items-start gap-3 rounded-2xl border border-slate-200/70 bg-white/50 p-3">
                             <input
                                 id="remember-email"
                                 type="checkbox"
@@ -327,7 +399,7 @@ export default function LoginPage() {
                             <label htmlFor="remember-email" className="text-sm text-slate-600">
                                 记住邮箱，下次自动填入；登录有效期仍由后端会话配置决定。
                             </label>
-                        </div>
+                        </div>}
                         <Button
                             type="submit"
                             disabled={isPasswordLoginLoading}
@@ -339,7 +411,7 @@ export default function LoginPage() {
                                 </>
                             ) : (
                                 <>
-                                    登录 <ArrowRight className="ml-2 w-4 h-4" />
+                                    {requiresPasswordChange ? "保存新密码并进入" : "登录"} <ArrowRight className="ml-2 w-4 h-4" />
                                 </>
                             )}
                         </Button>

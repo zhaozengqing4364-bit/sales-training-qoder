@@ -21,12 +21,11 @@ def _auth_headers(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _user(db: AsyncSession, *, role: str = "user", department: str | None = "Sales") -> User:
+async def _user(db: AsyncSession, *, role: str = "user") -> User:
     user = User(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"batch_assign_{uuid.uuid4().hex[:10]}",
         name="Batch Assign User",
-        department=department,
         email=f"batch-assign-{uuid.uuid4().hex[:10]}@example.com",
         role=role,
         is_active=True,
@@ -87,12 +86,12 @@ def _payload(template: PracticeTemplate, user_ids: list[str]) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
-async def test_batch_assign_creates_training_task_for_same_department_user(
+async def test_batch_assign_creates_training_task_for_selected_user(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
-    admin = await _user(test_db, role="admin", department="Sales")
-    assignee = await _user(test_db, department="Sales")
+    admin = await _user(test_db, role="admin")
+    assignee = await _user(test_db)
     template = await _template(test_db)
 
     response = await async_client.post(
@@ -137,8 +136,8 @@ async def test_batch_assign_skips_existing_template_assignment_without_duplicate
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
-    admin = await _user(test_db, role="admin", department="Sales")
-    assignee = await _user(test_db, department="Sales")
+    admin = await _user(test_db, role="admin")
+    assignee = await _user(test_db)
     template = await _template(test_db)
     existing = TrainingTask(
         title="已有训练",
@@ -178,12 +177,12 @@ async def test_batch_assign_skips_existing_template_assignment_without_duplicate
 
 
 @pytest.mark.asyncio
-async def test_batch_assign_reports_cross_department_user_as_failed(
+async def test_platform_admin_can_assign_any_selected_user(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
-    admin = await _user(test_db, role="admin", department="Sales")
-    assignee = await _user(test_db, department="Customer Success")
+    admin = await _user(test_db, role="admin")
+    assignee = await _user(test_db)
     template = await _template(test_db)
 
     response = await async_client.post(
@@ -194,10 +193,9 @@ async def test_batch_assign_reports_cross_department_user_as_failed(
 
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["failed_count"] == 1
-    assert data["failed"] == [
-        {"user_id": str(assignee.user_id), "reason": "[DEPARTMENT_SCOPE_VIOLATION]"}
-    ]
+    assert data["assigned_count"] == 1
+    assert data["failed_count"] == 0
+    assert data["assigned"][0]["user_id"] == str(assignee.user_id)
 
 
 @pytest.mark.asyncio
@@ -205,8 +203,8 @@ async def test_batch_assign_reports_unpublished_template_for_each_user(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
-    admin = await _user(test_db, role="admin", department="Sales")
-    assignee = await _user(test_db, department="Sales")
+    admin = await _user(test_db, role="admin")
+    assignee = await _user(test_db)
     template = await _template(test_db, status="draft")
 
     response = await async_client.post(
@@ -226,8 +224,8 @@ async def test_batch_assign_reports_invalid_template_id_for_each_user(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
-    admin = await _user(test_db, role="admin", department="Sales")
-    assignee = await _user(test_db, department="Sales")
+    admin = await _user(test_db, role="admin")
+    assignee = await _user(test_db)
     payload = {
         "user_ids": [str(assignee.user_id)],
         "template_id": "not-a-template-id",
@@ -254,8 +252,8 @@ async def test_batch_assign_reports_invalid_curriculum_plan(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
-    admin = await _user(test_db, role="admin", department="Sales")
-    assignee = await _user(test_db, department="Sales")
+    admin = await _user(test_db, role="admin")
+    assignee = await _user(test_db)
     template = await _template(test_db, curriculum_plan={"name": "缺少阶段", "stages": []})
 
     response = await async_client.post(
@@ -271,12 +269,14 @@ async def test_batch_assign_reports_invalid_curriculum_plan(
 
 
 @pytest.mark.asyncio
-async def test_batch_assign_rejects_normal_user_without_management_role(
+@pytest.mark.parametrize("role", ["user", "training_manager"])
+async def test_batch_assign_rejects_non_platform_admin(
     async_client: AsyncClient,
     test_db: AsyncSession,
+    role: str,
 ) -> None:
-    requester = await _user(test_db, role="user", department="Sales")
-    assignee = await _user(test_db, department="Sales")
+    requester = await _user(test_db, role=role)
+    assignee = await _user(test_db)
     template = await _template(test_db)
 
     response = await async_client.post(
@@ -286,4 +286,5 @@ async def test_batch_assign_rejects_normal_user_without_management_role(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "[ROLE_REQUIRED]"
+    detail = response.json()["detail"]
+    assert detail == "[ROLE_REQUIRED]" or detail.get("error") == "[ROLE_REQUIRED]"

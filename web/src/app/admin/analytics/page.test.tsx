@@ -243,7 +243,7 @@ describe("AnalyticsPage", () => {
                 evaluable_sessions: 0,
                 not_evaluable_sessions: 0,
                 degraded_sessions: 0,
-                active_departments: 0,
+                active_teams: 0,
                 at_risk_users: 0,
                 improving_users: 0,
                 top_issue_family: null,
@@ -252,7 +252,7 @@ describe("AnalyticsPage", () => {
                 top_degraded_reason: null,
             },
             cohort_issue_buckets: [],
-            department_issue_buckets: [],
+            team_issue_buckets: [],
             repeated_blocker_families: [],
             degradation_breakdown: {
                 not_evaluable_reasons: [],
@@ -324,7 +324,7 @@ describe("AnalyticsPage", () => {
                 evaluable_sessions: 7,
                 not_evaluable_sessions: 1,
                 degraded_sessions: 1,
-                active_departments: 2,
+                active_teams: 2,
                 at_risk_users: 4,
                 improving_users: 1,
                 top_issue_family: {
@@ -333,7 +333,7 @@ describe("AnalyticsPage", () => {
                     issue_text: "价值表达还停留在产品功能。",
                     count: 2,
                     user_count: 2,
-                    department_count: 2,
+                    team_count: 2,
                 },
                 top_blocker_family: {
                     issue_family: "value_expression",
@@ -341,7 +341,7 @@ describe("AnalyticsPage", () => {
                     issue_text: "价值表达还停留在产品功能。",
                     count: 2,
                     user_count: 2,
-                    department_count: 2,
+                    team_count: 2,
                 },
                 top_not_evaluable_reason: {
                     reason: "INSUFFICIENT_TURN_DATA",
@@ -359,7 +359,7 @@ describe("AnalyticsPage", () => {
                     issue_text: "价值表达还停留在产品功能。",
                     count: 2,
                     user_count: 2,
-                    department_count: 2,
+                    team_count: 2,
                 },
                 {
                     issue_family: "evidence_gap",
@@ -367,12 +367,12 @@ describe("AnalyticsPage", () => {
                     issue_text: "案例证据还不够扎实。",
                     count: 2,
                     user_count: 1,
-                    department_count: 1,
+                    team_count: 1,
                 },
             ],
-            department_issue_buckets: [
+            team_issue_buckets: [
                 {
-                    department: "North",
+                    team: { team_id: "team-north", code: "north", name: "North" },
                     session_count: 7,
                     evaluable_sessions: 6,
                     not_evaluable_sessions: 1,
@@ -408,7 +408,7 @@ describe("AnalyticsPage", () => {
                     issue_text: "价值表达还停留在产品功能。",
                     count: 2,
                     user_count: 2,
-                    department_count: 2,
+                    team_count: 2,
                 },
             ],
             degradation_breakdown: {
@@ -430,7 +430,7 @@ describe("AnalyticsPage", () => {
                     {
                         user_id: "user-risk",
                         user_name: "South Risk",
-                        department: "South",
+                        team: { team_id: "team-south", code: "south", name: "South" },
                         overall_result: "fail",
                         session_id: "session-risk",
                         session_start_time: "2026-03-25T10:00:00Z",
@@ -441,7 +441,7 @@ describe("AnalyticsPage", () => {
                     {
                         user_id: "user-inactive",
                         user_name: "Inactive User",
-                        department: "North",
+                        team: { team_id: "team-north", code: "north", name: "North" },
                         last_session_at: "2026-03-18T10:00:00Z",
                         inactive_days: 8,
                     },
@@ -450,7 +450,7 @@ describe("AnalyticsPage", () => {
                     {
                         user_id: "user-good",
                         user_name: "Improving User",
-                        department: "North",
+                        team: { team_id: "team-north", code: "north", name: "North" },
                         pass_gain: 100,
                         baseline_pass_rate: 0,
                         current_pass_rate: 100,
@@ -474,7 +474,7 @@ describe("AnalyticsPage", () => {
         expect(screen.getByText(/本周已完成 8 次训练，其中 7 次可评估，1 次证据不足；当前有 4 位风险成员、1 位显著回升成员。/)).toBeTruthy();
         expect(screen.getByText("反复卡点 Top 1")).toBeTruthy();
         expect(screen.getAllByText("价值表达还停留在产品功能。", { exact: false }).length).toBeGreaterThan(0);
-        expect(screen.getByText("部门问题面")).toBeTruthy();
+        expect(screen.getByText("团队问题面")).toBeTruthy();
         expect(screen.getByText("North")).toBeTruthy();
         expect(screen.getByText(/本周 7 次训练 · 6 次可评估 · 1 次证据不足/)).toBeTruthy();
         expect(screen.getByText("ManagerLitePanel:1")).toBeTruthy();
@@ -571,7 +571,7 @@ describe("AnalyticsPage", () => {
                     rank: 1,
                     user_id: "user-1",
                     username: "张三",
-                    department: "销售一部",
+                    team: { team_id: "team-sales-1", code: "sales-1", name: "销售一部" },
                     total_sessions: 8,
                     average_score: 88.6,
                     best_score: 93,
@@ -673,7 +673,7 @@ describe("AnalyticsPage", () => {
                 evaluable_sessions: 7,
                 not_evaluable_sessions: 1,
                 degraded_sessions: 1,
-                active_departments: 2,
+                active_teams: 2,
                 at_risk_users: 1,
                 improving_users: 1,
                 top_issue_family: null,
@@ -682,7 +682,7 @@ describe("AnalyticsPage", () => {
                 top_degraded_reason: null,
             },
             cohort_issue_buckets: [],
-            department_issue_buckets: [],
+            team_issue_buckets: [],
             repeated_blocker_families: [],
             degradation_breakdown: {
                 not_evaluable_reasons: [],
@@ -693,7 +693,7 @@ describe("AnalyticsPage", () => {
                     {
                         user_id: "user-risk",
                         user_name: "South Risk",
-                        department: "South",
+                        team: { team_id: "team-south", code: "south", name: "South" },
                         overall_result: "fail",
                         session_id: "session-risk",
                         session_start_time: "2026-03-25T10:00:00Z",

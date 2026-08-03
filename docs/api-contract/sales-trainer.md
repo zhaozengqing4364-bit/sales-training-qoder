@@ -1,9 +1,10 @@
 # 新人训练活动编排 API 契约
 
-> 状态：已冻结（2026-07-13）
-> 权威模型：`TrainingPath → Phase → Module → Activity`
+> 状态：Superseded / historical only（2026-07-18）
+> 历史模型：`TrainingPath → Phase → Module → Activity`
+> 当前权威：[`newcomer-training-v2.md`](newcomer-training-v2.md)。本文列出的新人 Path、Journey、subtype 写路由与 Realtime 活动已退出运行时注册和 OpenAPI，不得作为可调用合同、恢复依据或新消费者参考。
 
-本文是新人训练路径的当前唯一契约。旧的固定模块键、学习专题矩阵、场景 slug、V1/V2 双轨及前端聚合约定均已废弃。
+本文仅保留迁移历史，便于审计旧数据和解释退役测试。基础训练实现不得从本文复制 Phase/Module、Realtime 首发、自动 Enrollment 迁移或 subtype 写路由；运行时不存在兼容转发或双写。
 
 ## 核心规则
 

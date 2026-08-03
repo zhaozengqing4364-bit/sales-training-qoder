@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "文件与任务验证"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "编辑器和 Runner 验证"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "实际渲染与恢复检查"}
+{"file": ".trellis/tasks/07-19-newcomer-training-content-authoring-closure/execution-policy.md", "reason": "只运行当前任务直接相关的最小验证"}
+{"file": "docs/adr/2026-07-20-foundation-authoring-and-legacy-migration-authority.md", "reason": "核对资源权威与生命周期"}
+{"file": "DESING.md", "reason": "核对实际 UI、状态、可访问和恢复"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "核对跨层类型与安全投影"}

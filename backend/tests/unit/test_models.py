@@ -2,6 +2,7 @@
 Unit tests for database models (T020-T022)
 Tests for User, Scenario, and PracticeSession models
 """
+
 from uuid import uuid4
 
 import pytest
@@ -86,7 +87,6 @@ class TestUserModel:
         user = User(
             wechat_user_id="wechat_123",
             name="Test User",
-            department="Sales",
             email="test@example.com",
         )
         db_session.add(user)
@@ -96,7 +96,7 @@ class TestUserModel:
         assert user.user_id is not None
         assert user.wechat_user_id == "wechat_123"
         assert user.name == "Test User"
-        assert user.department == "Sales"
+        assert "department" not in user.__table__.columns
         assert user.email == "test@example.com"
         assert user.is_active is True
         assert user.created_at is not None
@@ -195,7 +195,9 @@ class TestPracticeSessionModel:
     def test_session_score_validation(self, db_session: Session):
         """Should validate score ranges (0-100)"""
         user = User(wechat_user_id="wechat_123", name="Test User")
-        scenario = Scenario(scenario_type=ScenarioType.PRESENTATION, name="PPT Practice")
+        scenario = Scenario(
+            scenario_type=ScenarioType.PRESENTATION, name="PPT Practice"
+        )
         db_session.add(user)
         db_session.add(scenario)
         db_session.flush()
@@ -218,7 +220,9 @@ class TestPracticeSessionModel:
     def test_session_invalid_score_raises_error(self, db_session: Session):
         """Should reject scores outside 0-100 range"""
         user = User(wechat_user_id="wechat_123", name="Test User")
-        scenario = Scenario(scenario_type=ScenarioType.PRESENTATION, name="PPT Practice")
+        scenario = Scenario(
+            scenario_type=ScenarioType.PRESENTATION, name="PPT Practice"
+        )
         db_session.add(user)
         db_session.add(scenario)
         db_session.flush()
@@ -236,7 +240,9 @@ class TestPracticeSessionModel:
     def test_session_relationships(self, db_session: Session):
         """Should create relationship with interruption events"""
         user = User(wechat_user_id="wechat_123", name="Test User")
-        scenario = Scenario(scenario_type=ScenarioType.PRESENTATION, name="PPT Practice")
+        scenario = Scenario(
+            scenario_type=ScenarioType.PRESENTATION, name="PPT Practice"
+        )
         db_session.add(user)
         db_session.add(scenario)
         db_session.flush()

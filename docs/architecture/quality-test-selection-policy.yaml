@@ -23,15 +23,12 @@ families:
       - backend/tests/integration/test_admin_model_configs_api.py
       - backend/tests/integration/test_scoring_rulesets_api.py
       - backend/tests/integration/test_supervisor_retraining_api.py
-      - backend/tests/integration/test_business_etiquette_quiz_api.py
-      - backend/tests/integration/test_business_etiquette_ai_coach_progress_api.py
-      - backend/tests/integration/test_newcomer_training_journey_api.py
-      - backend/tests/integration/test_newcomer_training_path_article_api.py
-      - backend/tests/integration/test_newcomer_training_path_config_api.py
-      - backend/tests/integration/test_newcomer_training_path_material_api.py
+      - backend/tests/integration/test_learning_content_api.py
+      - backend/tests/integration/test_learning_progress_api.py
+      - backend/tests/integration/newcomer_training/test_foundation_release_migration.py
+      - backend/tests/integration/newcomer_training/test_journey_learning_postgres.py
       - backend/tests/integration/test_newcomer_training_path_rbac_api.py
       - backend/tests/integration/test_practice_session_object_permissions.py
-      - backend/tests/integration/test_sales_trainer_persisted_path_unlock.py
   backend_e2e:
     prefix: backend/tests/e2e/
     glob: backend/tests/e2e/**/test_*.py
@@ -84,9 +81,9 @@ path_rules:
       - backend/src/sales_trainer/services/quiz_*.py
     select:
       backend_integration:
-        - backend/tests/integration/test_newcomer_training_journey_api.py
-        - backend/tests/integration/test_newcomer_training_path_config_api.py
-        - backend/tests/integration/test_newcomer_training_path_material_api.py
+        - backend/tests/integration/newcomer_training/test_journey_learning_postgres.py
+        - backend/tests/integration/test_learning_progress_api.py
+        - backend/tests/integration/test_newcomer_training_path_unit_revision_api.py
       playwright:
         - web/tests/e2e/newcomer-training-closed-loop.spec.ts
   - id: session-runtime

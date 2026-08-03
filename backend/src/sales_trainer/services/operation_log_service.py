@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.teams.policy import TeamDataScope
 from sales_trainer.models import SalesTrainerOperationLog
 
 
@@ -44,7 +45,7 @@ class OperationLogService:
         self,
         *,
         actor_id: str | None = None,
-        actor_department: str | None = None,
+        team_scope: TeamDataScope | None = None,
         target_type: str | None = None,
         target_id: str | None = None,
         limit: int = 50,
@@ -55,14 +56,13 @@ class OperationLogService:
         if actor_id:
             stmt = stmt.where(SalesTrainerOperationLog.actor_id == actor_id)
             count_stmt = count_stmt.where(SalesTrainerOperationLog.actor_id == actor_id)
-        if actor_department is not None:
-            stmt = stmt.join(User, SalesTrainerOperationLog.actor_id == User.user_id)
-            count_stmt = count_stmt.join(
-                User,
-                SalesTrainerOperationLog.actor_id == User.user_id,
+        if team_scope is not None and not team_scope.unrestricted:
+            stmt = stmt.where(
+                SalesTrainerOperationLog.actor_id.in_(team_scope.learner_ids)
             )
-            stmt = stmt.where(User.department == actor_department)
-            count_stmt = count_stmt.where(User.department == actor_department)
+            count_stmt = count_stmt.where(
+                SalesTrainerOperationLog.actor_id.in_(team_scope.learner_ids)
+            )
         if target_type:
             stmt = stmt.where(SalesTrainerOperationLog.target_type == target_type)
             count_stmt = count_stmt.where(

@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/prompt-template-governance.md", "reason": "卡片生成、评分和解释 Prompt 治理"}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "掌握阈值和补练轮次配置化"}
+{"file": ".trellis/spec/backend/domain-ownership-and-evaluation-ports.md", "reason": "Coach Outcome 与 Evidence 端口"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "结构化训练工作台与 AI 交互门禁"}
+{"file": ".trellis/tasks/archive/2026-07/07-16-newcomer-sales-foundation-platform/research/current-state.md", "reason": "现有自由对话、评分和失败恢复事实"}
+{"file": "docs/newcomer-foundation-contract-index.md", "reason": "切片 0 权威结构化 Coach、AI Invocation、状态、证据和人工接管合同入口"}
+{"file": "docs/adr/2026-07-16-governed-ai-and-durable-tasks.md", "reason": "直接约束结构化输出、保存优先、持久任务和人工接管"}

@@ -46,12 +46,16 @@
       "label": "新人训练首页",
       "path": "/newcomer-training",
       "viewport": "desktop",
-      "finalUrl": "http://186.241.123.157:3445/newcomer-training",
+      "finalUrl": "http://localhost:3445/newcomer-training",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 392,
-      "consoleErrors": [],
-      "networkErrors": [],
+      "bodyLength": 203,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+      ],
+      "networkErrors": [
+        "403 http://localhost:3445/api/v1/analytics/custom"
+      ],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
@@ -62,12 +66,16 @@
       "label": "新人训练首页",
       "path": "/newcomer-training",
       "viewport": "mobile",
-      "finalUrl": "http://186.241.123.157:3445/newcomer-training",
+      "finalUrl": "http://localhost:3445/newcomer-training",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 310,
-      "consoleErrors": [],
-      "networkErrors": [],
+      "bodyLength": 139,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+      ],
+      "networkErrors": [
+        "403 http://localhost:3445/api/v1/analytics/custom"
+      ],
       "forbiddenTextMatches": [],
       "missingExpectedText": [],
       "horizontalOverflowPx": 0,
@@ -78,14 +86,25 @@
       "label": "PPT 讲解录音准备",
       "path": "/newcomer-training/activities/ppt-intro-audio",
       "viewport": "desktop",
-      "finalUrl": "http://186.241.123.157:3445/newcomer-training/activities/ppt-intro-audio",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/ppt-intro-audio",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 554,
-      "consoleErrors": [],
-      "networkErrors": [],
-      "forbiddenTextMatches": [],
-      "missingExpectedText": [],
+      "bodyLength": 137,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "networkErrors": [
+        "404 http://localhost:3445/api/v1/newcomer-training/activities/ppt-intro-audio"
+      ],
+      "forbiddenTextMatches": [
+        "/trace[_-]?id/i"
+      ],
+      "missingExpectedText": [
+        "录音前，先看完这 3 项",
+        "本次材料",
+        "评分会关注",
+        "/优秀讲解示例|参考表达结构/"
+      ],
       "horizontalOverflowPx": 0,
       "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-02-desktop-newcomer-training-activities-ppt-intro-audio.png"
     },
@@ -94,14 +113,25 @@
       "label": "PPT 讲解录音准备",
       "path": "/newcomer-training/activities/ppt-intro-audio",
       "viewport": "mobile",
-      "finalUrl": "http://186.241.123.157:3445/newcomer-training/activities/ppt-intro-audio",
+      "finalUrl": "http://localhost:3445/newcomer-training/activities/ppt-intro-audio",
       "status": 200,
       "title": "AI 智能练习平台",
-      "bodyLength": 494,
-      "consoleErrors": [],
-      "networkErrors": [],
-      "forbiddenTextMatches": [],
-      "missingExpectedText": [],
+      "bodyLength": 73,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "networkErrors": [
+        "404 http://localhost:3445/api/v1/newcomer-training/activities/ppt-intro-audio"
+      ],
+      "forbiddenTextMatches": [
+        "/trace[_-]?id/i"
+      ],
+      "missingExpectedText": [
+        "录音前，先看完这 3 项",
+        "本次材料",
+        "评分会关注",
+        "/优秀讲解示例|参考表达结构/"
+      ],
       "horizontalOverflowPx": 0,
       "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/archive/2026-07/07-08-newcomer-path-playwright-audit-governance/playwright-audit/screenshots/L-02-mobile-newcomer-training-activities-ppt-intro-audio.png"
     }

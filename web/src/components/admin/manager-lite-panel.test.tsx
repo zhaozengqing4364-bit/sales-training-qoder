@@ -49,7 +49,7 @@ describe("ManagerLitePanel", () => {
                         {
                             user_id: "user-1",
                             user_name: "张三",
-                            department: "销售一部",
+                            team: { team_id: "team-1", code: "sales-1", name: "销售一组" },
                             overall_result: "fail",
                             session_id: "session-1",
                             session_start_time: "2026-03-23T09:00:00Z",
@@ -61,7 +61,7 @@ describe("ManagerLitePanel", () => {
                         {
                             user_id: "user-2",
                             user_name: "李四",
-                            department: "销售二部",
+                            team: { team_id: "team-2", code: "sales-2", name: "销售二组" },
                             pass_gain: 25,
                             baseline_pass_rate: 25,
                             current_pass_rate: 50,
@@ -113,7 +113,7 @@ describe("ManagerLitePanel", () => {
                         {
                             user_id: "user-3",
                             user_name: "王五",
-                            department: "销售三部",
+                            team: { team_id: "team-3", code: "sales-3", name: "销售三组" },
                             overall_result: "fail",
                             session_id: "session-3",
                             session_start_time: "2026-03-24T09:00:00Z",
@@ -124,7 +124,7 @@ describe("ManagerLitePanel", () => {
                         {
                             user_id: "user-4",
                             user_name: "赵六",
-                            department: "销售四部",
+                            team: { team_id: "team-4", code: "sales-4", name: "销售四组" },
                             last_session_at: "2026-03-18T09:00:00Z",
                             inactive_days: 8,
                         },

@@ -82,6 +82,22 @@ const STATUS_LABELS: Readonly<Record<string, string>> = {
     archived: "已归档",
 };
 
+const TRAINING_STAGE_LABELS: Readonly<Record<string, string>> = {
+    not_started: "未开始",
+    in_progress: "训练中",
+    waiting_upload: "等待提交",
+    processing: "评分中",
+    scored: "已评分",
+    passed: "已通过",
+    failed: "未通过",
+    needs_remediation: "需补练",
+    manual_review: "待人工复核",
+    disabled: "未启用",
+    archived: "已归档",
+    error_terminal: "处理失败",
+    error_transient: "暂时不可用",
+};
+
 const ACTOR_ROLE_LABELS: Readonly<Record<string, string>> = {
     admin: "管理员",
     super_admin: "超级管理员",
@@ -107,6 +123,20 @@ function stringValue(value: unknown): string | null {
     return typeof value === "string" && value.trim() ? value : null;
 }
 
+function businessText(value: unknown): string | null {
+    const text = stringValue(value)?.trim() ?? null;
+    if (!text) {
+        return null;
+    }
+    if (/^\d+$/.test(text) || /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(text)) {
+        return null;
+    }
+    if (/\b(?:seed|smoke|e2e|phase[_\s-]*\d+)\b/i.test(text)) {
+        return null;
+    }
+    return text;
+}
+
 function numberValue(value: unknown): number | null {
     return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -121,25 +151,51 @@ function fieldLabel(value: unknown): string {
     return field ? FIELD_LABELS[field] ?? "其他字段" : "未知字段";
 }
 
-function formatActor(role: string | null, actorId: string | null): string {
+function formatActor(role: string | null, metadata: Record<string, unknown>): string {
     const roleLabel = role ? ACTOR_ROLE_LABELS[role] ?? "工作人员" : "系统";
-    return actorId ? `${roleLabel} · ${actorId}` : roleLabel;
+    const actorName = businessText(metadata.actor_name);
+    return actorName ? `${actorName}（${roleLabel}）` : roleLabel;
+}
+
+function formatTarget(item: SalesTrainerOperationLog): string {
+    const typeLabel = TARGET_LABELS[item.target_type];
+    const previous = isRecord(item.metadata.previous) ? item.metadata.previous : null;
+    const next = isRecord(item.metadata.next) ? item.metadata.next : null;
+    const targetName = businessText(
+        item.metadata.target_name
+        ?? next?.title
+        ?? next?.name
+        ?? previous?.title
+        ?? previous?.name,
+    );
+    if (typeLabel && targetName) {
+        return `${typeLabel}：${targetName}`;
+    }
+    return typeLabel ?? targetName ?? "相关训练内容";
 }
 
 function formatRevisionLine(metadata: Record<string, unknown>): string | null {
-    const before = stringValue(
-        metadata.before_revision_id ?? metadata.source_revision_id,
+    const before = numberValue(
+        metadata.before_revision_no ?? metadata.source_revision_no,
     );
-    const after = stringValue(
-        metadata.after_revision_id
-        ?? metadata.working_revision_id
-        ?? metadata.target_revision_id,
+    const after = numberValue(
+        metadata.after_revision_no
+        ?? metadata.working_revision_no
+        ?? metadata.target_revision_no
+        ?? metadata.revision_no,
     );
     if (before && after && before !== after) {
-        return `修订：${before} → ${after}`;
+        return `修订：v${before} → v${after}`;
     }
-    if (after) {
-        return `修订：${after}`;
+    if (after !== null) {
+        return `修订：v${after}`;
+    }
+    if (
+        metadata.after_revision_id
+        || metadata.working_revision_id
+        || metadata.target_revision_id
+    ) {
+        return "修订版本已更新";
     }
     return null;
 }
@@ -208,7 +264,7 @@ function buildTrainingContextLines(
         lines.push(`路径版本：v${context.path_revision_no}`);
     }
     if (context.training_stage) {
-        lines.push(`训练阶段：${context.training_stage}`);
+        lines.push(`训练阶段：${TRAINING_STAGE_LABELS[context.training_stage] ?? "待确认"}`);
     }
     const learnerLevel = levelLabel(context.learner_level);
     if (learnerLevel) {
@@ -243,7 +299,7 @@ function buildSummaryLines(
     }
     pushIfPresent(lines, formatRevisionLine(metadata));
     pushIfPresent(lines, formatImpactScope(metadata));
-    const reason = stringValue(metadata.reason);
+    const reason = businessText(metadata.reason);
     if (reason) {
         lines.push(`原因：${reason}`);
     }
@@ -251,31 +307,27 @@ function buildSummaryLines(
     pushIfPresent(lines, formatSnapshotScore(metadata, "before_snapshot", "原始评分"));
     pushIfPresent(lines, formatSnapshotScore(metadata, "after_snapshot", "重评结果"));
     pushIfPresent(lines, formatTargetRevisionNo(metadata));
-    const traceId = stringValue(metadata.trace_id);
-    if (traceId) {
-        lines.push(`追踪号：${traceId}`);
-    }
     const questionCount = numberValue(metadata.question_count);
     if (questionCount !== null) {
         lines.push(`题目数量：${questionCount}`);
     }
     const errorCode = stringValue(metadata.error_code);
     if (errorCode) {
-        lines.push(`错误码：${errorCode}`);
+        lines.push("结果：处理失败，技术原因仅在详情中展示");
     }
     const versionLabel = stringValue(metadata.version_label);
     if (versionLabel) {
         lines.push(`版本：${versionLabel}`);
     }
     lines.push(...buildTrainingContextLines(trainingContext));
-    return lines.length ? lines : ["已记录关键操作，可展开查看原始诊断数据。"];
+    return lines.length ? lines : ["操作已记录，暂无补充说明。"];
 }
 
 export function buildOperationLogDisplay(item: SalesTrainerOperationLog): OperationLogDisplay {
     return {
-        actionLabel: ACTION_LABELS[item.action] ?? "关键操作",
-        actorLabel: formatActor(item.actor_role, item.actor_id),
-        targetLabel: TARGET_LABELS[item.target_type] ?? "业务对象",
+        actionLabel: ACTION_LABELS[item.action] ?? "系统操作已记录",
+        actorLabel: formatActor(item.actor_role, item.metadata),
+        targetLabel: formatTarget(item),
         summaryLines: buildSummaryLines(item.metadata, item.training_context ?? null),
         rawJson: JSON.stringify({
             action: item.action,

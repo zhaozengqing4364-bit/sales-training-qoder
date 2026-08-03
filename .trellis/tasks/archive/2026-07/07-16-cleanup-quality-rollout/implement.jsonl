@@ -1,0 +1,12 @@
+{"file": ".trellis/spec/backend/compatibility-retirement-and-root-composition.md", "reason": "清理旧权威、兼容层和组合入口"}
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "依赖、ORM、Provider 和 Registry Guard"}
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "OpenAPI 和运行时契约收口"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端全量质量门禁"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端全量质量门禁"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "实际渲染和端到端体验审计"}
+{"file": ".trellis/tasks/archive/2026-07/07-16-newcomer-sales-foundation-platform/research/current-state.md", "reason": "对照当前旧链路和待清理清单"}
+{"file": "docs/newcomer-foundation-contract-index.md", "reason": "切片 0 权威退役矩阵、Guard 机器规则、测试门禁和全部 ADR 入口"}
+{"file": "docs/adr/2026-07-16-newcomer-foundation-product-boundary.md", "reason": "最终验收首发范围、正式结论与延期边界"}
+{"file": "docs/adr/2026-07-16-newcomer-foundation-domain-and-modules.md", "reason": "最终验收唯一写权威和模块依赖"}
+{"file": "docs/adr/2026-07-16-enrollment-revision-freeze.md", "reason": "最终验收冻结 Enrollment 与无隐式迁移"}
+{"file": "docs/adr/2026-07-16-governed-ai-and-durable-tasks.md", "reason": "最终验收持久 Task/Outbox 与 AI 治理"}

@@ -91,6 +91,28 @@ class LearningContentResponse(BaseModel):
     revision_state: LearningContentRevisionState
 
 
+class LearningContentSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    learning_content_id: str
+    title: str
+    summary: str | None = None
+    owner: str | None = None
+    source: str | None = None
+    status: LearningContentStatus
+    safety_flagged: bool
+    version: int
+    content_hash: str | None = None
+    published_at: object | None = None
+    created_at: object
+    updated_at: object
+
+
 class LearningContentListResponse(BaseModel):
     items: list[LearningContentResponse]
+    total: int
+
+
+class LearningContentSummaryListResponse(BaseModel):
+    items: list[LearningContentSummaryResponse]
     total: int

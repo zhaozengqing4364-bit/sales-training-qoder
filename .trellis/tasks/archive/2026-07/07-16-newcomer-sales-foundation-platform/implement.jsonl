@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端总约束与实现入口"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端总约束与实现入口"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "用户任务、状态完整与上下文内完成"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "保证数据、API、UI 与权限端到端一致"}
+{"file": ".trellis/tasks/archive/2026-07/07-16-newcomer-sales-foundation-platform/research/current-state.md", "reason": "当前仓库事实、冲突和可复用能力"}
+{"file": ".trellis/tasks/archive/2026-07/07-16-newcomer-sales-foundation-platform/architecture.md", "reason": "目标模块、接口、事件和事务边界"}
+{"file": "docs/newcomer-foundation-contract-index.md", "reason": "切片 0 冻结后的 ADR、领域、状态、API、权限、AI、迁移与测试权威入口"}

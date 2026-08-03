@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 22
-- **Last Active**: 2026-07-16
+- **Total Sessions**: 28
+- **Last Active**: 2026-07-18
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~838 | Active |
+| `journal-1.md` | ~1024 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,12 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 28 | 2026-07-18 | 新人销售基础训练平台九切片首发闭环 | - | `codex/newcomer-path-live-preview-layout` |
+| 27 | 2026-07-17 | 切片 5：能力证据与人工复核闭环 | - | `codex/newcomer-path-live-preview-layout` |
+| 26 | 2026-07-17 | 完成结构化 AI Coach 与补练闭环 | - | `codex/newcomer-path-live-preview-layout` |
+| 25 | 2026-07-17 | 切片 3：录音评测持久流水线 | - | `codex/newcomer-path-live-preview-layout` |
+| 24 | 2026-07-17 | 切片 2：训练路径、学习内容与题库治理 | - | `codex/newcomer-path-live-preview-layout` |
+| 23 | 2026-07-17 | 完成切片 1：持久化任务运行时与 AI 平台 | - | `codex/newcomer-path-live-preview-layout` |
 | 22 | 2026-07-16 | 销售组长 /team 工作台性能修复 | `f57fcadf` | `codex/newcomer-path-live-preview-layout` |
 | 21 | 2026-07-12 | 新人训练活动编排系统闭环 | `ac0b9298`, `b7e11c1b`, `32143c43`, `4575c5b1`, `78b19b29`, `40c1728d`, `1f86b96c`, `3f4bad37`, `03336571`, `d2f3d87c`, `bcdb7cae`, `673d6b0c`, `a0651a75`, `0590e01d`, `4804b2f5`, `9f7aed1e`, `408650d8` | `codex/newcomer-training-v0-9-closure` |
 | 20 | 2026-07-12 | StepAudio 2.5 Realtime 生产配置闭环 | `5fe2866c`, `55c3ba56` | `codex/newcomer-training-v0-9-closure` |

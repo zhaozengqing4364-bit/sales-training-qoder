@@ -99,6 +99,92 @@ High-churn state stays inside route-scoped hooks:
 
 Avoid lifting this into global stores — sessions are route-scoped and disposable.
 
+## Scenario: Durable Browser Audio Drafts And Bounded Upload Memory
+
+### 1. Scope / Trigger
+
+- Trigger: recording or uploading a complete-file newcomer audio assessment/assignment in the browser.
+- Scope: `browser-audio-draft-store.ts`, `use-browser-audio-recorder.ts`, `browser-audio-uploader.ts`, logout cleanup and the audio activity runner.
+
+### 2. Signatures
+
+```typescript
+browserAudioDraftScope(ownerId, activityId, segmentId): string
+createBrowserAudioDraft(...): Promise<BrowserAudioDraft>
+appendBrowserAudioChunk({ draftId, blob, durationSeconds, maxSizeBytes, maxDurationSeconds })
+buildBrowserAudioUploadManifest(draft, partSizeBytes): Promise<BrowserAudioUploadManifest>
+readBrowserAudioUploadPart(draftId, partNumber): Promise<Blob>
+cleanupExpiredBrowserAudioDrafts(now?): Promise<number>
+clearBrowserAudioDraftDatabase(): void
+uploadBrowserAudioDraft({ workspace, segmentId, draft, signal, onProgress })
+```
+
+IndexedDB v1 stores are `drafts` (`draftId`), `chunks` (`[draftId, sequence]`) and `uploadParts` (`[draftId, partNumber]`). The standard policy is one-second MediaRecorder chunks, 7-day local TTL and 5MB upload parts; actual limits come from the frozen runner.
+
+### 3. Contracts
+
+- MediaRecorder writes each non-empty chunk to IndexedDB through a serialized write chain; React state holds metadata, not an ever-growing Blob array.
+- Refresh restores the newest unexpired draft for the exact owner/activity/segment scope. A draft interrupted in `recording` reopens as `paused`, never falsely as uploaded.
+- Manifest construction reads source chunks in bounded ordered batches (currently 32), assembles at most one configured upload part, hashes it and persists it before reading further. Do not use `getAll()` for every source chunk in the upload path.
+- Full preview Blob construction is allowed only after an explicit learner “试听” action; release the object URL on replacement/unmount.
+- Uploader reads and sends one persisted upload part at a time, skips server-confirmed parts, omits browser credentials for cross-origin signed URLs and retains the local draft on interruption.
+- Delete the draft only after server `finalize_upload` returns an accepted persisted task/result reference. Logout clears the entire audio draft database; TTL cleanup runs on draft restore.
+- An active server UploadSession may resume only when its exact local manifest matches. If the local draft is absent or different, do not replace that session; show return-to-original-device or cancel/re-record recovery.
+- Native `window.confirm/alert/prompt` are forbidden. Cancellation uses the shared accessible `ConfirmDialog`, keeps the local draft and maps server errors inline.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required UI/store behavior |
+|---|---|
+| Browser/IndexedDB unavailable | safe inline error; offer file upload where possible; no false saved state |
+| Microphone denied | preserve recovered draft and explain permission/file alternative |
+| Chunk would exceed size/duration | stop accepting it and show frozen-policy error |
+| Refresh during recording | restore metadata/chunks as paused draft |
+| Network/Abort during direct upload | keep draft/upload parts and report resumable state |
+| Server active upload does not match manifest | block replacement; require original device or cancel/re-record |
+| Server finalize accepted | remove local draft; processing state points to durable result location |
+| Audio is not scorable | show quality/review state, never zero/failed-competency copy |
+| Terminal media failure | explain retained upload and explicit re-record path |
+
+### 5. Good / Base / Bad Cases
+
+- Good: 30-minute recording leaves only small current chunk/part buffers in JS, refresh restores it, and upload resumes only missing parts.
+- Base: the learner requests preview; one full Blob is constructed temporarily, the URL is revoked afterward, and the IndexedDB draft remains authoritative until finalize.
+- Bad: push every `dataavailable` Blob into a React array, call `getAll()` for all chunks while hashing upload parts, delete on upload start, or silently attach a new local recording to an old server session.
+
+### 6. Tests Required
+
+- Hook: chunk persistence, pause/continue, interrupted-recording restore, microphone denial preservation and explicit reset deletion.
+- Uploader: bounded part order, exact manifest, missing-part resume, same-origin credentials, cross-origin credential omission, Abort/network draft preservation and finalize-before-delete.
+- Runner: frozen limits/prompt, processing can be left safely, not-scorable vs failed, terminal re-record, missing-local-draft recovery, structured results and three-segment progression.
+- Auth: logout invokes `clearBrowserAudioDraftDatabase` while preserving global theme/support preferences.
+- Static/type: targeted ESLint and strict TypeScript entrypoint check; full rendered/E2E and SLO remain the release gate.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+const chunks: Blob[] = [];
+recorder.ondataavailable = (event) => chunks.push(event.data);
+const file = new Blob(await chunkStore.getAll());
+await upload(file);
+```
+
+Memory grows with recording length and refresh loses the in-memory authority.
+
+#### Correct
+
+```typescript
+recorder.ondataavailable = (event) => enqueueIndexedDbWrite(event.data);
+for (const batch of boundedOrderedChunkBatches(draftId)) {
+    await persistCompletedUploadParts(batch);
+}
+await uploadMissingPartsOneAtATime();
+```
+
+IndexedDB is the recoverable draft authority; only bounded batches/parts enter JS memory during upload.
+
 ---
 
 ## Toast / Feedback
@@ -107,6 +193,13 @@ Avoid lifting this into global stores — sessions are route-scoped and disposab
 - `useToast()` in admin pages for success/failure feedback (e.g. `app/admin/users/page.tsx`).
 
 During **live practice**, prefer non-blocking `StatusIndicator` over toast floods.
+
+### Managed account status actions
+
+- Track submitting state by canonical account ID **and** action kind; a request for one row must not disable or relabel another row.
+- Account status writes need a bounded client timeout. Because a timeout can happen after the server commits, reload the target account before offering a retry and report the reconciled state inline.
+- Send the last observed `credential_version` with status and temporary-password mutations so concurrent admin actions fail as an explicit conflict instead of silently overwriting one another.
+- Important status results remain visible in the page state; a toast may supplement them but is not the only record.
 
 ---
 

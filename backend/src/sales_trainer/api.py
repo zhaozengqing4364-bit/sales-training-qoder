@@ -5,12 +5,8 @@ from typing import Any, cast
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
-    File,
-    Form,
     Query,
-    UploadFile,
 )
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,19 +15,17 @@ from common.api.response import error_response, success_response
 from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
+from common.teams.policy import TeamDataScope, TeamScopePolicy
 from sales_trainer.permissions import (
     can_learn_newcomer_training_path,
     can_manage_sales_trainer,
     can_manage_sales_trainer_questions,
-    can_retry_sales_trainer_jobs,
     can_view_sales_trainer_global_records,
     can_view_sales_trainer_logs,
     can_view_sales_trainer_records,
     can_view_sales_trainer_settings,
-    is_sales_trainer_admin,
     is_sales_trainer_ops,
     sales_trainer_admin_capability_projection,
-    team_scope_department,
 )
 from sales_trainer.schemas import (
     AudioScorePromptCreate,
@@ -44,11 +38,8 @@ from sales_trainer.schemas import (
     AudioScorePromptUpdate,
     AudioScoreResultListResponse,
     AudioScoreResultResponse,
-    AudioSubmissionCreate,
     AudioSubmissionListResponse,
     AudioSubmissionResponse,
-    AudioUploadUrlRequest,
-    AudioUploadUrlResponse,
     OperationLogListResponse,
     OperationLogResponse,
     QuizAttemptCreate,
@@ -108,7 +99,6 @@ from sales_trainer.services.roleplay_observation_service import (
 from sales_trainer.services.training_record_service import TrainingRecordService
 from sales_trainer.services.unit_public_payloads import learner_safe_unit_payload
 from sales_trainer.services.unit_service import SalesTrainerUnitError, UnitService
-from sales_trainer.tasks.process_audio import process_audio_submission_background
 
 router = APIRouter(prefix="/sales-trainer", tags=["sales-trainer"])
 admin_router = APIRouter(prefix="/admin/sales-trainer", tags=["admin-sales-trainer"])
@@ -153,14 +143,6 @@ def _require_records_viewer(user: User) -> JSONResponse | None:
     )
 
 
-def _require_job_retry(user: User) -> JSONResponse | None:
-    if can_retry_sales_trainer_jobs(user):
-        return None
-    return _api_error(
-        "[ROLE_REQUIRED]", status_code=403, message="当前账号无权重试转写或评分任务。"
-    )
-
-
 def _require_ops_viewer(user: User) -> JSONResponse | None:
     if can_view_sales_trainer_logs(user):
         return None
@@ -185,9 +167,8 @@ def _require_material_file_admin(user: User) -> JSONResponse | None:
     )
 
 
-def _team_scope(user: User) -> str | None:
-    department = team_scope_department(user)
-    return department if not is_sales_trainer_admin(user) else None
+async def _team_scope(db: AsyncSession, user: User) -> TeamDataScope:
+    return await TeamScopePolicy(db).resolve(user)
 
 
 def _as_unit_response(payload: dict[str, Any]) -> dict[str, Any]:
@@ -252,19 +233,6 @@ def _material_file_response(
             content_disposition_type=disposition,
         )
     return _api_error("[MATERIAL_FILE_NOT_FOUND]", status_code=404)
-
-
-def _schedule_audio_processing(
-    background_tasks: BackgroundTasks,
-    *,
-    submission_id: str,
-    actor: User,
-) -> None:
-    background_tasks.add_task(
-        process_audio_submission_background,
-        submission_id,
-        actor_id=str(actor.user_id),
-    )
 
 
 async def _sales_trainer_settings_payload(db: AsyncSession) -> dict[str, Any]:
@@ -394,96 +362,6 @@ async def get_quiz_attempt(
     )
 
 
-@router.post("/audio-submissions/upload-url", response_model=None)
-async def create_audio_upload_url(
-    payload: AudioUploadUrlRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    _ = db
-    service = AudioSubmissionService(db)
-    try:
-        result = service.generate_upload_url(
-            filename=payload.filename,
-            content_type=payload.content_type,
-            actor=current_user,
-        )
-    except AudioSubmissionServiceError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(AudioUploadUrlResponse.model_validate(result).model_dump())
-
-
-@router.post("/audio-submissions/upload", response_model=None)
-async def upload_audio_file(
-    background_tasks: BackgroundTasks,
-    unit_id: str | None = Form(None),
-    purpose: str = Form("general_audio_scoring"),
-    source_page: str | None = Form(None),
-    confirmed_material_version_id: str | None = Form(None),
-    auto_process: bool = Form(True),
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    service = AudioSubmissionService(db)
-    try:
-        submission = await service.save_uploaded_file(
-            file=file,
-            unit_id=unit_id,
-            purpose=purpose,
-            source_page=source_page.strip()
-            if source_page and source_page.strip()
-            else None,
-            confirmed_material_version_id=confirmed_material_version_id.strip()
-            if confirmed_material_version_id and confirmed_material_version_id.strip()
-            else None,
-            actor=current_user,
-            auto_process=False,
-        )
-        if auto_process:
-            _schedule_audio_processing(
-                background_tasks,
-                submission_id=str(submission.submission_id),
-                actor=current_user,
-            )
-    except AudioSubmissionServiceError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(
-        AudioSubmissionResponse.model_validate(
-            await service.serialize_submission(submission)
-        ).model_dump()
-    )
-
-
-@router.post("/audio-submissions", response_model=None)
-async def register_audio_submission(
-    payload: AudioSubmissionCreate,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    service = AudioSubmissionService(db)
-    try:
-        should_process = payload.auto_process
-        submission = await service.create_submission(
-            payload.model_copy(update={"auto_process": False}),
-            actor=current_user,
-        )
-        if should_process:
-            _schedule_audio_processing(
-                background_tasks,
-                submission_id=str(submission.submission_id),
-                actor=current_user,
-            )
-    except AudioSubmissionServiceError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(
-        AudioSubmissionResponse.model_validate(
-            await service.serialize_submission(submission)
-        ).model_dump()
-    )
-
-
 @router.get("/audio-submissions", response_model=None)
 async def list_my_audio_submissions(
     limit: int = Query(50, ge=1, le=200),
@@ -499,7 +377,7 @@ async def list_my_audio_submissions(
     service = AudioSubmissionService(db)
     submissions, total = await service.list_submissions(
         user_id=str(current_user.user_id),
-        team_department=None,
+        team_scope=None,
         limit=limit,
         offset=offset,
     )
@@ -861,10 +739,6 @@ async def admin_get_sales_trainer_material_version_file(
     return _material_file_response(access, disposition=disposition)
 
 
-@admin_router.get(
-    "/training-records/detail/{record_type}/{record_id}/materials/{version_id}/file",
-    response_model=None,
-)
 async def admin_get_training_record_material_file(
     record_type: str,
     record_id: str,
@@ -881,7 +755,7 @@ async def admin_get_training_record_material_file(
         record_type,
         record_id,
         viewer=current_user,
-        team_department=_team_scope(current_user),
+        team_scope=await _team_scope(db, current_user),
     )
     if record is None:
         return _api_error("[TRAINING_RECORD_NOT_FOUND]", status_code=404)
@@ -891,7 +765,7 @@ async def admin_get_training_record_material_file(
             record_type=record_type,
             record_id=record_id,
             viewer=current_user,
-            team_department=_team_scope(current_user),
+            team_scope=await _team_scope(db, current_user),
         )
     except MaterialServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
@@ -1104,7 +978,6 @@ async def admin_archive_sales_trainer_question(
     )
 
 
-@admin_router.get("/audio-submissions", response_model=None)
 async def admin_list_audio_submissions(
     user_id: str | None = None,
     limit: int = Query(50, ge=1, le=200),
@@ -1117,7 +990,7 @@ async def admin_list_audio_submissions(
     service = AudioSubmissionService(db)
     submissions, total = await service.list_submissions(
         user_id=user_id,
-        team_department=_team_scope(current_user),
+        team_scope=await _team_scope(db, current_user),
         limit=limit,
         offset=offset,
     )
@@ -1130,7 +1003,6 @@ async def admin_list_audio_submissions(
     return success_response(AudioSubmissionListResponse(items=payload, total=total))
 
 
-@admin_router.get("/audio-submissions/{submission_id}", response_model=None)
 async def admin_get_audio_submission(
     submission_id: str,
     current_user: User = Depends(get_current_user),
@@ -1144,7 +1016,7 @@ async def admin_get_audio_submission(
             submission_id,
             actor=current_user,
             allow_admin=can_view_sales_trainer_global_records(current_user),
-            team_department=_team_scope(current_user),
+            team_scope=await _team_scope(db, current_user),
         )
     except AudioSubmissionServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
@@ -1157,7 +1029,6 @@ async def admin_get_audio_submission(
     )
 
 
-@admin_router.get("/audio-submissions/{submission_id}/file", response_model=None)
 async def admin_get_audio_submission_file(
     submission_id: str,
     current_user: User = Depends(get_current_user),
@@ -1171,7 +1042,7 @@ async def admin_get_audio_submission_file(
             submission_id,
             actor=current_user,
             allow_admin=can_view_sales_trainer_global_records(current_user),
-            team_department=_team_scope(current_user),
+            team_scope=await _team_scope(db, current_user),
         )
     except AudioSubmissionServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
@@ -1186,65 +1057,6 @@ async def admin_get_audio_submission_file(
     return _api_error("[AUDIO_FILE_NOT_FOUND]", status_code=404)
 
 
-@admin_router.post(
-    "/audio-submissions/{submission_id}/retry-transcription", response_model=None
-)
-async def admin_retry_transcription(
-    submission_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    if error := _require_job_retry(current_user):
-        return error
-    service = AudioSubmissionService(db)
-    try:
-        await service.get_submission(
-            submission_id,
-            actor=current_user,
-            allow_admin=can_view_sales_trainer_global_records(current_user),
-            team_department=_team_scope(current_user),
-        )
-        submission = await service.retry_transcription(
-            submission_id, actor=current_user
-        )
-    except AudioSubmissionServiceError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(
-        AudioSubmissionResponse.model_validate(
-            await service.serialize_submission(submission)
-        ).model_dump()
-    )
-
-
-@admin_router.post(
-    "/audio-submissions/{submission_id}/retry-scoring", response_model=None
-)
-async def admin_retry_scoring(
-    submission_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse:
-    if error := _require_job_retry(current_user):
-        return error
-    service = AudioSubmissionService(db)
-    try:
-        await service.get_submission(
-            submission_id,
-            actor=current_user,
-            allow_admin=can_view_sales_trainer_global_records(current_user),
-            team_department=_team_scope(current_user),
-        )
-        submission = await service.retry_scoring(submission_id, actor=current_user)
-    except AudioSubmissionServiceError as exc:
-        return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
-    return success_response(
-        AudioSubmissionResponse.model_validate(
-            await service.serialize_submission(submission)
-        ).model_dump()
-    )
-
-
-@admin_router.get("/score-results", response_model=None)
 async def admin_list_score_results(
     user_id: str | None = None,
     submission_id: str | None = None,
@@ -1259,7 +1071,7 @@ async def admin_list_score_results(
     results, total = await service.list_score_results(
         user_id=user_id,
         submission_id=submission_id,
-        team_department=_team_scope(current_user),
+        team_scope=await _team_scope(db, current_user),
         limit=limit,
         offset=offset,
     )
@@ -1272,7 +1084,6 @@ async def admin_list_score_results(
     return success_response(AudioScoreResultListResponse(items=payload, total=total))
 
 
-@admin_router.get("/training-records", response_model=None)
 async def admin_list_training_records(
     user_id: str | None = None,
     activity_id: str | None = Query(default=None),
@@ -1290,7 +1101,7 @@ async def admin_list_training_records(
     service = TrainingRecordService(db)
     records, total = await service.list_records(
         user_id=user_id,
-        team_department=_team_scope(current_user),
+        team_scope=await _team_scope(db, current_user),
         activity_id=activity_id,
         activity_type=activity_type,
         phase_id=phase_id,
@@ -1311,7 +1122,6 @@ async def admin_list_training_records(
     )
 
 
-@admin_router.get("/training-records/audio/{submission_id}", response_model=None)
 async def admin_get_audio_training_record(
     submission_id: str,
     current_user: User = Depends(get_current_user),
@@ -1325,7 +1135,7 @@ async def admin_get_audio_training_record(
             submission_id,
             actor=current_user,
             allow_admin=can_view_sales_trainer_global_records(current_user),
-            team_department=_team_scope(current_user),
+            team_scope=await _team_scope(db, current_user),
         )
     except AudioSubmissionServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
@@ -1339,9 +1149,6 @@ async def admin_get_audio_training_record(
     )
 
 
-@admin_router.get(
-    "/training-records/detail/{record_type}/{record_id}", response_model=None
-)
 async def admin_get_training_record_detail(
     record_type: str,
     record_id: str,
@@ -1356,7 +1163,7 @@ async def admin_get_training_record_detail(
         record_type,
         record_id,
         viewer=current_user,
-        team_department=_team_scope(current_user),
+        team_scope=await _team_scope(db, current_user),
     )
     if record is None:
         return _api_error("[TRAINING_RECORD_NOT_FOUND]", status_code=404)
@@ -1365,9 +1172,6 @@ async def admin_get_training_record_detail(
     )
 
 
-@admin_router.get(
-    "/training-records/realtime-roleplay/{session_id}/observations", response_model=None
-)
 async def admin_get_realtime_roleplay_observations(
     session_id: str,
     current_user: User = Depends(get_current_user),
@@ -1379,7 +1183,7 @@ async def admin_get_realtime_roleplay_observations(
         evidence_type="realtime_roleplay_session",
         evidence_id=session_id,
         viewer=current_user,
-        team_department=_team_scope(current_user),
+        team_scope=await _team_scope(db, current_user),
     )
     if record is None:
         return _api_error("[TRAINING_RECORD_NOT_FOUND]", status_code=404)
@@ -1394,7 +1198,6 @@ async def admin_get_realtime_roleplay_observations(
     )
 
 
-@admin_router.get("/quiz-attempts", response_model=None)
 async def admin_list_quiz_attempts(
     user_id: str | None = None,
     unit_id: str | None = None,
@@ -1409,7 +1212,7 @@ async def admin_list_quiz_attempts(
     attempts, total = await service.list_attempts(
         user_id=user_id,
         unit_id=unit_id,
-        team_department=_team_scope(current_user),
+        team_scope=await _team_scope(db, current_user),
         limit=limit,
         offset=offset,
     )
@@ -1420,7 +1223,6 @@ async def admin_list_quiz_attempts(
     return success_response(QuizAttemptListResponse(items=payload, total=total))
 
 
-@admin_router.get("/quiz-attempts/{attempt_id}", response_model=None)
 async def admin_get_quiz_attempt(
     attempt_id: str,
     current_user: User = Depends(get_current_user),
@@ -1434,7 +1236,7 @@ async def admin_get_quiz_attempt(
             attempt_id,
             actor=current_user,
             allow_admin=can_view_sales_trainer_global_records(current_user),
-            team_department=_team_scope(current_user),
+            team_scope=await _team_scope(db, current_user),
         )
     except QuizServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
@@ -1635,7 +1437,7 @@ async def admin_list_operation_logs(
         return error
     logs, total = await OperationLogService(db).list_logs(
         actor_id=actor_id,
-        actor_department=_team_scope(current_user),
+        team_scope=await _team_scope(db, current_user),
         target_type=target_type,
         target_id=target_id,
         limit=limit,

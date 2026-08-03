@@ -42,21 +42,21 @@ DRILLS: tuple[DrillDefinition, ...] = (
         authority_paths=(
             "backend/alembic.ini",
             "backend/alembic/env.py",
-            "backend/scripts/repair_legacy_schema.py",
             "backend/src/common/db/session.py",
+            "backend/src/launch_reset/cli.py",
             "backend/tests/integration/test_startup_or_bootstrap_authority.py",
         ),
         evidence=(
             "alembic stdout",
-            "explicit repair stderr/stdout when legacy drift is present",
+            "startup read-only head verification",
         ),
         why_it_matters=(
-            "Schema authority must stay on Alembic plus explicit repair; startup bootstrap "
-            "must not silently mutate production-like databases."
+            "Schema authority must stay on Alembic; startup must not silently mutate "
+            "databases and pre-launch legacy databases must be rebuilt."
         ),
         failure_signals=(
             "non-zero alembic exit",
-            "legacy drift runtime error mentioning repair_legacy_schema.py",
+            "database head differs from the single active launch head",
         ),
     ),
     DrillDefinition(

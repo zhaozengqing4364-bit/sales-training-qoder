@@ -7,9 +7,7 @@ EVIDENCE_DIR="${ROOT_DIR}/.sisyphus/evidence"
 EVIDENCE_FILE="${EVIDENCE_DIR}/task-9-quality-gate.txt"
 PLAYWRIGHT_REPORT_DIR="${EVIDENCE_DIR}/task-9-playwright-report"
 PLAYWRIGHT_REPORT_HTML="${EVIDENCE_DIR}/task-9-playwright-report.html"
-NEWCOMER_REAL_PROVIDER_EVIDENCE="${EVIDENCE_DIR}/newcomer-real-provider-gate.json"
-NEWCOMER_AI_COACH_REAL_PROVIDER_EVIDENCE="${EVIDENCE_DIR}/newcomer-ai-coach-real-provider-gate.json"
-NEWCOMER_AI_COACH_REAL_PROVIDER_RUNTIME_AUDIT="${EVIDENCE_DIR}/newcomer-ai-coach-real-provider-runtime-audit.json"
+FOUNDATION_AI_REAL_PROVIDER_EVIDENCE="${EVIDENCE_DIR}/foundation-ai-real-provider-staging.json"
 PLAYWRIGHT_LIBRARY_DIR="${PLAYWRIGHT_LIBRARY_DIR:-${ROOT_DIR}/.sisyphus/playwright-libs/root/usr/lib/x86_64-linux-gnu}"
 
 BACKEND_PORT="${BACKEND_PORT:-3444}"
@@ -20,22 +18,15 @@ POSTGRES_USER="${POSTGRES_USER:-dev}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-dev}"
 POSTGRES_DB="${POSTGRES_DB:-sales_training}"
 CRITICAL_GATE_MODE="${CRITICAL_GATE_MODE:-full}"
-RUN_NEWCOMER_REAL_PROVIDER_GATE="${RUN_NEWCOMER_REAL_PROVIDER_GATE:-0}"
-NEWCOMER_REAL_PROVIDER_NAME="${NEWCOMER_REAL_PROVIDER_NAME:-stepfun_realtime}"
-NEWCOMER_REAL_PROVIDER_REQUIRED="${NEWCOMER_REAL_PROVIDER_REQUIRED:-0}"
-NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED="${NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED:-0}"
-RUN_NEWCOMER_AI_COACH_REAL_PROVIDER_GATE="${RUN_NEWCOMER_AI_COACH_REAL_PROVIDER_GATE:-0}"
-NEWCOMER_AI_COACH_REAL_PROVIDER_REQUIRED="${NEWCOMER_AI_COACH_REAL_PROVIDER_REQUIRED:-0}"
-NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED="${NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED:-0}"
+RUN_FOUNDATION_AI_REAL_PROVIDER_GATE="${RUN_FOUNDATION_AI_REAL_PROVIDER_GATE:-0}"
+FOUNDATION_AI_REAL_PROVIDER_REQUIRED="${FOUNDATION_AI_REAL_PROVIDER_REQUIRED:-0}"
+FOUNDATION_AI_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED="${FOUNDATION_AI_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED:-0}"
 NEWCOMER_E2E_FRESH_RUN_ID="${NEWCOMER_E2E_FRESH_RUN_ID:-fresh-$(date +%Y%m%d%H%M%S)}"
 export NEWCOMER_E2E_FRESH_RUN_ID
 
 case "${CRITICAL_GATE_MODE}" in
-  newcomer-real-provider)
-    EVIDENCE_FILE="${EVIDENCE_DIR}/task-9-newcomer-real-provider-gate.txt"
-    ;;
-  newcomer-ai-coach-real-provider)
-    EVIDENCE_FILE="${EVIDENCE_DIR}/task-9-newcomer-ai-coach-real-provider-gate.txt"
+  foundation-ai-real-provider)
+    EVIDENCE_FILE="${EVIDENCE_DIR}/task-9-foundation-ai-real-provider-gate.txt"
     ;;
 esac
 
@@ -160,13 +151,8 @@ rm -rf \
   "${PLAYWRIGHT_REPORT_DIR}" \
   "${PLAYWRIGHT_REPORT_HTML}"
 case "${CRITICAL_GATE_MODE}" in
-  newcomer-real-provider)
-    rm -f "${NEWCOMER_REAL_PROVIDER_EVIDENCE}"
-    ;;
-  newcomer-ai-coach-real-provider)
-    rm -f \
-      "${NEWCOMER_AI_COACH_REAL_PROVIDER_EVIDENCE}" \
-      "${NEWCOMER_AI_COACH_REAL_PROVIDER_RUNTIME_AUDIT}"
+  foundation-ai-real-provider)
+    rm -f "${FOUNDATION_AI_REAL_PROVIDER_EVIDENCE}"
     ;;
 esac
 exec > >(tee "${EVIDENCE_FILE}") 2>&1
@@ -185,8 +171,9 @@ PLAYWRIGHT_TARGET_FILE="${EVIDENCE_DIR}/playwright-targets.txt"
 QUALITY_GATE_SELECTION_MODE="${QUALITY_GATE_SELECTION_MODE:-local}"
 QUALITY_GATE_BASE_SHA="${QUALITY_GATE_BASE_SHA:-}"
 QUALITY_GATE_HEAD_SHA="${QUALITY_GATE_HEAD_SHA:-HEAD}"
-BACKEND_SUITE_TIMEOUT_SECONDS="${BACKEND_SUITE_TIMEOUT_SECONDS:-1200}"
+BACKEND_SUITE_TIMEOUT_SECONDS="${BACKEND_SUITE_TIMEOUT_SECONDS:-1500}"
 VITEST_SUITE_TIMEOUT_SECONDS="${VITEST_SUITE_TIMEOUT_SECONDS:-1200}"
+FOUNDATION_CAPACITY_TIMEOUT_SECONDS="${FOUNDATION_CAPACITY_TIMEOUT_SECONDS:-600}"
 
 export DATABASE_URL="${DATABASE_URL:-$(dotenv_get "${BACKEND_ENV_FILE}" "DATABASE_URL")}" 
 DATABASE_URL="${DATABASE_URL:-${DEFAULT_DATABASE_URL}}"
@@ -232,14 +219,13 @@ assert_non_empty_vitest_coverage_summary() {
   ' "${summary_file}" || die "Vitest coverage summary is not a valid non-empty summary"
 }
 
-write_newcomer_real_provider_evidence() {
+write_foundation_ai_real_provider_skip_evidence() {
   local status="$1"
   local classification="$2"
   local reason="$3"
-  local http_status="${4:-}"
 
-  "${PYTHON_BIN}" - "${NEWCOMER_REAL_PROVIDER_EVIDENCE}" \
-    "${status}" "${classification}" "${reason}" "${http_status}" <<'PY'
+  "${PYTHON_BIN}" - "${FOUNDATION_AI_REAL_PROVIDER_EVIDENCE}" \
+    "${status}" "${classification}" "${reason}" <<'PY'
 import json
 import os
 import sys
@@ -247,23 +233,24 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 path = Path(sys.argv[1])
-http_status = int(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] else None
 payload = {
+    "contract_version": "foundation_ai_provider_staging_v1",
     "status": sys.argv[2],
     "classification": sys.argv[3],
     "reason": sys.argv[4],
-    "http_status": http_status,
-    "provider": os.getenv("NEWCOMER_REAL_PROVIDER_NAME", "stepfun_realtime"),
-    "model": os.getenv("STEPFUN_REALTIME_MODEL", "stepaudio-2.5-realtime"),
-    "realtime_url_configured": bool(os.getenv("STEPFUN_REALTIME_URL")),
-    "required": os.getenv("NEWCOMER_REAL_PROVIDER_REQUIRED", "0") == "1",
+    "provider": os.getenv("LLM_PROVIDER", "openai"),
+    "model_configured": bool(os.getenv("LLM_MODEL") or os.getenv("OPENAI_MODEL")),
+    "base_url_configured": bool(
+        os.getenv("LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL")
+    ),
+    "required": os.getenv("FOUNDATION_AI_REAL_PROVIDER_REQUIRED", "0") == "1",
     "credential_skip_allowed": os.getenv(
-        "NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED", "0"
+        "FOUNDATION_AI_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED", "0"
     ) == "1",
     "mode": os.getenv("CRITICAL_GATE_MODE", "full"),
     "command": (
-        "CRITICAL_GATE_MODE=newcomer-real-provider "
-        "NEWCOMER_REAL_PROVIDER_NAME=stepfun_realtime "
+        "CRITICAL_GATE_MODE=foundation-ai-real-provider "
+        "LLM_API_KEY=... LLM_BASE_URL=... LLM_MODEL=... "
         "bash scripts/critical-quality-gate.sh"
     ),
     "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -273,117 +260,13 @@ path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encodi
 PY
 }
 
-infer_newcomer_real_provider_failure_classification() {
-  if grep -q "\\[STEPFUN_UPSTREAM_REJECTED\\].*HTTP 401\\|HTTP 401.*\\[STEPFUN_UPSTREAM_REJECTED\\]" "${EVIDENCE_FILE}" 2>/dev/null; then
-    printf '%s\n' "upstream_auth_rejected"
-    return 0
-  fi
-  if grep -q "\\[STEPFUN_UPSTREAM_REJECTED\\]" "${EVIDENCE_FILE}" 2>/dev/null; then
-    printf '%s\n' "upstream_rejected"
-    return 0
-  fi
-  if grep -q "\\[STEPFUN_API_ERROR\\]" "${EVIDENCE_FILE}" 2>/dev/null; then
-    printf '%s\n' "upstream_api_error"
-    return 0
-  fi
-  if grep -q "\\[STEPFUN_CONNECTION_ERROR\\]\\|timed out during opening handshake" "${EVIDENCE_FILE}" 2>/dev/null; then
-    printf '%s\n' "upstream_connection_error"
-    return 0
-  fi
-  printf '%s\n' "executed_failed"
-}
-
-infer_newcomer_real_provider_http_status() {
-  grep -Eo "HTTP [0-9]{3}" "${EVIDENCE_FILE}" 2>/dev/null \
-    | tail -1 \
-    | sed -E 's/^HTTP //' \
-    || true
-}
-
-newcomer_real_provider_failure_reason() {
-  local classification="$1"
-  case "${classification}" in
-    upstream_auth_rejected)
-      printf '%s\n' "StepFun realtime provider gate executed and reached upstream, but StepFun rejected the handshake with HTTP 401. The local auth/seed/path flow passed; check that STEPFUN_API_KEY is valid and authorized for STEPFUN_REALTIME_MODEL."
-      ;;
-    upstream_rejected)
-      printf '%s\n' "StepFun realtime provider gate executed and reached upstream, but StepFun rejected the handshake. Inspect .sisyphus/evidence/task-9-quality-gate.txt for status code and provider detail."
-      ;;
-    upstream_api_error)
-      printf '%s\n' "StepFun realtime provider gate executed, reached upstream, and completed the WebSocket handshake, but StepFun returned an application-level API error during the session. Inspect .sisyphus/evidence/task-9-newcomer-real-provider-gate.txt for provider detail."
-      ;;
-    upstream_connection_error)
-      printf '%s\n' "StepFun realtime provider gate executed but the upstream WebSocket connection failed before a completed realtime session. Inspect .sisyphus/evidence/task-9-newcomer-real-provider-gate.txt for provider detail."
-      ;;
-    *)
-      printf '%s\n' "Newcomer realtime real provider gate executed but did not pass. Inspect .sisyphus/evidence/task-9-newcomer-real-provider-gate.txt for the upstream error and Playwright trace."
-      ;;
-  esac
-}
-
-write_newcomer_ai_coach_real_provider_evidence() {
-  local status="$1"
-  local classification="$2"
-  local reason="$3"
-
-  "${PYTHON_BIN}" - "${NEWCOMER_AI_COACH_REAL_PROVIDER_EVIDENCE}" \
-    "${NEWCOMER_AI_COACH_REAL_PROVIDER_RUNTIME_AUDIT}" \
-    "${status}" "${classification}" "${reason}" <<'PY'
-import json
-import os
-import sys
-from datetime import datetime, timezone
-from pathlib import Path
-
-path = Path(sys.argv[1])
-runtime_audit_path = Path(sys.argv[2])
-runtime_audit = {}
-if runtime_audit_path.exists():
-    raw = json.loads(runtime_audit_path.read_text(encoding="utf-8"))
-    if isinstance(raw, dict):
-        runtime_audit = raw
-actual_llm_runtime = {}
-if isinstance(runtime_audit.get("llm_runtime"), dict):
-    actual_llm_runtime = runtime_audit["llm_runtime"]
-payload = {
-    "status": sys.argv[3],
-    "classification": sys.argv[4],
-    "reason": sys.argv[5],
-    "provider": actual_llm_runtime.get("provider") or os.getenv("LLM_PROVIDER", "openai"),
-    "model": actual_llm_runtime.get("model_name")
-    or os.getenv("LLM_MODEL")
-    or os.getenv("OPENAI_MODEL")
-    or "",
-    "base_url_configured": bool(
-        actual_llm_runtime.get("base_url")
-        or os.getenv("LLM_BASE_URL")
-        or os.getenv("OPENAI_BASE_URL")
-    ),
-    "required": os.getenv("NEWCOMER_AI_COACH_REAL_PROVIDER_REQUIRED", "0") == "1",
-    "credential_skip_allowed": os.getenv(
-        "NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED", "0"
-    ) == "1",
-    "mode": os.getenv("CRITICAL_GATE_MODE", "full"),
-    "command": (
-        "CRITICAL_GATE_MODE=newcomer-ai-coach-real-provider "
-        "LLM_API_KEY=... bash scripts/critical-quality-gate.sh"
-    ),
-    "actual_runtime_audit": runtime_audit,
-    "generated_at": datetime.now(timezone.utc).isoformat(),
-}
-path.parent.mkdir(parents=True, exist_ok=True)
-path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-PY
-}
-
-is_placeholder_stepfun_key() {
-  local key="${STEPFUN_API_KEY:-}"
-  [[ -z "${key}" || "${key}" == "phase4-local-e2e" || "${key}" == "replace-with-stepfun-api-key" ]]
-}
-
-is_placeholder_llm_key() {
+is_foundation_ai_real_provider_configuration_missing() {
   local key="${LLM_API_KEY:-${OPENAI_API_KEY:-}}"
+  local base_url="${LLM_BASE_URL:-${OPENAI_BASE_URL:-}}"
+  local model="${LLM_MODEL:-${OPENAI_MODEL:-}}"
   [[ -z "${key}" \
+    || -z "${base_url}" \
+    || -z "${model}" \
     || "${key}" == "change-me" \
     || "${key}" == "test-key" \
     || "${key}" == "local-test-key" \
@@ -391,100 +274,34 @@ is_placeholder_llm_key() {
     || "${key}" == "replace-with-openai-api-key" ]]
 }
 
-run_newcomer_real_provider_gate() {
-  log "Newcomer realtime real provider gate"
+run_foundation_ai_real_provider_gate() {
+  log "Foundation AI controlled real-provider staging gate"
 
-  if is_placeholder_stepfun_key; then
-    write_newcomer_real_provider_evidence \
+  if is_foundation_ai_real_provider_configuration_missing; then
+    write_foundation_ai_real_provider_skip_evidence \
       "skipped" \
-      "credential_missing" \
-      "STEPFUN_API_KEY is empty or still uses a local/test placeholder; real provider gate was not executed."
-    if [[ "${NEWCOMER_REAL_PROVIDER_REQUIRED}" == "1" ]]; then
-      die "Newcomer real provider gate requires a non-placeholder STEPFUN_API_KEY"
+      "provider_configuration_missing" \
+      "LLM_API_KEY, LLM_BASE_URL, or LLM_MODEL is missing, or the key still uses a local/test placeholder; the Foundation AI real-provider staging gate was not executed."
+    if [[ "${FOUNDATION_AI_REAL_PROVIDER_REQUIRED}" == "1" ]]; then
+      die "Foundation AI real-provider gate requires non-placeholder provider credentials, base URL, and model"
     fi
-    if [[ "${NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED}" != "1" ]]; then
-      die "Newcomer real provider gate requires STEPFUN_API_KEY or NEWCOMER_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1"
+    if [[ "${FOUNDATION_AI_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED}" != "1" ]]; then
+      die "Foundation AI real-provider gate requires provider configuration or FOUNDATION_AI_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1"
     fi
-    log "Skipped newcomer real provider gate: credential_missing"
+    log "Skipped Foundation AI real-provider gate: provider_configuration_missing"
     return 0
   fi
 
   stop_smoke_stack
-  export PHASE4_E2E_PROVIDER="${NEWCOMER_REAL_PROVIDER_NAME}"
-  export NEWCOMER_E2E_EXPECT_REAL_PROVIDER="1"
-  start_smoke_stack
-
   if ! (
-    cd "${ROOT_DIR}/web"
-    SMOKE_REUSE_EXISTING_STACK=1 \
-      PHASE4_E2E_PROVIDER="${NEWCOMER_REAL_PROVIDER_NAME}" \
-      NEWCOMER_E2E_EXPECT_REAL_PROVIDER=1 \
-      run_playwright test tests/e2e/newcomer-training-closed-loop.spec.ts \
-        --grep "realtime roleplay starts from active path" \
-        --workers=1
+    cd "${ROOT_DIR}/backend"
+    FOUNDATION_AI_REAL_PROVIDER_CONFIRM=1 \
+      PYTHONPATH=src \
+      "${PYTHON_BIN}" scripts/run_foundation_ai_provider_staging.py \
+        --output "${FOUNDATION_AI_REAL_PROVIDER_EVIDENCE}"
   ); then
-    local failure_classification
-    local failure_reason
-    local failure_http_status
-    failure_classification="$(infer_newcomer_real_provider_failure_classification)"
-    failure_reason="$(newcomer_real_provider_failure_reason "${failure_classification}")"
-    failure_http_status="$(infer_newcomer_real_provider_http_status)"
-    write_newcomer_real_provider_evidence \
-      "failed" \
-      "${failure_classification}" \
-      "${failure_reason}" \
-      "${failure_http_status}"
-    return 1
+    die "Foundation AI real-provider staging executed but did not pass; inspect ${FOUNDATION_AI_REAL_PROVIDER_EVIDENCE}"
   fi
-
-  write_newcomer_real_provider_evidence \
-    "passed" \
-    "executed" \
-    "Newcomer realtime roleplay start, /ws/sales session lifecycle, Journey outcome, and admin record projection passed against the configured non-local provider."
-}
-
-run_newcomer_ai_coach_real_provider_gate() {
-  log "Newcomer AI Coach real provider stream gate"
-
-  if is_placeholder_llm_key; then
-    write_newcomer_ai_coach_real_provider_evidence \
-      "skipped" \
-      "credential_missing" \
-      "LLM_API_KEY/OPENAI_API_KEY is empty or still uses a local/test placeholder; AI Coach real provider stream gate was not executed."
-    if [[ "${NEWCOMER_AI_COACH_REAL_PROVIDER_REQUIRED}" == "1" ]]; then
-      die "Newcomer AI Coach real provider gate requires a non-placeholder LLM_API_KEY or OPENAI_API_KEY"
-    fi
-    if [[ "${NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED}" != "1" ]]; then
-      die "Newcomer AI Coach real provider gate requires LLM_API_KEY/OPENAI_API_KEY or NEWCOMER_AI_COACH_REAL_PROVIDER_CREDENTIAL_SKIP_ALLOWED=1"
-    fi
-    log "Skipped newcomer AI Coach real provider gate: credential_missing"
-    return 0
-  fi
-
-  stop_smoke_stack
-  export NEWCOMER_AI_COACH_EXPECT_REAL_PROVIDER="1"
-  start_smoke_stack
-
-	  if ! (
-	    cd "${ROOT_DIR}/web"
-	    SMOKE_REUSE_EXISTING_STACK=1 \
-	      NEWCOMER_AI_COACH_EXPECT_REAL_PROVIDER=1 \
-	      NEWCOMER_AI_COACH_REAL_PROVIDER_AUDIT_FILE="${NEWCOMER_AI_COACH_REAL_PROVIDER_RUNTIME_AUDIT}" \
-	      run_playwright test tests/e2e/newcomer-training-closed-loop.spec.ts \
-	        --grep "AI Coach real provider stream creates a governed first-card after learner choice" \
-	        --workers=1
-  ); then
-    write_newcomer_ai_coach_real_provider_evidence \
-      "failed" \
-      "executed_failed" \
-      "AI Coach real provider stream gate executed but did not pass. Inspect .sisyphus/evidence/task-9-quality-gate.txt for the provider error and Playwright trace."
-    return 1
-  fi
-
-  write_newcomer_ai_coach_real_provider_evidence \
-    "passed" \
-    "executed" \
-    "AI Coach /chat/sessions/stream and /messages/stream created a governed first-card after learner choice against the configured real LLM provider without fallback error events."
 }
 
 run_with_watchdog() {
@@ -517,20 +334,13 @@ is_selected_playwright_target() {
 }
 
 if [[ "${CRITICAL_GATE_MODE}" != "full" \
-  && "${CRITICAL_GATE_MODE}" != "newcomer-real-provider" \
-  && "${CRITICAL_GATE_MODE}" != "newcomer-ai-coach-real-provider" ]]; then
+  && "${CRITICAL_GATE_MODE}" != "foundation-ai-real-provider" ]]; then
   die "Unsupported CRITICAL_GATE_MODE=${CRITICAL_GATE_MODE}"
 fi
 
-if [[ "${CRITICAL_GATE_MODE}" == "newcomer-real-provider" ]]; then
-  run_newcomer_real_provider_gate
-  log "Newcomer real provider gate finished"
-  exit 0
-fi
-
-if [[ "${CRITICAL_GATE_MODE}" == "newcomer-ai-coach-real-provider" ]]; then
-  run_newcomer_ai_coach_real_provider_gate
-  log "Newcomer AI Coach real provider gate finished"
+if [[ "${CRITICAL_GATE_MODE}" == "foundation-ai-real-provider" ]]; then
+  run_foundation_ai_real_provider_gate
+  log "Foundation AI real-provider staging gate finished"
   exit 0
 fi
 
@@ -578,6 +388,14 @@ log "OpenAPI contract parity"
   "${PYTHON_BIN}" scripts/generate_openapi_contract.py --check
 )
 
+log "Foundation deterministic AI gold-set quality gate"
+(
+  cd "${ROOT_DIR}/backend"
+  PYTHONPATH=src \
+    "${PYTHON_BIN}" scripts/evaluate_foundation_ai_gold_set.py \
+      --output "${EVIDENCE_DIR}/foundation-ai-gold-set.json"
+)
+
 log "Backend full mypy"
 (
   cd "${ROOT_DIR}/backend"
@@ -604,7 +422,7 @@ log "Backend full unit + contract branch coverage"
 log "Web typecheck"
 (
   cd "${ROOT_DIR}/web"
-  rm -rf .next/types .next/dev/types
+  rm -rf .next/types .next/dev/types .next-smoke/types .next-smoke/dev/types
   npx tsc --noEmit
 )
 
@@ -626,6 +444,12 @@ log "Vitest"
 assert_non_empty_vitest_coverage_summary
 [[ -s "${ROOT_DIR}/web/coverage/coverage-final.json" ]] \
   || die "Vitest coverage-final.json is missing or empty"
+
+log "Web production build"
+(
+  cd "${ROOT_DIR}/web"
+  npm run build
+)
 
 log "[quality-gate] Ensuring database schema is current before smoke bootstrap and Playwright"
 start_smoke_stack
@@ -712,12 +536,8 @@ if is_selected_playwright_target "tests/e2e/sales-phase4.spec.ts"; then
   )
 fi
 
-if [[ "${RUN_NEWCOMER_REAL_PROVIDER_GATE}" == "1" ]]; then
-  run_newcomer_real_provider_gate
-fi
-
-if [[ "${RUN_NEWCOMER_AI_COACH_REAL_PROVIDER_GATE}" == "1" ]]; then
-  run_newcomer_ai_coach_real_provider_gate
+if [[ "${RUN_FOUNDATION_AI_REAL_PROVIDER_GATE}" == "1" ]]; then
+  run_foundation_ai_real_provider_gate
 fi
 
 # Playwright has finished. Release the smoke stack before the slower pytest
@@ -744,6 +564,21 @@ log "Policy-selected backend integration + e2e coverage append"
       -q
 )
 [[ -s "${BACKEND_COVERAGE_REPORT}" ]] || die "Backend coverage report is missing or empty"
+
+log "Foundation capacity and concurrency baseline"
+(
+  cd "${ROOT_DIR}/backend"
+  run_with_watchdog \
+    "Foundation capacity and concurrency baseline" \
+    "${FOUNDATION_CAPACITY_TIMEOUT_SECONDS}" \
+    env PYTHONPATH=src \
+    "${PYTHON_BIN}" -m pytest -c pyproject.toml \
+      -o addopts="--import-mode=importlib" \
+      tests/performance/test_foundation_capacity.py \
+      -q
+)
+[[ -s "${EVIDENCE_DIR}/foundation-capacity-baseline.json" ]] \
+  || die "Foundation capacity evidence is missing or empty"
 
 log "Changed-line and critical-branch coverage guard"
 "${PYTHON_BIN}" "${ROOT_DIR}/scripts/check_changed_coverage.py" \

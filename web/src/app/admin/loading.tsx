@@ -5,21 +5,24 @@ export default function Loading() {
             role="status"
             aria-live="polite"
             aria-busy="true"
-            className="w-full h-[600px] flex items-center justify-center"
+            className="mx-auto w-full max-w-6xl space-y-5 py-4"
         >
-            <div className="flex flex-col items-center gap-6">
-                <span className="sr-only">正在加载管理后台</span>
-                {/* 玻璃拟态加载动画 */}
-                <div className="relative w-24 h-24">
-                    <div className="absolute inset-0 rounded-full border-4 border-slate-100/50" />
-                    <div className="absolute inset-0 rounded-full border-4 border-blue-500/30 border-t-blue-600 animate-spin" />
-                    {/* 内层脉冲动画 */}
-                    <div className="absolute inset-4 rounded-full bg-blue-500/10 animate-pulse backdrop-blur-sm" />
+            <span className="sr-only">正在打开管理页面</span>
+            <div className="flex items-center justify-between gap-4">
+                <div className="space-y-2">
+                    <div className="h-7 w-40 rounded-lg bg-slate-200/80 motion-safe:animate-pulse" />
+                    <div className="h-4 w-64 max-w-[65vw] rounded bg-slate-100 motion-safe:animate-pulse" />
                 </div>
-                <div className="text-slate-400 text-sm font-medium tracking-widest animate-pulse">
-                    正在加载系统资源...
+                <div className="h-9 w-24 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="h-4 w-1/3 rounded bg-slate-100 motion-safe:animate-pulse" />
+                <div className="mt-4 space-y-3">
+                    <div className="h-12 rounded-xl bg-slate-50 motion-safe:animate-pulse" />
+                    <div className="h-12 rounded-xl bg-slate-50 motion-safe:animate-pulse" />
+                    <div className="h-12 rounded-xl bg-slate-50 motion-safe:animate-pulse" />
                 </div>
             </div>
         </div>
-    )
+    );
 }

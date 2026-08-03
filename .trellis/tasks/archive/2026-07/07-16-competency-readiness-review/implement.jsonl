@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/domain-ownership-and-evaluation-ports.md", "reason": "能力证据、Outcome 和正式结论边界"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "不可变证据、快照和并发决策"}
+{"file": ".trellis/spec/backend/business-rule-configs.md", "reason": "能力门槛和复核策略修订化"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "档案、队列、人工审批和上下文补练"}
+{"file": ".trellis/tasks/archive/2026-07/07-16-newcomer-sales-foundation-platform/architecture.md", "reason": "Evidence、Readiness 和事件目标架构"}
+{"file": "docs/newcomer-foundation-contract-index.md", "reason": "切片 0 权威 Evidence、Dossier、ReviewDecision、权限、事件与状态合同入口"}
+{"file": "docs/adr/2026-07-16-newcomer-foundation-product-boundary.md", "reason": "直接约束 foundation_ready 含义、人工授予和 Realtime 延期"}
+{"file": "docs/adr/2026-07-16-newcomer-foundation-domain-and-modules.md", "reason": "直接约束 competency_evidence/readiness 唯一写权威"}

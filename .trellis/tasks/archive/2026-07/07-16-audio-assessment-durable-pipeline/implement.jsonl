@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/domain-ownership-and-evaluation-ports.md", "reason": "录音评分端口、结果和证据边界"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Submission、Transcript、Outcome 修订与事务"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "上传、ASR、评分和对账失败语义"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "任务、Provider 和敏感数据日志规则"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "长任务、录音恢复和用户状态"}
+{"file": ".trellis/tasks/archive/2026-07/07-16-newcomer-sales-foundation-platform/research/current-state.md", "reason": "当前录音同步处理和前端内存问题证据"}
+{"file": "docs/newcomer-foundation-contract-index.md", "reason": "切片 0 权威音频状态、Task/AI、Outcome、事件、安全与迁移合同入口"}
+{"file": "docs/adr/2026-07-16-newcomer-foundation-domain-and-modules.md", "reason": "直接约束 audio_assessment 唯一写权威、Outcome 与 Evidence 端口"}
+{"file": "docs/adr/2026-07-16-governed-ai-and-durable-tasks.md", "reason": "直接约束 ASR/评分 Invocation 与可恢复持久任务"}

@@ -153,6 +153,62 @@ def test_should_accept_each_supported_activity_type(
     assert parsed.phases[0].modules[0].activities[0].type == activity_type
 
 
+@pytest.mark.parametrize(
+    ("activity_type", "config"),
+    [
+        ("lesson", {"learning_content_id": ""}),
+        ("quiz", {"exam_paper_id": "", "pass_score": 80}),
+        (
+            "audio_assessment",
+            {"scoring_rubric_id": "", "material_id": "", "pass_score": 80},
+        ),
+        (
+            "realtime_roleplay",
+            {"practice_template_id": "", "runtime_profile_id": ""},
+        ),
+        ("ai_coach", {"coach_profile_id": ""}),
+    ],
+)
+def test_should_accept_incomplete_resource_bindings_in_working_draft(
+    activity_type: str,
+    config: dict[str, object],
+) -> None:
+    parsed = TrainingPathPayload.model_validate(
+        {
+            "title": "待补资源的新人训练路径",
+            "phases": [
+                {
+                    "phase_id": "phase-1",
+                    "title": "阶段",
+                    "order_index": 1,
+                    "modules": [
+                        {
+                            "module_id": "module-1",
+                            "title": "模块",
+                            "order_index": 1,
+                            "completion_policy": {"mode": "all_required"},
+                            "activities": [
+                                {
+                                    "activity_id": "activity-1",
+                                    "type": activity_type,
+                                    "title": "待配置活动",
+                                    "order_index": 1,
+                                    "config": config,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    activity = parsed.phases[0].modules[0].activities[0]
+    assert activity.type == activity_type
+    if activity.type == "audio_assessment":
+        assert activity.config.material_id is None
+
+
 def test_should_reject_arbitrary_route_in_activity_config() -> None:
     payload = {
         "title": "新人训练路径",
@@ -189,7 +245,9 @@ def test_should_reject_arbitrary_route_in_activity_config() -> None:
         TrainingPathPayload.model_validate(payload)
 
 
-def test_should_accept_optional_learner_presentation_and_default_legacy_values() -> None:
+def test_should_accept_optional_learner_presentation_and_default_legacy_values() -> (
+    None
+):
     legacy = TrainingPathPayload.model_validate(
         {
             "title": "旧版路径",

@@ -66,7 +66,6 @@ async def serialize_quiz_attempt(
         "user_id": attempt.user_id,
         "user_name": user.name if user else None,
         "user_email": user.email if user else None,
-        "user_department": user.department if user else None,
         "total_score": float(attempt.total_score)
         if attempt.total_score is not None
         else None,

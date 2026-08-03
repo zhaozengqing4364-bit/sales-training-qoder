@@ -8,6 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.teams import active_primary_teams_by_user_ids
+from common.teams.policy import TeamDataScope
 from sales_trainer.models import (
     NewcomerTrainingActivityAttempt,
     NewcomerTrainingEnrollment,
@@ -22,7 +24,7 @@ class TrainingRecordService:
         self,
         *,
         user_id: str | None = None,
-        team_department: str | None = None,
+        team_scope: TeamDataScope | None = None,
         status: str | None = None,
         activity_id: str | None = None,
         activity_type: str | None = None,
@@ -46,11 +48,10 @@ class TrainingRecordService:
             filters.append(NewcomerTrainingActivityAttempt.activity_id == activity_id)
         if activity_type:
             filters.append(NewcomerTrainingActivityAttempt.activity_type == activity_type)
-        if team_department is not None:
-            statement = statement.join(
-                User, NewcomerTrainingEnrollment.learner_id == User.user_id
+        if team_scope is not None and not team_scope.unrestricted:
+            filters.append(
+                NewcomerTrainingEnrollment.learner_id.in_(team_scope.learner_ids)
             )
-            filters.append(User.department == team_department)
         statement = statement.where(*filters)
         rows = list(
             (
@@ -69,6 +70,7 @@ class TrainingRecordService:
                 attempt.activity_snapshot, phase_id=phase_id, module_id=module_id
             )
         ]
+        await self._attach_user_context(records)
         total = len(records)
         return records[offset : offset + limit], total
 
@@ -83,7 +85,11 @@ class TrainingRecordService:
         enrollment = await self._db.get(
             NewcomerTrainingEnrollment, str(attempt.enrollment_id)
         )
-        return _record(attempt, enrollment) if enrollment is not None else None
+        if enrollment is None:
+            return None
+        record = _record(attempt, enrollment)
+        await self._attach_user_context([record])
+        return record
 
     async def get_record_for_viewer(
         self,
@@ -91,14 +97,15 @@ class TrainingRecordService:
         record_id: str,
         *,
         viewer: User,
-        team_department: str | None,
+        team_scope: TeamDataScope | None,
     ) -> dict[str, Any] | None:
-        del viewer
         record = await self.get_record(record_type, record_id)
-        if record is None or team_department is None:
+        if record is None:
             return record
-        learner = await self._db.get(User, str(record["user_id"]))
-        if learner is None or str(learner.department or "") != team_department:
+        learner_id = str(record["user_id"])
+        if team_scope is not None:
+            return record if team_scope.allows_learner(learner_id) else None
+        if learner_id != str(viewer.user_id):
             return None
         return record
 
@@ -108,7 +115,7 @@ class TrainingRecordService:
         evidence_type: str,
         evidence_id: str,
         viewer: User,
-        team_department: str | None,
+        team_scope: TeamDataScope | None,
     ) -> dict[str, Any] | None:
         attempt = await self._db.scalar(
             select(NewcomerTrainingActivityAttempt).where(
@@ -122,7 +129,7 @@ class TrainingRecordService:
             "newcomer_activity_attempt",
             str(attempt.attempt_id),
             viewer=viewer,
-            team_department=team_department,
+            team_scope=team_scope,
         )
 
     async def get_audio_record(self, submission_id: str) -> dict[str, Any] | None:
@@ -137,6 +144,27 @@ class TrainingRecordService:
         return await self.get_record(
             "newcomer_activity_attempt", str(attempt.attempt_id)
         )
+
+    async def _attach_user_context(self, records: list[dict[str, Any]]) -> None:
+        """Attach stable user and Team read models without changing record authority."""
+
+        user_ids = {str(record["user_id"]) for record in records}
+        if not user_ids:
+            return
+        users = list(
+            (
+                await self._db.scalars(select(User).where(User.user_id.in_(user_ids)))
+            ).all()
+        )
+        users_by_id = {str(user.user_id): user for user in users}
+        teams_by_user_id = await active_primary_teams_by_user_ids(self._db, user_ids)
+        for record in records:
+            user_id = str(record["user_id"])
+            user = users_by_id.get(user_id)
+            team = teams_by_user_id.get(user_id)
+            record["user_name"] = user.name if user else None
+            record["user_email"] = user.email if user else None
+            record["team"] = team.to_dict() if team else None
 
 
 def _record(

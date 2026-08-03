@@ -47,12 +47,8 @@ AUTH_SESSION_COOKIE_SAMESITE = (
 CookieSameSite = Literal["lax", "strict", "none"]
 
 security = HTTPBearer(auto_error=False)
-# Login compatibility seam:
-# - password reset writes User.hashed_password and should become the durable credential path.
-# - users without hashed_password must keep authenticating through
-#   AUTH_USER_PASSWORDS_JSON / AUTH_SHARED_PASSWORD until the reset contract replaces that fallback.
-# - request-path auth recovery work should not expand init_db/runtime DDL behavior here; schema authority lives
-#   in Alembic revisions plus common.db.models.PasswordResetToken, including the single-active-token invariant.
+# Password login uses only User.hashed_password. Environment-based shared
+# passwords are intentionally not part of the credential authority.
 # M016/S03/T01 auth/RBAC baseline:
 # - get_current_user / get_current_admin_user / require_role now raise structured detail payloads via _raise_auth_http_error(...).
 # - the remaining admin-risk seam is not helper shape, but legacy /admin route families that still wire get_current_user instead of get_current_admin_user.
@@ -77,7 +73,7 @@ AUTH_TRANSPORT_MATRIX: dict[str, dict[str, list[str] | str]] = {
     },
     "login_credentials": {
         "formal": ["user_hashed_password"],
-        "compatibility": ["auth_user_passwords_json", "auth_shared_password"],
+        "compatibility": [],
         "resolver": "common.auth.api.login",
     },
 }
@@ -86,7 +82,6 @@ WECOM_API_BASE_URL = "https://qyapi.weixin.qq.com"
 WECOM_AUTHORIZE_URL = "https://open.weixin.qq.com/connect/oauth2/authorize"
 DEV_LOGIN_EMAIL = "dev@example.com"
 DEV_LOGIN_WECHAT_USER_ID = "dev_wechat_user"
-DEFAULT_DEV_LOGIN_TEAM_DEPARTMENT = "新人训练路径"
 
 
 def _read_env(*names: str) -> str:
@@ -95,10 +90,6 @@ def _read_env(*names: str) -> str:
         if value:
             return value
     return ""
-
-
-def get_dev_login_team_department() -> str:
-    return _read_env("AUTH_DEV_LOGIN_DEPARTMENT") or DEFAULT_DEV_LOGIN_TEAM_DEPARTMENT
 
 
 def get_wecom_corp_id() -> str:
@@ -228,13 +219,6 @@ def _normalize_optional_string(value: Any) -> str | None:
         return None
     normalized = str(value).strip()
     return normalized or None
-
-
-def _normalize_department_value(value: Any) -> str | None:
-    if isinstance(value, list):
-        parts = [str(item).strip() for item in value if str(item).strip()]
-        return ",".join(parts) if parts else None
-    return _normalize_optional_string(value)
 
 
 async def _request_wecom_json(
@@ -566,6 +550,23 @@ async def get_current_user(
             message="当前账号已被停用。",
         )
 
+    if payload.get("scope", "business") != "business":
+        _raise_auth_http_error(
+            status_code=403,
+            error_code="[PASSWORD_CHANGE_REQUIRED]",
+            message="请先完成首次密码修改。",
+        )
+
+    token_credential_version = payload.get("credential_version")
+    if token_credential_version is not None and int(token_credential_version) != int(
+        getattr(user, "credential_version", 1)
+    ):
+        _raise_auth_http_error(
+            status_code=401,
+            error_code="[INVALID_TOKEN]",
+            message="登录态已失效，请重新登录。",
+        )
+
     return user
 
 
@@ -695,8 +696,6 @@ async def upsert_wecom_user(db: AsyncSession, profile: dict[str, Any]) -> User:
 
     email = _normalize_optional_string(profile.get("email"))
     name = _normalize_optional_string(profile.get("name")) or wecom_user_id
-    department = _normalize_department_value(profile.get("department"))
-
     result = await db.execute(select(User).where(User.wechat_user_id == wecom_user_id))
     user = result.scalar_one_or_none()
 
@@ -710,7 +709,6 @@ async def upsert_wecom_user(db: AsyncSession, profile: dict[str, Any]) -> User:
             wechat_user_id=wecom_user_id,
             email=email,
             name=name,
-            department=department,
         )
         db.add(user)
     else:
@@ -718,8 +716,6 @@ async def upsert_wecom_user(db: AsyncSession, profile: dict[str, Any]) -> User:
         _set_user_field(user, "name", name or _user_field(user, "name") or wecom_user_id)
         if email:
             _set_user_field(user, "email", email)
-        if department is not None:
-            _set_user_field(user, "department", department)
 
     await db.commit()
     await db.refresh(user)
@@ -759,7 +755,6 @@ async def get_dev_user(db: AsyncSession) -> User:
             wechat_user_id=DEV_LOGIN_WECHAT_USER_ID,
             email=DEV_LOGIN_EMAIL,
             name="Developer",
-            department=get_dev_login_team_department(),
             role="admin",
         )
         db.add(user)
@@ -773,8 +768,6 @@ async def get_dev_user(db: AsyncSession) -> User:
         _set_user_field(user, "email", DEV_LOGIN_EMAIL)
     if not user.name:
         _set_user_field(user, "name", "Developer")
-    if _user_field(user, "department") != get_dev_login_team_department():
-        _set_user_field(user, "department", get_dev_login_team_department())
     # Dev fallback account is the local administrator for seeding training
     # paths and admin-only flows. Normalize legacy rows that were created
     # before role was set here; production is gated by is_dev_login_enabled().

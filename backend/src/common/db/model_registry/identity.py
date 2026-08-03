@@ -16,7 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from common.auth.roles import admin_permission_role_check_sql, user_role_check_sql
 from common.db.model_registry.base import Base
@@ -25,22 +25,50 @@ from common.db.model_registry.base import Base
 class User(Base):
     __tablename__ = "users"
 
-    user_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    wechat_user_id = Column(String(128), unique=True, nullable=False, index=True)
-    name = Column(String(100), nullable=False)
-    department = Column(String(100))
-    email = Column(String(255), unique=True)
-    hashed_password = Column(String(255), nullable=True)
-    role = Column(String(32), default="user", nullable=False)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    last_login = Column(DateTime(timezone=True))
-    is_active = Column(Boolean, default=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    wechat_user_id: Mapped[str] = mapped_column(
+        String(128), unique=True, nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    credential_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="active"
+    )
+    temporary_password_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    credential_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1
+    )
+    role: Mapped[str] = mapped_column(
+        String(32), default="user", nullable=False
+    )
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=True
+    )
+    last_login: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_active: Mapped[bool | None] = mapped_column(
+        Boolean, default=True, nullable=True
+    )
 
     __table_args__ = (
         CheckConstraint(
             user_role_check_sql(),
             name="ck_user_role",
         ),
+        CheckConstraint(
+            "credential_status IN ('active', 'temporary', 'reset_required')",
+            name="ck_users_credential_status",
+        ),
+        Index("ix_users_email_lower", text("lower(email)"), unique=True),
     )
 
     # Relationships
@@ -86,6 +114,242 @@ class User(Base):
         "TrainingTask",
         back_populates="assignee",
         cascade="all, delete-orphan",
+    )
+
+
+class Team(Base):
+    __tablename__ = "teams"
+
+    team_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    code: Mapped[str] = mapped_column(
+        String(80), nullable=False, unique=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, index=True
+    )
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class TeamMembership(Base):
+    __tablename__ = "team_memberships"
+
+    membership_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    team_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("teams.team_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    membership_role: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="primary"
+    )
+    effective_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    effective_to: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "membership_role IN ('primary')", name="ck_team_membership_role"
+        ),
+        Index(
+            "uq_team_memberships_active_primary_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text(
+                "effective_to IS NULL AND membership_role = 'primary'"
+            ),
+            sqlite_where=text("effective_to IS NULL AND membership_role = 'primary'"),
+        ),
+    )
+
+
+class TeamLeaderAssignment(Base):
+    __tablename__ = "team_leader_assignments"
+
+    assignment_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    team_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("teams.team_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    leader_user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    assignment_role: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="primary"
+    )
+    effective_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    effective_to: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "assignment_role IN ('primary', 'proxy')",
+            name="ck_team_leader_assignment_role",
+        ),
+        Index(
+            "uq_team_leader_assignments_active_primary_team",
+            "team_id",
+            unique=True,
+            postgresql_where=text(
+                "effective_to IS NULL AND assignment_role = 'primary'"
+            ),
+            sqlite_where=text("effective_to IS NULL AND assignment_role = 'primary'"),
+        ),
+        Index(
+            "uq_team_leader_assignments_active_role",
+            "team_id",
+            "leader_user_id",
+            "assignment_role",
+            unique=True,
+            postgresql_where=text("effective_to IS NULL"),
+            sqlite_where=text("effective_to IS NULL"),
+        ),
+    )
+
+
+class ProvisioningBatch(Base):
+    __tablename__ = "provisioning_batches"
+
+    batch_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    idempotency_key: Mapped[str] = mapped_column(
+        String(120), nullable=False, unique=True, index=True
+    )
+    source_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="previewed", index=True
+    )
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('previewed', 'processing', 'completed', 'partially_completed', 'failed')",
+            name="ck_provisioning_batch_status",
+        ),
+    )
+
+
+class ProvisioningTeamExecution(Base):
+    __tablename__ = "provisioning_team_executions"
+
+    execution_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    batch_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("provisioning_batches.batch_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    team_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="pending"
+    )
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'completed', 'failed')",
+            name="ck_provisioning_team_execution_status",
+        ),
+        UniqueConstraint(
+            "batch_id", "team_code", name="uq_provisioning_team_execution"
+        ),
+    )
+
+
+class ProvisioningRow(Base):
+    __tablename__ = "provisioning_rows"
+
+    row_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    batch_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("provisioning_batches.batch_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    team_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    team_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    primary_leader_email: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    employee_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="valid"
+    )
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('valid', 'invalid', 'created', 'failed', 'skipped')",
+            name="ck_provisioning_row_status",
+        ),
+        UniqueConstraint(
+            "batch_id", "row_number", name="uq_provisioning_batch_row_number"
+        ),
     )
 
 

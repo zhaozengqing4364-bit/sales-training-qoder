@@ -1,2 +1,7 @@
-import type { ActivityDetailResponse } from "@/lib/api/types/newcomer-training";
-export interface ActivityRunnerProps { detail: ActivityDetailResponse; onRefresh?: (detail: ActivityDetailResponse) => void; }
+import type { FoundationActivityWorkspace } from "@/lib/api/types/newcomer-training";
+import type { FoundationActivityViewModel } from "@/lib/newcomer-training/view-models";
+
+export interface ActivityRunnerProps {
+    detail: FoundationActivityViewModel;
+    onRefresh?: (detail: FoundationActivityWorkspace) => void;
+}

@@ -47,12 +47,13 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/glass-tooltip";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { api } from "@/lib/api/client";
 import { authHandler } from "@/lib/auth-handler";
 import { isPlatformAdminRole } from "@/lib/auth/current-user";
 import type { CurrentUser } from "@/lib/auth/current-user";
 import type { SalesTrainerAdminCapabilities } from "@/lib/api/types";
+import type { FoundationAdminCapabilities } from "@/lib/api/types/foundation-admin";
 import {
     SALES_TRAINER_ADMIN_NAV_ITEMS,
     salesTrainerAdminItemsForCapabilities,
@@ -63,7 +64,7 @@ interface UserInfo {
     display_name: string;
     avatar_url?: string;
     role: string;
-    department?: string;
+    team?: { team_id: string; code: string; name: string } | null;
 }
 
 export function AdminSidebar({ currentUser }: { currentUser: CurrentUser }) {
@@ -72,7 +73,7 @@ export function AdminSidebar({ currentUser }: { currentUser: CurrentUser }) {
     return (
         <aside
             className={cn(
-                "hidden md:flex fixed left-4 top-4 h-[calc(100vh-2rem)] rounded-[2.5rem] bg-white/50 backdrop-blur-2xl border border-white/60 shadow-[0_8px_32px_rgba(0,0,0,0.04)] z-50 flex-col pt-8 pb-6 overflow-hidden",
+                "hidden md:flex fixed left-4 top-4 h-[calc(100vh-2rem)] rounded-[2.5rem] bg-white/95 border border-slate-200/80 shadow-[0_8px_32px_rgba(0,0,0,0.04)] z-50 flex-col pt-8 pb-6 overflow-hidden",
                 isCollapsed ? "w-20 px-3" : "w-72 px-5"
             )}
         >
@@ -92,12 +93,14 @@ interface AdminSidebarContentProps {
     toggleSidebar?: () => void;
     showToggle?: boolean;
     salesTrainerCapabilities?: SalesTrainerAdminCapabilities | null;
+    foundationAdminCapabilities?: FoundationAdminCapabilities | null;
 }
 
 interface AdminNavItem {
     label: string;
     href: string;
     icon: LucideIcon;
+    prefetch?: boolean;
 }
 
 interface AdminNavSection {
@@ -108,22 +111,53 @@ interface AdminNavSection {
     items: readonly AdminNavItem[];
 }
 
-function salesTrainerSection(items: readonly AdminNavItem[]): AdminNavSection {
+const subscribeToHydration = () => () => undefined;
+const getHydratedSnapshot = () => true;
+const getServerHydratedSnapshot = () => false;
+
+function useIsHydrated(): boolean {
+    return useSyncExternalStore(
+        subscribeToHydration,
+        getHydratedSnapshot,
+        getServerHydratedSnapshot,
+    );
+}
+
+function salesTrainerSection(
+    items: readonly AdminNavItem[],
+): AdminNavSection {
     const visibleHrefs = new Set([
-        "/admin/newcomer-training/path",
+        "/admin/newcomer-training",
+        "/admin/newcomer-training/paths",
+        "/admin/newcomer-training/resources",
         "/admin/newcomer-training/learners",
-        "/admin/sales-trainer/readiness",
-        "/admin/sales-trainer/training-records",
+        "/admin/newcomer-training/reviews",
+        "/admin/newcomer-training/assessments",
         "/admin/sales-trainer/settings",
         "/admin/sales-trainer/operation-logs",
     ]);
+    const visibleItems = items.filter((item) => visibleHrefs.has(item.href));
     return {
         key: "sales-trainer",
         label: "新人训练",
         icon: Mic,
-        items: items.filter((item) => visibleHrefs.has(item.href)),
+        items: visibleItems,
     };
 }
+
+const FOUNDATION_TRAINING_SECTION: AdminNavSection = {
+    key: "sales-trainer",
+    label: "新人训练",
+    icon: Mic,
+    items: [
+        {
+            label: "新人训练工作台",
+            icon: Mic,
+            href: "/admin/newcomer-training",
+            prefetch: false,
+        },
+    ],
+};
 
 const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     {
@@ -151,7 +185,6 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         label: "内容与知识",
         icon: BookOpen,
         items: [
-            { label: "学习内容管理", icon: BookOpen, href: "/admin/learning-contents" },
             { label: "知识库管理", icon: Database, href: "/admin/knowledge" },
             { label: "通用题库", icon: FileText, href: "/admin/test-bank" },
         ],
@@ -199,7 +232,10 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         key: "organization",
         label: "组织与权限",
         icon: Users,
-        items: [{ label: "用户管理", icon: Users, href: "/admin/users" }],
+        items: [
+            { label: "用户管理", icon: Users, href: "/admin/users" },
+            { label: "团队与成员", icon: UserRoundCog, href: "/admin/teams", prefetch: true },
+        ],
     },
     {
         key: "governance",
@@ -239,13 +275,27 @@ function resolveActiveSectionKey(pathname: string, sections: AdminNavSection[]):
 function visibleAdminNavSections(
     currentUser: UserInfo | null,
     salesTrainerCapabilities: SalesTrainerAdminCapabilities | null | undefined,
+    foundationAdminCapabilities: FoundationAdminCapabilities | null | undefined,
 ): AdminNavSection[] {
+    const hasFoundationAccess = Boolean(foundationAdminCapabilities?.capabilities.length);
     if (isPlatformAdminRole(currentUser?.role)) {
-        return ADMIN_NAV_SECTIONS;
+        if (foundationAdminCapabilities === undefined) return ADMIN_NAV_SECTIONS;
+        return ADMIN_NAV_SECTIONS.flatMap((section) => (
+            section.key === "sales-trainer"
+                ? hasFoundationAccess ? [FOUNDATION_TRAINING_SECTION] : []
+                : [section]
+        ));
     }
-    if (salesTrainerCapabilities?.capabilities.admin_full_access) {
-        return ADMIN_NAV_SECTIONS;
+    if (hasFoundationAccess) {
+        if (salesTrainerCapabilities?.capabilities.admin_full_access) {
+            return ADMIN_NAV_SECTIONS.flatMap((section) => (
+                section.key === "sales-trainer" ? [FOUNDATION_TRAINING_SECTION] : [section]
+            ));
+        }
+        return [FOUNDATION_TRAINING_SECTION];
     }
+    if (foundationAdminCapabilities === null) return [];
+    if (salesTrainerCapabilities?.capabilities.admin_full_access) return ADMIN_NAV_SECTIONS;
     const salesTrainerItems = salesTrainerAdminItemsForCapabilities(salesTrainerCapabilities);
     return salesTrainerItems.length > 0 ? [salesTrainerSection(salesTrainerItems)] : [];
 }
@@ -273,14 +323,25 @@ export function AdminSidebarContent({
     toggleSidebar,
     showToggle = false,
     salesTrainerCapabilities: providedSalesTrainerCapabilities,
+    foundationAdminCapabilities: providedFoundationAdminCapabilities,
 }: AdminSidebarContentProps) {
     const pathname = usePathname();
-    const [openSectionKeys, setOpenSectionKeys] = useState<Record<string, boolean>>({});
+    const isNavigationReady = useIsHydrated();
+    const [openSectionKeys, setOpenSectionKeys] = useState<Record<string, boolean>>(
+        (): Record<string, boolean> => (
+            isPlatformAdminRole(currentUser?.role) ? { organization: true } : {}
+        ),
+    );
     const [loadedSalesTrainerCapabilities, setLoadedSalesTrainerCapabilities] =
         useState<SalesTrainerAdminCapabilities | null>(null);
+    const [loadedFoundationAdminCapabilities, setLoadedFoundationAdminCapabilities] =
+        useState<FoundationAdminCapabilities | null | undefined>(undefined);
     const salesTrainerCapabilities = providedSalesTrainerCapabilities !== undefined
         ? providedSalesTrainerCapabilities
         : loadedSalesTrainerCapabilities;
+    const foundationAdminCapabilities = providedFoundationAdminCapabilities !== undefined
+        ? providedFoundationAdminCapabilities
+        : loadedFoundationAdminCapabilities;
 
     useEffect(() => {
         if (
@@ -307,7 +368,26 @@ export function AdminSidebarContent({
         };
     }, [currentUser, providedSalesTrainerCapabilities]);
 
-    const sections = visibleAdminNavSections(currentUser, salesTrainerCapabilities);
+    useEffect(() => {
+        if (!currentUser || providedFoundationAdminCapabilities !== undefined) return;
+        let cancelled = false;
+        api.admin.newcomerTraining.getCapabilities()
+            .then((capabilities) => {
+                if (!cancelled) setLoadedFoundationAdminCapabilities(capabilities);
+            })
+            .catch(() => {
+                if (!cancelled) setLoadedFoundationAdminCapabilities(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [currentUser, providedFoundationAdminCapabilities]);
+
+    const sections = visibleAdminNavSections(
+        currentUser,
+        salesTrainerCapabilities,
+        foundationAdminCapabilities,
+    );
     const activeSectionKey = resolveActiveSectionKey(pathname, sections);
 
     return (
@@ -331,7 +411,7 @@ export function AdminSidebarContent({
 
             {/* Main Navigation */}
             <TooltipProvider delayDuration={0}>
-                <nav className="flex-1 space-y-2 flex flex-col w-full overflow-y-auto min-h-0 pr-1">
+                <nav aria-busy={!isNavigationReady} className="flex-1 space-y-2 flex flex-col w-full overflow-y-auto min-h-0 pr-1">
                     {sections.map((section, sectionIndex) => (
                         <AdminNavSectionGroup
                             key={section.key}
@@ -339,6 +419,7 @@ export function AdminSidebarContent({
                             pathname={pathname}
                             isCollapsed={isCollapsed}
                             isLast={sectionIndex === sections.length - 1}
+                            isNavigationReady={isNavigationReady}
                             isOpen={openSectionKeys[section.key]
                                 ?? section.key === activeSectionKey}
                             onToggle={() => {
@@ -355,7 +436,7 @@ export function AdminSidebarContent({
             {/* Bottom Actions */}
             <div className="mt-auto flex flex-col gap-3 shrink-0 pt-4">
                 {/* Back to User Portal */}
-                <BackToUserLink isCollapsed={isCollapsed} />
+                <BackToUserLink isCollapsed={isCollapsed} isNavigationReady={isNavigationReady} />
                 {/* Admin User Card */}
                 <AdminUserCard
                     currentUser={currentUser}
@@ -479,7 +560,7 @@ function AdminProfileModal({
         <DialogContent>
             <DialogHeader>
                 <DialogTitle>{displayName}</DialogTitle>
-                <DialogDescription>{roleLabel} · {userInfo?.department || "未设置部门"}</DialogDescription>
+                <DialogDescription>{roleLabel} · {userInfo?.team?.name || "未分配团队"}</DialogDescription>
             </DialogHeader>
             <div className="py-6 space-y-4">
                 <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
@@ -497,7 +578,7 @@ function AdminProfileModal({
                     <div className="text-sm font-mono bg-slate-100 p-2 rounded text-slate-600">
                         ID: {userInfo?.id?.slice(0, 8) || "..."}<br />
                         角色: {roleLabel}<br />
-                        部门: {userInfo?.department || "未设置"}
+                        团队: {userInfo?.team?.name || "未分配"}
                     </div>
                 </div>
             </div>
@@ -509,7 +590,13 @@ function AdminProfileModal({
     );
 }
 
-function BackToUserLink({ isCollapsed }: { isCollapsed: boolean }) {
+function BackToUserLink({
+    isCollapsed,
+    isNavigationReady,
+}: {
+    isCollapsed: boolean;
+    isNavigationReady: boolean;
+}) {
     if (isCollapsed) {
         return (
             <TooltipProvider>
@@ -517,7 +604,13 @@ function BackToUserLink({ isCollapsed }: { isCollapsed: boolean }) {
                     <TooltipTrigger asChild>
                         <Link
                             href="/"
-                            className="mx-auto w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center cursor-pointer hover:bg-blue-100 transition-colors group"
+                            prefetch={false}
+                            aria-disabled={!isNavigationReady || undefined}
+                            tabIndex={isNavigationReady ? undefined : -1}
+                            className={cn(
+                                "mx-auto w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center cursor-pointer hover:bg-blue-100 transition-colors group",
+                                !isNavigationReady && "pointer-events-none cursor-wait opacity-60",
+                            )}
                         >
                             <ArrowLeft className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                         </Link>
@@ -533,7 +626,13 @@ function BackToUserLink({ isCollapsed }: { isCollapsed: boolean }) {
     return (
         <Link
             href="/"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition-colors group"
+            prefetch={false}
+            aria-disabled={!isNavigationReady || undefined}
+            tabIndex={isNavigationReady ? undefined : -1}
+            className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition-colors group",
+                !isNavigationReady && "pointer-events-none cursor-wait opacity-60",
+            )}
         >
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm font-medium">回到用户端</span>
@@ -545,26 +644,27 @@ function AdminNavLink({
     item,
     pathname,
     isCollapsed,
+    isNavigationReady,
     tooltipLabel,
 }: {
     item: AdminNavItem;
     pathname: string;
     isCollapsed: boolean;
+    isNavigationReady: boolean;
     tooltipLabel: string;
 }) {
     const isActive = isPathActive(pathname, item.href);
 
-    const LinkContent = (
-        <Link
-            href={item.href}
-            className={cn(
-                "flex items-center gap-3 py-2.5 rounded-xl transition-[color,background-color,box-shadow] duration-[var(--duration-press)] ease-[var(--ease-out)] group relative",
-                isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : "px-4 w-full",
-                isActive
-                    ? "text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"
-                    : "text-slate-500 hover:text-slate-900 hover:bg-white/40"
-            )}
-        >
+    const linkClassName = cn(
+        "flex items-center gap-3 py-2.5 rounded-xl transition-[color,background-color,box-shadow] duration-[var(--duration-press)] ease-[var(--ease-out)] group relative",
+        isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : "px-4 w-full",
+        isActive
+            ? "text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"
+            : "text-slate-500 hover:text-slate-900 hover:bg-white/40",
+        !isNavigationReady && "pointer-events-none cursor-wait opacity-60",
+    );
+    const content = (
+        <>
             {isActive && !isCollapsed && (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-slate-900 rounded-r-full" />
             )}
@@ -583,7 +683,25 @@ function AdminNavLink({
             )}>
                 {item.label}
             </span>
+        </>
+    );
+    const LinkContent = isNavigationReady ? (
+        <Link
+            href={item.href}
+            prefetch={item.prefetch ?? false}
+            className={linkClassName}
+        >
+            {content}
         </Link>
+    ) : (
+        <span
+            aria-disabled="true"
+            data-admin-nav-href={item.href}
+            tabIndex={-1}
+            className={linkClassName}
+        >
+            {content}
+        </span>
     );
 
     if (isCollapsed) {
@@ -607,6 +725,7 @@ function AdminNavSectionGroup({
     pathname,
     isCollapsed,
     isLast,
+    isNavigationReady,
     isOpen,
     onToggle,
 }: {
@@ -614,6 +733,7 @@ function AdminNavSectionGroup({
     pathname: string;
     isCollapsed: boolean;
     isLast: boolean;
+    isNavigationReady: boolean;
     isOpen: boolean;
     onToggle: () => void;
 }) {
@@ -630,6 +750,7 @@ function AdminNavSectionGroup({
                     item={{ label: section.label, href: section.href, icon: section.icon }}
                     pathname={pathname}
                     isCollapsed={isCollapsed}
+                    isNavigationReady={isNavigationReady}
                     tooltipLabel={sectionLabel}
                 />
                 {isCollapsed && !isLast && (
@@ -700,6 +821,7 @@ function AdminNavSectionGroup({
                             item={item}
                             pathname={pathname}
                             isCollapsed={false}
+                            isNavigationReady={isNavigationReady}
                             tooltipLabel={`${sectionLabel} · ${item.label}`}
                         />
                     ))}

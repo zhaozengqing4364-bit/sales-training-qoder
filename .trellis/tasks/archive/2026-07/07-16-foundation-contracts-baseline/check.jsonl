@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "检查目标依赖和自动化 Guard"}
+{"file": ".trellis/spec/backend/compatibility-retirement-and-root-composition.md", "reason": "检查干净切换和组合根"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查跨层契约闭环"}

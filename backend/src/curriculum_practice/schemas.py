@@ -160,6 +160,12 @@ from curriculum_practice.learning_content_schemas import (
     LearningContentRevisionState as LearningContentRevisionState,
 )
 from curriculum_practice.learning_content_schemas import (
+    LearningContentSummaryListResponse as LearningContentSummaryListResponse,
+)
+from curriculum_practice.learning_content_schemas import (
+    LearningContentSummaryResponse as LearningContentSummaryResponse,
+)
+from curriculum_practice.learning_content_schemas import (
     LearningContentUpdate as LearningContentUpdate,
 )
 from curriculum_practice.practice_template_schemas import (

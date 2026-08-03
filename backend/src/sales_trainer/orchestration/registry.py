@@ -1,4 +1,4 @@
-"""Non-dynamic registry for the six supported activity capabilities."""
+"""Non-dynamic registry for the remaining legacy activity capabilities."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ SUPPORTED_ACTIVITY_TYPES = (
     "quiz",
     "audio_assessment",
     "realtime_roleplay",
-    "ai_coach",
     "assignment",
 )
 
@@ -53,7 +52,6 @@ __all__ = ["ActivityTypeRegistry", "SUPPORTED_ACTIVITY_TYPES"]
 
 
 def build_activity_registry(db: AsyncSession) -> ActivityTypeRegistry:
-    from sales_trainer.orchestration.activities.ai_coach import AiCoachActivityHandler
     from sales_trainer.orchestration.activities.assignment import (
         AssignmentActivityHandler,
     )
@@ -72,7 +70,6 @@ def build_activity_registry(db: AsyncSession) -> ActivityTypeRegistry:
             QuizActivityHandler(db),
             AudioAssessmentActivityHandler(db),
             RealtimeRoleplayActivityHandler(db),
-            AiCoachActivityHandler(db),
             AssignmentActivityHandler(db),
         ]
     )

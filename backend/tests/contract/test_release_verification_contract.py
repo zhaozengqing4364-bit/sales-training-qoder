@@ -24,7 +24,6 @@ async def _user(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"{email_prefix}_{uuid.uuid4().hex[:8]}",
         name=f"{role.title()} Release Contract Tester",
-        department="QA",
         email=f"{email_prefix}-{uuid.uuid4().hex[:8]}@example.com",
         role=role,
         is_active=True,

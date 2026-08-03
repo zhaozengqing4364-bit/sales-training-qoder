@@ -234,6 +234,26 @@ Curriculum assets (`CaseItem`, `RoleProfile`, `ExaminerAgent`) and `PracticeTemp
 
 ---
 
+## In-Flow Create, Then Governed Follow-Up
+
+When an asset page needs a governed policy that does not yet exist, follow the repository's in-flow completion rule:
+
+1. Create the minimum valid object in the current drawer or inline surface.
+2. Bind it to the current work object.
+3. Persist the current work object's server-side draft and wait for the returned revision.
+4. Offer a cross-link such as 「去完善提示词」 to the dedicated policy editor.
+
+The follow-up link must not weaken persistence semantics:
+
+- If navigation opens a new tab after an async save, synchronously reserve `about:blank` from the click event before awaiting; otherwise real browsers may block it.
+- Navigate the reserved tab only after draft persistence succeeds. Close it on save failure, conflict, component close, or unmount.
+- A toast is not sufficient evidence for an important cross-surface outcome. Keep an inline success or partial-failure record.
+- For revisioned policies, distinguish “保存 working revision” from “发布为运行时生效版本”. If the user action promises both, call both APIs and report partial failure truthfully.
+
+Reference flow: newcomer-training path scoring-standard quick-create → path draft save → recording scoring-standard editor → save and publish.
+
+---
+
 ## Governed Policy Diagnostics
 
 Domain settings pages may show read-only snapshots of backend-managed policies when the API returns a diagnostic payload such as `phase2_policy`.
@@ -251,6 +271,100 @@ Required behavior:
 - `POST /case-items|role-profiles|examiner-agents/{id}/duplicate`
 - `POST .../unpublish` with optional `{ acknowledge: true }` when published templates still reference the asset
 - `GET .../template-references` for preflight in confirm dialogs
+
+## Scenario: Newcomer Foundation Admin Workspace
+
+### 1. Scope / Trigger
+
+- Trigger: changing `/admin/newcomer-training`, its navigation, Path editor, content/questions/cohorts/assessment/review/release/settings workspaces, or their shared DTO/ViewModel layer.
+- The visual source of truth remains the existing project shell, tokens, forms, tables, Drawer, Inspector and status components. Do not create a parallel dashboard aesthetic or prototype chooser.
+
+### 2. Signatures
+
+```text
+/admin/newcomer-training                 -> actionable overview
+/admin/newcomer-training/paths           -> path index
+/admin/newcomer-training/paths/[id]/edit -> three-pane editor
+/admin/newcomer-training/content         -> Source / LearningUnit workspace
+/admin/newcomer-training/questions       -> generation batches / candidate review
+/admin/newcomer-training/audio           -> PPT/Demo 讲解材料与评分方案
+/admin/newcomer-training/coaches         -> structured Coach Profile authoring
+/admin/newcomer-training/scenarios       -> three-segment async customer scenarios
+/admin/newcomer-training/cohorts         -> Cohort index and in-flow assignment
+/admin/newcomer-training/cohorts/[id]    -> Enrollment/progress/import workspace
+/admin/newcomer-training/assessments     -> durable task operations
+/admin/newcomer-training/reviews         -> Readiness queue/dossier
+/admin/newcomer-training/releases        -> ReleasePlan process/approval
+/admin/newcomer-training/settings        -> governed configuration links/status
+```
+
+The frontend consumes `capabilities`, `workspace`, resource/path/cohort projections and typed domain methods. Permission/action availability must not be re-derived from a role string.
+
+The single global entry is a product boundary, not a one-page boundary. Desktop uses a persistent local module navigation and narrow viewports use an accessible module selector. Authorized users must be able to discover 训练方案、内容中心、题库与测验、讲解与评分、AI 教练、客户场景、学员与班级、评测与复核、发布与治理 without relying on a horizontally clipped tab strip. Legacy `/admin/sales-trainer/*` pages never return to this navigation.
+
+Target task capabilities are `view_content`, `edit_content`, `review_content`, `view_question_bank`, `edit_questions`, `review_questions`, `edit_quizzes`, `edit_audio_materials`, `edit_scoring_schemes`, `edit_coach_profiles`, `edit_async_scenarios`, `edit_paths`, `manage_cohorts`, `retry_assessments`, `regrade_results`, `review_readiness`, `publish_releases`, `rollback_releases`, and `view_sensitive_audit`. Existing coarse capabilities may remain during migration, but UI must consume the backend projection and must not infer these actions from role strings. Prompt/model/provider/secret governance stays behind separate high-risk authorization.
+
+### 3. Contracts
+
+- The overview contains deduplicated actionable work with reason, affected object and next action; it is not a grid of decorative metrics.
+- The Path editor is Structure → typed editor → preview/validation/impact. One selected work object and one dominant save/validate/release action are visible at a time; raw JSON is never the ordinary editor.
+- Missing resources are completed in the current Drawer/Inspector: search, preview, quick-create minimum working object, auto-bind and preserve the Path draft. This applies to LearningUnit、Quiz、AudioMaterial、ScoringScheme、CoachProfile and Scenario. Source/Unit/Quiz and other legal working references are permitted for composition; formal effect still requires ReleasePlan. A backend `quick_create_supported=true` without a frontend renderer is a visible contract error, not a reason to hide the action.
+- Source file upload shows durable parse status, permits leaving the page and keeps a result location. Failure preserves the resource/input and offers an explicit recovery path.
+- Question generation submits only safe Source/Unit/prompt-policy/model-policy selections. Prompt text, Provider payload, internal task type, contract hash and opaque IDs are never rendered as user explanations. Candidates remain draft until human review.
+- Seed resources, list options and routes are runtime prerequisites only. Completion evidence for an Authoring workspace requires create, save working revision, validate, compare/reference impact, archive, permission denial and ReleasePlan hand-off through the actual rendered flow.
+- Cohort import and candidate bulk review always preview first and persist per-item success/failure. Partial success is never displayed as complete success.
+- Release UI never calls Path/resource direct publish. It shows dependency graph, blockers, impact and stable rollback target before confirm.
+- Every navigation item and command is gated by the backend projection; denied workspaces show an explicit permission state and help route without fetching sensitive detail.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required UI behavior |
+|---|---|
+| Capability absent | hide unavailable navigation/action; direct URL shows permission state, not empty data |
+| Initial loading or filtered no-result | stable skeleton or explanatory no-result with filter reset |
+| Save conflict/stale projection | preserve edits, show conflict details and reload/compare action |
+| Source parsing/generation task pending | persistent status/result link; page may be left safely |
+| Recoverable task failure | preserve input/object and offer authorized retry/cancel path |
+| Bulk items partly rejected | durable per-item result grouped by success/failure |
+| Release blocker | locate object/Stage/Activity/field; publish remains disabled |
+| Publish/rollback succeeds | persistent plan record and result location, not toast-only |
+| Long labels/file names/values | wrap or truncate with accessible full value; primary action remains reachable |
+
+### 5. Good / Base / Bad Cases
+
+- **Good**: an editor uploads a Source, follows its persistent parse task, creates an Anchor and Unit in-flow, binds it to a Path, reviews blockers and publishes one ReleasePlan without leaving the work context.
+- **Base**: a manager imports learner emails, previews valid/invalid rows, confirms valid rows, and sees a persistent partial-result table with reasons for rejected rows.
+- **Bad**: role strings drive buttons, a quick-create forces navigation and loses dirty Path edits, the browser submits raw Prompt/hash, or a success toast hides failed bulk items.
+
+### 6. Tests Required
+
+- Navigation/capability tests prove allowed, denied and direct-route permission behavior.
+- Path editor tests cover keyboard selection, reorder controls, dirty/submitting/conflict, typed field errors, resource quick-create/bind and no direct publish action.
+- Content/question tests cover durable task pending/recovery, safe policy options, candidate batch filtering, source references and no internal-term leakage.
+- Cohort/assessment/release tests cover preview-confirm, partial results, frozen Enrollment copy, task result locations, blockers and rollback.
+- Rendered verification covers desktop/narrow viewport, 200% zoom, keyboard/focus return, long Chinese/English text and realistic large lists; final release evidence is produced by the newcomer admin/learner Playwright suites and `.sisyphus/evidence/task-9-playwright-report.html`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```tsx
+{user.role === "admin" && <Button onClick={() => publishResource(id)}>发布</Button>}
+```
+
+This duplicates authorization and bypasses ReleasePlan, dependency preview and audit.
+
+#### Correct
+
+```tsx
+{capabilities.publish_release ? (
+  <Link href="/admin/newcomer-training/releases">校验发布计划</Link>
+) : (
+  <PermissionState help={capabilities.permission_help} />
+)}
+```
+
+The backend projection owns capability truth and the user enters the persistent ReleasePlan workflow.
 
 ---
 

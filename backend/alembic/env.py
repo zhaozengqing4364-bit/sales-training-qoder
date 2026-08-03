@@ -8,26 +8,13 @@ from sqlalchemy import create_engine, pool
 # Add src to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-# Import all models to ensure they are registered with Base.metadata
-# Core models (already in common.db.models)
-# - User, Scenario, Presentation, Page, RequiredTalkingPoint
-# - ForbiddenWord, PracticeSession, InterruptionEvent, LeaderboardEntry
-# Agent Platform models (R1-R4)
-from agent.models import Agent, AgentPersona, Persona  # noqa: F401
-
-# Model config models
-from common.ai.models import ModelConfig  # noqa: F401
 from common.config import settings
+from common.db.model_registry import Base
+from common.db.model_registry.registration import register_all_models
 
-# Conversation models (R9)
-from common.conversation.models import ConversationMessage  # noqa: F401
-from common.db.models import Base
-
-# Knowledge Base models (R5)
-from common.knowledge.models import KnowledgeBase, KnowledgeDocument  # noqa: F401
-from common.knowledge.rag_profile_models import RagProfile  # noqa: F401
-from curriculum_practice.models import PracticeTemplate, SituationPack  # noqa: F401
-from sales_trainer import models as sales_trainer_models  # noqa: F401
+# Root composition is shared with startup validation and tests. Do not add
+# one-off model imports here; register the owning module in registration.py.
+register_all_models()
 
 # this is the Alembic Config object
 config = context.config
@@ -37,7 +24,10 @@ config = context.config
 db_url = str(settings.DATABASE_URL)
 db_url = db_url.replace("+asyncpg", "")  # PostgreSQL async -> sync
 db_url = db_url.replace("+aiosqlite", "")  # SQLite async -> sync
-config.set_main_option("sqlalchemy.url", db_url)
+# ConfigParser treats percent-encoded URL components as interpolation markers.
+# Escape them for Alembic's config layer; callers may legitimately use encoded
+# connection options (for example an isolated PostgreSQL search_path in tests).
+config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:

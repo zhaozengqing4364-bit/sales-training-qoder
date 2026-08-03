@@ -76,10 +76,12 @@ class QuizActivityHandler:
         )
 
     async def project(self, context: ActivityExecutionContext) -> ActivityProjection:
-        attempt = await self._attempts.latest_for_activity(
-            enrollment_id=context.enrollment_id,
-            activity_id=context.activity.activity_id,
-        )
+        attempt = context.latest_attempt
+        if not context.latest_attempt_loaded:
+            attempt = await self._attempts.latest_for_activity(
+                enrollment_id=context.enrollment_id,
+                activity_id=context.activity.activity_id,
+            )
         if attempt is None:
             return ActivityProjection(
                 context.activity.activity_id,

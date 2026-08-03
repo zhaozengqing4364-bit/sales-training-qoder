@@ -20,12 +20,17 @@ from sales_trainer.orchestration.errors import (
     PathValidationError,
 )
 from sales_trainer.orchestration.graph import PathIssue, validate_path_graph
+from sales_trainer.orchestration.repository import EnrollmentRepository
 from sales_trainer.orchestration.resource_validator import PathResourceValidator
 from sales_trainer.services.asset_revision_service import (
     AssetPublishResult,
     SalesTrainerAssetRevisionService,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.realtime_binding_snapshot_service import (
+    freeze_realtime_bindings,
+    validate_realtime_binding_snapshots,
+)
 
 PATH_RESOURCE_TYPE = "newcomer_training_path_orchestration"
 PATH_LOGICAL_ID = "default"
@@ -46,6 +51,7 @@ class TrainingPathRevisionService:
         self._revisions = SalesTrainerAssetRevisionService(db)
         self._resources = resource_validator or PathResourceValidator(db)
         self._operations = OperationLogService(db)
+        self._enrollments = EnrollmentRepository(db)
 
     async def active_revision(self) -> SalesTrainerAssetRevision | None:
         return await self._revisions.active_revision(
@@ -81,8 +87,14 @@ class TrainingPathRevisionService:
         reason: str,
         trace_id: str | None = None,
         expected_revision_id: str | None = None,
+        preserve_runtime_snapshots: bool = False,
     ) -> SalesTrainerAssetRevision:
         await self._assert_expected_revision(expected_revision_id)
+        payload = await freeze_realtime_bindings(
+            self._db,
+            payload,
+            refresh_existing=not preserve_runtime_snapshots,
+        )
         issues = validate_path_graph(payload)
         if issues:
             raise PathValidationError(issues)
@@ -108,6 +120,7 @@ class TrainingPathRevisionService:
     async def validate_candidate(
         self, payload: TrainingPathPayload
     ) -> PathValidationResponse:
+        payload = await freeze_realtime_bindings(self._db, payload)
         issues = await self._collect_issues(payload)
         return self._validation_response(issues)
 
@@ -129,6 +142,7 @@ class TrainingPathRevisionService:
         expected_revision_id: str | None,
         trace_id: str | None = None,
     ) -> AssetPublishResult:
+        payload = await freeze_realtime_bindings(self._db, payload)
         issues = await self._collect_issues(payload)
         if issues:
             raise PathValidationError(issues)
@@ -143,13 +157,22 @@ class TrainingPathRevisionService:
         result = await self._revisions.publish_working_revision(
             revision, actor=actor, reason=reason, trace_id=trace_id
         )
+        synced_enrollment_count = await self._enrollments.sync_active_path_revision(
+            path_id=PATH_LOGICAL_ID,
+            path_revision_id=str(result.revision.revision_id),
+        )
         await self._operations.record(
             actor=actor,
             action="newcomer_path.published",
             target_type="newcomer_training_path",
             target_id=str(result.revision.revision_id),
             request_id=trace_id,
-            metadata={"reason": reason, "candidate_publish": True},
+            metadata={
+                "reason": reason,
+                "candidate_publish": True,
+                "rollout_scope": "all_active_learners",
+                "synced_enrollment_count": synced_enrollment_count,
+            },
         )
         return result
 
@@ -162,14 +185,15 @@ class TrainingPathRevisionService:
                 "[NEWCOMER_PATH_DRAFT_MISSING]", "当前没有可发布的草稿。", 404
             )
         payload = TrainingPathPayload.model_validate(working.payload_json)
-        issues = (
-            *validate_path_graph(payload),
-            *await self._resources.validate(payload),
-        )
+        issues = await self._collect_issues(payload)
         if issues:
             raise PathValidationError(issues)
         result = await self._revisions.publish_working_revision(
             working, actor=actor, reason=reason, trace_id=trace_id
+        )
+        synced_enrollment_count = await self._enrollments.sync_active_path_revision(
+            path_id=PATH_LOGICAL_ID,
+            path_revision_id=str(result.revision.revision_id),
         )
         await self._operations.record(
             actor=actor,
@@ -177,7 +201,11 @@ class TrainingPathRevisionService:
             target_type="newcomer_training_path",
             target_id=str(result.revision.revision_id),
             request_id=trace_id,
-            metadata={"reason": reason},
+            metadata={
+                "reason": reason,
+                "rollout_scope": "all_active_learners",
+                "synced_enrollment_count": synced_enrollment_count,
+            },
         )
         return result
 
@@ -205,6 +233,7 @@ class TrainingPathRevisionService:
             reason=reason,
             trace_id=trace_id,
             expected_revision_id=expected_revision_id,
+            preserve_runtime_snapshots=True,
         )
         await self._operations.record(
             actor=actor,
@@ -235,9 +264,7 @@ class TrainingPathRevisionService:
             request_id=trace_id,
         )
 
-    async def _assert_expected_revision(
-        self, expected_revision_id: str | None
-    ) -> None:
+    async def _assert_expected_revision(self, expected_revision_id: str | None) -> None:
         if expected_revision_id is None:
             return
         working = await self.working_revision()
@@ -252,6 +279,7 @@ class TrainingPathRevisionService:
         return (
             *validate_path_graph(payload),
             *await self._resources.validate(payload),
+            *await validate_realtime_binding_snapshots(self._db, payload),
         )
 
     @staticmethod

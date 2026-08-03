@@ -9,6 +9,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // Production restart keeps timestamped rollback builds next to `.next`.
+    // They are generated output and must never be linted as source.
+    ".next-*/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

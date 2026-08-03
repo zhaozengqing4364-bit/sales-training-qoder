@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "安全幂等迁移"}
+{"file": ".trellis/spec/backend/compatibility-retirement-and-root-composition.md", "reason": "Legacy 精确退役"}
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "路由消费者门禁"}
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "禁止 Legacy 依赖回流"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "迁移到学员读取链路"}
+{"file": ".trellis/tasks/07-19-newcomer-training-content-authoring-closure/research/current-state-gap.md", "reason": "旧活动和 PPT 事实"}

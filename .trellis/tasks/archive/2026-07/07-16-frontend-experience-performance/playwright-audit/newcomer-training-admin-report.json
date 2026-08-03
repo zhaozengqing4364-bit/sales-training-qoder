@@ -1,0 +1,424 @@
+{
+  "routes": [
+    {
+      "id": "A-00",
+      "label": "训练运营总览",
+      "path": "/admin/newcomer-training",
+      "critical": true,
+      "expectText": [
+        "新人训练运营工作台"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "A-01",
+      "label": "路径编排",
+      "path": "/admin/newcomer-training/paths",
+      "critical": true,
+      "expectText": [
+        "路径与版本",
+        "新建训练路径",
+        "搜索路径"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "A-02",
+      "label": "学员进度",
+      "path": "/admin/newcomer-training/learners",
+      "critical": true,
+      "expectText": [
+        "学员进度"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "A-03",
+      "label": "题库审核",
+      "path": "/admin/newcomer-training/questions",
+      "critical": true,
+      "expectText": [
+        "题库审核",
+        "生成候选题",
+        "候选题队列"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "A-04",
+      "label": "达标复核",
+      "path": "/admin/newcomer-training/reviews",
+      "critical": true,
+      "expectText": [
+        "达标复核"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "A-05",
+      "label": "路径编辑器",
+      "path": "/admin/newcomer-training/paths/d6584d5b-b2f9-4fc4-8bf6-dd5838a215a3/edit",
+      "critical": true,
+      "expectText": [
+        "阶段与活动",
+        "学员路径预览",
+        "校验与引用影响"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "A-06",
+      "label": "学员训练详情",
+      "path": "/admin/newcomer-training/learners/eca041e3-765d-4ecf-b448-116f88c7928f",
+      "critical": true,
+      "expectText": [
+        "返回学员进度",
+        "查看所属班级",
+        "进入达标复核"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    {
+      "id": "A-07",
+      "label": "复核档案",
+      "path": "/admin/newcomer-training/reviews/5aefa7fd-4bc9-4fab-9427-da362fbe4415",
+      "critical": true,
+      "expectText": [
+        "能力证据",
+        "证据明细",
+        "当前结论"
+      ],
+      "forbiddenText": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    }
+  ],
+  "results": [
+    {
+      "id": "A-00",
+      "label": "训练运营总览",
+      "path": "/admin/newcomer-training",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 224,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-00-desktop-admin-newcomer-training.png"
+    },
+    {
+      "id": "A-01",
+      "label": "路径编排",
+      "path": "/admin/newcomer-training/paths",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/paths",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 290,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-01-desktop-admin-newcomer-training-paths.png"
+    },
+    {
+      "id": "A-02",
+      "label": "学员进度",
+      "path": "/admin/newcomer-training/learners",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/learners",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 300,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-02-desktop-admin-newcomer-training-learners.png"
+    },
+    {
+      "id": "A-03",
+      "label": "题库审核",
+      "path": "/admin/newcomer-training/questions",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/questions",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 524,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-03-desktop-admin-newcomer-training-questions.png"
+    },
+    {
+      "id": "A-04",
+      "label": "达标复核",
+      "path": "/admin/newcomer-training/reviews",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/reviews",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 456,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-04-desktop-admin-newcomer-training-reviews.png"
+    },
+    {
+      "id": "A-00",
+      "label": "训练运营总览",
+      "path": "/admin/newcomer-training",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 135,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-00-mobile-admin-newcomer-training.png"
+    },
+    {
+      "id": "A-02",
+      "label": "学员进度",
+      "path": "/admin/newcomer-training/learners",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/learners",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 211,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-02-mobile-admin-newcomer-training-learners.png"
+    },
+    {
+      "id": "A-03",
+      "label": "题库审核",
+      "path": "/admin/newcomer-training/questions",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/questions",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 435,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-03-mobile-admin-newcomer-training-questions.png"
+    },
+    {
+      "id": "A-04",
+      "label": "达标复核",
+      "path": "/admin/newcomer-training/reviews",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/reviews",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 367,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-04-mobile-admin-newcomer-training-reviews.png"
+    },
+    {
+      "id": "A-05",
+      "label": "路径编辑器",
+      "path": "/admin/newcomer-training/paths/d6584d5b-b2f9-4fc4-8bf6-dd5838a215a3/edit",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/paths/d6584d5b-b2f9-4fc4-8bf6-dd5838a215a3/edit",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 1747,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-05-desktop-admin-newcomer-training-paths-d6584d5b-b2f9-4fc4-8bf6-dd5838a215a3-edit.png"
+    },
+    {
+      "id": "A-05",
+      "label": "路径编辑器",
+      "path": "/admin/newcomer-training/paths/d6584d5b-b2f9-4fc4-8bf6-dd5838a215a3/edit",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/paths/d6584d5b-b2f9-4fc4-8bf6-dd5838a215a3/edit",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 1658,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-05-mobile-admin-newcomer-training-paths-d6584d5b-b2f9-4fc4-8bf6-dd5838a215a3-edit.png"
+    },
+    {
+      "id": "A-06",
+      "label": "学员训练详情",
+      "path": "/admin/newcomer-training/learners/eca041e3-765d-4ecf-b448-116f88c7928f",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/learners/eca041e3-765d-4ecf-b448-116f88c7928f",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 770,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-06-desktop-admin-newcomer-training-learners-eca041e3-765d-4ecf-b448-116f88c7928f.png"
+    },
+    {
+      "id": "A-06",
+      "label": "学员训练详情",
+      "path": "/admin/newcomer-training/learners/eca041e3-765d-4ecf-b448-116f88c7928f",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/learners/eca041e3-765d-4ecf-b448-116f88c7928f",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 681,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-06-mobile-admin-newcomer-training-learners-eca041e3-765d-4ecf-b448-116f88c7928f.png"
+    },
+    {
+      "id": "A-07",
+      "label": "复核档案",
+      "path": "/admin/newcomer-training/reviews/5aefa7fd-4bc9-4fab-9427-da362fbe4415",
+      "viewport": "desktop",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/reviews/5aefa7fd-4bc9-4fab-9427-da362fbe4415",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 829,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-07-desktop-admin-newcomer-training-reviews-5aefa7fd-4bc9-4fab-9427-da362fbe4415.png"
+    },
+    {
+      "id": "A-07",
+      "label": "复核档案",
+      "path": "/admin/newcomer-training/reviews/5aefa7fd-4bc9-4fab-9427-da362fbe4415",
+      "viewport": "mobile",
+      "finalUrl": "http://localhost:3445/admin/newcomer-training/reviews/5aefa7fd-4bc9-4fab-9427-da362fbe4415",
+      "status": 200,
+      "title": "新人销售训练平台",
+      "bodyLength": 740,
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "missingExpectedText": [],
+      "horizontalOverflowPx": 0,
+      "screenshotPath": "/home/dev/work/sales-training-qoder/.trellis/tasks/07-16-frontend-experience-performance/playwright-audit/screenshots/A-07-mobile-admin-newcomer-training-reviews-5aefa7fd-4bc9-4fab-9427-da362fbe4415.png"
+    }
+  ]
+}

@@ -28,6 +28,7 @@ from common.db.models import (
     User,
 )
 from common.db.schemas import (
+    AssetGovernanceSummary,
     ForbiddenWordCreate,
     ForbiddenWordResponse,
     PageResponse,
@@ -474,6 +475,7 @@ async def list_presentations(
     governance_indexes = await runtime_service.build_asset_governance_indexes()
     seven_days_ago = datetime.now(UTC) - timedelta(days=7)
 
+    response_items: list[PresentationResponse] = []
     for presentation in presentations:
         upload_date = RuntimeStatusService._coerce_datetime(
             cast(datetime | str | None, getattr(presentation, "upload_date", None))
@@ -517,9 +519,17 @@ async def list_presentations(
             change_count_7d=1 if upload_date and upload_date >= seven_days_ago else 0,
             extra_anomalies=extra_anomalies,
         )
-        setattr(presentation, "governance_summary", governance_summary)
+        response_items.append(
+            PresentationResponse.model_validate(presentation).model_copy(
+                update={
+                    "governance_summary": AssetGovernanceSummary.model_validate(
+                        governance_summary
+                    )
+                }
+            )
+        )
 
-    return presentations
+    return response_items
 
 
 @router.post("/presentations", response_model=PresentationResponse)

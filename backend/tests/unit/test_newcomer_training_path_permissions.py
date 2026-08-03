@@ -14,18 +14,16 @@ from sales_trainer.permissions import (
     is_sales_trainer_manager,
     sales_trainer_admin_capability_projection,
     sales_trainer_manager_roles,
-    team_scope_department,
 )
 
 
-def _user(role: str, *, department: str | None = "销售一部") -> User:
+def _user(role: str) -> User:
     return User(
         user_id=f"user-{role}",
         wechat_user_id=f"wechat-{role}",
         name=role,
         email=f"{role}@example.com",
         role=role,
-        department=department,
     )
 
 
@@ -36,11 +34,10 @@ def test_should_allow_super_admin_to_manage_view_retry_and_audit() -> None:
     assert can_view_sales_trainer_records(user)
     assert can_retry_sales_trainer_jobs(user)
     assert can_view_sales_trainer_logs(user)
-    assert team_scope_department(user) is None
 
 
-def test_should_scope_training_lead_to_department_records() -> None:
-    user = _user("support", department="华东销售")
+def test_should_grant_training_lead_record_capability_before_object_scope() -> None:
+    user = _user("support")
 
     assert not can_manage_sales_trainer(user)
     assert can_view_sales_trainer_records(user)
@@ -48,7 +45,6 @@ def test_should_scope_training_lead_to_department_records() -> None:
     assert not can_view_sales_trainer_settings(user)
     assert not can_retry_sales_trainer_jobs(user)
     assert not can_regrade_sales_trainer_history(user)
-    assert team_scope_department(user) == "华东销售"
 
 
 def test_should_allow_content_admin_to_manage_content_but_not_records() -> None:
@@ -61,22 +57,22 @@ def test_should_allow_content_admin_to_manage_content_but_not_records() -> None:
     assert not can_regrade_sales_trainer_history(user)
 
 
-def test_should_allow_ops_to_diagnose_and_retry_without_content_management() -> None:
+def test_should_allow_ops_to_retry_without_content_or_learner_record_access() -> None:
     user = _user("operations")
 
     assert not can_manage_sales_trainer(user)
-    assert can_view_sales_trainer_records(user)
+    assert not can_view_sales_trainer_records(user)
     assert can_retry_sales_trainer_jobs(user)
+    assert not can_regrade_sales_trainer_history(user)
     assert can_view_sales_trainer_logs(user)
 
 
 def test_should_keep_support_as_training_lead_compatibility_alias() -> None:
-    user = _user("support", department="北区")
+    user = _user("support")
 
     assert not can_manage_sales_trainer(user)
     assert can_view_sales_trainer_records(user)
     assert not can_view_sales_trainer_logs(user)
-    assert team_scope_department(user) == "北区"
 
 
 def test_should_accept_ops_as_operations_compatibility_alias() -> None:
@@ -84,7 +80,7 @@ def test_should_accept_ops_as_operations_compatibility_alias() -> None:
 
     assert can_view_sales_trainer_logs(user)
     assert can_retry_sales_trainer_jobs(user)
-    assert can_regrade_sales_trainer_history(user)
+    assert not can_regrade_sales_trainer_history(user)
 
 
 def test_should_filter_invalid_manager_roles_without_expanding_capabilities(
@@ -121,17 +117,13 @@ def test_should_fail_closed_when_manager_roles_env_has_no_allowlisted_role(
 def test_should_use_granular_route_guards_for_admin_surfaces() -> None:
     content_admin = _user("content_admin")
     training_lead = _user("support")
-    ops = _user("operations")
     training_error = sales_trainer_api._require_manager(training_lead)
-    retry_error = sales_trainer_api._require_job_retry(content_admin)
 
     assert sales_trainer_api._require_manager(content_admin) is None
     assert training_error is not None
     assert training_error.status_code == 403
     assert sales_trainer_api._require_records_viewer(training_lead) is None
-    assert retry_error is not None
-    assert retry_error.status_code == 403
-    assert sales_trainer_api._require_job_retry(ops) is None
+    assert not hasattr(sales_trainer_api, "_require_job_retry")
 
 
 def test_admin_capability_projection_uses_permission_authority() -> None:
@@ -156,7 +148,8 @@ def test_admin_capability_projection_uses_permission_authority() -> None:
 
     assert ops["role_label"] == "运维人员"
     assert ops["capabilities"]["retry_jobs"] is True
-    assert ops["capabilities"]["regrade_history"] is True
+    assert ops["capabilities"]["view_records"] is False
+    assert ops["capabilities"]["regrade_history"] is False
     assert ops["capabilities"]["view_logs"] is True
     assert ops["capabilities"]["view_settings"] is True
     assert ops["capabilities"]["manage_content"] is False

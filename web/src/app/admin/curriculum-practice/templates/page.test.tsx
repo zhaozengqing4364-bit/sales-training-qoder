@@ -252,8 +252,11 @@ describe("AdminPracticeTemplatesPage", () => {
 
         expect(await screen.findByRole("heading", { name: "课程训练模板" })).toBeTruthy();
         expect(screen.getByText("客户异议处理训练")).toBeTruthy();
-        expect(screen.getByText("customer_roleplay · sales")).toBeTruthy();
-        expect(screen.getByText("draft · v1")).toBeTruthy();
+        expect(screen.getByText("客户实战对练 · 销售沟通")).toBeTruthy();
+        expect(screen.getByText("草稿 · v1")).toBeTruthy();
+        expect(screen.queryByText(/agent-1|persona-1|runtime-1/)).toBeNull();
+        expect(screen.queryByTestId("curriculum-config-checklist")).toBeNull();
+        expect(listPracticeTemplatesMock).toHaveBeenCalledTimes(1);
     });
 
     it("does not render inline template form on index page", async () => {
@@ -363,7 +366,7 @@ describe("AdminPracticeTemplatesPage", () => {
 
         render(<AdminPracticeTemplatesPage />);
 
-        expect(await screen.findByText("published · v1")).toBeTruthy();
+        expect(await screen.findByText("已发布 · v1")).toBeTruthy();
         expect(screen.queryByRole("button", { name: "编辑模板" })).toBeNull();
         expect(screen.getByText(/已发布内容不可修改/)).toBeTruthy();
     });
@@ -380,7 +383,7 @@ describe("AdminPracticeTemplatesPage", () => {
         await waitFor(() => {
             expect(screen.getByText(/发布完成：客户异议处理训练 v1/)).toBeTruthy();
         });
-        expect(screen.getByText("published · v1")).toBeTruthy();
+        expect(screen.getByText("已发布 · v1")).toBeTruthy();
     });
 
     it("archives a PracticeTemplate from the row action", async () => {
@@ -396,7 +399,7 @@ describe("AdminPracticeTemplatesPage", () => {
             expect(archivePracticeTemplateMock).toHaveBeenCalledWith("template-1");
         });
         expect(screen.getByText(/归档完成：客户异议处理训练/)).toBeTruthy();
-        expect(screen.getByText("archived · v1")).toBeTruthy();
+        expect(screen.getByText("已归档 · v1")).toBeTruthy();
     });
 
     it("does not offer archive action for archived PracticeTemplates", async () => {
@@ -407,7 +410,7 @@ describe("AdminPracticeTemplatesPage", () => {
 
         render(<AdminPracticeTemplatesPage />);
 
-        expect(await screen.findByText("archived · v1")).toBeTruthy();
+        expect(await screen.findByText("已归档 · v1")).toBeTruthy();
         expect(screen.queryByRole("button", { name: "归档模板" })).toBeNull();
     });
 

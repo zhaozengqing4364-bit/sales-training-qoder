@@ -17,17 +17,42 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.analytics.history_service import history_service
-from common.auth.service import get_current_admin_user
-from common.db.models import SystemLog, User
+from common.auth.credentials import (
+    generate_temporary_password,
+    normalize_email,
+    temporary_password_ttl_hours,
+)
+from common.auth.roles import (
+    PLATFORM_ADMIN_ROLES,
+    ROLE_TRAINING_MANAGER,
+    SALES_TRAINER_LEARNER_ROLES,
+    TRAINING_MANAGER_ROLES,
+    is_platform_admin_role,
+    normalize_role,
+)
+from common.auth.service import get_current_admin_user, pwd_context
+from common.db.models import (
+    SystemLog,
+    Team,
+    TeamLeaderAssignment,
+    TeamMembership,
+    User,
+)
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
+from common.teams import (
+    TeamSummary,
+    active_primary_team_for_user,
+    active_primary_teams_by_user_ids,
+)
+from common.teams.service import TeamService
 
 logger = get_logger(__name__)
 
@@ -38,31 +63,34 @@ router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 class CreateUserRequest(BaseModel):
     """Request to create a new user"""
 
-    username: str
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
     email: EmailStr
-    password: str
-    name: str | None = None
-    department: str | None = None
     role: str = "user"  # user | admin
+    team_id: str | None = None
     audit_reason: str | None = None
 
-    @field_validator("password")
+    @field_validator("name")
     @classmethod
-    def validate_password(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("密码至少需要8位")
-        if not any(c.isalpha() for c in v):
-            raise ValueError("密码需要包含字母")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("密码需要包含数字")
-        return v
+    def validate_name(cls, v: str) -> str:
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("姓名不能为空")
+        return cleaned
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: EmailStr) -> str:
+        return str(normalize_email(v))
 
     @field_validator("role")
     @classmethod
     def validate_role(cls, v: str) -> str:
-        if v not in {"user", "support", "admin"}:
-            raise ValueError("角色仅支持 user、support 或 admin")
-        return v
+        cleaned = v.strip().lower()
+        if cleaned not in {"user", "support", "admin", ROLE_TRAINING_MANAGER}:
+            raise ValueError("角色仅支持 user、training_manager、support 或 admin")
+        return cleaned
 
     @field_validator("audit_reason")
     @classmethod
@@ -74,13 +102,20 @@ class CreateUserRequest(BaseModel):
             raise ValueError("审计原因不能超过500个字符")
         return cleaned or None
 
+    @field_validator("team_id")
+    @classmethod
+    def normalize_team_id(cls, v: str | None) -> str | None:
+        cleaned = (v or "").strip()
+        return cleaned or None
+
 
 class UpdateUserRequest(BaseModel):
     """Request to update user"""
 
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = None
     email: EmailStr | None = None
-    department: str | None = None
     role: str | None = None
     is_active: bool | None = None
     audit_reason: str | None = None
@@ -132,6 +167,7 @@ class UserAuditReasonRequest(BaseModel):
     """Optional audit reason payload for account status actions."""
 
     audit_reason: str | None = None
+    expected_credential_version: int | None = Field(default=None, ge=1)
 
     @field_validator("audit_reason")
     @classmethod
@@ -157,8 +193,17 @@ class AdminUserResponse(BaseModel):
     role: str
     status: str
     last_active_at: str | None
-    department: str | None
     created_at: str | None
+    credential_status: str = "active"
+    temporary_password_expires_at: str | None = None
+    credential_version: int = 1
+    team: dict[str, str] | None = None
+
+
+class CreatedUserResponse(AdminUserResponse):
+    """Create response. The temporary password is returned exactly once."""
+
+    temporary_password: str
 
 
 class UserListResponse(BaseModel):
@@ -200,7 +245,11 @@ def _resolve_time_range_start(time_range: str) -> datetime:
     return datetime(2000, 1, 1, tzinfo=UTC)
 
 
-def user_to_response(user: User) -> AdminUserResponse:
+def user_to_response(
+    user: User,
+    *,
+    team: TeamSummary | None = None,
+) -> AdminUserResponse:
     """Convert User model to AdminUserResponse"""
     return AdminUserResponse(
         id=str(user.user_id),
@@ -210,8 +259,15 @@ def user_to_response(user: User) -> AdminUserResponse:
         role=getattr(user, "role", "user"),  # Use actual role field
         status="active" if user.is_active else "inactive",
         last_active_at=user.last_login.isoformat() if user.last_login else None,
-        department=user.department,
         created_at=user.created_at.isoformat() if user.created_at else None,
+        credential_status=getattr(user, "credential_status", "active"),
+        temporary_password_expires_at=(
+            user.temporary_password_expires_at.isoformat()
+            if user.temporary_password_expires_at
+            else None
+        ),
+        credential_version=int(getattr(user, "credential_version", 1) or 1),
+        team=team.to_dict() if team else None,
     )
 
 
@@ -237,7 +293,6 @@ def _user_audit_snapshot(user: User) -> dict[str, Any]:
         "user_id": str(user.user_id),
         "name": user.name,
         "email": _mask_email(cast(str | None, user.email)),
-        "department": user.department,
         "role": user.role,
         "is_active": bool(user.is_active),
     }
@@ -297,7 +352,7 @@ def _assert_role_transition_allowed(
     new_role: str,
 ) -> None:
     """Validate caller-independent role transition guardrails."""
-    if new_role not in {"user", "support", "admin"}:
+    if new_role not in {"user", "support", "admin", ROLE_TRAINING_MANAGER}:
         raise HTTPException(status_code=400, detail="[INVALID_ROLE]")
 
     if is_self and new_role != "admin":
@@ -309,7 +364,7 @@ _ROW_LOCKING_DIALECTS = frozenset({"postgresql", "mysql", "mariadb", "oracle"})
 
 def _requires_last_admin_guard(*, current_role: str | None, new_role: str) -> bool:
     """Return whether a role transition could remove an active administrator."""
-    return current_role == "admin" and new_role != "admin"
+    return is_platform_admin_role(current_role) and not is_platform_admin_role(new_role)
 
 
 def _dialect_supports_row_locks(dialect_name: str | None) -> bool:
@@ -326,9 +381,9 @@ def _active_admin_recount_statement(*, lock_rows: bool) -> Any:
     transaction immediately before mutation.
     """
     statement = select(User.user_id).where(
-        User.role == "admin",
+        User.role.in_(PLATFORM_ADMIN_ROLES),
         User.is_active.is_(True),
-    )
+    ).order_by(User.user_id.asc())
     return statement.with_for_update() if lock_rows else statement
 
 
@@ -367,6 +422,152 @@ async def _assert_admin_demotion_keeps_active_admin(
         raise HTTPException(status_code=400, detail="[CANNOT_REMOVE_LAST_ADMIN]")
 
 
+async def _assert_admin_deactivation_keeps_active_admin(
+    db: AsyncSession,
+    *,
+    target_role: str | None,
+    target_is_active: bool,
+    active_admin_count: int | None = None,
+) -> None:
+    """Reject a status change that would deactivate the final platform admin."""
+    if not is_platform_admin_role(target_role) or not target_is_active:
+        return
+
+    authoritative_count = (
+        active_admin_count
+        if active_admin_count is not None
+        else await _count_active_admins_for_role_guard(db)
+    )
+    if authoritative_count <= 1:
+        raise HTTPException(status_code=400, detail="[CANNOT_REMOVE_LAST_ADMIN]")
+
+
+async def _retire_incompatible_team_relationships(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    new_role: str,
+    effective_at: datetime | None = None,
+) -> dict[str, int]:
+    """End organization relationships that are invalid for the target role.
+
+    Team membership identifies learners; team leadership identifies training
+    managers. Role transitions and relationship retirement share one database
+    transaction so authorization can never observe a stale department-era scope.
+    """
+
+    normalized_role = normalize_role(new_role)
+    now = effective_at or datetime.now(UTC)
+    retired_memberships = 0
+    retired_leaderships = 0
+
+    if normalized_role not in SALES_TRAINER_LEARNER_ROLES:
+        memberships = list(
+            (
+                await db.scalars(
+                    select(TeamMembership).where(
+                        TeamMembership.user_id == user_id,
+                        TeamMembership.effective_to.is_(None),
+                    )
+                )
+            ).all()
+        )
+        for membership in memberships:
+            membership.effective_to = now
+        retired_memberships = len(memberships)
+
+    if normalized_role not in TRAINING_MANAGER_ROLES:
+        leaderships = list(
+            (
+                await db.scalars(
+                    select(TeamLeaderAssignment).where(
+                        TeamLeaderAssignment.leader_user_id == user_id,
+                        TeamLeaderAssignment.effective_to.is_(None),
+                    )
+                )
+            ).all()
+        )
+        for leadership in leaderships:
+            leadership.effective_to = now
+        retired_leaderships = len(leaderships)
+
+    return {
+        "memberships": retired_memberships,
+        "leaderships": retired_leaderships,
+    }
+
+
+async def _change_user_active_state(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    desired_active: bool,
+    payload: UserAuditReasonRequest | None,
+    operator: User,
+    request_context: Request,
+    audit_action: str,
+) -> dict[str, Any]:
+    """Serialize, validate, audit, and persist an account status transition."""
+    # Lock active administrators first in a stable order. This prevents two admins
+    # from concurrently deactivating each other and avoids opposite lock ordering.
+    active_admin_count = await _count_active_admins_for_role_guard(db)
+
+    statement = select(User).where(User.user_id == user_id)
+    if _dialect_supports_row_locks(_session_dialect_name(db)):
+        statement = statement.with_for_update()
+    result = await db.execute(statement)
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
+
+    current_active = bool(user.is_active)
+    current_version = int(user.credential_version or 1)
+    if current_active == desired_active:
+        return {
+            "user_id": user_id,
+            "status": "active" if desired_active else "inactive",
+            "changed": False,
+            "credential_version": current_version,
+        }
+
+    expected_version = payload.expected_credential_version if payload else None
+    if expected_version is not None and expected_version != current_version:
+        raise HTTPException(status_code=409, detail="[ACCOUNT_STATUS_CONFLICT]")
+
+    if not desired_active:
+        await _assert_admin_deactivation_keeps_active_admin(
+            db,
+            target_role=cast(str | None, user.role),
+            target_is_active=current_active,
+            active_admin_count=active_admin_count,
+        )
+
+    before_snapshot = _user_audit_snapshot(user)
+    user.is_active = desired_active
+    if not desired_active:
+        user.credential_version = current_version + 1
+    after_snapshot = _user_audit_snapshot(user)
+    _queue_user_audit_log(
+        db,
+        action=audit_action,
+        operator=operator,
+        target_user_id=user_id,
+        reason=payload.audit_reason if payload else None,
+        before=before_snapshot,
+        after=after_snapshot,
+        ip_address=request_context.client.host if request_context.client else None,
+    )
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "user_id": user_id,
+        "status": "active" if desired_active else "inactive",
+        "changed": True,
+        "credential_version": int(user.credential_version or 1),
+    }
+
+
 @router.get("", response_model=dict)
 async def list_users(
     page: int = Query(1, ge=1, description="Page number"),
@@ -374,6 +575,7 @@ async def list_users(
     search: str | None = Query(None, description="Search by name or email"),
     status: str | None = Query(None, description="Filter by status (active/inactive)"),
     role: str | None = Query(None, description="Filter by role"),
+    team_id: str | None = Query(None, description="Filter by active primary Team"),
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -406,6 +608,25 @@ async def list_users(
         query = query.where(User.role == role)
         count_query = count_query.where(User.role == role)
 
+    if team_id:
+        effective_at = datetime.now(UTC)
+        team_member_ids = (
+            select(TeamMembership.user_id)
+            .join(Team, Team.team_id == TeamMembership.team_id)
+            .where(
+                TeamMembership.team_id == team_id,
+                TeamMembership.membership_role == "primary",
+                TeamMembership.effective_from <= effective_at,
+                or_(
+                    TeamMembership.effective_to.is_(None),
+                    TeamMembership.effective_to > effective_at,
+                ),
+                Team.is_active.is_(True),
+            )
+        )
+        query = query.where(User.user_id.in_(team_member_ids))
+        count_query = count_query.where(User.user_id.in_(team_member_ids))
+
     # Get total count
     total = (await db.execute(count_query)).scalar() or 0
 
@@ -416,9 +637,19 @@ async def list_users(
     # Execute query
     result = await db.execute(query)
     users = result.scalars().all()
+    teams_by_user_id = await active_primary_teams_by_user_ids(
+        db,
+        [user.user_id for user in users],
+    )
 
     # Convert to response format
-    items = [user_to_response(u) for u in users]
+    items = [
+        user_to_response(
+            user,
+            team=teams_by_user_id.get(str(user.user_id)),
+        )
+        for user in users
+    ]
 
     response = UserListResponse(
         items=items,
@@ -429,6 +660,24 @@ async def list_users(
     )
 
     return success_response(response.model_dump())
+
+
+@router.get("/export", response_class=StreamingResponse)
+async def export_users_route(
+    format: str = Query("csv", description="Export format: csv or json"),
+    search: str | None = Query(None, description="Search filter"),
+    status: str | None = Query(None, description="Status filter"),
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Static export route must be registered before the dynamic user route."""
+    return await _export_users(
+        format=format,
+        search=search,
+        status=status,
+        current_user=current_user,
+        db=db,
+    )
 
 
 @router.get("/{user_id}", response_model=dict)
@@ -444,7 +693,8 @@ async def get_user(
     if not user:
         raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
 
-    return success_response(user_to_response(user).model_dump())
+    team = await active_primary_team_for_user(db, user.user_id)
+    return success_response(user_to_response(user, team=team).model_dump())
 
 
 @router.get("/{user_id}/stats", response_model=dict)
@@ -554,8 +804,9 @@ async def get_user_stats(
         for r in persona_result.all()
     ]
 
+    team = await active_primary_team_for_user(db, user.user_id)
     stats_data = {
-        "user": user_to_response(user).model_dump(),
+        "user": user_to_response(user, team=team).model_dump(),
         "statistics": {
             "total_sessions": total_sessions,
             "completed_sessions": completed_sessions,
@@ -826,39 +1077,28 @@ async def delete_user(
 
     Requirements: 4.4
     """
-    # Prevent self-deletion
+    # Compatibility endpoint: managed accounts are deactivated, never physically deleted.
     if str(current_user.user_id) == user_id:
         raise HTTPException(status_code=400, detail="[CANNOT_DELETE_SELF]")
-
-    result = await db.execute(select(User).where(User.user_id == user_id))
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
-
-    # Soft delete - set is_active to False
-    before_snapshot = _user_audit_snapshot(user)
-    setattr(user, "is_active", False)
-    after_snapshot = _user_audit_snapshot(user)
-    _queue_user_audit_log(
+    status_result = await _change_user_active_state(
         db,
-        action="admin.user.deactivated",
+        user_id=user_id,
+        desired_active=False,
+        payload=payload,
         operator=current_user,
-        target_user_id=user_id,
-        reason=payload.audit_reason if payload else None,
-        before=before_snapshot,
-        after=after_snapshot,
-        ip_address=request_context.client.host if request_context.client else None,
+        request_context=request_context,
+        audit_action="admin.user.deactivated",
     )
-    await db.commit()
-
-    return success_response({"deleted": True})
+    return success_response(
+        {**status_result, "deactivated": True, "deleted": False}
+    )
 
 
 @router.post("", response_model=dict)
 async def create_user(
     payload: CreateUserRequest,
     request_context: Request,
+    response: Response,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -868,17 +1108,38 @@ async def create_user(
     Requirements: 4.1
     """
     # Check if email already exists
-    existing = await db.execute(select(User).where(User.email == payload.email))
+    normalized_email = normalize_email(payload.email)
+    existing = await db.execute(
+        select(User).where(func.lower(User.email) == normalized_email)
+    )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="[EMAIL_ALREADY_EXISTS]")
 
+    team: Team | None = None
+    if payload.team_id is not None:
+        if normalize_role(payload.role) not in SALES_TRAINER_LEARNER_ROLES:
+            raise HTTPException(
+                status_code=400,
+                detail="[TEAM_MEMBERSHIP_REQUIRES_LEARNER_ROLE]",
+            )
+        team = await db.get(Team, payload.team_id)
+        if team is None or not bool(team.is_active):
+            raise HTTPException(status_code=404, detail="[ACTIVE_TEAM_NOT_FOUND]")
+
     # Create new user
+    temporary_password = generate_temporary_password()
+    temporary_password_expires_at = datetime.now(UTC) + timedelta(
+        hours=temporary_password_ttl_hours()
+    )
     new_user = User(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"admin_created_{uuid.uuid4().hex[:8]}",  # Placeholder for admin-created users
-        name=payload.name or payload.username,
-        email=payload.email,
-        department=payload.department,
+        name=payload.name,
+        email=normalized_email,
+        hashed_password=pwd_context.hash(temporary_password),
+        credential_status="temporary",
+        temporary_password_expires_at=temporary_password_expires_at,
+        credential_version=1,
         role=payload.role,
         is_active=True,
         created_at=datetime.now(UTC),
@@ -886,6 +1147,15 @@ async def create_user(
 
     db.add(new_user)
     await db.flush()
+    if team is not None:
+        await TeamService(db).assign_primary_member(
+            team=team,
+            learner=new_user,
+            actor=current_user,
+        )
+    audit_after = _user_audit_snapshot(new_user)
+    if team is not None:
+        audit_after["team_id"] = str(team.team_id)
     _queue_user_audit_log(
         db,
         action="admin.user.created",
@@ -893,7 +1163,7 @@ async def create_user(
         target_user_id=str(new_user.user_id),
         reason=payload.audit_reason,
         before=None,
-        after=_user_audit_snapshot(new_user),
+        after=audit_after,
         ip_address=request_context.client.host if request_context.client else None,
     )
     await db.commit()
@@ -901,7 +1171,13 @@ async def create_user(
 
     logger.info(f"User created: {new_user.user_id} by admin {current_user.user_id}")
 
-    return success_response(user_to_response(new_user).model_dump())
+    team_summary = await active_primary_team_for_user(db, new_user.user_id)
+    created = CreatedUserResponse(
+        **user_to_response(new_user, team=team_summary).model_dump(),
+        temporary_password=temporary_password,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return success_response(created.model_dump())
 
 
 @router.put("/{user_id}", response_model=dict)
@@ -928,6 +1204,11 @@ async def update_user(
             status_code=400,
             detail="[ROLE_UPDATE_REQUIRES_DEDICATED_ENDPOINT]",
         )
+    if payload.is_active is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="[ACCOUNT_STATUS_REQUIRES_DEDICATED_ENDPOINT]",
+        )
 
     is_self = str(current_user.user_id) == user_id
     before_snapshot = _user_audit_snapshot(user)
@@ -937,20 +1218,18 @@ async def update_user(
         raise HTTPException(status_code=400, detail="[CANNOT_DEACTIVATE_SELF]")
 
     # Check email uniqueness if changing
-    if payload.email and payload.email != user.email:
-        existing = await db.execute(select(User).where(User.email == payload.email))
+    normalized_email = normalize_email(payload.email) if payload.email else None
+    if normalized_email and normalized_email != user.email:
+        existing = await db.execute(
+            select(User).where(func.lower(User.email) == normalized_email)
+        )
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="[EMAIL_ALREADY_EXISTS]")
-        setattr(user, "email", payload.email)
+        setattr(user, "email", normalized_email)
 
     # Update fields
     if payload.name is not None:
         setattr(user, "name", payload.name)
-    if payload.department is not None:
-        setattr(user, "department", payload.department)
-    if payload.is_active is not None:
-        setattr(user, "is_active", payload.is_active)
-
     after_snapshot = _user_audit_snapshot(user)
     _queue_user_audit_log(
         db,
@@ -968,7 +1247,8 @@ async def update_user(
 
     logger.info(f"User updated: {user_id} by admin {current_user.user_id}")
 
-    return success_response(user_to_response(user).model_dump())
+    team = await active_primary_team_for_user(db, user.user_id)
+    return success_response(user_to_response(user, team=team).model_dump())
 
 
 @router.put("/{user_id}/role", response_model=dict)
@@ -1003,7 +1283,13 @@ async def update_user_role(
 
     before_snapshot = _user_audit_snapshot(user)
     setattr(user, "role", payload.role)
+    retired_relationships = await _retire_incompatible_team_relationships(
+        db,
+        user_id=user_id,
+        new_role=payload.role,
+    )
     after_snapshot = _user_audit_snapshot(user)
+    after_snapshot["retired_team_relationships"] = retired_relationships
 
     _queue_user_audit_log(
         db,
@@ -1021,7 +1307,8 @@ async def update_user_role(
 
     logger.info(f"User role updated: {user_id} by admin {current_user.user_id}")
 
-    return success_response(user_to_response(user).model_dump())
+    team = await active_primary_team_for_user(db, user.user_id)
+    return success_response(user_to_response(user, team=team).model_dump())
 
 
 @router.post("/{user_id}/suspend", response_model=dict)
@@ -1041,30 +1328,71 @@ async def suspend_user(
     if str(current_user.user_id) == user_id:
         raise HTTPException(status_code=400, detail="[CANNOT_SUSPEND_SELF]")
 
-    result = await db.execute(select(User).where(User.user_id == user_id))
+    status_result = await _change_user_active_state(
+        db,
+        user_id=user_id,
+        desired_active=False,
+        payload=payload,
+        operator=current_user,
+        request_context=request_context,
+        audit_action="admin.user.suspended",
+    )
+
+    logger.info(f"User suspended: {user_id} by admin {current_user.user_id}")
+    return success_response({**status_result, "suspended": True})
+
+
+@router.post("/{user_id}/reset-temporary-password", response_model=dict)
+async def reset_temporary_password(
+    user_id: str,
+    request_context: Request,
+    response: Response,
+    payload: UserAuditReasonRequest | None = None,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Issue a replacement one-time password and invalidate existing sessions."""
+    statement = select(User).where(User.user_id == user_id)
+    if _dialect_supports_row_locks(_session_dialect_name(db)):
+        statement = statement.with_for_update()
+    result = await db.execute(statement)
     user = result.scalar_one_or_none()
-
-    if not user:
+    if user is None:
         raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
+    if not user.is_active:
+        raise HTTPException(status_code=409, detail="[USER_INACTIVE]")
+    current_version = int(user.credential_version or 1)
+    expected_version = payload.expected_credential_version if payload else None
+    if expected_version is not None and expected_version != current_version:
+        raise HTTPException(status_code=409, detail="[ACCOUNT_STATUS_CONFLICT]")
 
+    temporary_password = generate_temporary_password()
+    expires_at = datetime.now(UTC) + timedelta(hours=temporary_password_ttl_hours())
     before_snapshot = _user_audit_snapshot(user)
-    setattr(user, "is_active", False)
-    after_snapshot = _user_audit_snapshot(user)
+    user.hashed_password = pwd_context.hash(temporary_password)
+    user.credential_status = "temporary"
+    user.temporary_password_expires_at = expires_at
+    user.password_changed_at = None
+    user.credential_version = current_version + 1
     _queue_user_audit_log(
         db,
-        action="admin.user.suspended",
+        action="admin.user.temporary_password.reset",
         operator=current_user,
         target_user_id=user_id,
         reason=payload.audit_reason if payload else None,
         before=before_snapshot,
-        after=after_snapshot,
+        after=_user_audit_snapshot(user),
         ip_address=request_context.client.host if request_context.client else None,
     )
     await db.commit()
-
-    logger.info(f"User suspended: {user_id} by admin {current_user.user_id}")
-
-    return success_response({"suspended": True, "user_id": user_id})
+    response.headers["Cache-Control"] = "no-store"
+    team = await active_primary_team_for_user(db, user.user_id)
+    return success_response(
+        CreatedUserResponse(
+            **user_to_response(user, team=team).model_dump(),
+            temporary_password=temporary_password,
+        ).model_dump()
+    )
 
 
 @router.post("/{user_id}/activate", response_model=dict)
@@ -1078,34 +1406,22 @@ async def activate_user(
     """
     Activate a suspended user account
     """
-    result = await db.execute(select(User).where(User.user_id == user_id))
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
-
-    before_snapshot = _user_audit_snapshot(user)
-    setattr(user, "is_active", True)
-    after_snapshot = _user_audit_snapshot(user)
-    _queue_user_audit_log(
+    status_result = await _change_user_active_state(
         db,
-        action="admin.user.activated",
+        user_id=user_id,
+        desired_active=True,
+        payload=payload,
         operator=current_user,
-        target_user_id=user_id,
-        reason=payload.audit_reason if payload else None,
-        before=before_snapshot,
-        after=after_snapshot,
-        ip_address=request_context.client.host if request_context.client else None,
+        request_context=request_context,
+        audit_action="admin.user.activated",
     )
-    await db.commit()
 
     logger.info(f"User activated: {user_id} by admin {current_user.user_id}")
 
-    return success_response({"activated": True, "user_id": user_id})
+    return success_response({**status_result, "activated": True})
 
 
-@router.get("/export", response_class=StreamingResponse)
-async def export_users(
+async def _export_users(
     format: str = Query("csv", description="Export format: csv or json"),
     search: str | None = Query(None, description="Search filter"),
     status: str | None = Query(None, description="Status filter"),
@@ -1132,9 +1448,19 @@ async def export_users(
 
     result = await db.execute(query.order_by(User.created_at.desc()))
     users = result.scalars().all()
+    teams_by_user_id = await active_primary_teams_by_user_ids(
+        db,
+        [user.user_id for user in users],
+    )
 
     # Convert to response format
-    user_data = [user_to_response(u).model_dump() for u in users]
+    user_data = [
+        user_to_response(
+            user,
+            team=teams_by_user_id.get(str(user.user_id)),
+        ).model_dump()
+        for user in users
+    ]
 
     if format.lower() == "json":
         # JSON export

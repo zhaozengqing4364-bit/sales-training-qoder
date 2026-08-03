@@ -192,7 +192,7 @@ export default function AnalyticsPage() {
         operatingSummary,
         managerLite,
         repeatedBlockerFamilies,
-        departmentIssueBuckets,
+        teamIssueBuckets,
         topBlockerFamily,
         topDegradedReason,
     } = useMemo(() => buildOperatingPackReadModel(operatingPack), [operatingPack]);
@@ -250,11 +250,11 @@ export default function AnalyticsPage() {
 
     if (isLoading) {
         return (
-            <div className="space-y-8 animate-in fade-in">
+            <div className="space-y-8">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                        <div className="h-8 w-48 bg-slate-200 rounded-lg animate-pulse" />
-                        <div className="h-4 w-72 bg-slate-100 rounded mt-2 animate-pulse" />
+                        <h1 className="text-3xl font-black tracking-tight text-slate-900">数据分析</h1>
+                        <p className="mt-1 text-slate-500">查看训练效果、反复卡点和需要跟进的团队问题</p>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -274,7 +274,7 @@ export default function AnalyticsPage() {
     }
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-8 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[var(--duration-tooltip)]">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight">数据分析</h1>
@@ -391,9 +391,9 @@ export default function AnalyticsPage() {
                         <p className="mt-1 text-xs text-slate-600">{topDegradedReasonLabel || topReasonLabel || "当前没有明显降级信号"}</p>
                     </div>
                     <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">活跃部门</p>
-                        <p className="mt-2 text-3xl font-black text-slate-900">{operatingSummary.active_departments}</p>
-                        <p className="mt-1 text-xs text-slate-600">本周至少产生一次已完成训练的部门数。</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">活跃团队</p>
+                        <p className="mt-2 text-3xl font-black text-slate-900">{operatingSummary.active_teams}</p>
+                        <p className="mt-1 text-xs text-slate-600">本周至少产生一次已完成训练的团队数。</p>
                     </div>
                 </div>
 
@@ -424,7 +424,7 @@ export default function AnalyticsPage() {
                                             </div>
                                             <div className="text-right text-xs text-slate-500">
                                                 <p>{bucket.count} 次命中</p>
-                                                <p>{bucket.user_count} 人 / {bucket.department_count ?? 0} 部门</p>
+                                                <p>{bucket.user_count} 人 / {bucket.team_count ?? 0} 团队</p>
                                             </div>
                                         </div>
                                     </div>
@@ -468,23 +468,23 @@ export default function AnalyticsPage() {
             <GlassCard className="p-6 border border-slate-200 bg-white/95">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div>
-                        <h3 className="text-lg font-bold text-slate-900">部门问题面</h3>
+                        <h3 className="text-lg font-bold text-slate-900">团队问题面</h3>
                         <p className="mt-1 text-sm text-slate-500 text-pretty">
-                            把部门维度的 blocker、证据不足与降级原因放在一屏里，方便周会上直接分派动作。
+                            把团队维度的 blocker、证据不足与降级原因放在一屏里，方便周会上直接分派动作。
                         </p>
                     </div>
                     <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                        {departmentIssueBuckets.length > 0 ? `${departmentIssueBuckets.length} 个部门有已完成训练` : "本周暂无部门样本"}
+                        {teamIssueBuckets.length > 0 ? `${teamIssueBuckets.length} 个团队有已完成训练` : "本周暂无团队样本"}
                     </span>
                 </div>
 
-                {departmentIssueBuckets.length > 0 ? (
+                {teamIssueBuckets.length > 0 ? (
                     <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
-                        {departmentIssueBuckets.map((bucket) => (
-                            <article key={bucket.department} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+                        {teamIssueBuckets.map((bucket) => (
+                            <article key={bucket.team?.team_id || "unassigned"} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
-                                        <h4 className="text-lg font-bold text-slate-900">{bucket.department}</h4>
+                                        <h4 className="text-lg font-bold text-slate-900">{bucket.team?.name || "未分配团队"}</h4>
                                         <p className="mt-1 text-sm text-slate-500 tabular-nums">
                                             本周 {bucket.session_count} 次训练 · {bucket.evaluable_sessions} 次可评估 · {bucket.not_evaluable_sessions} 次证据不足
                                         </p>
@@ -495,7 +495,7 @@ export default function AnalyticsPage() {
                                     {bucket.issue_buckets.length > 0 ? bucket.issue_buckets.map((issueBucket) => {
                                         const issueLabel = formatIssueTypeLabel(issueBucket.issue_type) || issueBucket.issue_type || issueBucket.issue_family;
                                         return (
-                                            <div key={`${bucket.department}-${issueBucket.issue_family}`} className="rounded-2xl border border-white/80 bg-white px-4 py-3">
+                                            <div key={`${bucket.team?.team_id || "unassigned"}-${issueBucket.issue_family}`} className="rounded-2xl border border-white/80 bg-white px-4 py-3">
                                                 <div className="flex items-start justify-between gap-4">
                                                     <div>
                                                         <p className="text-sm font-semibold text-slate-900 text-pretty">{issueBucket.issue_text || issueLabel}</p>
@@ -507,7 +507,7 @@ export default function AnalyticsPage() {
                                         );
                                     }) : (
                                         <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
-                                            当前部门本周还没有形成 blocker family。
+                                            当前团队本周还没有形成 blocker family。
                                         </div>
                                     )}
                                 </div>
@@ -517,7 +517,7 @@ export default function AnalyticsPage() {
                                         <p className="text-xs font-medium text-slate-500">证据不足原因</p>
                                         <div className="mt-2 space-y-1 text-sm text-slate-700">
                                             {bucket.degradation_breakdown.not_evaluable_reasons.length > 0 ? bucket.degradation_breakdown.not_evaluable_reasons.map((reason) => (
-                                                <p key={`${bucket.department}-${reason.reason}`}>{formatNotEvaluableReason(reason.reason)} · {reason.count} 次</p>
+                                                <p key={`${bucket.team?.team_id || "unassigned"}-${reason.reason}`}>{formatNotEvaluableReason(reason.reason)} · {reason.count} 次</p>
                                             )) : <p>当前无证据不足原因</p>}
                                         </div>
                                     </div>
@@ -525,7 +525,7 @@ export default function AnalyticsPage() {
                                         <p className="text-xs font-medium text-slate-500">降级原因</p>
                                         <div className="mt-2 space-y-1 text-sm text-slate-700">
                                             {bucket.degradation_breakdown.degraded_reasons.length > 0 ? bucket.degradation_breakdown.degraded_reasons.map((reason) => (
-                                                <p key={`${bucket.department}-degraded-${reason.reason}`}>{formatAdminDegradedReasonLabel(reason.reason)} · {reason.count} 次</p>
+                                                <p key={`${bucket.team?.team_id || "unassigned"}-degraded-${reason.reason}`}>{formatAdminDegradedReasonLabel(reason.reason)} · {reason.count} 次</p>
                                             )) : <p>当前无降级原因</p>}
                                         </div>
                                     </div>
@@ -535,7 +535,7 @@ export default function AnalyticsPage() {
                     </div>
                 ) : (
                     <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                        本周还没有可用于部门问题面的完成训练样本。
+                        本周还没有可用于团队问题面的完成训练样本。
                     </div>
                 )}
             </GlassCard>

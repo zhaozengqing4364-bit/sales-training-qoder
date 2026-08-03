@@ -1,0 +1,272 @@
+{
+  "measuredAt": "2026-07-18T11:55:29.469Z",
+  "environment": {
+    "frontend": "Next.js development server, fresh browser context per page sample",
+    "backend": "local Uvicorn + PostgreSQL, sequential warm samples",
+    "providerMode": "not invoked by measured read paths",
+    "pageSampleCount": 8,
+    "apiSampleCount": 30,
+    "limitation": "开发机证据只验证回归阈值；生产构建体积与并发基线在切片 8 发布门禁复测。"
+  },
+  "thresholds": {
+    "journeyPrimaryActionP75Ms": 2000,
+    "ordinaryApiP95Ms": 500
+  },
+  "journeyPage": {
+    "p50Ms": 781.5,
+    "p75Ms": 823.7,
+    "p95Ms": 852.6,
+    "samples": [
+      {
+        "status": 200,
+        "primaryActionVisibleMs": 738.4,
+        "responseCount": 34,
+        "apiResponseCount": 0,
+        "blockingApiResponseCount": 0,
+        "apiResponses": [
+          "POST /api/v1/analytics/custom"
+        ],
+        "javascriptResourceCount": 32,
+        "javascriptTransferBytes": 5980501
+      },
+      {
+        "status": 200,
+        "primaryActionVisibleMs": 852.6,
+        "responseCount": 35,
+        "apiResponseCount": 1,
+        "blockingApiResponseCount": 0,
+        "apiResponses": [
+          "POST /api/v1/analytics/custom"
+        ],
+        "javascriptResourceCount": 32,
+        "javascriptTransferBytes": 5980501
+      },
+      {
+        "status": 200,
+        "primaryActionVisibleMs": 712.3,
+        "responseCount": 35,
+        "apiResponseCount": 1,
+        "blockingApiResponseCount": 0,
+        "apiResponses": [
+          "POST /api/v1/analytics/custom"
+        ],
+        "javascriptResourceCount": 32,
+        "javascriptTransferBytes": 5980501
+      },
+      {
+        "status": 200,
+        "primaryActionVisibleMs": 823.7,
+        "responseCount": 35,
+        "apiResponseCount": 1,
+        "blockingApiResponseCount": 0,
+        "apiResponses": [
+          "POST /api/v1/analytics/custom"
+        ],
+        "javascriptResourceCount": 32,
+        "javascriptTransferBytes": 5980501
+      },
+      {
+        "status": 200,
+        "primaryActionVisibleMs": 781.5,
+        "responseCount": 35,
+        "apiResponseCount": 1,
+        "blockingApiResponseCount": 0,
+        "apiResponses": [
+          "POST /api/v1/analytics/custom"
+        ],
+        "javascriptResourceCount": 32,
+        "javascriptTransferBytes": 5980501
+      },
+      {
+        "status": 200,
+        "primaryActionVisibleMs": 726.9,
+        "responseCount": 35,
+        "apiResponseCount": 1,
+        "blockingApiResponseCount": 0,
+        "apiResponses": [
+          "POST /api/v1/analytics/custom"
+        ],
+        "javascriptResourceCount": 32,
+        "javascriptTransferBytes": 5980501
+      },
+      {
+        "status": 200,
+        "primaryActionVisibleMs": 789.7,
+        "responseCount": 35,
+        "apiResponseCount": 1,
+        "blockingApiResponseCount": 0,
+        "apiResponses": [
+          "POST /api/v1/analytics/custom"
+        ],
+        "javascriptResourceCount": 32,
+        "javascriptTransferBytes": 5980501
+      },
+      {
+        "status": 200,
+        "primaryActionVisibleMs": 842.1,
+        "responseCount": 35,
+        "apiResponseCount": 1,
+        "blockingApiResponseCount": 0,
+        "apiResponses": [
+          "POST /api/v1/analytics/custom"
+        ],
+        "javascriptResourceCount": 32,
+        "javascriptTransferBytes": 5980501
+      }
+    ]
+  },
+  "apis": {
+    "journey": {
+      "samplesMs": [
+        24.4,
+        19.4,
+        15.6,
+        19.6,
+        15.5,
+        16.9,
+        15.4,
+        20.9,
+        22.4,
+        16,
+        14.3,
+        15.6,
+        16.8,
+        17.5,
+        15.7,
+        18.8,
+        15,
+        15.2,
+        14.5,
+        14.4,
+        14,
+        16.5,
+        15.8,
+        15.7,
+        14,
+        15.1,
+        23.4,
+        20.7,
+        19.5,
+        19.7
+      ],
+      "failures": 0,
+      "p50Ms": 15.8,
+      "p95Ms": 23.4,
+      "p99Ms": 24.4
+    },
+    "dossier": {
+      "samplesMs": [
+        21.1,
+        17.8,
+        22.7,
+        17.6,
+        16.8,
+        15,
+        17.1,
+        14.6,
+        14.1,
+        14.2,
+        14.2,
+        14.9,
+        15.9,
+        15.7,
+        16.2,
+        14.5,
+        15.1,
+        15.1,
+        15.7,
+        15.1,
+        15.8,
+        16.7,
+        18.2,
+        15.3,
+        13.1,
+        13.2,
+        16.3,
+        13.6,
+        14.4,
+        16.8
+      ],
+      "failures": 0,
+      "p50Ms": 15.3,
+      "p95Ms": 21.1,
+      "p99Ms": 22.7
+    },
+    "taskList": {
+      "samplesMs": [
+        12,
+        11.5,
+        11.5,
+        12.4,
+        9.9,
+        11.7,
+        10.8,
+        9.1,
+        9.1,
+        9,
+        8.9,
+        9.5,
+        10.3,
+        9.9,
+        8.6,
+        9.2,
+        8.4,
+        9.1,
+        8.4,
+        9.9,
+        10.9,
+        9,
+        8.5,
+        9.5,
+        9.6,
+        10.9,
+        8.7,
+        8.8,
+        8.4,
+        9.5
+      ],
+      "failures": 0,
+      "p50Ms": 9.5,
+      "p95Ms": 12,
+      "p99Ms": 12.4
+    },
+    "adminLearnerList": {
+      "samplesMs": [
+        14.9,
+        13,
+        14.5,
+        13.7,
+        14.6,
+        15.1,
+        15.9,
+        12.3,
+        13,
+        13,
+        12.5,
+        14,
+        17.6,
+        25.9,
+        35.3,
+        26,
+        47.9,
+        29.8,
+        35.1,
+        24.5,
+        16.8,
+        32.1,
+        29.4,
+        39.1,
+        27.6,
+        34,
+        17.9,
+        19,
+        22.1,
+        29.4
+      ],
+      "failures": 0,
+      "p50Ms": 17.9,
+      "p95Ms": 39.1,
+      "p99Ms": 47.9
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/architecture-fitness.md", "reason": "验证依赖方向与模块边界"}
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "验证运行时契约真源"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量门禁"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量门禁"}
+{"file": ".trellis/spec/guides/design-artifact-audit-guide.md", "reason": "验证实际渲染、状态和设计契约"}

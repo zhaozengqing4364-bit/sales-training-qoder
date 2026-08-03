@@ -6,9 +6,9 @@
 
 ## Overview
 
-UI builds on **Tailwind CSS** + **Radix UI** primitives wrapped in a **glass** design language. Interactive components are client components (`"use client"`). During practice, **never use native browser dialogs** for errors — use status indicators, toasts, and inline error states.
+UI builds on **Tailwind CSS** + **Radix UI** primitives wrapped in the project's existing **glass** surface language. Glass is not a default page container: use it for semantically framed cards and overlays, while page structure should prefer the established shells, alignment, spacing, lists, and tables. Interactive components are client components (`"use client"`). During practice, **never use native browser dialogs** for errors — use status indicators, toasts, and inline error states.
 
-Reference: `components/ui/`, `.kiro/steering/frontend-principles.md`, Constitution principle I (UX never interrupted).
+Reference: `components/ui/`, `components/admin/admin-layout-shells.tsx`, `.kiro/steering/frontend-principles.md`, `DESING.md`, [Product Design and UI Engineering](../guides/product-design-engineering.md), Constitution principle I (UX never interrupted).
 
 ---
 
@@ -50,7 +50,8 @@ import { cn } from "@/lib/utils";
 ### Canvas vs surfaces
 
 - **Page canvas**: `bg-slate-50 text-slate-900` (root `app/layout.tsx`).
-- **Cards / modals**: glass surfaces — `components/ui/glass-card.tsx`, `glass-modal.tsx`.
+- **Page structure**: use `AdminIndexShell`, `AdminDetailShell`, `AdminFormShell`, or `PolicyPageShell` where their intent matches.
+- **Cards / modals**: glass surfaces — `components/ui/glass-card.tsx`, `glass-modal.tsx`; do not wrap every field group or page section in a card.
 - **Buttons**: `rounded-full` in `components/ui/button.tsx`.
 - Avoid full-page `bg-white` backgrounds; white is for cards/inputs.
 
@@ -83,9 +84,12 @@ Dependencies: `@radix-ui/react-dialog`, `@radix-ui/react-slot`, `@radix-ui/react
 ## Composition
 
 - **Confirm flows**: `ConfirmDialog` on top of `GlassModal` — not `window.confirm`.
+- **Primary action**: one dominant action per scope via `AdminPageHeader.primaryAction`; keep secondary and destructive actions visually subordinate or risk-specific.
 - **Feedback**: `ToastProvider` + `useToast()` — see `components/ui/toast.tsx`.
+- **Important outcomes**: persist in the page/object state or history; a toast may supplement but must not be the only record.
 - **Practice status**: `StatusIndicator` — `components/ui/status-indicator.tsx`.
 - **Route errors**: `LearnerRouteErrorState` — inline recovery, no alert.
+- **Missing related objects**: keep users in flow with selection plus permitted quick-create-and-bind behavior; see `components/admin/newcomer-training/resource-picker-drawer.tsx`.
 
 Barrel exports for multi-file domains: `components/practice/presentation/index.ts`.
 
@@ -108,6 +112,9 @@ Barrel exports for multi-file domains: `components/practice/presentation/index.t
 | Error popups during practice | Inline error + retry affordance |
 | Raw Radix in every page | Import from `components/ui/` |
 | `bg-white` full-page background | `bg-slate-50` canvas |
+| Card per field/section or nested cards | Page shell + semantic sections, list, or table |
+| Generic `确定` / `处理` action labels | Precise verb + object labels |
+| Navigate away to create a missing related object | In-flow select or permitted quick-create-and-bind |
 
 Production `src/` has **no** `alert()` usage (tests may use alert in XSS fixtures only).
 

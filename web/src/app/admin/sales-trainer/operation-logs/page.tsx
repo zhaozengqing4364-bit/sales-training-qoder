@@ -16,7 +16,7 @@ import type {
 import { buildOperationLogDisplay } from "@/lib/sales-trainer/operation-log-display";
 import { isSalesTrainerAdminPathAllowedForCapabilities } from "@/lib/sales-trainer/routes";
 
-function RawMetadataToggle({ rawJson }: { readonly rawJson: string }) {
+function TechnicalDetailsToggle({ rawJson }: { readonly rawJson: string }) {
     const [isExpanded, setIsExpanded] = useState(false);
     return (
         <div className="space-y-2">
@@ -27,7 +27,7 @@ function RawMetadataToggle({ rawJson }: { readonly rawJson: string }) {
                 className="rounded-full"
                 onClick={() => setIsExpanded((current) => !current)}
             >
-                {isExpanded ? "收起原始数据" : "查看原始数据"}
+                {isExpanded ? "收起技术详情" : "查看技术详情"}
             </Button>
             {isExpanded ? (
                 <pre className="whitespace-pre-wrap break-all rounded-2xl bg-slate-50 p-3 text-xs text-slate-500">
@@ -156,7 +156,9 @@ export default function SalesTrainerOperationLogsPage() {
                                                 <p key={line}>{line}</p>
                                             ))}
                                         </div>
-                                        <RawMetadataToggle rawJson={display.rawJson} />
+                                        {adminCapabilities?.capabilities.admin_full_access ? (
+                                            <TechnicalDetailsToggle rawJson={display.rawJson} />
+                                        ) : null}
                                     </td>
                                 </tr>
                             );
@@ -172,7 +174,7 @@ export default function SalesTrainerOperationLogsPage() {
             header={(
                 <AdminPageHeader
                     title="新人训练路径操作日志"
-                    description="集中追踪发布、回滚、绑定变更、历史重评和学员关键操作，原始诊断数据可按需展开。"
+                    description="集中追踪发布、回滚、绑定变更、历史重评和学员关键操作；技术详情仅限超级管理员按需查看。"
                     secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} capabilities={adminCapabilities} />}
                 />
             )}

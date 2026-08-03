@@ -24,6 +24,7 @@ These guides help you **ask the right questions before coding**.
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
 | [Design Artifact Audit Guide](./design-artifact-audit-guide.md) | Seven-dimension audit of prd/design/implement artifacts before `task.py start` | After writing any design artifact; rerun after each fix round |
+| [Product Design and UI Engineering](./product-design-engineering.md) | Project projection of `DESING.md`: page contracts, in-flow completion, states, AI gate, and verification | Any user-visible or user-behavior change |
 
 ---
 
@@ -47,6 +48,14 @@ These guides help you **ask the right questions before coding**.
 - [ ] **You're creating a new utility/helper function** ← Search first!
 
 → Read [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md)
+
+### When to Apply Product Design Rules
+
+- [ ] The change affects what users see, understand, choose, enter, approve, or execute
+- [ ] A backend/API change alters visible state, permission, error, or result behavior
+- [ ] The task adds AI assistance, recommendations, generation, scoring, or automation
+
+→ Read [Product Design and UI Engineering](./product-design-engineering.md) and the repository-root `DESING.md`
 
 ---
 

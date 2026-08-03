@@ -122,7 +122,7 @@ class LeaderboardEntry(BaseModel):
     rank: int
     user_id: str
     user_name: str
-    department: str | None
+    team: dict[str, str] | None
     total_sessions: int
     average_score: float
     best_score: float
@@ -287,7 +287,7 @@ async def get_leaderboard(
     Get user leaderboard
 
     Returns users ranked by average score, including:
-    - Rank, name, department
+    - Rank, name, team
     - Total sessions and average/best score
     - Total practice duration
     """
@@ -332,7 +332,7 @@ async def get_operating_pack(
 
     Returns:
     - Weekly summary counts on the projection-backed score basis
-    - Cohort and department blocker buckets
+    - Cohort and team blocker buckets
     - Degradation / not-evaluable breakdowns
     - Risk and improving manager lists aligned to the same evidence line
     """
@@ -607,17 +607,18 @@ async def export_analytics(
     # Leaderboard section
     writer.writerow(["=== 用户排行榜 ==="])
     writer.writerow(
-        ["排名", "姓名", "部门", "练习次数", "平均分", "最高分", "总时长(分钟)"]
+        ["排名", "姓名", "团队", "练习次数", "平均分", "最高分", "总时长(分钟)"]
     )
 
     if leaderboard_result.is_success:
         leaderboard = cast(list[dict[str, Any]], leaderboard_result.value)
         for entry in leaderboard:
+            team = cast(dict[str, Any] | None, entry.get("team"))
             writer.writerow(
                 [
                     entry["rank"],
                     entry["user_name"],
-                    entry["department"] or "-",
+                    team.get("name", "-") if team else "-",
                     entry["total_sessions"],
                     entry["average_score"],
                     entry["best_score"],

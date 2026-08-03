@@ -20,7 +20,6 @@ async def test_admin_scoring_ruleset_active_contract_returns_default_schema(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"admin_{uuid.uuid4().hex[:8]}",
         name="Contract Admin",
-        department="QA",
         email=f"contract-admin-{uuid.uuid4().hex[:8]}@example.com",
         role="admin",
         is_active=True,

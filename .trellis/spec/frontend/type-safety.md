@@ -416,6 +416,7 @@ api.clonePromptTemplate(templateId: string, payload: PromptTemplateCloneRequest)
 
 - Typing mock data in camelCase while production API is snake_case.
 - Missing `| undefined` on optional query data before render.
+- Using a legacy or invented identifier alias as a list-selection key. Selection, batching, and result lookup must use the API DTO's canonical non-optional ID; regression fixtures should omit compatibility aliases so `undefined` cannot make every row appear selected.
 - Exporting huge types from page files — move to `lib/api/types.ts` or hook types file.
 
 ---

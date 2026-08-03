@@ -53,25 +53,13 @@ const activeTaskRoot = path.resolve(
   "..",
   ".trellis",
   "tasks",
-  "07-08-newcomer-path-playwright-audit-governance",
-);
-const archivedTaskRoot = path.resolve(
-  process.cwd(),
-  "..",
-  ".trellis",
-  "tasks",
-  "archive",
-  "2026-07",
-  "07-08-newcomer-path-playwright-audit-governance",
+  "07-16-frontend-experience-performance",
 );
 
 function resolveAuditTaskRoot(): string {
   const configuredRoot = process.env.NEWCOMER_TRAINING_AUDIT_ROOT;
   if (configuredRoot) {
     return path.resolve(configuredRoot);
-  }
-  if (fs.existsSync(archivedTaskRoot)) {
-    return archivedTaskRoot;
   }
   return activeTaskRoot;
 }

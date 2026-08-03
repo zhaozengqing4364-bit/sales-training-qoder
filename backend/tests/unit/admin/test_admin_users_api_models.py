@@ -43,13 +43,12 @@ def test_create_user_request_rejects_invalid_role() -> None:
     """Create request should reject unsupported role values."""
     try:
         CreateUserRequest(
-            username="tester",
+            name="tester",
             email="tester@example.com",
-            password="Password123",
             role="super-admin",
         )
     except ValidationError as exc:
-        assert "角色仅支持 user、support 或 admin" in str(exc)
+        assert "角色仅支持 user、training_manager、support 或 admin" in str(exc)
     else:
         raise AssertionError("Expected ValidationError for invalid role")
 
@@ -59,9 +58,8 @@ def test_create_user_request_rejects_too_long_audit_reason() -> None:
     long_reason = "a" * 501
     try:
         CreateUserRequest(
-            username="tester",
+            name="tester",
             email="tester@example.com",
-            password="Password123",
             role="user",
             audit_reason=long_reason,
         )
@@ -73,7 +71,9 @@ def test_create_user_request_rejects_too_long_audit_reason() -> None:
 
 def test_update_user_request_accepts_valid_role_and_reason() -> None:
     """Update request should accept supported role and trimmed reason."""
-    request = UpdateUserRequest(role="admin", audit_reason="  role escalation approved  ")
+    request = UpdateUserRequest(
+        role="admin", audit_reason="  role escalation approved  "
+    )
 
     assert request.role == "admin"
     assert request.audit_reason == "role escalation approved"
@@ -82,13 +82,37 @@ def test_update_user_request_accepts_valid_role_and_reason() -> None:
 def test_create_user_request_accepts_support_role() -> None:
     """Create request should accept support role."""
     request = CreateUserRequest(
-        username="support_tester",
+        name="support_tester",
         email="support.tester@example.com",
-        password="Password123",
         role="support",
     )
 
     assert request.role == "support"
+
+
+def test_user_requests_reject_retired_department_field() -> None:
+    with pytest.raises(ValidationError):
+        CreateUserRequest(
+            name="legacy client",
+            email="legacy@example.com",
+            role="user",
+            department="Sales",  # type: ignore[call-arg]
+        )
+
+    with pytest.raises(ValidationError):
+        UpdateUserRequest(department="Sales")  # type: ignore[call-arg]
+
+
+def test_create_user_request_normalizes_email_and_training_manager_role() -> None:
+    request = CreateUserRequest(
+        name="  销售组长  ",
+        email="Lead.Manager@Example.COM",
+        role="  TRAINING_MANAGER  ",
+    )
+
+    assert request.name == "销售组长"
+    assert request.email == "lead.manager@example.com"
+    assert request.role == "training_manager"
 
 
 def test_update_user_request_accepts_support_role() -> None:
@@ -132,7 +156,6 @@ def test_user_audit_snapshot_masks_sensitive_email() -> None:
         user_id="test-user-id",
         wechat_user_id="wechat_test_user",
         name="Tester",
-        department="QA",
         email="sensitive@example.com",
         role="user",
         is_active=True,
@@ -159,7 +182,9 @@ def test_role_transition_guard_rejects_removing_last_active_admin() -> None:
     assert exc_info.value.detail == "[CANNOT_DOWNGRADE_SELF]"
 
 
-def test_active_admin_recount_statement_requests_row_lock_for_supported_dialects() -> None:
+def test_active_admin_recount_statement_requests_row_lock_for_supported_dialects() -> (
+    None
+):
     """Transaction-local recount should request row locks when SQL supports them."""
     statement = _active_admin_recount_statement(lock_rows=True)
 
@@ -244,7 +269,9 @@ def test_sensitive_log_security_baseline_inventory_is_closed_and_scoped() -> Non
     assert watch_surfaces == WATCH_SENSITIVE_LOG_SURFACES
     assert baseline_surfaces == {SENSITIVE_LOG_POSITIVE_CONTROL}
     assert watch_surfaces.isdisjoint(baseline_surfaces)
-    assert all(surface.redaction_state == "present" for surface in SENSITIVE_LOG_SURFACES)
+    assert all(
+        surface.redaction_state == "present" for surface in SENSITIVE_LOG_SURFACES
+    )
     assert all(surface.sensitive_fields for surface in SENSITIVE_LOG_SURFACES)
 
 

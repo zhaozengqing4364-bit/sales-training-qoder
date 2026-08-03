@@ -231,9 +231,9 @@ function buildLearnerRubric({
 function PublishedRevisionGuidance() {
     return (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-            <p className="font-semibold">编辑将生成新修订</p>
+            <p className="font-semibold">保存并发布后只影响后续评分</p>
             <p className="mt-1 text-emerald-800">
-                保存修改会进入待发布修订；发布后只影响后续学员和后续评分，已提交录音、转写和评分结果继续保留当时快照。
+                系统会先保存一份可审计修订，再发布为当前有效版本。已提交录音、转写和评分结果继续保留当时快照。
                 需要重新评分历史记录时，请走单独的高风险重评流程。
             </p>
         </div>
@@ -382,9 +382,12 @@ export function SalesTrainerScorePromptForm({
                         value={scoringTemplate}
                         onChange={(event) => setScoringTemplate(event.target.value)}
                         disabled={isSubmitting || !canEdit}
-                        rows={10}
+                        rows={16}
                         className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 font-mono text-sm"
                     />
+                    <p className="text-xs leading-5 text-slate-500">
+                        当前 {scoringTemplate.length.toLocaleString("zh-CN")} 字；系统会完整保存，并在评分时将 {"{transcript}"} 替换为录音转写。内容越长，评分耗时可能越高。
+                    </p>
                 </div>
                 <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-learner-rubric-criteria">
@@ -487,7 +490,9 @@ export function SalesTrainerScorePromptForm({
                     disabled={isSubmitting || isArchived}
                     className="rounded-full bg-slate-900 text-white"
                 >
-                    {isSubmitting ? "保存中..." : mode === "create" ? "创建评分标准" : "保存评分标准"}
+                    {isSubmitting
+                        ? mode === "create" ? "创建中..." : "保存并发布中..."
+                        : mode === "create" ? "创建评分标准" : "保存并发布"}
                 </Button>
             </div>
         </form>

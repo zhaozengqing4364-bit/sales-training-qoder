@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import event, select
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -34,10 +34,6 @@ from sales_trainer.models import (
     SalesTrainerAssetRevision,
 )
 from sales_trainer.orchestration.contracts import TrainingPathPayload
-from sales_trainer.orchestration.journey_service import NewcomerJourneyService
-from sales_trainer.orchestration.journey_summary_service import (
-    JourneySummaryReadService,
-)
 from sales_trainer.orchestration.revision_service import (
     PATH_LOGICAL_ID,
     PATH_RESOURCE_TYPE,
@@ -286,31 +282,6 @@ async def _seed_team_dataset(db: AsyncSession, *, learner_count: int) -> User:
 
 @pytest.mark.asyncio
 @pytest.mark.performance
-async def test_should_keep_journey_list_sql_count_constant_across_page_sizes(
-    test_engine, db_session
-):
-    admin = await _seed_team_dataset(db_session, learner_count=100)
-    service = JourneySummaryReadService(db_session)
-    counts: list[int] = []
-    for limit in (1, 50, 100):
-        with _capture_sql_statements(test_engine) as statements:
-            result = await service.list_summaries(
-                current_user=admin,
-                team_id=None,
-                search=None,
-                limit=limit,
-                offset=0,
-            )
-        assert result.response.total == 100
-        assert len(result.response.items) == limit
-        assert result.wrote is False
-        assert result.response.items[0].summary.risk_labels
-        counts.append(len(statements))
-    assert max(counts) - min(counts) <= 2
-
-
-@pytest.mark.asyncio
-@pytest.mark.performance
 async def test_should_push_workbench_date_predicates_into_sql(test_engine, db_session):
     admin = await _seed_team_dataset(db_session, learner_count=20)
     service = SupervisorReviewService(db_session)
@@ -357,99 +328,3 @@ async def test_should_keep_workbench_sql_bounded_for_large_team(
     # Bounded read model: constant-ish query count, never one score query per learner.
     assert len(statements) < 40
     assert len(payload["learners"]) == 100
-
-
-@pytest.mark.asyncio
-@pytest.mark.performance
-async def test_should_record_limit_100_for_500_learner_dataset(test_engine, db_session):
-    admin = await _seed_team_dataset(db_session, learner_count=500)
-    service = JourneySummaryReadService(db_session)
-    result = await service.list_summaries(
-        current_user=admin,
-        team_id=None,
-        search=None,
-        limit=100,
-        offset=0,
-    )
-    assert result.response.total == 500
-    assert len(result.response.items) == 100
-
-
-@pytest.mark.asyncio
-@pytest.mark.performance
-async def test_should_heal_stale_enrollment_revision_once(db_session):
-    admin = await _seed_team_dataset(db_session, learner_count=3)
-    enrollments = list(
-        (await db_session.scalars(select(NewcomerTrainingEnrollment))).all()
-    )
-    assert enrollments
-    stale_revision = str(uuid.uuid4())
-    for enrollment in enrollments:
-        enrollment.path_revision_id = stale_revision
-    await db_session.commit()
-
-    service = JourneySummaryReadService(db_session)
-    first = await service.list_summaries(
-        current_user=admin,
-        team_id=None,
-        search=None,
-        limit=100,
-        offset=0,
-    )
-    assert first.wrote is True
-    assert all(
-        item.summary.path_revision_id != stale_revision for item in first.response.items
-    )
-    second = await service.list_summaries(
-        current_user=admin,
-        team_id=None,
-        search=None,
-        limit=100,
-        offset=0,
-    )
-    assert second.wrote is False
-
-
-@pytest.mark.asyncio
-@pytest.mark.performance
-async def test_should_match_summary_progress_to_full_journey(db_session):
-    admin = await _seed_team_dataset(db_session, learner_count=1)
-    summary_service = JourneySummaryReadService(db_session)
-    listed = await summary_service.list_summaries(
-        current_user=admin,
-        team_id=None,
-        search=None,
-        limit=10,
-        offset=0,
-    )
-    assert len(listed.response.items) == 1
-    item = listed.response.items[0]
-    learner = await db_session.get(User, item.learner_id)
-    assert learner is not None
-    journey = await NewcomerJourneyService(db_session).get_or_create_for_learner(
-        learner=learner
-    )
-    assert item.summary.progress.completed_count == journey.progress.completed_count
-    assert item.summary.progress.total_required == journey.progress.total_required
-    assert item.summary.progress.percent == journey.progress.percent
-    assert item.summary.progress.completed == journey.progress.completed
-    summary_next = (
-        item.summary.primary_next_action.model_dump()
-        if item.summary.primary_next_action
-        else None
-    )
-    full_next = (
-        journey.primary_next_action.model_dump()
-        if journey.primary_next_action
-        else None
-    )
-    assert summary_next == full_next
-    full_risks = [
-        activity.title
-        for phase in journey.phases
-        for module in phase.modules
-        for activity in module.activities
-        if activity.passed is False
-        or activity.status in {"failed", "needs_review", "error"}
-    ][:2]
-    assert item.summary.risk_labels == full_risks

@@ -3,12 +3,34 @@ import { describe, expect, it, vi } from "vitest";
 
 import Page from "./page";
 
-vi.mock("@/lib/api/client", () => ({ api: { newcomerTraining: { getJourney: vi.fn().mockResolvedValue({ enrollment_id: "e", path_revision_id: "r", path_title: "新人训练", phases: [], progress: { completed: false, completed_count: 0, total_required: 0, percent: 0 }, primary_next_action: null }) } } }));
+vi.mock("@/lib/server-api", () => ({
+    ServerApiError: class ServerApiError extends Error {
+        constructor(readonly status: number) { super(String(status)); }
+    },
+    serverApiGet: vi.fn().mockResolvedValue({
+                contract_version: "journey_projection_v1",
+                generated_at: "2026-07-16T00:00:00Z",
+                data_freshness: "fresh",
+                capabilities: ["view_journey"],
+                status: "not_enrolled",
+                status_label: "尚未分配训练",
+                status_reason: "请联系培训负责人分配训练路径。",
+                enrollment: null,
+                path: null,
+                progress: { completed_required: 0, total_required: 0, percentage: 0 },
+                stages: [],
+                current_activity: null,
+                background_tasks: [],
+                recent_outcomes: [],
+                primary_action: null,
+                projection_version: 0,
+            }),
+}));
 
 describe("newcomer training page", () => {
-    it("loads the canonical learner journey", async () => {
-        render(<Page />);
-        expect(screen.getByText("正在准备你的训练路径…")).toBeTruthy();
-        expect(await screen.findByText("新人训练")).toBeTruthy();
+    it("loads the canonical learner journey without a legacy module request", async () => {
+        render(await Page());
+        expect(screen.getByText("尚未分配训练")).toBeTruthy();
+        expect(screen.getByText("新人销售基础训练")).toBeTruthy();
     });
 });

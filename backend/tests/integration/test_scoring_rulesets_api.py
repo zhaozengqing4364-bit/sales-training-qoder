@@ -85,7 +85,6 @@ async def _seed_user(db: AsyncSession, *, role: str) -> User:
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"{role}_{uuid.uuid4().hex[:8]}",
         name=f"{role.title()} Tester",
-        department="QA",
         email=f"{role}_{uuid.uuid4().hex[:8]}@example.com",
         role=role,
         is_active=True,

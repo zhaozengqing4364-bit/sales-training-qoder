@@ -3,6 +3,25 @@
 > Executable contract for test contributor isolation, FastAPI route inventory, and
 > committed OpenAPI parity.
 
+> **Implementation-status note (2026-07-18):** Newcomer v2 learner, domain-admin, unified workspace and ReleasePlan surfaces are mounted; experience/performance, Legacy deletion and final release gates have passed. `create_app().openapi()` remains the runtime truth and is checked against the committed contract in the canonical gate.
+
+## Newcomer Foundation Contract Truth
+
+- The runtime schema from `create_app().openapi()` remains the only evidence that a v2 route is implemented; the Markdown contract records status and intent but cannot substitute for runtime proof.
+- v2 owns `/api/v1/newcomer-training/**` and `/api/v1/admin/newcomer-training/**`; once a v2 writer passes its end-to-end gate, the corresponding Legacy writer is removed from route composition and OpenAPI in the same slice.
+- Do not keep a permanent forwarding router, copied route inventory, dual writer, or hand-edited OpenAPI path.
+- OpenAPI deletion tests use the retirement matrix in `docs/architecture/newcomer-foundation-clean-cut.md` and distinguish planned, current Legacy, and removed states.
+- Domain contributor bootstrap must register the five target ActivityRuntime adapters explicitly at the composition root; string module/class locators and realtime newcomer registration fail the target contract.
+- Formal Path/resource publication is exposed only through `/api/v1/admin/newcomer-training/release-plans/**`. Former direct Path/resource publish tombstones are removed from runtime composition and OpenAPI and must not be restored.
+
+### Durable task composition contract
+
+- `task_runtime` owns one lifecycle only: `queued -> running/retry_wait/cancel_requested -> cancelled/succeeded/dead_letter`. Lease and attempt are execution metadata; `partial_success` and `waiting_input` are typed result kinds, never task states.
+- Registry identity is `(task_type, schema_version)`. Enqueue freezes the complete execution policy; recovery must resolve that exact version and use the stored timeout, lease, attempts, retry policy and deadline rather than current registry defaults.
+- Task payloads, Outbox payloads and TaskResultRef item groups contain only bounded object/artifact references. Full audio, transcript, Prompt, Provider raw response, credentials or arbitrary result JSON are rejected at the platform seam.
+- Worker and Outbox Dispatcher are independent processes with liveness/readiness, bounded leases, graceful drain and fail-closed composition. An empty registry, missing handler or missing production EventTransport is a startup error; a development fake requires explicit environment and feature switches.
+- Admin task projection requires both persisted capability and active organization/object scope. Action flags are server projections of the same authorization used by cancel/redrive commands; a role name alone never grants cross-organization access.
+
 ## 1. Scope / Trigger
 
 Apply this spec when a change does any of the following:

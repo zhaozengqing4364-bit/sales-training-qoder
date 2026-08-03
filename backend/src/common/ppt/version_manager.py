@@ -47,7 +47,9 @@ class VersionManager:
     """
 
     def __init__(self) -> None:
-        self.storage_base_path = "/data/ppt_versions"
+        self.storage_base_path = os.getenv(
+            "PPT_VERSION_STORAGE_PATH", "/data/ppt_versions"
+        )
         self.max_versions_per_presentation = 5
 
     async def create_version(

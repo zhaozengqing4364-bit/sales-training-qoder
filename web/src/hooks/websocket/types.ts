@@ -206,8 +206,49 @@ export interface UsePracticeWebSocketOptions {
     useStreamingTTS?: boolean;
 }
 
-const RAW_WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3444";
-export const WS_BASE_URL = RAW_WS_BASE_URL.replace(/\/+$/, "").replace(/\/ws$/i, "");
+const RAW_WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3445";
+
+type BrowserLocation = {
+    hostname: string;
+    port: string;
+    protocol: string;
+};
+
+function isLoopbackHost(hostname: string): boolean {
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+export function resolveWebSocketBaseUrl(
+    configuredBaseUrl = RAW_WS_BASE_URL,
+    pageLocation?: BrowserLocation,
+): string {
+    const normalized = configuredBaseUrl.replace(/\/+$/, "").replace(/\/ws$/i, "");
+    const location = pageLocation ?? (
+        typeof window === "undefined"
+            ? undefined
+            : window.location
+    );
+
+    if (!location) {
+        return normalized;
+    }
+
+    try {
+        const parsed = new URL(normalized);
+        if (!isLoopbackHost(parsed.hostname)) {
+            return normalized;
+        }
+
+        parsed.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+        parsed.hostname = location.hostname;
+        parsed.port = location.port;
+        return parsed.toString().replace(/\/+$/, "");
+    } catch {
+        return normalized;
+    }
+}
+
+export const WS_BASE_URL = resolveWebSocketBaseUrl();
 
 export const INITIAL_PRACTICE_STATE: PracticeState = {
     connectionState: "connecting",

@@ -836,3 +836,195 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 23: 完成切片 1：持久化任务运行时与 AI 平台
+
+**Date**: 2026-07-17
+**Task**: 完成切片 1：持久化任务运行时与 AI 平台
+**Branch**: `codex/newcomer-path-live-preview-layout`
+
+### Summary
+
+完成 canonical Durable Task/Outbox 运行时、受治理 AI/ASR 调用平台、PostgreSQL 迁移、权限/运维/API 契约与定向质量门禁；R1-R14 和全部验收项已关闭。按 GOAL 未提交，继续切片 2。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 24: 切片 2：训练路径、学习内容与题库治理
+
+**Date**: 2026-07-17
+**Task**: 切片 2：训练路径、学习内容与题库治理
+**Branch**: `codex/newcomer-path-live-preview-layout`
+
+### Summary
+
+完成冻结 PathRevision 与 Enrollment、统一 Journey、Lesson/Quiz 运行时、学习与题库修订治理、受控 AI 候选题和标准训练包；聚焦验证通过，外部 Provider 实网 smoke 留作部署验证。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 25: 切片 3：录音评测持久流水线
+
+**Date**: 2026-07-17
+**Task**: 切片 3：录音评测持久流水线
+**Branch**: `codex/newcomer-path-live-preview-layout`
+
+### Summary
+
+完成录音与异步客户场景录音的分块草稿、直传、持久任务、ASR/结构化评分、版本治理、权限审计、旧写链路清理及针对性验收；不含实时语音对练。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 26: 完成结构化 AI Coach 与补练闭环
+
+**Date**: 2026-07-17
+**Task**: 完成结构化 AI Coach 与补练闭环
+**Branch**: `codex/newcomer-path-live-preview-layout`
+
+### Summary
+
+完成三检查点有类型 Coach、保存优先的持久 AI 任务、确定性评分、两轮补练上限、人工帮助队列、统一 Activity Workspace、旧自由聊天写链路清理及 61 项后端/18 项前端目标验证；实际浏览器因环境缺少 libnspr4.so 留到切片 8 门禁。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 27: 切片 5：能力证据与人工复核闭环
+
+**Date**: 2026-07-17
+**Task**: 切片 5：能力证据与人工复核闭环
+**Branch**: `codex/newcomer-path-live-preview-layout`
+
+### Summary
+
+完成七项能力 Evidence、Readiness Dossier/Snapshot、人工决定、持久例外预览、补练、申诉、AI 摘要与校准；目标验证 31+16 条后端测试、10 条前端测试及契约/类型/架构门禁通过。按用户要求不提交。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 28: 新人销售基础训练平台九切片首发闭环
+
+**Date**: 2026-07-18
+**Task**: 新人销售基础训练平台九切片首发闭环
+**Branch**: `codex/newcomer-path-live-preview-layout`
+
+### Summary
+
+按冻结顺序完成并归档切片0至8及父任务；完成唯一训练入口、版本冻结、持久任务、受治理AI、内容题库、录音评测、结构化Coach、能力证据、人工foundation_ready、统一管理工作台、旧权威清理与受控发布；最终全量质量门禁通过。遵守用户约束，未创建提交。
+
+### Main Changes
+
+- 按冻结顺序完成并归档 9 个 Trellis 子任务及父任务，父验收矩阵全部关闭。
+- 收口新人唯一训练入口、冻结 PathRevision、持久化任务、受治理 AI、内容题库、录音评测、结构化 Coach、能力证据、人工复核与统一管理工作台。
+- 删除 Foundation 首发范围内旧写权威和临时兼容，补齐架构、契约、权限、安全、可观测性、容量、发布与回滚证据；Realtime 明确留在首发范围外。
+- 按用户约束保留现有脏工作区，未执行 commit、push 或 PR。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] `bash scripts/critical-quality-gate.sh`：最终完整门禁退出码 0；Backend Unit+Contract 3432 passed / 1 skipped，Integration+E2E 530 passed / 56 skipped。
+- [OK] Web typecheck、lint（0 errors）、Vitest 201 files / 1148 passed / 6 skipped、production build、Playwright 21 条全部通过。
+- [OK] Ruff、Mypy 769 files、Architecture Guard、OpenAPI parity、AI gold/provider staging、容量基线、reset/seed/rollback 演练和 changed coverage 均通过。
+- [OK] 10 个归档任务 `task.py validate` 全部通过；无未关闭验收项；`git diff --check` 通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

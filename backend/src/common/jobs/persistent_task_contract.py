@@ -1,14 +1,19 @@
-"""Shared contract for the planned durable background task table.
-
-This module intentionally contains no database or scheduler implementation. It
-locks the state machine and retry semantics that the first durable-task
-migration and worker must follow.
-"""
+"""Deprecated import facade over the canonical ``task_runtime`` contracts."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import TypeAlias
+
+from task_runtime.contracts import TaskPolicy, TaskState
+from task_runtime.errors import TaskTransitionError
+from task_runtime.retry_policy import retry_backoff_seconds
+from task_runtime.state_machine import (
+    ALLOWED_TASK_TRANSITIONS,
+    TERMINAL_TASK_STATES,
+    require_task_transition,
+)
 
 
 class PersistentTaskType(str, Enum):
@@ -20,78 +25,46 @@ class PersistentTaskType(str, Enum):
     AUDIO_ARCHIVE_BATCH = "audio_archive.batch"
 
 
-class PersistentTaskStatus(str, Enum):
-    """Durable task lifecycle statuses."""
-
-    QUEUED = "queued"
-    RUNNING = "running"
-    RETRY_WAIT = "retry_wait"
-    SUCCEEDED = "succeeded"
-    DEAD_LETTER = "dead_letter"
-    CANCELLED = "cancelled"
+# Backward-compatible import surface. TaskState is the only lifecycle authority.
+PersistentTaskStatus: TypeAlias = TaskState
 
 
-PERSISTENT_TASK_TABLE_NAME = "persistent_tasks"
+PERSISTENT_TASK_TABLE_NAME = "durable_tasks"
 
 PERSISTENT_TASK_REQUIRED_COLUMNS: tuple[str, ...] = (
     "task_id",
     "task_type",
-    "business_key",
-    "target_type",
-    "target_id",
-    "idempotency_key",
-    "payload_json",
-    "status",
+    "schema_version",
+    "organization_id",
+    "actor_id",
+    "resource_type",
+    "resource_id",
+    "idempotency_key_hash",
+    "idempotency_fingerprint",
+    "input_artifact_id",
+    "state",
     "priority",
     "attempt_count",
     "max_attempts",
+    "timeout_seconds",
+    "retry_policy_json",
     "next_run_at",
-    "lease_owner",
-    "lease_expires_at",
+    "deadline_at",
+    "correlation_id",
+    "causation_id",
     "last_error_code",
     "last_error_message",
-    "dead_letter_reason",
+    "fence_generation",
+    "version",
     "trace_id",
     "created_at",
     "updated_at",
-    "started_at",
     "completed_at",
 )
 
 
-TERMINAL_STATUSES = frozenset(
-    {
-        PersistentTaskStatus.SUCCEEDED,
-        PersistentTaskStatus.DEAD_LETTER,
-        PersistentTaskStatus.CANCELLED,
-    }
-)
-
-ALLOWED_STATUS_TRANSITIONS: dict[
-    PersistentTaskStatus, frozenset[PersistentTaskStatus]
-] = {
-    PersistentTaskStatus.QUEUED: frozenset(
-        {PersistentTaskStatus.RUNNING, PersistentTaskStatus.CANCELLED}
-    ),
-    PersistentTaskStatus.RUNNING: frozenset(
-        {
-            PersistentTaskStatus.SUCCEEDED,
-            PersistentTaskStatus.RETRY_WAIT,
-            PersistentTaskStatus.DEAD_LETTER,
-            PersistentTaskStatus.CANCELLED,
-        }
-    ),
-    PersistentTaskStatus.RETRY_WAIT: frozenset(
-        {
-            PersistentTaskStatus.QUEUED,
-            PersistentTaskStatus.DEAD_LETTER,
-            PersistentTaskStatus.CANCELLED,
-        }
-    ),
-    PersistentTaskStatus.SUCCEEDED: frozenset(),
-    PersistentTaskStatus.DEAD_LETTER: frozenset(),
-    PersistentTaskStatus.CANCELLED: frozenset(),
-}
+TERMINAL_STATUSES = TERMINAL_TASK_STATES
+ALLOWED_STATUS_TRANSITIONS = ALLOWED_TASK_TRANSITIONS
 
 
 class PersistentTaskTransitionError(ValueError):
@@ -120,14 +93,15 @@ class TaskRetryPolicy:
     backoff_multiplier: float = 2.0
 
     def __post_init__(self) -> None:
-        if self.max_attempts < 1:
-            raise ValueError("max_attempts must be >= 1")
-        if self.initial_delay_seconds < 1:
-            raise ValueError("initial_delay_seconds must be >= 1")
-        if self.max_delay_seconds < self.initial_delay_seconds:
-            raise ValueError("max_delay_seconds must be >= initial_delay_seconds")
-        if self.backoff_multiplier < 1:
-            raise ValueError("backoff_multiplier must be >= 1")
+        self.as_task_policy()
+
+    def as_task_policy(self) -> TaskPolicy:
+        return TaskPolicy(
+            max_attempts=self.max_attempts,
+            initial_backoff_seconds=self.initial_delay_seconds,
+            max_backoff_seconds=self.max_delay_seconds,
+            backoff_multiplier=self.backoff_multiplier,
+        )
 
 
 DEFAULT_TASK_RETRY_POLICY = TaskRetryPolicy()
@@ -171,7 +145,7 @@ def can_transition(
 
     source = coerce_task_status(from_status)
     target = coerce_task_status(to_status)
-    return target in ALLOWED_STATUS_TRANSITIONS[source]
+    return target in ALLOWED_TASK_TRANSITIONS[source]
 
 
 def require_transition(
@@ -182,8 +156,10 @@ def require_transition(
 
     source = coerce_task_status(from_status)
     target = coerce_task_status(to_status)
-    if not can_transition(source, target):
-        raise PersistentTaskTransitionError(source, target)
+    try:
+        require_task_transition(source, target)
+    except TaskTransitionError as exc:
+        raise PersistentTaskTransitionError(source, target) from exc
 
 
 def retry_delay_seconds(
@@ -192,13 +168,7 @@ def retry_delay_seconds(
 ) -> int:
     """Return deterministic exponential backoff for a failed attempt count."""
 
-    if failed_attempt_count < 1:
-        raise ValueError("failed_attempt_count must be >= 1")
-    multiplier = policy.backoff_multiplier ** (failed_attempt_count - 1)
-    return min(
-        policy.max_delay_seconds,
-        int(policy.initial_delay_seconds * multiplier),
-    )
+    return retry_backoff_seconds(failed_attempt_count, policy.as_task_policy())
 
 
 def classify_failed_attempt(

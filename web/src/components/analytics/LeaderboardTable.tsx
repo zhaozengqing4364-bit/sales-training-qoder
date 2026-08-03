@@ -75,7 +75,7 @@ export function LeaderboardTable({ data }: LeaderboardTableProps) {
                                     {entry.username}
                                 </p>
                                 <p className="text-xs text-slate-500 truncate">
-                                    {entry.department || "未分配部门"}
+                                    {entry.team?.name || "未分配团队"}
                                 </p>
                             </div>
 

@@ -7,14 +7,22 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 # Import Agent models so Base.metadata has all FK targets used by common models.
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # noqa: F401
 from common.analytics.admin_analytics_service import admin_analytics_service
-from common.db.models import Base, ConversationMessage, PracticeSession, Scenario, User
+from common.db.models import (
+    Base,
+    ConversationMessage,
+    PracticeSession,
+    Scenario,
+    Team,
+    TeamMembership,
+    User,
+)
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -87,19 +95,38 @@ async def _create_user(
     db_session: AsyncSession,
     *,
     name: str,
-    department: str,
+    team_name: str,
     email: str,
 ) -> User:
     user = User(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"wechat_{uuid.uuid4().hex[:8]}",
         name=name,
-        department=department,
         email=email,
         role="user",
         is_active=True,
     )
     db_session.add(user)
+    await db_session.flush()
+    team_code = f"analytics-{team_name.casefold().replace(' ', '-')}"
+    team = await db_session.scalar(select(Team).where(Team.code == team_code))
+    if team is None:
+        team = Team(
+            team_id=str(uuid.uuid4()),
+            code=team_code,
+            name=team_name,
+            created_by=str(user.user_id),
+        )
+        db_session.add(team)
+        await db_session.flush()
+    db_session.add(
+        TeamMembership(
+            team_id=str(team.team_id),
+            user_id=str(user.user_id),
+            membership_role="primary",
+            created_by=str(user.user_id),
+        )
+    )
     await db_session.flush()
     return user
 
@@ -149,13 +176,13 @@ async def test_overview_and_trends_use_projection_evaluability_not_legacy_weight
     evaluable_user = await _create_user(
         db_session,
         name="Projection User",
-        department="Sales",
+        team_name="Sales",
         email="projection-user@example.com",
     )
     not_evaluable_user = await _create_user(
         db_session,
         name="Need More Evidence",
-        department="Sales",
+        team_name="Sales",
         email="need-more-evidence@example.com",
     )
 
@@ -356,13 +383,13 @@ async def test_leaderboard_and_agent_stats_use_projection_scores_and_counts(
     top_user = await _create_user(
         db_session,
         name="Top Projection",
-        department="Enterprise",
+        team_name="Enterprise",
         email="top-projection@example.com",
     )
     second_user = await _create_user(
         db_session,
         name="Legacy Weighted Winner",
-        department="Enterprise",
+        team_name="Enterprise",
         email="legacy-weighted@example.com",
     )
 
@@ -476,7 +503,7 @@ async def test_leaderboard_and_agent_stats_use_projection_scores_and_counts(
 
 
 @pytest.mark.asyncio
-async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists(
+async def test_operating_pack_groups_cohort_team_buckets_and_manager_lists(
     db_session: AsyncSession,
 ) -> None:
     scenario = await _create_sales_scenario(db_session, name="团队周节奏")
@@ -484,37 +511,37 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
     north_risk = await _create_user(
         db_session,
         name="North Risk",
-        department="North",
+        team_name="North",
         email="north-risk@example.com",
     )
     south_risk = await _create_user(
         db_session,
         name="South Risk",
-        department="South",
+        team_name="South",
         email="south-risk@example.com",
     )
     not_evaluable_user = await _create_user(
         db_session,
         name="Need More Turns",
-        department="North",
+        team_name="North",
         email="need-more-turns@example.com",
     )
     degraded_user = await _create_user(
         db_session,
         name="Degraded Evidence",
-        department="North",
+        team_name="North",
         email="degraded-evidence@example.com",
     )
     improving_user = await _create_user(
         db_session,
         name="Improving User",
-        department="North",
+        team_name="North",
         email="improving-user@example.com",
     )
     inactive_user = await _create_user(
         db_session,
         name="Inactive User",
-        department="East",
+        team_name="East",
         email="inactive-user@example.com",
     )
 
@@ -763,7 +790,7 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
             "issue_text": "价值表达还停留在产品功能。",
             "count": 2,
             "user_count": 2,
-            "department_count": 2,
+            "team_count": 2,
         },
         {
             "issue_family": "evidence_gap",
@@ -771,7 +798,7 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
             "issue_text": "案例证据还不够扎实。",
             "count": 2,
             "user_count": 1,
-            "department_count": 1,
+            "team_count": 1,
         },
         {
             "issue_family": "structure_gap",
@@ -779,17 +806,18 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
             "issue_text": "结构还不完整，客户难以跟上。",
             "count": 1,
             "user_count": 1,
-            "department_count": 1,
+            "team_count": 1,
         },
     ]
 
-    department_buckets = {
-        bucket["department"]: bucket for bucket in operating_pack["department_issue_buckets"]
+    team_buckets = {
+        (bucket["team"] or {}).get("name", "未分配团队"): bucket
+        for bucket in operating_pack["team_issue_buckets"]
     }
-    assert department_buckets["North"]["session_count"] == 7
-    assert department_buckets["North"]["evaluable_sessions"] == 6
-    assert department_buckets["North"]["not_evaluable_sessions"] == 1
-    assert department_buckets["North"]["issue_buckets"] == [
+    assert team_buckets["North"]["session_count"] == 7
+    assert team_buckets["North"]["evaluable_sessions"] == 6
+    assert team_buckets["North"]["not_evaluable_sessions"] == 1
+    assert team_buckets["North"]["issue_buckets"] == [
         {
             "issue_family": "evidence_gap",
             "issue_type": "evidence_gap",
@@ -812,7 +840,7 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
             "user_count": 1,
         },
     ]
-    assert department_buckets["North"]["degradation_breakdown"] == {
+    assert team_buckets["North"]["degradation_breakdown"] == {
         "not_evaluable_reasons": [
             {
                 "reason": "INSUFFICIENT_TURN_DATA",
@@ -834,7 +862,7 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
             },
         ],
     }
-    assert department_buckets["South"]["issue_buckets"] == [
+    assert team_buckets["South"]["issue_buckets"] == [
         {
             "issue_family": "value_expression",
             "issue_type": "value_expression",
@@ -851,7 +879,7 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
             "issue_text": "价值表达还停留在产品功能。",
             "count": 2,
             "user_count": 2,
-            "department_count": 2,
+            "team_count": 2,
         },
         {
             "issue_family": "evidence_gap",
@@ -859,7 +887,7 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
             "issue_text": "案例证据还不够扎实。",
             "count": 2,
             "user_count": 1,
-            "department_count": 1,
+            "team_count": 1,
         },
     ]
 
@@ -897,16 +925,15 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
     assert manager_lists["not_passed"][2]["issue_family"] == "value_expression"
     assert manager_lists["inactive_streak"][0]["user_name"] == "Inactive User"
     assert manager_lists["inactive_streak"][0]["inactive_days"] >= 7
-    assert manager_lists["improving"] == [
-        {
-            "user_id": str(improving_user.user_id),
-            "user_name": "Improving User",
-            "department": "North",
-            "pass_gain": 100.0,
-            "baseline_pass_rate": 0.0,
-            "current_pass_rate": 100.0,
-        }
-    ]
+    assert len(manager_lists["improving"]) == 1
+    improving_item = manager_lists["improving"][0]
+    assert improving_item["user_id"] == str(improving_user.user_id)
+    assert improving_item["user_name"] == "Improving User"
+    assert improving_item["team"]["name"] == "North"
+    assert improving_item["team"]["code"] == "analytics-north"
+    assert improving_item["pass_gain"] == 100.0
+    assert improving_item["baseline_pass_rate"] == 0.0
+    assert improving_item["current_pass_rate"] == 100.0
 
 
 @pytest.mark.asyncio
@@ -917,13 +944,13 @@ async def test_get_leaderboard_batches_projection_window_and_messages_once(
     first_user = await _create_user(
         db_session,
         name="Window One",
-        department="Sales",
+        team_name="Sales",
         email="window-one@example.com",
     )
     second_user = await _create_user(
         db_session,
         name="Window Two",
-        department="Sales",
+        team_name="Sales",
         email="window-two@example.com",
     )
 
@@ -1023,7 +1050,7 @@ async def test_get_overview_stats_replays_projection_window_for_growth_compariso
     user = await _create_user(
         db_session,
         name="Growth Window",
-        department="Sales",
+        team_name="Sales",
         email="growth-window@example.com",
     )
 

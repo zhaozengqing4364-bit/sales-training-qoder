@@ -142,14 +142,12 @@ describe("frontend route error reporting seam", () => {
                 expect.objectContaining({
                     method: "POST",
                     keepalive: true,
-                    headers: expect.objectContaining({
-                        "Content-Type": "application/json",
-                    }),
                 }),
             );
         });
 
         const request = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+        expect(new Headers(request?.headers).get("Content-Type")).toBe("application/json");
         const body = JSON.parse(String(request?.body ?? "{}"));
 
         expect(body).toMatchObject({

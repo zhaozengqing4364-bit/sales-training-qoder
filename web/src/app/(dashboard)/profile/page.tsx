@@ -21,7 +21,6 @@ import { Briefcase, Key, Loader2, LogOut, Mail, Settings, Volume2 } from "lucide
 type ProfileForm = {
     display_name: string;
     email: string;
-    department: string;
 };
 
 type HistoryStats = {
@@ -72,8 +71,8 @@ export default function ProfilePage() {
     const [profile, setProfile] = useState<ProfileForm>({
         display_name: "",
         email: "",
-        department: "",
     });
+    const [teamName, setTeamName] = useState("");
     const [stats, setStats] = useState<HistoryStats>(DEFAULT_STATS);
     const [sessionStats, setSessionStats] = useState<SessionStats>(DEFAULT_SESSION_STATS);
 
@@ -93,8 +92,8 @@ export default function ProfilePage() {
                 setProfile({
                     display_name: profileResult.value.display_name || profileResult.value.name || "用户",
                     email: profileResult.value.email || "",
-                    department: profileResult.value.department || "",
                 });
+                setTeamName(profileResult.value.team?.name || "");
             }
 
             if (statsResult.status === "fulfilled") {
@@ -153,16 +152,15 @@ export default function ProfilePage() {
             const updated = await api.user.updateProfile({
                 display_name: profile.display_name.trim(),
                 email: profile.email.trim(),
-                department: profile.department.trim(),
             });
 
             const normalized = {
                 display_name: updated.display_name || updated.name || "用户",
                 email: updated.email || "",
-                department: updated.department || "",
             };
 
             setProfile(normalized);
+            setTeamName(updated.team?.name || "");
             setIsEditing(false);
             queryClient.setQueryData<CurrentUser | undefined>(currentUserQueryKey, (current) => (
                 current
@@ -171,7 +169,7 @@ export default function ProfilePage() {
                         name: normalized.display_name,
                         display_name: normalized.display_name,
                         email: normalized.email,
-                        department: normalized.department || undefined,
+                        team: updated.team,
                     }
                     : current
             ));
@@ -192,8 +190,8 @@ export default function ProfilePage() {
             setProfile({
                 display_name: current.display_name || current.name || "用户",
                 email: current.email || "",
-                department: current.department || "",
             });
+            setTeamName(current.team?.name || "");
         } catch {
             // keep local draft when refetch fails
         }
@@ -250,11 +248,9 @@ export default function ProfilePage() {
                                 onChange={(event) => onFieldChange("email", event.target.value)}
                                 placeholder="邮箱"
                             />
-                            <Input
-                                value={profile.department}
-                                onChange={(event) => onFieldChange("department", event.target.value)}
-                                placeholder="部门"
-                            />
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                                所属团队：{teamName || "未分配团队"}。团队关系由管理员维护。
+                            </div>
                             <div className="flex gap-2">
                                 <Button onClick={handleSave} disabled={isSaving}>
                                     {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
@@ -273,7 +269,7 @@ export default function ProfilePage() {
                                     <Mail className="w-4 h-4" /> {profile.email || "未设置邮箱"}
                                 </span>
                                 <span className="flex items-center gap-1">
-                                    <Briefcase className="w-4 h-4" /> {profile.department || "未设置部门"}
+                                    <Briefcase className="w-4 h-4" /> {teamName || "未分配团队"}
                                 </span>
                             </div>
                         </div>

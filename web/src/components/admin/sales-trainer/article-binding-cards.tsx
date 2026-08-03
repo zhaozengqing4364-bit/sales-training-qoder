@@ -36,7 +36,7 @@ export function CurrentArticleBindingCard({
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <Button asChild variant="outline" className="rounded-full">
-                        <Link href={`/admin/learning-contents/${content.learning_content_id}`}>
+                        <Link href={`/admin/learning-contents/${content.learning_content_id}`} prefetch={false}>
                             编辑章节
                             <ExternalLink className="ml-2 h-4 w-4" />
                         </Link>
@@ -71,7 +71,7 @@ export function PendingArticleBindingCard({
                     </p>
                 </div>
                 <Button asChild className="rounded-full bg-emerald-700 text-white hover:bg-emerald-800">
-                    <Link href="/admin/newcomer-training/path">去路径编辑器发布</Link>
+                    <Link href="/admin/newcomer-training/paths">去路径编辑器发布</Link>
                 </Button>
             </div>
         </GlassCard>

@@ -44,7 +44,7 @@ export interface AdminOperatingPackReadModel {
     operatingSummary: AdminOperatingPackResponse["weekly_summary"];
     managerLite: ManagerLiteListsResponse;
     repeatedBlockerFamilies: AdminOperatingPackIssueBucket[];
-    departmentIssueBuckets: AdminOperatingPackResponse["department_issue_buckets"];
+    teamIssueBuckets: AdminOperatingPackResponse["team_issue_buckets"];
     topBlockerFamily: AdminOperatingPackIssueBucket | null;
     topDegradedReason: AdminOperatingPackReasonBucket | null;
 }
@@ -65,7 +65,7 @@ export const EMPTY_ADMIN_OPERATING_PACK: AdminOperatingPackResponse = {
         evaluable_sessions: 0,
         not_evaluable_sessions: 0,
         degraded_sessions: 0,
-        active_departments: 0,
+        active_teams: 0,
         at_risk_users: 0,
         improving_users: 0,
         top_issue_family: null,
@@ -74,7 +74,7 @@ export const EMPTY_ADMIN_OPERATING_PACK: AdminOperatingPackResponse = {
         top_degraded_reason: null,
     },
     cohort_issue_buckets: [],
-    department_issue_buckets: [],
+    team_issue_buckets: [],
     repeated_blocker_families: [],
     degradation_breakdown: {
         not_evaluable_reasons: [],
@@ -113,9 +113,10 @@ const ADMIN_USER_STATUS_LABELS: Record<string, string> = {
 };
 
 const ADMIN_USER_ROLE_LABELS: Record<string, string> = {
-    admin: "管理员",
-    support: "支持角色",
-    user: "普通用户",
+    admin: "平台管理员",
+    training_manager: "培训管理员",
+    support: "技术支持",
+    user: "学员",
     manager: "经理",
     editor: "编辑",
     viewer: "访客",
@@ -142,9 +143,15 @@ export function formatAdminUserStatusLabel(status?: string | null): string {
     return ADMIN_USER_STATUS_LABELS[status] || status;
 }
 
-export function formatAdminUserRoleLabel(role?: string | null): string {
+export function formatAdminUserRoleLabel(
+    role?: string | null,
+    options?: { isTeamLeader?: boolean },
+): string {
     if (!role) {
         return "未分配角色";
+    }
+    if (role === "training_manager" && options?.isTeamLeader) {
+        return "销售组长";
     }
     return ADMIN_USER_ROLE_LABELS[role] || role;
 }
@@ -166,18 +173,23 @@ export function buildOperatingPackReadModel(
     operatingPack: AdminOperatingPackResponse | null | undefined,
 ): AdminOperatingPackReadModel {
     const resolvedOperatingPack = operatingPack || EMPTY_ADMIN_OPERATING_PACK;
-    const operatingSummary = resolvedOperatingPack.weekly_summary;
+    const operatingSummary = resolvedOperatingPack.weekly_summary
+        || EMPTY_ADMIN_OPERATING_PACK.weekly_summary;
+    const repeatedBlockerFamilies = resolvedOperatingPack.repeated_blocker_families || [];
+    const cohortIssueBuckets = resolvedOperatingPack.cohort_issue_buckets || [];
+    const degradationBreakdown = resolvedOperatingPack.degradation_breakdown
+        || EMPTY_ADMIN_OPERATING_PACK.degradation_breakdown;
 
     return {
         operatingSummary,
         managerLite: resolvedOperatingPack.manager_lists || EMPTY_ADMIN_MANAGER_LITE_LISTS,
-        repeatedBlockerFamilies: resolvedOperatingPack.repeated_blocker_families.length > 0
-            ? resolvedOperatingPack.repeated_blocker_families
-            : resolvedOperatingPack.cohort_issue_buckets,
-        departmentIssueBuckets: resolvedOperatingPack.department_issue_buckets,
+        repeatedBlockerFamilies: repeatedBlockerFamilies.length > 0
+            ? repeatedBlockerFamilies
+            : cohortIssueBuckets,
+        teamIssueBuckets: resolvedOperatingPack.team_issue_buckets || [],
         topBlockerFamily: operatingSummary.top_blocker_family ?? operatingSummary.top_issue_family ?? null,
         topDegradedReason: operatingSummary.top_degraded_reason
-            ?? resolvedOperatingPack.degradation_breakdown.degraded_reasons[0]
+            ?? degradationBreakdown.degraded_reasons?.[0]
             ?? null,
     };
 }

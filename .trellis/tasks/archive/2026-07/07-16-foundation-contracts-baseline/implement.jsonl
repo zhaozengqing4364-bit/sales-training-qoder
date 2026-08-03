@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/newcomer-training-activity-orchestration.md", "reason": "需消除路径层级、Realtime 与 Enrollment 迁移冲突"}
+{"file": ".trellis/spec/backend/domain-ownership-and-evaluation-ports.md", "reason": "冻结领域所有权和评估端口"}
+{"file": ".trellis/spec/backend/platform-contract-truth.md", "reason": "冻结运行时契约真源"}
+{"file": ".trellis/spec/backend/prompt-template-governance.md", "reason": "冻结 AI Prompt 治理边界"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "冻结页面契约与 AI 产品门禁"}
+{"file": ".trellis/tasks/archive/2026-07/07-16-newcomer-sales-foundation-platform/research/current-state.md", "reason": "以真实代码证据处理现有冲突"}
+{"file": "CONTEXT.md", "reason": "同步 2026-07-16 Foundation target 的共享领域语言并隔离 Legacy 术语"}
+{"file": "docs/newcomer-foundation-contract-index.md", "reason": "本切片产出的权威合同总入口与状态声明"}

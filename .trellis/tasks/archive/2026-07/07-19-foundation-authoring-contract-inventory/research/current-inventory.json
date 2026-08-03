@@ -1,0 +1,1660 @@
+{
+  "generated_at": "2026-07-20T01:46:47.355058+00:00",
+  "legacy": {
+    "active_paths": [
+      {
+        "active_revision_id": "1256e7e9-7ce2-4605-afbf-21d8dccadf7c",
+        "activities": [
+          {
+            "activity_id": "f7ed018b-dd21-469f-954e-f7ea3ceec3c6",
+            "activity_type": "audio_assessment",
+            "is_focus_activity": true,
+            "material_id": null,
+            "module_id": "e2fe1543-c0ef-4e22-8887-d6d6f85c5262",
+            "phase_id": "c8bc159c-f82c-4e98-a616-539674c626d1",
+            "scoring_prompt_id": "fa31d12c-bb00-47ab-8693-fe3f9b1db080",
+            "title": "demo讲解"
+          },
+          {
+            "activity_id": "b1417992-316d-4c68-91b3-7be502a53046",
+            "activity_type": "audio_assessment",
+            "is_focus_activity": true,
+            "material_id": "4ea86a64-93aa-46e4-82c5-05bd9d6f8031",
+            "module_id": "e2fe1543-c0ef-4e22-8887-d6d6f85c5262",
+            "phase_id": "c8bc159c-f82c-4e98-a616-539674c626d1",
+            "scoring_prompt_id": "1744e842-21cd-4f0f-bd5a-e7863680358c",
+            "title": "石犀ppt讲解"
+          }
+        ],
+        "logical_id": "default",
+        "payload_hash": "91dbb158ddd6909c481ac9d74d497ad134fe22ae1228aa53591668da435dc1f4",
+        "revision_no": 7,
+        "schema_version": "newcomer_training_orchestration_v1",
+        "status": "published",
+        "title": "新人训练路径"
+      }
+    ],
+    "counts": {
+      "active_paths": 1,
+      "activities": 2,
+      "material_versions": 2,
+      "materials": 4,
+      "scoring_prompts": 2
+    },
+    "material_conflicts": [
+      {
+        "code": "LEGACY_MATERIAL_SAME_NAME_INCOMPLETE_HASH",
+        "known_hash_count": 1,
+        "material_ids": [
+          "228bd36f-a5ae-4f41-8b0a-44a3a2f12d53",
+          "4543c9e6-7fda-443d-9ef7-ceab90735a3f",
+          "4ea86a64-93aa-46e4-82c5-05bd9d6f8031",
+          "bcb9be54-1079-4b9d-8334-87796959d481"
+        ],
+        "normalized_name": "石犀科技-企业介绍标准版（202606版）.pptx"
+      },
+      {
+        "code": "LEGACY_MATERIAL_SAME_HASH_MULTIPLE_LOGICAL_OBJECTS",
+        "hash": "ec128db6106bd7c8124fbaf9bb11d44758848df4c136231d7121e065601b95fd",
+        "material_ids": [
+          "4543c9e6-7fda-443d-9ef7-ceab90735a3f",
+          "4ea86a64-93aa-46e4-82c5-05bd9d6f8031"
+        ]
+      }
+    ],
+    "materials": [
+      {
+        "current_version_id": null,
+        "material_id": "228bd36f-a5ae-4f41-8b0a-44a3a2f12d53",
+        "material_key": "path-b8120d36-74f5-469d-b013-57a46bbfa1cc",
+        "material_type": "attachment",
+        "name": "石犀科技-企业介绍标准版（202606版）.pptx",
+        "purpose": "training_activity",
+        "status": "draft",
+        "versions": []
+      },
+      {
+        "current_version_id": null,
+        "material_id": "4543c9e6-7fda-443d-9ef7-ceab90735a3f",
+        "material_key": "path-0fb45e2a-0fcc-42d1-9c11-62c524e5ade7",
+        "material_type": "attachment",
+        "name": "石犀科技-企业介绍标准版（202606版）.pptx",
+        "purpose": "training_activity",
+        "status": "draft",
+        "versions": [
+          {
+            "content_type": "application/pdf",
+            "file_hash": "ec128db6106bd7c8124fbaf9bb11d44758848df4c136231d7121e065601b95fd",
+            "file_name": "石犀科技-企业介绍标准版（202606版）.pdf",
+            "file_size_bytes": 8513338,
+            "status": "draft",
+            "title": "石犀科技-企业介绍标准版（202606版）.pptx",
+            "version_id": "2a00d87d-c3a2-4dad-be26-1a6e4bc100e2",
+            "version_label": "1.0"
+          }
+        ]
+      },
+      {
+        "current_version_id": "fba00034-0a1e-4c44-b1bb-711851cfb20d",
+        "material_id": "4ea86a64-93aa-46e4-82c5-05bd9d6f8031",
+        "material_key": "path-76373ba1-fab7-46aa-983d-b56d6c8db5a2",
+        "material_type": "attachment",
+        "name": "石犀科技-企业介绍标准版（202606版）.pptx",
+        "purpose": "training_activity",
+        "status": "published",
+        "versions": [
+          {
+            "content_type": "application/pdf",
+            "file_hash": "ec128db6106bd7c8124fbaf9bb11d44758848df4c136231d7121e065601b95fd",
+            "file_name": "石犀科技-企业介绍标准版（202606版）.pdf",
+            "file_size_bytes": 8513338,
+            "status": "published",
+            "title": "石犀科技-企业介绍标准版（202606版）.pptx",
+            "version_id": "fba00034-0a1e-4c44-b1bb-711851cfb20d",
+            "version_label": "1.0"
+          }
+        ]
+      },
+      {
+        "current_version_id": null,
+        "material_id": "bcb9be54-1079-4b9d-8334-87796959d481",
+        "material_key": "path-faa16979-d559-4ab0-b299-79e887aa760a",
+        "material_type": "attachment",
+        "name": "石犀科技-企业介绍标准版（202606版）.pptx",
+        "purpose": "training_activity",
+        "status": "draft",
+        "versions": []
+      }
+    ],
+    "scoring_prompts": [
+      {
+        "contract_hash": "sha256:8196085eea7f4990206a5c60706403e60f58f3d0389bd8f976819c33c7fba969",
+        "learner_rubric_keys": [
+          "common_mistakes",
+          "criteria",
+          "pass_threshold",
+          "visible_to_learner"
+        ],
+        "name": "PPT评分标准",
+        "output_schema_keys": [
+          "additionalProperties",
+          "properties",
+          "required",
+          "schema_version",
+          "type"
+        ],
+        "prompt_id": "1744e842-21cd-4f0f-bd5a-e7863680358c",
+        "purpose": "general_audio_scoring",
+        "referenced_by_activity_ids": [
+          "b1417992-316d-4c68-91b3-7be502a53046"
+        ],
+        "status": "published",
+        "verification_state": "requires_governed_contract_review",
+        "version": 1
+      },
+      {
+        "contract_hash": "sha256:6c7922924dc4244f06c9741f7c82205743ebd0687a4009c29ee90ce558801749",
+        "learner_rubric_keys": [
+          "common_mistakes",
+          "criteria",
+          "pass_threshold",
+          "visible_to_learner"
+        ],
+        "name": "demo讲解",
+        "output_schema_keys": [
+          "additionalProperties",
+          "properties",
+          "required",
+          "schema_version",
+          "type"
+        ],
+        "prompt_id": "fa31d12c-bb00-47ab-8693-fe3f9b1db080",
+        "purpose": "general_audio_scoring",
+        "referenced_by_activity_ids": [
+          "f7ed018b-dd21-469f-954e-f7ea3ceec3c6"
+        ],
+        "status": "published",
+        "verification_state": "requires_governed_contract_review",
+        "version": 1
+      }
+    ],
+    "unverifiable_items": [
+      {
+        "object_id": "1744e842-21cd-4f0f-bd5a-e7863680358c",
+        "object_type": "sales_trainer_audio_score_prompt",
+        "reason": "requires_governed_prompt_model_schema_review",
+        "referenced_by_activity_ids": [
+          "b1417992-316d-4c68-91b3-7be502a53046"
+        ]
+      },
+      {
+        "object_id": "fa31d12c-bb00-47ab-8693-fe3f9b1db080",
+        "object_type": "sales_trainer_audio_score_prompt",
+        "reason": "requires_governed_prompt_model_schema_review",
+        "referenced_by_activity_ids": [
+          "f7ed018b-dd21-469f-954e-f7ea3ceec3c6"
+        ]
+      }
+    ]
+  },
+  "legacy_scope": "global_unscoped",
+  "mode": "read_only",
+  "organizations": [
+    {
+      "conflicts": [
+        {
+          "code": "LEGACY_MATERIAL_SAME_NAME_INCOMPLETE_HASH",
+          "known_hash_count": 1,
+          "material_ids": [
+            "228bd36f-a5ae-4f41-8b0a-44a3a2f12d53",
+            "4543c9e6-7fda-443d-9ef7-ceab90735a3f",
+            "4ea86a64-93aa-46e4-82c5-05bd9d6f8031",
+            "bcb9be54-1079-4b9d-8334-87796959d481"
+          ],
+          "normalized_name": "石犀科技-企业介绍标准版（202606版）.pptx"
+        },
+        {
+          "code": "LEGACY_MATERIAL_SAME_HASH_MULTIPLE_LOGICAL_OBJECTS",
+          "hash": "ec128db6106bd7c8124fbaf9bb11d44758848df4c136231d7121e065601b95fd",
+          "material_ids": [
+            "4543c9e6-7fda-443d-9ef7-ceab90735a3f",
+            "4ea86a64-93aa-46e4-82c5-05bd9d6f8031"
+          ]
+        },
+        {
+          "object_id": "228bd36f-a5ae-4f41-8b0a-44a3a2f12d53",
+          "object_type": "sales_trainer_material",
+          "reason": "conflict_legacy_material_identity"
+        },
+        {
+          "object_id": "4543c9e6-7fda-443d-9ef7-ceab90735a3f",
+          "object_type": "sales_trainer_material",
+          "reason": "conflict_legacy_material_identity"
+        },
+        {
+          "object_id": "4ea86a64-93aa-46e4-82c5-05bd9d6f8031",
+          "object_type": "sales_trainer_material",
+          "reason": "conflict_legacy_material_identity"
+        },
+        {
+          "object_id": "bcb9be54-1079-4b9d-8334-87796959d481",
+          "object_type": "sales_trainer_material",
+          "reason": "conflict_legacy_material_identity"
+        }
+      ],
+      "estimated_new_objects": {
+        "audio_materials": 1,
+        "path_activities": 1,
+        "scoring_schemes": 1,
+        "source_documents": 0
+      },
+      "foundation": {
+        "audio_resources": [
+          {
+            "pointer_source": "derived_missing_logical_container",
+            "published_revision_id": "33386fe4-dacf-594a-b411-8ca21f790df6",
+            "resource_id": null,
+            "resource_type": "audio_material",
+            "revisions": [
+              {
+                "content_hash": "2628425a291c112b6f33101e721d11139b018cff0139123e7deba32467c1886a",
+                "revision_id": "33386fe4-dacf-594a-b411-8ca21f790df6",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-explanation-material-v1",
+            "status": "published",
+            "title": "基础方案讲解材料",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "derived_missing_logical_container",
+            "published_revision_id": "235a655a-3ee8-55bd-a03c-9db38c95eb38",
+            "resource_id": null,
+            "resource_type": "scenario",
+            "revisions": [
+              {
+                "content_hash": "6d1a52d3b0c3b700376534ed92af6b7892db2a60b8f6ea6888239876ba012dbd",
+                "revision_id": "235a655a-3ee8-55bd-a03c-9db38c95eb38",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-assignment-scenario-v1",
+            "status": "published",
+            "title": "首次客户沟通异步场景",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "derived_missing_logical_container",
+            "published_revision_id": "f962ba92-c7f8-5a61-b3f5-e550c73b582a",
+            "resource_id": null,
+            "resource_type": "scoring_scheme",
+            "revisions": [
+              {
+                "content_hash": "2c353fe4c088fa8353601f77e8aa443162244590a8c2ae90d6eaf1934036540e",
+                "revision_id": "f962ba92-c7f8-5a61-b3f5-e550c73b582a",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-assignment-scoring-v1",
+            "status": "published",
+            "title": "异步客户场景评分方案",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "derived_missing_logical_container",
+            "published_revision_id": "2e757889-d66b-53ff-970a-4b44eda6e7e5",
+            "resource_id": null,
+            "resource_type": "scoring_scheme",
+            "revisions": [
+              {
+                "content_hash": "064fc3f282f19a52511b75331d822a9f9d34bbff97e72ebee19861e180c09c24",
+                "revision_id": "2e757889-d66b-53ff-970a-4b44eda6e7e5",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-explanation-scoring-v1",
+            "status": "published",
+            "title": "基础方案讲解评分方案",
+            "working_revision_id": null
+          }
+        ],
+        "coach_profiles": [
+          {
+            "pointer_source": "derived_missing_logical_container",
+            "published_revision_id": "fc70fadc-5dac-5cf8-8544-627b8c6a3d96",
+            "resource_id": null,
+            "resource_type": "coach_profile",
+            "revisions": [
+              {
+                "content_hash": "5d8d561e4a7d60e55b34006d2ce1a1d771a24f2c90e29e4aa7823a843e88e3b9",
+                "revision_id": "fc70fadc-5dac-5cf8-8544-627b8c6a3d96",
+                "revision_label": "foundation-coach-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-coach-profile",
+            "status": "published",
+            "title": "新人销售基础能力结构化教练",
+            "working_revision_id": null
+          }
+        ],
+        "counts": {
+          "audio_resource_revisions": 4,
+          "coach_profile_revisions": 1,
+          "learning_units": 7,
+          "paths": 1,
+          "question_candidates": 0,
+          "questions": 7,
+          "quizzes": 7,
+          "release_plans": 0,
+          "source_documents": 1
+        },
+        "learning_units": [
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "61e9909b-c18b-474a-9115-d7c0f1f8ba43",
+            "resource_id": "9d0163a3-52a1-4d23-b329-d8473621b724",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "214427a3f44799d7192bf994bd2db1f43b155a752ec15e3e1c1e80dfb46ad44a",
+                "revision_id": "61e9909b-c18b-474a-9115-d7c0f1f8ba43",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-communication_structure-lesson",
+            "status": "active",
+            "title": "沟通结构",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "e6b52274-27a1-4862-ac71-dcd2085971ea",
+            "resource_id": "b6186ebe-64bf-433b-972a-c844c56e79e3",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "c76fb6935c2874f41efab5b40a6b73585b0c2f40c8dd1a21450013135f6235c1",
+                "revision_id": "e6b52274-27a1-4862-ac71-dcd2085971ea",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-customer_understanding-lesson",
+            "status": "active",
+            "title": "客户理解",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "8084fb32-1a15-45b8-9a6d-f3775f46a9d4",
+            "resource_id": "d344c4b8-597d-43bd-a9a7-366522173140",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "be99ed3fa72fc16e3c2c2c1b1fe3fa11989b383fade7d8937a7f3b87b1203906",
+                "revision_id": "8084fb32-1a15-45b8-9a6d-f3775f46a9d4",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-needs_discovery-lesson",
+            "status": "active",
+            "title": "需求发现",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "826ff687-6b66-47dc-9804-9fa5af2dd510",
+            "resource_id": "0d4d7df8-11f8-472f-b536-f32cc06b785f",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "e7a55e42dbfd73baa06cfbea28d35221412558c23c9c8423558e94f0b92315f2",
+                "revision_id": "826ff687-6b66-47dc-9804-9fa5af2dd510",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-objection_handling-lesson",
+            "status": "active",
+            "title": "异议处理",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "dfc331b3-4a41-4038-a265-3a1b29ee05e3",
+            "resource_id": "95d3d684-ea4c-4b9a-b8a5-7fbfd7de1b2c",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "78132cca1d4c4c1369a12fa94bbf0dc9bb92e717918cb35b69a665b9f37f3844",
+                "revision_id": "dfc331b3-4a41-4038-a265-3a1b29ee05e3",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-process_compliance-lesson",
+            "status": "active",
+            "title": "流程与合规",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "e440214c-9c76-456a-8608-39aef98d5476",
+            "resource_id": "67a56dd7-fec8-4830-9431-9f9c8f2fa359",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "36fa10b489511e432af9248728849a1655ffb7725c6e32493cf4a91c0432a12d",
+                "revision_id": "e440214c-9c76-456a-8608-39aef98d5476",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-product_knowledge-lesson",
+            "status": "active",
+            "title": "产品知识",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "b8b09c34-ac7b-49bd-abd4-2dcd4a5dbc65",
+            "resource_id": "41c56d3e-5871-48ba-99ef-e9612e104e34",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "87a74334dce99114c1f3ae2d770255ea5473dbb94e77ddd3862eea59442e9143",
+                "revision_id": "b8b09c34-ac7b-49bd-abd4-2dcd4a5dbc65",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-value_expression-lesson",
+            "status": "active",
+            "title": "价值表达",
+            "working_revision_id": null
+          }
+        ],
+        "paths": [
+          {
+            "active_release_plan_id": null,
+            "pointer_source": "persisted",
+            "published_revision_id": "e6421461-7117-4c7e-abcc-88afdd0aaa12",
+            "resource_id": "d6584d5b-b2f9-4fc4-8bf6-dd5838a215a3",
+            "resource_type": "path",
+            "revisions": [
+              {
+                "content_hash": "d6a0ab1aa3b45a6262b75ce01d5858765bb4d6d73342d4dea78559914d8e95b9",
+                "revision_id": "e6421461-7117-4c7e-abcc-88afdd0aaa12",
+                "revision_label": "2026.07-foundation-coach-v3",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard",
+            "status": "active",
+            "title": "新人销售基础训练",
+            "working_revision_id": null
+          }
+        ],
+        "question_candidate_counts": {},
+        "questions": [
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "1d822dba-bcf4-4d1f-aac8-f0238fb1fc3a",
+            "resource_id": "15af12af-54a6-4278-ae97-fe8995307eec",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "e2817a244956be3522f929bb97296f861f88c0a3077725c61b0359d78f3f5e25",
+                "question_type": "single_choice",
+                "revision_id": "1d822dba-bcf4-4d1f-aac8-f0238fb1fc3a",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-communication_structure-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "3f78f0fa-203c-45d9-a654-b280f9612662",
+            "resource_id": "86c504da-739c-443a-bc39-5149505711c4",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "dc5f21f3583fe5e2fec194a2ba7b429d32da5746962c00a10f569114783eab17",
+                "question_type": "single_choice",
+                "revision_id": "3f78f0fa-203c-45d9-a654-b280f9612662",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-customer_understanding-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "a3aa154e-53c2-48b5-87fb-746f7a2ba288",
+            "resource_id": "b7a2f03a-ecac-443c-bbfa-11238c8fcff5",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "d010e2e0d3c337e89dcd10713bfb7fbf6a44f1cd4674e1b0b81ad84d0d1f5678",
+                "question_type": "single_choice",
+                "revision_id": "a3aa154e-53c2-48b5-87fb-746f7a2ba288",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-needs_discovery-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "ecc5b149-8b88-490c-a62e-68d9caaa21e6",
+            "resource_id": "e4fd68be-bb71-4277-b0d3-67a525191ba4",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "fe0e4b6ca21bed304209c47b4e69dc70cc70adfcd2b5cd79c8df546e4e370141",
+                "question_type": "single_choice",
+                "revision_id": "ecc5b149-8b88-490c-a62e-68d9caaa21e6",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-objection_handling-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "d38ce44b-3e4c-4ce3-9a3a-720a1175d5ab",
+            "resource_id": "ac8f53e0-267b-4b09-8681-f94636734a32",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "9a30daa66a704d44df38a897aa406e754417fecea5d1745e232407e459ce7bab",
+                "question_type": "single_choice",
+                "revision_id": "d38ce44b-3e4c-4ce3-9a3a-720a1175d5ab",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-process_compliance-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "ec460436-f4aa-4f2c-8e33-224d9d905e74",
+            "resource_id": "6495ec09-d7b3-46ef-97b9-77d7d1fadda6",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "9d20b2c2d9f6368c3c6d43e71276a20abe23b42765ca327ac6cc4eb84a6a1848",
+                "question_type": "single_choice",
+                "revision_id": "ec460436-f4aa-4f2c-8e33-224d9d905e74",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-product_knowledge-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "1de6930b-a5c2-457b-93ff-2114c596f214",
+            "resource_id": "0bb970fc-018e-4528-a416-38bdbcd51bf6",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "71107f5cb50ec53fcf44e3a42414afe4fc4fbd0e257bb2d244903515ac2f3663",
+                "question_type": "single_choice",
+                "revision_id": "1de6930b-a5c2-457b-93ff-2114c596f214",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-value_expression-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          }
+        ],
+        "quizzes": [
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "55d8c945-b0f9-4ac9-a525-0a283136aaeb",
+            "resource_id": "1d8729c5-c313-49ac-8a38-eb74ab26f452",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "558d0021fb760c743c7b4817ebb8ce5b5af83c78eff03c65936e759ef16f2448",
+                "revision_id": "55d8c945-b0f9-4ac9-a525-0a283136aaeb",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-communication_structure-quiz",
+            "status": "active",
+            "title": "沟通结构测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "d11e85cf-0022-49d8-85dc-38e9861e3dec",
+            "resource_id": "a04c70cc-c4be-4f4c-a0cb-325de2517f37",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "ae3ab2778ced0ece5db981726ca8287a5ee7611829dce36ba74ad468d8d36116",
+                "revision_id": "d11e85cf-0022-49d8-85dc-38e9861e3dec",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-customer_understanding-quiz",
+            "status": "active",
+            "title": "客户理解测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "2a067763-9711-4d3b-8fb8-17ae3d058dc6",
+            "resource_id": "12d29ea4-36ae-4bf4-93f5-abaec1b6dc34",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "31c551b5762775929ce14ddb724834f430a2aba128166eb83ffde5c2c08f3288",
+                "revision_id": "2a067763-9711-4d3b-8fb8-17ae3d058dc6",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-needs_discovery-quiz",
+            "status": "active",
+            "title": "需求发现测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "79019e46-bc7d-414f-b228-416a649a6a88",
+            "resource_id": "18ca0a6d-0fe5-42a6-be22-4258472dd44d",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "47051d4e2e98c26fe41d2b5ced126561bcbdb4ea3f7e0490f31f38768efb496c",
+                "revision_id": "79019e46-bc7d-414f-b228-416a649a6a88",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-objection_handling-quiz",
+            "status": "active",
+            "title": "异议处理测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "c19ac696-7f40-4a66-b173-78b45575bc20",
+            "resource_id": "ba5716ff-3c88-4ba4-913c-81402ae7ce58",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "18f0aef4d74325d421cdf7678510077321f80649038fb421169f2211e110382a",
+                "revision_id": "c19ac696-7f40-4a66-b173-78b45575bc20",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-process_compliance-quiz",
+            "status": "active",
+            "title": "流程与合规测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "a438d47b-7ff8-4274-9280-5af506355f48",
+            "resource_id": "30cee5cc-83bf-443a-bff0-05356195e749",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "fc8bc418b592f728c983cde59bb5177f12ab27d43298fa19809c6afebe5eafb6",
+                "revision_id": "a438d47b-7ff8-4274-9280-5af506355f48",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-product_knowledge-quiz",
+            "status": "active",
+            "title": "产品知识测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "f53ccc26-34bb-430e-9159-e644af51d72f",
+            "resource_id": "31718a47-e2f6-427f-95bb-0363bc04ac6d",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "48096ab5669badd62112827155ddff971a41d6c9f3ba10a2af88e2edf0886247",
+                "revision_id": "f53ccc26-34bb-430e-9159-e644af51d72f",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-value_expression-quiz",
+            "status": "active",
+            "title": "价值表达测验",
+            "working_revision_id": null
+          }
+        ],
+        "release_plans": [],
+        "source_documents": [
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "c056f229-aa65-4144-9ee2-5e53b15761a5",
+            "resource_id": "e4add8fa-5dd8-4e5c-93ce-0af26ced0dfa",
+            "resource_type": "source_document",
+            "revisions": [
+              {
+                "content_hash": "3fa48e6b5a75d0e0c7427787640c7ea00913cce62cbee5df513a04f8743a5035",
+                "file_hash": "a8b2727e981504c634469f96189cb8e3cff10621842dac12acc7fe558d72cd30",
+                "parse_status": "ready",
+                "revision_id": "c056f229-aa65-4144-9ee2-5e53b15761a5",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "source_type": "manual",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-source",
+            "status": "active",
+            "title": "新人销售基础训练依据",
+            "working_revision_id": null
+          }
+        ]
+      },
+      "mapping_candidates": {
+        "focus_activities": [
+          {
+            "content_requirement": "demo_or_script",
+            "disposition": "needs_input",
+            "is_focus_activity": true,
+            "legacy_id": "f7ed018b-dd21-469f-954e-f7ea3ceec3c6",
+            "legacy_title": "demo讲解",
+            "legacy_type": "sales_trainer_path_activity",
+            "missing_dependencies": [
+              "legacy_material"
+            ],
+            "target_activity_type": "audio_assessment",
+            "target_resources": [
+              "audio_material",
+              "scoring_scheme"
+            ]
+          },
+          {
+            "content_requirement": "slide_deck",
+            "disposition": "ready_for_dry_run",
+            "is_focus_activity": true,
+            "legacy_id": "b1417992-316d-4c68-91b3-7be502a53046",
+            "legacy_title": "石犀ppt讲解",
+            "legacy_type": "sales_trainer_path_activity",
+            "missing_dependencies": [],
+            "target_activity_type": "audio_assessment",
+            "target_resources": [
+              "audio_material",
+              "scoring_scheme"
+            ]
+          }
+        ],
+        "materials": [
+          {
+            "content_kind": "slide_deck",
+            "disposition": "conflict_legacy_material_identity",
+            "exact_hash_matches": [],
+            "is_focus_material": true,
+            "legacy_conflicts": [
+              "LEGACY_MATERIAL_SAME_NAME_INCOMPLETE_HASH"
+            ],
+            "legacy_id": "228bd36f-a5ae-4f41-8b0a-44a3a2f12d53",
+            "legacy_name": "石犀科技-企业介绍标准版（202606版）.pptx",
+            "legacy_type": "sales_trainer_material",
+            "same_name_matches": [],
+            "target_type": "source_document"
+          },
+          {
+            "content_kind": "slide_deck",
+            "disposition": "conflict_legacy_material_identity",
+            "exact_hash_matches": [],
+            "is_focus_material": true,
+            "legacy_conflicts": [
+              "LEGACY_MATERIAL_SAME_HASH_MULTIPLE_LOGICAL_OBJECTS",
+              "LEGACY_MATERIAL_SAME_NAME_INCOMPLETE_HASH"
+            ],
+            "legacy_id": "4543c9e6-7fda-443d-9ef7-ceab90735a3f",
+            "legacy_name": "石犀科技-企业介绍标准版（202606版）.pptx",
+            "legacy_type": "sales_trainer_material",
+            "same_name_matches": [],
+            "target_type": "source_document"
+          },
+          {
+            "content_kind": "slide_deck",
+            "disposition": "conflict_legacy_material_identity",
+            "exact_hash_matches": [],
+            "is_focus_material": true,
+            "legacy_conflicts": [
+              "LEGACY_MATERIAL_SAME_HASH_MULTIPLE_LOGICAL_OBJECTS",
+              "LEGACY_MATERIAL_SAME_NAME_INCOMPLETE_HASH"
+            ],
+            "legacy_id": "4ea86a64-93aa-46e4-82c5-05bd9d6f8031",
+            "legacy_name": "石犀科技-企业介绍标准版（202606版）.pptx",
+            "legacy_type": "sales_trainer_material",
+            "same_name_matches": [],
+            "target_type": "source_document"
+          },
+          {
+            "content_kind": "slide_deck",
+            "disposition": "conflict_legacy_material_identity",
+            "exact_hash_matches": [],
+            "is_focus_material": true,
+            "legacy_conflicts": [
+              "LEGACY_MATERIAL_SAME_NAME_INCOMPLETE_HASH"
+            ],
+            "legacy_id": "bcb9be54-1079-4b9d-8334-87796959d481",
+            "legacy_name": "石犀科技-企业介绍标准版（202606版）.pptx",
+            "legacy_type": "sales_trainer_material",
+            "same_name_matches": [],
+            "target_type": "source_document"
+          }
+        ]
+      },
+      "missing_dependencies": [
+        {
+          "missing": [
+            "legacy_material"
+          ],
+          "object_id": "f7ed018b-dd21-469f-954e-f7ea3ceec3c6",
+          "object_type": "sales_trainer_path_activity"
+        }
+      ],
+      "organization_id": "default",
+      "recommended_migration_order": [
+        "resolve_organization_scope",
+        "resolve_material_hash_and_file_availability",
+        "create_or_reuse_source_document_revisions",
+        "review_scoring_prompt_contracts",
+        "create_audio_material_and_scoring_scheme_working_revisions",
+        "clone_path_and_upsert_focus_activities",
+        "validate_release_plan_without_publishing"
+      ]
+    },
+    {
+      "conflicts": [
+        {
+          "code": "LEGACY_MATERIAL_SAME_NAME_INCOMPLETE_HASH",
+          "known_hash_count": 1,
+          "material_ids": [
+            "228bd36f-a5ae-4f41-8b0a-44a3a2f12d53",
+            "4543c9e6-7fda-443d-9ef7-ceab90735a3f",
+            "4ea86a64-93aa-46e4-82c5-05bd9d6f8031",
+            "bcb9be54-1079-4b9d-8334-87796959d481"
+          ],
+          "normalized_name": "石犀科技-企业介绍标准版（202606版）.pptx"
+        },
+        {
+          "code": "LEGACY_MATERIAL_SAME_HASH_MULTIPLE_LOGICAL_OBJECTS",
+          "hash": "ec128db6106bd7c8124fbaf9bb11d44758848df4c136231d7121e065601b95fd",
+          "material_ids": [
+            "4543c9e6-7fda-443d-9ef7-ceab90735a3f",
+            "4ea86a64-93aa-46e4-82c5-05bd9d6f8031"
+          ]
+        },
+        {
+          "object_id": "228bd36f-a5ae-4f41-8b0a-44a3a2f12d53",
+          "object_type": "sales_trainer_material",
+          "reason": "conflict_legacy_material_identity"
+        },
+        {
+          "object_id": "4543c9e6-7fda-443d-9ef7-ceab90735a3f",
+          "object_type": "sales_trainer_material",
+          "reason": "conflict_legacy_material_identity"
+        },
+        {
+          "object_id": "4ea86a64-93aa-46e4-82c5-05bd9d6f8031",
+          "object_type": "sales_trainer_material",
+          "reason": "conflict_legacy_material_identity"
+        },
+        {
+          "object_id": "bcb9be54-1079-4b9d-8334-87796959d481",
+          "object_type": "sales_trainer_material",
+          "reason": "conflict_legacy_material_identity"
+        }
+      ],
+      "estimated_new_objects": {
+        "audio_materials": 1,
+        "path_activities": 1,
+        "scoring_schemes": 1,
+        "source_documents": 0
+      },
+      "foundation": {
+        "audio_resources": [],
+        "coach_profiles": [],
+        "counts": {
+          "audio_resource_revisions": 0,
+          "coach_profile_revisions": 0,
+          "learning_units": 7,
+          "paths": 1,
+          "question_candidates": 0,
+          "questions": 7,
+          "quizzes": 7,
+          "release_plans": 0,
+          "source_documents": 1
+        },
+        "learning_units": [
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "b3cc3330-fb02-4fc5-a539-6dec7a613952",
+            "resource_id": "0c1f5f07-c32b-454d-97de-05118a777443",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "ddb0a31d201663749930eb1adb15f947bdddc1ff317f2191de875cb284f32881",
+                "revision_id": "b3cc3330-fb02-4fc5-a539-6dec7a613952",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-communication_structure-lesson",
+            "status": "active",
+            "title": "沟通结构",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "0f364ea5-8bc6-4eb5-8e37-33352de39864",
+            "resource_id": "bb4ca525-a284-4f2a-a0c0-abecd538054a",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "4968c1ac3b2d4937ddc22ee1a8a5a3a9c4d4182c414ff3d2792f5384e5a6e366",
+                "revision_id": "0f364ea5-8bc6-4eb5-8e37-33352de39864",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-customer_understanding-lesson",
+            "status": "active",
+            "title": "客户理解",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "b8da24af-3d16-4e97-8f4f-f8756f8e9cde",
+            "resource_id": "6480cf86-2eba-439a-bf04-b59940ab2444",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "7dea00b4c30fbc3fc2eba617519f54403cb14ccd94bf188650c128889d0ec565",
+                "revision_id": "b8da24af-3d16-4e97-8f4f-f8756f8e9cde",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-needs_discovery-lesson",
+            "status": "active",
+            "title": "需求发现",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "ffa0cac3-75bc-48eb-bbd1-6c7ae1ebccdf",
+            "resource_id": "d1103414-e496-4c36-a5d3-de52d014b5db",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "5c84aa8d2e6e3a53f99dea0795fcbbada1e25eb26852e6f8bc2278a3d2b7e95b",
+                "revision_id": "ffa0cac3-75bc-48eb-bbd1-6c7ae1ebccdf",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-objection_handling-lesson",
+            "status": "active",
+            "title": "异议处理",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "f8212653-768d-40a5-8d60-e6729b0c7c7a",
+            "resource_id": "022921f5-9020-4cc3-a2cf-b5a8aff5ba92",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "c663c681d3241c454e76c2e1ef4039a240728f1db9ac2e5690606acdb39d96e4",
+                "revision_id": "f8212653-768d-40a5-8d60-e6729b0c7c7a",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-process_compliance-lesson",
+            "status": "active",
+            "title": "流程与合规",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "ce990da7-59a3-430b-9ee8-ed4c4f11fca8",
+            "resource_id": "d03d1469-8059-4aa9-8c1e-2a47286f1353",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "88de0d4b37289215422726e2603e58a118c56688fd25c0e20c869316c8d37f2f",
+                "revision_id": "ce990da7-59a3-430b-9ee8-ed4c4f11fca8",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-product_knowledge-lesson",
+            "status": "active",
+            "title": "产品知识",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "85d3e0bb-5dfa-45a9-b7d7-dc4588d142f2",
+            "resource_id": "195a1db4-07eb-4aa9-a699-fd2a1fe99588",
+            "resource_type": "learning_unit",
+            "revisions": [
+              {
+                "content_hash": "a279f4b4a0aef69d574396ca1abecb2121f27fe68d50d79a970b0d904835f144",
+                "revision_id": "85d3e0bb-5dfa-45a9-b7d7-dc4588d142f2",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-value_expression-lesson",
+            "status": "active",
+            "title": "价值表达",
+            "working_revision_id": null
+          }
+        ],
+        "paths": [
+          {
+            "active_release_plan_id": null,
+            "pointer_source": "persisted",
+            "published_revision_id": "fe553925-efbf-4fdc-90cb-ae5ec00b5f3e",
+            "resource_id": "649f4103-7512-4a26-8968-681be1d2f393",
+            "resource_type": "path",
+            "revisions": [
+              {
+                "content_hash": "165bb44bc32b375f8d16097ef08b7c83e7cab7747873ea389a1bdf66747e459b",
+                "revision_id": "fe553925-efbf-4fdc-90cb-ae5ec00b5f3e",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard",
+            "status": "active",
+            "title": "新人销售基础训练",
+            "working_revision_id": null
+          }
+        ],
+        "question_candidate_counts": {},
+        "questions": [
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "85f6c5ee-dfa0-4bb2-a5ec-00ce9c84a223",
+            "resource_id": "17eaec53-c5e7-4e5f-9f57-b399ab812a43",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "6afc887803351c25a797707ed6e0177beca789645e6db1c9aa6e20f2771ed784",
+                "question_type": "single_choice",
+                "revision_id": "85f6c5ee-dfa0-4bb2-a5ec-00ce9c84a223",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-communication_structure-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "7d26a5e0-d4bb-4fe6-9200-b6667f4690ec",
+            "resource_id": "bcc70bca-b6d0-43e6-bab1-02bdb7809bf0",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "78a8b14ea0dfedcb86b6448b0ae535ce01c386d16c1a1699a42fc823c2af7f74",
+                "question_type": "single_choice",
+                "revision_id": "7d26a5e0-d4bb-4fe6-9200-b6667f4690ec",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-customer_understanding-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "253aae3f-13b9-4483-b7fb-44e0ecc2f9d0",
+            "resource_id": "db9df072-d49b-4393-bde6-44b2bb4e17d6",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "03199a63fb3a82cbdbba437475de63eff2c7588200bb1cc4298901fdbdc754f9",
+                "question_type": "single_choice",
+                "revision_id": "253aae3f-13b9-4483-b7fb-44e0ecc2f9d0",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-needs_discovery-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "fba4f6d5-9e6f-40df-ad99-4922ee6bd8ea",
+            "resource_id": "c63e96f8-a08a-4f71-ab08-edc91da21751",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "f723c997e22429faa1edf43cd5dfec387efcebd988c947ea6eb696230fc246b4",
+                "question_type": "single_choice",
+                "revision_id": "fba4f6d5-9e6f-40df-ad99-4922ee6bd8ea",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-objection_handling-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "10808dd6-f15c-4bf4-8eaf-e20866bf403e",
+            "resource_id": "bbb3ffa4-6ff1-42be-be7d-8ea606d3eedd",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "808bc09af3ec2eb16c60de4dadce21c0c35c3ff84f925e6fdd02cbc44262b19a",
+                "question_type": "single_choice",
+                "revision_id": "10808dd6-f15c-4bf4-8eaf-e20866bf403e",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-process_compliance-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "8c41b816-ea23-4e8b-a796-7df2e526d77d",
+            "resource_id": "00f430d8-b972-45f2-8994-44c15c55e538",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "ae9b91600457e390076d11d491f80ebb00b2dcc6dd5728d789c81d1cdfe6677a",
+                "question_type": "single_choice",
+                "revision_id": "8c41b816-ea23-4e8b-a796-7df2e526d77d",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-product_knowledge-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "4b5c8147-0d06-4fc6-b782-f7d8808d58e4",
+            "resource_id": "d75104fb-020a-4c07-8cbd-b34881c8e034",
+            "resource_type": "question",
+            "revisions": [
+              {
+                "content_hash": "51096ff6e636ea8c9a76a6936cc22fb7a925b1182b86fd4c6c53dfac6dfde1ca",
+                "question_type": "single_choice",
+                "revision_id": "4b5c8147-0d06-4fc6-b782-f7d8808d58e4",
+                "revision_label": null,
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-value_expression-question",
+            "status": "published",
+            "title": null,
+            "working_revision_id": null
+          }
+        ],
+        "quizzes": [
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "cbb2f028-a35b-4408-9a70-09ed3d8c844d",
+            "resource_id": "c084ffdb-1afa-484f-945f-1095ad47bfa5",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "2bc56b1a19e0cea359431340359e9e9b818a9396748ee48b8e7e11bee91ea82d",
+                "revision_id": "cbb2f028-a35b-4408-9a70-09ed3d8c844d",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-communication_structure-quiz",
+            "status": "active",
+            "title": "沟通结构测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "f0f22db4-7824-42d4-b02c-7d43246b775f",
+            "resource_id": "cb3e45ec-53c9-40e1-9738-a19a4cc4a4e4",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "a11cf60ba9b330c589683e98e428a286496dd8cbe561e7b8dced8d801c6df898",
+                "revision_id": "f0f22db4-7824-42d4-b02c-7d43246b775f",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-customer_understanding-quiz",
+            "status": "active",
+            "title": "客户理解测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "67c4a87e-d7cc-4abc-8697-6e5c773ee4aa",
+            "resource_id": "5e6005ac-73a6-44b7-9094-ee0a174d545e",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "c615ad47ec0aef99d40aa2b1ecdc8819d9dcf27b18025f08eab2cf36f66bd1bb",
+                "revision_id": "67c4a87e-d7cc-4abc-8697-6e5c773ee4aa",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-needs_discovery-quiz",
+            "status": "active",
+            "title": "需求发现测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "3e6eb3d8-aeed-49f6-b750-cbd5a5e2ce75",
+            "resource_id": "3e7903a0-2833-43a1-915e-9b367aec7d33",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "59728984d1733ad5b37dd38ff1dc3fbfe4f460812c2088bb869ac9622e8cc15b",
+                "revision_id": "3e6eb3d8-aeed-49f6-b750-cbd5a5e2ce75",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-objection_handling-quiz",
+            "status": "active",
+            "title": "异议处理测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "483cf884-8cc0-47ff-9f05-8ad341589bcb",
+            "resource_id": "c137074f-72d6-42fc-89a8-b59c4d52e284",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "96d35c3f22ca8040f39b256751d97a178babfd6fd46081d4301bf7752bd6c99e",
+                "revision_id": "483cf884-8cc0-47ff-9f05-8ad341589bcb",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-process_compliance-quiz",
+            "status": "active",
+            "title": "流程与合规测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "ca7650c1-4720-4e44-ba83-fc01fb7d0fac",
+            "resource_id": "0d188a64-79df-4d74-aaf6-0b2a44b5f111",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "bd6a12896d0334c00d689014d52ad2e7b20db6a6f583966aa2b11c997ebd1c75",
+                "revision_id": "ca7650c1-4720-4e44-ba83-fc01fb7d0fac",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-product_knowledge-quiz",
+            "status": "active",
+            "title": "产品知识测验",
+            "working_revision_id": null
+          },
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "df295a54-1800-4593-821d-aac99142c633",
+            "resource_id": "b7a00116-9282-49a0-a772-d79e6d1f771a",
+            "resource_type": "quiz",
+            "revisions": [
+              {
+                "content_hash": "926557abddf07f2c1a12332ba664bd8a7dfc3fd0b0fabdee5eb106b2fa491b2a",
+                "revision_id": "df295a54-1800-4593-821d-aac99142c633",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-value_expression-quiz",
+            "status": "active",
+            "title": "价值表达测验",
+            "working_revision_id": null
+          }
+        ],
+        "release_plans": [],
+        "source_documents": [
+          {
+            "pointer_source": "persisted",
+            "published_revision_id": "3f688a9b-6eb1-4aab-a7b7-7b74962659b1",
+            "resource_id": "4d814d85-7fbe-49ab-aee0-79021be857a3",
+            "resource_type": "source_document",
+            "revisions": [
+              {
+                "content_hash": "3fa48e6b5a75d0e0c7427787640c7ea00913cce62cbee5df513a04f8743a5035",
+                "file_hash": "a8b2727e981504c634469f96189cb8e3cff10621842dac12acc7fe558d72cd30",
+                "parse_status": "ready",
+                "revision_id": "3f688a9b-6eb1-4aab-a7b7-7b74962659b1",
+                "revision_label": "2026.07-foundation-v1",
+                "revision_no": 1,
+                "seed_source": "foundation_standard_pack",
+                "source_type": "manual",
+                "status": "published"
+              }
+            ],
+            "stable_key": "newcomer-sales-foundation-standard-source",
+            "status": "active",
+            "title": "新人销售基础训练依据",
+            "working_revision_id": null
+          }
+        ]
+      },
+      "mapping_candidates": {
+        "focus_activities": [
+          {
+            "content_requirement": "demo_or_script",
+            "disposition": "needs_input",
+            "is_focus_activity": true,
+            "legacy_id": "f7ed018b-dd21-469f-954e-f7ea3ceec3c6",
+            "legacy_title": "demo讲解",
+            "legacy_type": "sales_trainer_path_activity",
+            "missing_dependencies": [
+              "legacy_material"
+            ],
+            "target_activity_type": "audio_assessment",
+            "target_resources": [
+              "audio_material",
+              "scoring_scheme"
+            ]
+          },
+          {
+            "content_requirement": "slide_deck",
+            "disposition": "ready_for_dry_run",
+            "is_focus_activity": true,
+            "legacy_id": "b1417992-316d-4c68-91b3-7be502a53046",
+            "legacy_title": "石犀ppt讲解",
+            "legacy_type": "sales_trainer_path_activity",
+            "missing_dependencies": [],
+            "target_activity_type": "audio_assessment",
+            "target_resources": [
+              "audio_material",
+              "scoring_scheme"
+            ]
+          }
+        ],
+        "materials": [
+          {
+            "content_kind": "slide_deck",
+            "disposition": "conflict_legacy_material_identity",
+            "exact_hash_matches": [],
+            "is_focus_material": true,
+            "legacy_conflicts": [
+              "LEGACY_MATERIAL_SAME_NAME_INCOMPLETE_HASH"
+            ],
+            "legacy_id": "228bd36f-a5ae-4f41-8b0a-44a3a2f12d53",
+            "legacy_name": "石犀科技-企业介绍标准版（202606版）.pptx",
+            "legacy_type": "sales_trainer_material",
+            "same_name_matches": [],
+            "target_type": "source_document"
+          },
+          {
+            "content_kind": "slide_deck",
+            "disposition": "conflict_legacy_material_identity",
+            "exact_hash_matches": [],
+            "is_focus_material": true,
+            "legacy_conflicts": [
+              "LEGACY_MATERIAL_SAME_HASH_MULTIPLE_LOGICAL_OBJECTS",
+              "LEGACY_MATERIAL_SAME_NAME_INCOMPLETE_HASH"
+            ],
+            "legacy_id": "4543c9e6-7fda-443d-9ef7-ceab90735a3f",
+            "legacy_name": "石犀科技-企业介绍标准版（202606版）.pptx",
+            "legacy_type": "sales_trainer_material",
+            "same_name_matches": [],
+            "target_type": "source_document"
+          },
+          {
+            "content_kind": "slide_deck",
+            "disposition": "conflict_legacy_material_identity",
+            "exact_hash_matches": [],
+            "is_focus_material": true,
+            "legacy_conflicts": [
+              "LEGACY_MATERIAL_SAME_HASH_MULTIPLE_LOGICAL_OBJECTS",
+              "LEGACY_MATERIAL_SAME_NAME_INCOMPLETE_HASH"
+            ],
+            "legacy_id": "4ea86a64-93aa-46e4-82c5-05bd9d6f8031",
+            "legacy_name": "石犀科技-企业介绍标准版（202606版）.pptx",
+            "legacy_type": "sales_trainer_material",
+            "same_name_matches": [],
+            "target_type": "source_document"
+          },
+          {
+            "content_kind": "slide_deck",
+            "disposition": "conflict_legacy_material_identity",
+            "exact_hash_matches": [],
+            "is_focus_material": true,
+            "legacy_conflicts": [
+              "LEGACY_MATERIAL_SAME_NAME_INCOMPLETE_HASH"
+            ],
+            "legacy_id": "bcb9be54-1079-4b9d-8334-87796959d481",
+            "legacy_name": "石犀科技-企业介绍标准版（202606版）.pptx",
+            "legacy_type": "sales_trainer_material",
+            "same_name_matches": [],
+            "target_type": "source_document"
+          }
+        ]
+      },
+      "missing_dependencies": [
+        {
+          "missing": [
+            "legacy_material"
+          ],
+          "object_id": "f7ed018b-dd21-469f-954e-f7ea3ceec3c6",
+          "object_type": "sales_trainer_path_activity"
+        }
+      ],
+      "organization_id": "slice2-seed-validation",
+      "recommended_migration_order": [
+        "resolve_organization_scope",
+        "resolve_material_hash_and_file_availability",
+        "create_or_reuse_source_document_revisions",
+        "review_scoring_prompt_contracts",
+        "create_audio_material_and_scoring_scheme_working_revisions",
+        "clone_path_and_upsert_focus_activities",
+        "validate_release_plan_without_publishing"
+      ]
+    }
+  ],
+  "safety": {
+    "apply_supported": false,
+    "database_mode": "read_only_transaction_when_supported",
+    "redacted_fields": [
+      "access_token",
+      "api_key",
+      "authorization",
+      "credential",
+      "credentials",
+      "password",
+      "payload_json",
+      "private_key",
+      "prompt_body",
+      "raw_prompt",
+      "raw_response",
+      "refresh_token",
+      "scoring_template",
+      "secret",
+      "snapshot_json",
+      "source_uri",
+      "storage_key",
+      "system_prompt",
+      "token",
+      "transcript"
+    ]
+  },
+  "schema_version": "foundation_authoring_inventory_v1",
+  "unresolved_scope": [
+    {
+      "code": "LEGACY_ORGANIZATION_SCOPE_UNRESOLVED",
+      "message": "Legacy sales_trainer authoring rows have no organization_id; a target organization must be selected before dry-run/apply."
+    }
+  ],
+  "writes_performed": 0
+}

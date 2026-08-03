@@ -23,6 +23,7 @@ from common.db.schemas import (
 )
 from common.db.session import get_db
 from common.monitoring.logger import get_trace_id
+from common.teams import active_primary_teams_by_user_ids
 
 router = APIRouter(prefix="/admin/interventions", tags=["admin-interventions"])
 
@@ -76,7 +77,6 @@ async def get_manager_lite_lists(
                 PracticeSession.start_time,
                 PracticeSession.effectiveness_snapshot,
                 User.name,
-                User.department,
             )
             .join(User, User.user_id == PracticeSession.user_id)
             .where(PracticeSession.status == "completed")
@@ -85,6 +85,23 @@ async def get_manager_lite_lists(
             .limit(2000)
         )
     ).all()
+
+    last_session_rows = (
+        await db.execute(
+            select(
+                PracticeSession.user_id,
+                func.max(PracticeSession.start_time).label("last_session_at"),
+                User.name,
+            )
+            .join(User, User.user_id == PracticeSession.user_id)
+            .where(PracticeSession.status == "completed")
+            .group_by(PracticeSession.user_id, User.name)
+        )
+    ).all()
+    teams_by_user_id = await active_primary_teams_by_user_ids(
+        db,
+        [row.user_id for row in rows] + [row.user_id for row in last_session_rows],
+    )
 
     not_passed: list[dict[str, Any]] = []
     not_passed_users: set[str] = set()
@@ -104,30 +121,17 @@ async def get_manager_lite_lists(
             if user_id in not_passed_users:
                 continue
             not_passed_users.add(user_id)
+            team = teams_by_user_id.get(user_id)
             not_passed.append(
                 {
                     "user_id": user_id,
                     "user_name": row.name,
-                    "department": row.department,
+                    "team": team.to_dict() if team else None,
                     "overall_result": overall_result,
                     "session_id": str(row.session_id),
                     "session_start_time": row.start_time.isoformat(),
                 }
             )
-
-    last_session_rows = (
-        await db.execute(
-            select(
-                PracticeSession.user_id,
-                func.max(PracticeSession.start_time).label("last_session_at"),
-                User.name,
-                User.department,
-            )
-            .join(User, User.user_id == PracticeSession.user_id)
-            .where(PracticeSession.status == "completed")
-            .group_by(PracticeSession.user_id, User.name, User.department)
-        )
-    ).all()
 
     inactive_streak: list[dict[str, Any]] = []
     for row in last_session_rows:
@@ -135,11 +139,12 @@ async def get_manager_lite_lists(
             continue
         days_inactive = int((now - row.last_session_at).total_seconds() // 86400)
         if days_inactive >= inactive_days:
+            team = teams_by_user_id.get(str(row.user_id))
             inactive_streak.append(
                 {
                     "user_id": str(row.user_id),
                     "user_name": row.name,
-                    "department": row.department,
+                    "team": team.to_dict() if team else None,
                     "last_session_at": row.last_session_at.isoformat(),
                     "inactive_days": days_inactive,
                 }
@@ -164,11 +169,12 @@ async def get_manager_lite_lists(
             continue
 
         sample = next((row for row in rows if str(row.user_id) == user_id), None)
+        team = teams_by_user_id.get(user_id)
         improving.append(
             {
                 "user_id": user_id,
                 "user_name": sample.name if sample else user_id,
-                "department": sample.department if sample else None,
+                "team": team.to_dict() if team else None,
                 "pass_gain": round(gain * 100, 2),
                 "baseline_pass_rate": round(baseline_pass_rate * 100, 2),
                 "current_pass_rate": round(current_pass_rate * 100, 2),

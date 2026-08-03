@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { TeamScopeResponse, TeamWorkbenchResponse } from "@/lib/api/types";
-import type { AdminJourneyListResponse } from "@/lib/api/types/newcomer-training";
+import type { FoundationAdminLearnerListResponse } from "@/lib/api/types/foundation-admin";
 import { toTeamJourneyRow } from "@/lib/team-journey/view-models";
 
 type RangeKey = "7" | "30" | "90" | "custom";
@@ -34,7 +34,7 @@ export default function TeamDashboardPage() {
     const [scope, setScope] = useState<TeamScopeResponse | null>(null);
     const [scopeLoading, setScopeLoading] = useState(true);
     const [scopeError, setScopeError] = useState<string | null>(null);
-    const [journeys, setJourneys] = useState<AdminJourneyListResponse | null>(null);
+    const [journeys, setJourneys] = useState<FoundationAdminLearnerListResponse | null>(null);
     const [journeysRefreshing, setJourneysRefreshing] = useState(false);
     const [journeysError, setJourneysError] = useState<string | null>(null);
     const [insights, setInsights] = useState<TeamWorkbenchResponse | null>(null);
@@ -96,9 +96,8 @@ export default function TeamDashboardPage() {
         setJourneysError(null);
         setInsightsError(null);
         setPreviousError(null);
-        const journeyPromise = api.admin.newcomerTraining.listJourneys({
+        const journeyPromise = api.admin.newcomerTraining.listLearners({
             limit: 100,
-            team_id: teamId === "all" ? undefined : teamId,
             search: query || undefined,
         }).then((result) => {
             if (requestId !== requestIdRef.current) return;

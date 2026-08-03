@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/newcomer-training-activity-orchestration.md", "reason": "保持五类 Activity、冻结修订与 ReleasePlan 合同"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "统一管理入口与任务型工作区"}
+{"file": ".trellis/spec/frontend/newcomer-foundation-view-models.md", "reason": "保持安全 ViewModel 投影"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "落实上下文内完成与页面状态"}
+{"file": ".trellis/tasks/07-19-newcomer-training-content-authoring-closure/research/current-state-gap.md", "reason": "当前代码与数据缺口基线"}

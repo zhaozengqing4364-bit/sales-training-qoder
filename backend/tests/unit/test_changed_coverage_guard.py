@@ -27,12 +27,12 @@ validate_selector_manifest = MODULE.validate_selector_manifest
 EXPECTED_CRITICAL_BRANCH_FLOORS = {
     "backend": {
         "backend/src/common/db/session_lifecycle.py": (44, 64),
-        "backend/src/sales_trainer/services/path_progress_service.py": (2, 8),
-        "backend/src/sales_trainer/services/path_projection_payloads.py": (22, 24),
-        "backend/src/sales_trainer/services/path_service.py": (18, 22),
+        "backend/src/newcomer_training/activity.py": (82, 82),
+        "backend/src/newcomer_training/activity_application.py": (34, 34),
+        "backend/src/newcomer_training/application.py": (150, 150),
+        "backend/src/newcomer_training/contracts.py": (22, 22),
+        "backend/src/newcomer_training/journey.py": (54, 54),
         "backend/src/sales_bot/websocket/session_control_adapter.py": (8, 10),
-        "backend/src/sales_trainer/services/training_journey_service.py": (176, 262),
-        "backend/src/sales_trainer/services/training_journey_projection.py": (164, 164),
         "backend/src/sales_bot/services/roleplay_state_card.py": (14, 20),
     },
     "frontend": {
@@ -42,24 +42,6 @@ EXPECTED_CRITICAL_BRANCH_FLOORS = {
         "web/src/hooks/use-audio-recorder.ts": (19, 135),
     },
 }
-
-PRE_GATE5_JOURNEY_BRANCH_FLOOR = (290, 434)
-
-
-def test_gate5_journey_floor_migration_preserves_combined_coverage() -> None:
-    service = EXPECTED_CRITICAL_BRANCH_FLOORS["backend"][
-        "backend/src/sales_trainer/services/training_journey_service.py"
-    ]
-    projection = EXPECTED_CRITICAL_BRANCH_FLOORS["backend"][
-        "backend/src/sales_trainer/services/training_journey_projection.py"
-    ]
-    previous_covered, previous_total = PRE_GATE5_JOURNEY_BRANCH_FLOOR
-    combined_covered = service[0] + projection[0]
-    combined_total = service[1] + projection[1]
-
-    assert combined_covered >= previous_covered
-    assert combined_covered / combined_total >= previous_covered / previous_total
-
 
 def _write_policy(
     tmp_path: Path,
@@ -489,6 +471,22 @@ def test_repo_critical_branch_floors_cannot_drop_below_adoption_baseline() -> No
         assert set(actual_files) == set(expected_files)
         for path, (covered, total) in expected_files.items():
             assert actual_files[path].ratio + 1e-12 >= covered / total
+
+
+def test_repo_critical_branch_policy_only_references_existing_files() -> None:
+    policy = load_policy(
+        REPO_ROOT / "docs" / "architecture" / "changed-coverage-policy.yaml",
+        today=date(2026, 7, 10),
+    )
+
+    configured = {
+        path
+        for files in policy.critical_branch_files.values()
+        for path in files
+    }
+    missing = sorted(path for path in configured if not (REPO_ROOT / path).is_file())
+
+    assert missing == []
 
 
 def test_guard_result_is_json_serializable(tmp_path: Path) -> None:

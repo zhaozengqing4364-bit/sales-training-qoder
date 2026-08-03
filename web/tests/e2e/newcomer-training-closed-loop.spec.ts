@@ -10,57 +10,78 @@ import {
 } from "./newcomer-training-audit-helpers";
 
 type Journey = {
-  enrollment_id: string;
-  path_revision_id: string;
-  phases: Array<{
-    modules: Array<{
-      module_id: string;
-      title: string;
-      activities: Array<{ activity_id: string; type: string; title: string }>;
+  contract_version: "journey_projection_v1";
+  enrollment: {
+    enrollment_id: string;
+    revision_id: string;
+    version: number;
+  } | null;
+  path: { path_id: string; title: string; revision_label: string } | null;
+  stages: Array<{
+    stage_id: string;
+    activities: Array<{
+      activity_id: string;
+      type: "lesson" | "quiz" | "audio_assessment" | "ai_coach" | "assignment";
     }>;
   }>;
-  primary_next_action: { activity_id: string } | null;
+  current_activity: { activity_id: string; type: string } | null;
+  primary_action: { activity_id: string; href: string } | null;
 };
 
-test.describe("新人训练活动编排闭环", () => {
+test.describe("新人销售基础训练首发闭环", () => {
   test.setTimeout(240_000);
 
-  test("管理员可用同一编辑器组合产品模块并完成发布检查", async ({ page }) => {
+  test("管理员只使用 v2 路径与发布工作台", async ({ page }) => {
     await loginFromUi(page, adminEmail);
-    await page.goto("/admin/newcomer-training/path");
+    await page.goto("/admin/newcomer-training/paths");
 
-    const moduleTitles = ["产品 A 核心功能", "产品 B 核心功能", "标准产品 Demo"];
-    for (const title of moduleTitles) {
-      await expect(page.getByRole("button", { name: `编辑模块 ${title}` })).toBeVisible();
-    }
-    await expect(page.getByRole("button", { name: /编辑活动 学习产品 A/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /编辑活动 产品 A 小测/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /编辑活动 讲解产品 A/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "路径与版本" })).toBeVisible();
+    const editorLink = page.getByRole("link", { name: "打开编辑器" }).first();
+    await expect(editorLink).toBeVisible();
+    await editorLink.click();
+    await expect(page).toHaveURL(/\/admin\/newcomer-training\/paths\/[^/]+\/edit$/);
+    await expect(page.getByText("阶段与活动", { exact: true })).toBeVisible();
+    await expect(page.getByText("校验与引用影响", { exact: true })).toBeVisible();
 
-    await page.getByLabel("修改说明").fill("验证活动编排闭环");
-    await page.getByRole("button", { name: "检查并预览" }).click();
-    await expect(page.getByText("路径配置完整，可以发布。")).toBeVisible();
+    const retired = await page.request.get(`${backendBaseUrl}/admin/newcomer-training/path/`);
+    expect(retired.status()).toBe(404);
   });
 
-  test("学员固定到不可变发布修订且获得唯一下一步", async ({ context, page }) => {
+  test("学员固定到发布修订、只有一个下一步且首发不含 Realtime", async ({
+    context,
+    page,
+  }) => {
     const token = await loginForBearerToken(context, learnerEmail);
+    const headers = { Authorization: `Bearer ${token}` };
     const first = await context.request.get(`${backendBaseUrl}/newcomer-training/journey`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers,
     });
     expect(first.ok(), await first.text()).toBeTruthy();
     const initial = unwrapApiPayload<Journey>(await first.json());
-    expect(initial.path_revision_id).toBeTruthy();
-    expect(initial.primary_next_action?.activity_id).toBeTruthy();
+    expect(initial.contract_version).toBe("journey_projection_v1");
+    expect(initial.enrollment).not.toBeNull();
+    expect(initial.path?.revision_label).toBeTruthy();
+    expect(initial.primary_action?.activity_id).toBe(initial.current_activity?.activity_id);
+
+    const activityTypes = new Set(
+      initial.stages.flatMap((stage) => stage.activities.map((activity) => activity.type)),
+    );
+    expect(activityTypes).toEqual(
+      new Set(["lesson", "quiz", "audio_assessment", "ai_coach", "assignment"]),
+    );
+    expect([...activityTypes]).not.toContain("realtime_roleplay");
 
     const second = await context.request.get(`${backendBaseUrl}/newcomer-training/journey`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers,
     });
+    expect(second.ok(), await second.text()).toBeTruthy();
     const repeated = unwrapApiPayload<Journey>(await second.json());
-    expect(repeated.enrollment_id).toBe(initial.enrollment_id);
-    expect(repeated.path_revision_id).toBe(initial.path_revision_id);
+    expect(repeated.enrollment?.enrollment_id).toBe(initial.enrollment?.enrollment_id);
+    expect(repeated.enrollment?.revision_id).toBe(initial.enrollment?.revision_id);
 
     await loginFromUi(page, learnerEmail);
     await page.goto("/newcomer-training");
     await expect(page.locator('[data-primary-action="true"]')).toHaveCount(1);
+    await expect(page.getByText("实时对练")).toHaveCount(0);
   });
 });

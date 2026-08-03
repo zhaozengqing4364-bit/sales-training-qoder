@@ -1,5 +1,7 @@
 # Newcomer Training Task-first Experience Implementation Plan
 
+> **Status: Superseded / Legacy historical plan (2026-07-16).** Do not execute this plan as target work. Use [`../../newcomer-foundation-contract-index.md`](../../newcomer-foundation-contract-index.md) and the Slice 1–8 tasks.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Do not dispatch subagents for this plan.
 
 **Goal:** 将新人训练学员端改成具体、清晰的任务体验，并把管理端改成可配置、低噪、可真实预览的两栏编排器。

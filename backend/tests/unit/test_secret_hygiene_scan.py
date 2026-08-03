@@ -2,6 +2,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -63,6 +64,22 @@ def test_secret_scan_detects_bearer_jwt_and_url_query_token():
     assert "url-query-token" in pattern_names
 
 
+def test_secret_scan_detects_token_inside_playwright_trace_archive(tmp_path):
+    module = _load_script_module()
+    archive_path = tmp_path / "trace.zip"
+    token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1MSJ9.signatureValue123"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("trace.network", f"Authorization: Bearer {token}\n")
+
+    findings = module.scan_paths(tmp_path, ("trace.zip",))
+
+    assert {finding.pattern_name for finding in findings} >= {
+        "bearer-token",
+        "jwt-token",
+    }
+    assert "trace.zip::trace.network" in str(findings[0].path)
+
+
 def test_secret_scan_passes_current_release_facing_files():
     result = subprocess.run(
         [sys.executable, str(SCRIPT_PATH)],
@@ -77,6 +94,14 @@ def test_secret_scan_passes_current_release_facing_files():
 
 
 def test_secret_scan_passes_stepfun_realtime_contract_and_migrations():
+    migration_paths = [
+        "backend/alembic/archive/prelaunch_20260715/versions/"
+        "20260702_1100_088_stepfun_default_model_stepaudio25.py",
+        "backend/alembic/archive/prelaunch_20260715/versions/"
+        "20260702_1530_089_sales_trainer_roleplay_observations.py",
+        "backend/alembic/versions/20260715_0000_001_launch_baseline.py",
+    ]
+    assert all((REPO_ROOT / path).is_file() for path in migration_paths)
     result = subprocess.run(
         [
             sys.executable,
@@ -85,10 +110,7 @@ def test_secret_scan_passes_stepfun_realtime_contract_and_migrations():
             "docs/api-contract/voice-runtime.md",
             "docs/adr/2026-06-27-newcomer-training-closed-loop.md",
             "docs/adr/2026-07-02-roleplay-observation-sidecar.md",
-            "backend/alembic/versions/"
-            "20260702_1100_088_stepfun_default_model_stepaudio25.py",
-            "backend/alembic/versions/"
-            "20260702_1530_089_sales_trainer_roleplay_observations.py",
+            *migration_paths,
         ],
         cwd=REPO_ROOT,
         check=False,

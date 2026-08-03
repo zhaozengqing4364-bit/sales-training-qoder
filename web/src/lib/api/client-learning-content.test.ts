@@ -93,7 +93,7 @@ describe("learning content api client", () => {
         expect(createResult.learning_content_id).toBe("content-2");
         expect(fetchMock).toHaveBeenNthCalledWith(
             1,
-            expect.stringContaining("/curriculum/learning-contents?status=draft&query=%E5%BC%82%E8%AE%AE"),
+            expect.stringContaining("/curriculum/learning-contents?status=draft&query=%E5%BC%82%E8%AE%AE&view=summary"),
             expect.any(Object),
         );
         expect(fetchMock).toHaveBeenNthCalledWith(

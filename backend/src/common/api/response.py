@@ -40,7 +40,7 @@ def success_response(
     Returns:
         Dict with success=True and data
     """
-    payload = {
+    payload: dict[str, Any] = {
         "success": True,
         "data": _jsonable_data(data),
         "trace_id": trace_id or get_trace_id(),
@@ -54,6 +54,7 @@ def error_response(
     error_code: str,
     message: str | None = None,
     trace_id: str | None = None,
+    details: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Create unified error response.
@@ -68,13 +69,16 @@ def error_response(
     Returns:
         Dict with success=False and error details
     """
-    return {
+    payload: dict[str, Any] = {
         "success": False,
         "data": None,
         "error": error_code,
         "message": message or error_code,
         "trace_id": trace_id or get_trace_id(),
     }
+    if details is not None:
+        payload["details"] = details
+    return payload
 
 
 def server_error_response(

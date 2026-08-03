@@ -4,8 +4,7 @@ import type {
     RoleplayComplianceTimelineItem,
     SalesTrainerRoleplayObservation,
     SalesTrainerRoleplayObservationSessionResponse,
-    SalesTrainerTrainingRecord,
-    TrainingJourneyAnalyticsResponse,
+    LegacySalesTrainerTrainingRecord as SalesTrainerTrainingRecord,
 } from "@/lib/api/types";
 
 const DIMENSION_LABELS = {
@@ -215,7 +214,6 @@ export function buildRoleplayObservationViewModel(
 
 export function buildRoleplayObservationAnalyticsViewModel(
     analytics:
-        | TrainingJourneyAnalyticsResponse
         | Record<string, unknown>
         | null
         | undefined,

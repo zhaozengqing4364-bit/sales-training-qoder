@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端总架构、验证和非协商约束"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Activity Shell、domain adapter 和页面放置"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "任务、草稿、查询和恢复状态"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "DTO 到 Domain 到 ViewModel"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "复用现有组件和交互模式"}
+{"file": ".trellis/spec/frontend/admin-console-patterns.md", "reason": "管理者页面一致性"}
+{"file": ".trellis/spec/guides/product-design-engineering.md", "reason": "页面契约、AI 界面、状态和韧性"}
+{"file": "docs/newcomer-foundation-contract-index.md", "reason": "切片 0 权威 ViewModel、用户语言、状态、API、权限与性能合同入口"}
+{"file": "docs/adr/2026-07-16-newcomer-foundation-product-boundary.md", "reason": "直接约束首发五类活动、foundation_ready 文案和 Realtime 不可见"}

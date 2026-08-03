@@ -1,5 +1,7 @@
 # Newcomer Training Activity Orchestration Implementation Plan
 
+> **Status: Superseded / Legacy historical plan (2026-07-16).** Do not execute this plan as target work. The accepted Foundation target is [`../../newcomer-foundation-contract-index.md`](../../newcomer-foundation-contract-index.md); Phase/Module, six-activity, Realtime-first-launch, and automatic Enrollment semantics below are migration history only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Do not dispatch subagents; the user explicitly requires single-agent inline execution. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the unpublished fixed newcomer-training prototype with one configurable `Path → Phase → Module → Activity` orchestration system whose existing activity types can be composed without source changes.

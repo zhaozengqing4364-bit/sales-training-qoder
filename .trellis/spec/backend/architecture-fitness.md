@@ -3,6 +3,20 @@
 > Executable contract for backend cross-package dependencies, migration exceptions, and
 > strongly connected component containment.
 
+> **Newcomer implementation status (2026-07-18):** `docs/architecture/newcomer-foundation-guard-policy.yaml` is enforced by the AST edge/SCC guard and the canonical quality gate. Failure probes cover scoped cross-business imports, shared-kernel reverse edges, dynamic Activity locators, direct Provider access and composition-root misuse.
+
+## Newcomer Foundation Guard Extension Contract
+
+The machine guard fails closed on cross-business-module ORM/Repository/table imports; `shared_kernel` reverse dependencies; literal dynamic/string ActivityRuntime locators; business-module Provider SDK/raw endpoint/`.llm.apredict` access; and delivery code that combines ORM mutation/commit with external Provider IO.
+
+An allowed business `stable_edge` is contract-scoped, not a package-wide friendship: the importer may use only the target's `contracts/`, `ports/`, immutable `public/` DTOs, or `identifiers/`. Imports of a foreign `models`, repository, SQLAlchemy adapter/table, concrete adapter, `services`, or `internal` path fail even when the pair appears in `stable_edges`. The `application_root` is governed separately by `composition_root_edges`: it may import concrete adapters/providers only to wire and register lifecycles, but may not own business rules, mutate business ORM, or become a request-time service locator.
+
+The policy file owns target edges, Legacy exceptions, owner, retirement condition, expiry, and failure-probe names. Until target packages exist, the current `module-dependency-policy.yaml` remains runtime truth; do not add non-existent packages to it merely to make the design appear implemented.
+
+Required probes inject one violation for each of the first four rules, assert the stable failure code and source location, remove the probe, then prove both current and target guard suites return green. An expired or stale exception fails closed.
+
+The target probe set also injects a foreign internal-service import across an otherwise allowed business edge and expects `ARCH_BUSINESS_EDGE_SCOPE_FORBIDDEN`. A composition-root fixture proves every declared root edge is accepted, while an undeclared root target and a business mutation inside the root both fail.
+
 ## 1. Scope / Trigger
 
 Apply this contract when a backend change:
@@ -118,6 +132,10 @@ baseline_sccs:
 | New undeclared edge stays inside an existing SCC | Fail as unexpected edge even though SCC size is unchanged |
 | YAML is missing or invalid | Fail with a deterministic policy error |
 | Non-literal plugin path is encountered | Ignore statically; runtime contract remains responsible |
+| Stable business edge imports target `contracts/ports/public/identifiers` | Pass |
+| Stable business edge imports target ORM/repository/adapter/service/internal path | Fail with `ARCH_CROSS_MODULE_ORM_FORBIDDEN` or `ARCH_BUSINESS_EDGE_SCOPE_FORBIDDEN` |
+| `application_root` imports a declared concrete adapter only for wiring | Pass under `composition_root_edges` |
+| `application_root` imports an undeclared target or owns business ORM mutation | Fail closed; a stable business edge cannot be used as a root exemption |
 
 ## 5. Good / Base / Bad Cases
 
@@ -140,6 +158,11 @@ baseline_sccs:
 - Repository: `validate_repository()` returns no violations using the real UTC date.
 - Failure probe: a temporary `sales_bot -> supervisor` import reports both unexpected edge
   and expanded SCC; delete the probe and prove the CLI returns to green.
+- Target failure probes: foreign business ORM import, foreign internal-service import across an
+  allowed edge, shared-kernel reverse import, literal dynamic Activity import, and direct business
+  Provider import each report its stable code and location.
+- Composition root: every declared `composition_root_edge` passes; undeclared targets, request-time
+  service-location and business ORM mutation in the root fail.
 - Regression: run architecture guard tests together with runtime, newcomer path, and knowledge
   import boundary tests; run Ruff, Bash syntax, and `git diff --check`.
 

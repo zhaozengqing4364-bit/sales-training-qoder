@@ -165,7 +165,7 @@ describe("AdminShell auth and role routing", () => {
         renderShell(<div>admin content</div>, { ...currentUser, role: "support" });
 
         await waitFor(() => {
-            expect(replaceMock).toHaveBeenCalledWith("/admin/newcomer-training/path");
+            expect(replaceMock).toHaveBeenCalledWith("/admin/newcomer-training/resources");
         });
     });
 
@@ -188,6 +188,7 @@ describe("AdminShell auth and role routing", () => {
         expect(expandedMain?.className).toContain("md:ml-80");
         expect(expandedMain?.className).not.toContain("transition-all");
         expect(expandedMain?.className).not.toContain("duration-300");
+        expect(expandedMain?.className).not.toContain("scroll-smooth");
 
         cleanup();
         useSidebarStoreMock.mockReturnValue({
@@ -199,5 +200,15 @@ describe("AdminShell auth and role routing", () => {
         const collapsedMain = collapsed.container.querySelector("main");
         expect(collapsedMain?.className).toContain("md:ml-28");
         expect(collapsedMain?.className).not.toContain("transition-all");
+    });
+
+    it("avoids full-viewport blur filters that make admin scrolling expensive", () => {
+        useCurrentUserMock.mockReturnValue({ data: currentUser, error: null });
+
+        const view = renderShell(<div>admin content</div>);
+
+        expect(view.container.innerHTML).not.toContain("blur-[120px]");
+        expect(view.container.innerHTML).not.toContain("backdrop-blur-2xl");
+        expect(view.container.innerHTML).not.toContain("backdrop-blur-xl");
     });
 });

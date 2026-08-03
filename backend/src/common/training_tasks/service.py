@@ -7,12 +7,14 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.auth.roles import is_platform_admin_role
 from common.db.models import PracticeSession, TrainingTask, User
 from common.db.schemas import ScenarioType, SessionCreate
 from common.services.practice_session_service import (
     PracticeServiceError,
     PracticeSessionCreateService,
 )
+from common.teams import TeamScopePolicy
 from common.training_tasks.ports import (
     TrainingTaskPracticeTemplate,
     resolve_registered_training_task_practice_template,
@@ -28,15 +30,17 @@ from common.training_tasks.schemas import (
     TrainingTaskUpdate,
 )
 
-MANAGER_ROLES = {"admin", "support"}
-
 
 def can_manage_training_tasks(user: User) -> bool:
-    return str(getattr(user, "role", "user")).lower() in MANAGER_ROLES
+    return is_platform_admin_role(getattr(user, "role", None))
 
 
-def can_read_training_task(task: TrainingTask, user: User) -> bool:
-    return can_manage_training_tasks(user) or str(task.assignee_id) == str(user.user_id)
+async def can_read_training_task(
+    db: AsyncSession, task: TrainingTask, user: User
+) -> bool:
+    if can_manage_training_tasks(user) or str(task.assignee_id) == str(user.user_id):
+        return True
+    return await TeamScopePolicy(db).can_view_learner(user, str(task.assignee_id))
 
 
 async def get_training_task(
@@ -45,7 +49,7 @@ async def get_training_task(
     current_user: User,
 ) -> TrainingTask | None:
     task = await db.get(TrainingTask, task_id)
-    if task is None or not can_read_training_task(task, current_user):
+    if task is None or not await can_read_training_task(db, task, current_user):
         return None
     return task
 
@@ -59,7 +63,14 @@ async def list_training_tasks(
     status: str | None = None,
 ) -> tuple[int, list[TrainingTask]]:
     filters: list[Any] = []
-    if not can_manage_training_tasks(current_user):
+    if can_manage_training_tasks(current_user):
+        pass
+    elif TeamScopePolicy.is_team_leader(current_user):
+        learner_ids = await TeamScopePolicy(db).authorized_learner_ids(current_user)
+        if not learner_ids:
+            return 0, []
+        filters.append(TrainingTask.assignee_id.in_(learner_ids))
+    else:
         filters.append(TrainingTask.assignee_id == str(current_user.user_id))
     if status:
         filters.append(TrainingTask.status == status)
@@ -121,8 +132,6 @@ async def batch_assign_training_tasks(
     assigned: list[TrainingTaskBatchAssignAssignedItem] = []
     skipped: list[TrainingTaskBatchAssignReasonItem] = []
     failed: list[TrainingTaskBatchAssignReasonItem] = []
-    assigner_department = getattr(current_user, "department", None)
-
     for user_id in payload.user_ids:
         assignee = await db.get(User, user_id)
         if assignee is None:
@@ -133,23 +142,18 @@ async def batch_assign_training_tasks(
                 )
             )
             continue
-        if getattr(assignee, "department", None) != assigner_department:
-            failed.append(
-                TrainingTaskBatchAssignReasonItem(
-                    user_id=user_id,
-                    reason="[DEPARTMENT_SCOPE_VIOLATION]",
-                )
-            )
-            continue
-
         existing = (
-            await db.execute(
-                select(TrainingTask).where(
-                    TrainingTask.assignee_id == user_id,
-                    TrainingTask.practice_template_id == template_id,
+            (
+                await db.execute(
+                    select(TrainingTask).where(
+                        TrainingTask.assignee_id == user_id,
+                        TrainingTask.practice_template_id == template_id,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if existing is not None:
             skipped.append(
                 TrainingTaskBatchAssignReasonItem(
@@ -196,7 +200,10 @@ def _batch_failed(
     user_ids: list[str],
     reason: str,
 ) -> TrainingTaskBatchAssignResponse:
-    failed = [TrainingTaskBatchAssignReasonItem(user_id=user_id, reason=reason) for user_id in user_ids]
+    failed = [
+        TrainingTaskBatchAssignReasonItem(user_id=user_id, reason=reason)
+        for user_id in user_ids
+    ]
     return TrainingTaskBatchAssignResponse(
         assigned_count=0,
         skipped_count=0,
@@ -225,7 +232,9 @@ def _validate_curriculum_plan_id(
     stages = curriculum_plan.get("stages")
     if not isinstance(stages, list):
         return "[CURRICULUM_PLAN_INVALID]"
-    stage_types = {stage.get("stage_type") for stage in stages if isinstance(stage, dict)}
+    stage_types = {
+        stage.get("stage_type") for stage in stages if isinstance(stage, dict)
+    }
     if not {"study", "exam", "practice"} <= stage_types:
         return "[CURRICULUM_PLAN_INVALID]"
     return None
@@ -396,7 +405,9 @@ async def complete_training_task(
         raise ValueError("[SESSION_NOT_TERMINAL]")
 
     _set_orm_field(task, "resulting_session_id", str(session.session_id))
-    _set_orm_field(task, "before_after_summary", _build_before_after_summary(task, session))
+    _set_orm_field(
+        task, "before_after_summary", _build_before_after_summary(task, session)
+    )
     _set_orm_field(task, "status", "completed")
     await db.commit()
     await db.refresh(task)

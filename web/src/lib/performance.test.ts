@@ -11,6 +11,7 @@ describe("performance telemetry dispatch", () => {
     });
 
     afterEach(() => {
+        document.cookie = "app_csrf=; Max-Age=0; path=/";
         process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
         vi.restoreAllMocks();
     });
@@ -32,21 +33,14 @@ describe("performance telemetry dispatch", () => {
 
         postTelemetryEvent("custom", JSON.stringify({ metric: true }));
 
-        await vi.waitFor(() => {
-            expect(fetch).toHaveBeenCalledWith(
-                "http://localhost:3444/api/v1/analytics/custom",
-                expect.objectContaining({
-                    method: "POST",
-                    keepalive: true,
-                    headers: expect.objectContaining({
-                        "Content-Type": "application/json",
-                    }),
-                }),
-            );
-        });
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+        const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
+        expect(url).toBe("http://localhost:3444/api/v1/analytics/custom");
+        expect(options).toEqual(expect.objectContaining({ method: "POST", keepalive: true }));
+        expect(new Headers(options?.headers).get("Content-Type")).toBe("application/json");
     });
 
-    it("routes custom metrics through the backend api authority instead of same-origin next routes", () => {
+    it("uses credential-omitting fetch for a cross-origin telemetry authority", async () => {
         const sendBeaconMock = vi.fn().mockReturnValue(true);
 
         Object.defineProperty(window.navigator, "sendBeacon", {
@@ -56,9 +50,29 @@ describe("performance telemetry dispatch", () => {
 
         trackCustomMetric("page_load", 123);
 
-        expect(sendBeaconMock).toHaveBeenCalledWith(
-            "http://localhost:3444/api/v1/analytics/custom",
-            expect.any(Blob),
-        );
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+        expect(sendBeaconMock).not.toHaveBeenCalled();
+        const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
+        expect(url).toBe("http://localhost:3444/api/v1/analytics/custom");
+        expect(options?.credentials).toBe("same-origin");
+    });
+
+    it("uses a CSRF-protected keepalive request for same-origin cookie sessions", async () => {
+        process.env.NEXT_PUBLIC_API_URL = `${window.location.origin}/api/v1`;
+        document.cookie = "app_csrf=csrf-telemetry; path=/";
+        const sendBeaconMock = vi.fn().mockReturnValue(true);
+        Object.defineProperty(window.navigator, "sendBeacon", {
+            configurable: true,
+            value: sendBeaconMock,
+        });
+
+        postTelemetryEvent("custom", JSON.stringify({ metric: true }));
+
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+        expect(sendBeaconMock).not.toHaveBeenCalled();
+        const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
+        expect(url).toBe(`${window.location.origin}/api/v1/analytics/custom`);
+        expect(new Headers(options?.headers).get("X-CSRF-Token")).toBe("csrf-telemetry");
+        expect(options?.credentials).toBe("same-origin");
     });
 });

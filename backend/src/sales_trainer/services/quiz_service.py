@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
+from common.teams.policy import TeamDataScope
 from sales_trainer.models import (
     SalesTrainerQuizAnswer,
     SalesTrainerQuizAttempt,
@@ -263,17 +264,14 @@ class QuizService:
         *,
         actor: User,
         allow_admin: bool = False,
-        team_department: str | None = None,
+        team_scope: TeamDataScope | None = None,
     ) -> SalesTrainerQuizAttempt | None:
         attempt = await self._db.get(SalesTrainerQuizAttempt, attempt_id)
         if attempt is None:
             return None
         if allow_admin:
             return attempt
-        if team_department is not None and await self._attempt_in_department(
-            attempt,
-            team_department,
-        ):
+        if team_scope is not None and team_scope.allows_learner(attempt.user_id):
             return attempt
         if attempt.user_id != str(actor.user_id):
             raise QuizServiceError("[ACCESS_DENIED]", "无权查看该做题记录。", 403)
@@ -284,7 +282,7 @@ class QuizService:
         *,
         user_id: str | None = None,
         unit_id: str | None = None,
-        team_department: str | None = None,
+        team_scope: TeamDataScope | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[SalesTrainerQuizAttempt], int]:
@@ -296,14 +294,13 @@ class QuizService:
         if unit_id:
             stmt = stmt.where(SalesTrainerQuizAttempt.unit_id == unit_id)
             count_stmt = count_stmt.where(SalesTrainerQuizAttempt.unit_id == unit_id)
-        if team_department is not None:
-            stmt = stmt.join(User, SalesTrainerQuizAttempt.user_id == User.user_id)
-            count_stmt = count_stmt.join(
-                User,
-                SalesTrainerQuizAttempt.user_id == User.user_id,
+        if team_scope is not None and not team_scope.unrestricted:
+            stmt = stmt.where(
+                SalesTrainerQuizAttempt.user_id.in_(team_scope.learner_ids)
             )
-            stmt = stmt.where(User.department == team_department)
-            count_stmt = count_stmt.where(User.department == team_department)
+            count_stmt = count_stmt.where(
+                SalesTrainerQuizAttempt.user_id.in_(team_scope.learner_ids)
+            )
         result = await self._db.execute(
             stmt.order_by(SalesTrainerQuizAttempt.submitted_at.desc())
             .offset(offset)
@@ -324,13 +321,3 @@ class QuizService:
             .order_by(SalesTrainerUnitQuestion.order_index.asc())
             )
         return list(result.scalars().all())
-
-    async def _attempt_in_department(
-        self,
-        attempt: SalesTrainerQuizAttempt,
-        department: str,
-    ) -> bool:
-        result = await self._db.execute(
-            select(User.department).where(User.user_id == attempt.user_id)
-        )
-        return result.scalar_one_or_none() == department

@@ -1,7 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/components/newcomer-training/activity-runners/browser-audio-draft-store", () => ({
+    clearBrowserAudioDraftDatabase: vi.fn(),
+}));
 
 import { TRAINING_PREFERENCES_STORAGE_KEY } from "@/hooks/use-training-preferences";
 import { VOICE_SPEED_PREFERENCE_STORAGE_KEY } from "@/hooks/use-voice-speed-preference";
+import { clearBrowserAudioDraftDatabase } from "@/components/newcomer-training/activity-runners/browser-audio-draft-store";
 
 import {
     REMEMBER_EMAIL_STORAGE_KEY,
@@ -12,6 +17,7 @@ describe("clearClientAuthState", () => {
     beforeEach(() => {
         localStorage.clear();
         sessionStorage.clear();
+        vi.mocked(clearBrowserAudioDraftDatabase).mockClear();
     });
 
     it("removes remembered login email, training prefs, and qoder-prefixed drafts", () => {
@@ -36,5 +42,6 @@ describe("clearClientAuthState", () => {
         expect(localStorage.getItem("token")).toBeNull();
         expect(localStorage.getItem("theme")).toBe("dark");
         expect(localStorage.getItem("QODER_DEBUG")).toBe("1");
+        expect(clearBrowserAudioDraftDatabase).toHaveBeenCalledOnce();
     });
 });

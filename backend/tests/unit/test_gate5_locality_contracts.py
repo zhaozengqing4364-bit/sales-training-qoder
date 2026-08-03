@@ -57,6 +57,9 @@ EXPECTED_PUBLIC_MODEL_CLASSES = {
     "Presentation",
     "PresentationStatus",
     "PromptTemplate",
+    "ProvisioningBatch",
+    "ProvisioningRow",
+    "ProvisioningTeamExecution",
     "ReleaseVerificationRecord",
     "ReleaseVerificationSummary",
     "ReportGenerationStatus",
@@ -73,6 +76,9 @@ EXPECTED_PUBLIC_MODEL_CLASSES = {
     "SupervisorScoreCalibration",
     "SystemLog",
     "SystemLogStatus",
+    "Team",
+    "TeamLeaderAssignment",
+    "TeamMembership",
     "TrainingReportSnapshot",
     "TrainingTask",
     "TrainingTaskStatus",
@@ -226,7 +232,7 @@ from common.db import models
 from common.db.model_registry import User
 assert models.User is User
 assert models.User.__module__ == "common.db.models"
-assert len(models.Base.metadata.tables) == 52
+assert len(models.Base.metadata.tables) == 58
 """
         completed = subprocess.run(
             [sys.executable, "-c", script],
@@ -249,7 +255,7 @@ def test_journey_application_module_does_not_import_foreign_orm() -> None:
 
 def test_readiness_application_module_does_not_import_foreign_orm() -> None:
     readiness_imports = _imported_names(
-        BACKEND_SRC / "sales_trainer" / "services" / "readiness_dossier_service.py",
+        BACKEND_SRC / "readiness" / "application.py",
         "common.db.models",
     )
 
@@ -269,15 +275,11 @@ def test_journey_read_port_and_projection_modules_exist() -> None:
 
 
 def test_readiness_projection_module_exists() -> None:
-    assert (
-        BACKEND_SRC / "sales_trainer" / "services" / "readiness_dossier_service.py"
-    ).is_file()
+    assert (BACKEND_SRC / "readiness" / "application.py").is_file()
 
 
 def test_application_services_use_explicit_projection_interfaces() -> None:
-    service_dir = BACKEND_SRC / "sales_trainer" / "services"
-
     assert not _private_projection_calls(
         BACKEND_SRC / "sales_trainer" / "orchestration" / "journey_service.py"
     )
-    assert not _private_projection_calls(service_dir / "readiness_dossier_service.py")
+    assert not _private_projection_calls(BACKEND_SRC / "readiness" / "application.py")

@@ -4,8 +4,8 @@ import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI 智能练习平台",
-  description: "销售教练高保真原型",
+  title: "新人销售训练平台",
+  description: "新人销售学习与能力训练",
 };
 
 export default function RootLayout({

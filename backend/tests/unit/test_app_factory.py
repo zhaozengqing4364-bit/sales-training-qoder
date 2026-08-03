@@ -166,6 +166,28 @@ def test_create_app_does_not_duplicate_method_path_routes() -> None:
     assert duplicates == []
 
 
+@pytest.mark.asyncio
+async def test_create_app_compresses_large_http_responses() -> None:
+    app = create_app()
+
+    @app.get("/__test__/large-response")
+    async def large_response() -> dict[str, str]:
+        return {"payload": "x" * 4096}
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get(
+            "/__test__/large-response",
+            headers={"Accept-Encoding": "gzip"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-encoding"] == "gzip"
+    assert response.json()["payload"] == "x" * 4096
+
+
 def test_create_app_cors_defaults_fail_closed_in_production(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("SECRET_KEY", "production-secret-key-with-32-characters")
@@ -212,11 +234,11 @@ async def test_lifespan_rejects_unsafe_production_jwt_secret(monkeypatch) -> Non
     import common.auth.service as auth_service
     from common.config import settings
 
-    init_db_called = False
+    schema_verifier_called = False
 
     async def fail_if_called() -> None:
-        nonlocal init_db_called
-        init_db_called = True
+        nonlocal schema_verifier_called
+        schema_verifier_called = True
 
     monkeypatch.setattr(settings, "ENVIRONMENT", "production")
     monkeypatch.setattr(
@@ -226,13 +248,13 @@ async def test_lifespan_rejects_unsafe_production_jwt_secret(monkeypatch) -> Non
     )
     monkeypatch.setattr(auth_service, "JWT_SECRET", "change-me")
     monkeypatch.setattr(app_lifespan_module, "initialize_otel", lambda _app: None)
-    monkeypatch.setattr(app_lifespan_module, "init_db", fail_if_called)
+    monkeypatch.setattr(app_lifespan_module, "verify_database_schema", fail_if_called)
 
     with pytest.raises(RuntimeError, match="JWT_SECRET must be explicit"):
         async with app_lifespan_module.lifespan(FastAPI()):
             pass
 
-    assert init_db_called is False
+    assert schema_verifier_called is False
 
 
 def test_create_app_cors_appends_dev_origins_only_in_dev(monkeypatch) -> None:
@@ -298,10 +320,7 @@ async def test_create_app_cors_allows_public_ipv4_dev_frontend_origin(
         )
 
     assert response.status_code == 200
-    assert (
-        response.headers["access-control-allow-origin"]
-        == "http://203.0.113.42:3445"
-    )
+    assert response.headers["access-control-allow-origin"] == "http://203.0.113.42:3445"
     assert response.headers["access-control-allow-credentials"] == "true"
 
 

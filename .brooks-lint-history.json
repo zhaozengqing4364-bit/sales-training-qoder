@@ -53,5 +53,16 @@
       "suggestion": 0
     },
     "scope": "Incremental audit - final Gate 6 branch state since 13cdfd6a (44 files, unrelated dirty plan excluded)"
+  },
+  {
+    "date": "2026-07-15",
+    "mode": "Health Dashboard",
+    "score": 72,
+    "findings": {
+      "critical": 5,
+      "warning": 7,
+      "suggestion": 0
+    },
+    "scope": "Entire project - current dirty worktree snapshot on codex/newcomer-path-live-preview-layout @ db12a898"
   }
 ]

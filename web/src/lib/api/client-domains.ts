@@ -150,7 +150,7 @@ export function createAuthDomain({ request }: AuthDomainDependencies) {
         },
 
         login: async (credentials: { email: string; password: string }) => {
-            return request<{ token?: string; access_token?: string; user: User & { id?: string } }>("/auth/login", {
+            return request<{ token?: string; access_token?: string; user: User & { id?: string }; requires_password_change?: boolean }>("/auth/login", {
                 method: "POST",
                 body: JSON.stringify(credentials),
                 skipSessionExpiredHandling: true,
@@ -159,11 +159,20 @@ export function createAuthDomain({ request }: AuthDomainDependencies) {
             });
         },
 
+        changeTemporaryPassword: async (newPassword: string) => {
+            return request<{ token?: string; user: User & { id?: string }; requires_password_change?: boolean }>("/auth/change-temporary-password", {
+                method: "POST",
+                body: JSON.stringify({ new_password: newPassword }),
+                timeoutMs: 8000,
+                timeoutMessage: "密码修改超时，请重试。",
+            });
+        },
+
         devLogin: async () => {
             return request<{ access_token: string; token_type: string; user: User }>("/auth/dev-login", {
                 method: "POST",
                 skipSessionExpiredHandling: true,
-                timeoutMs: 8000,
+                timeoutMs: 15000,
                 timeoutMessage: "登录超时，请重试。",
             });
         },
@@ -206,6 +215,7 @@ export function createLearningContentsDomain({ request }: LearningContentsDomain
             const searchParams = new URLSearchParams();
             if (filters?.status && filters.status !== "all") searchParams.set("status", filters.status);
             if (filters?.query) searchParams.set("query", filters.query);
+            searchParams.set("view", "summary");
             const query = searchParams.toString();
             return request<LearningContentListResponse>(`/curriculum/learning-contents${query ? `?${query}` : ""}`);
         },

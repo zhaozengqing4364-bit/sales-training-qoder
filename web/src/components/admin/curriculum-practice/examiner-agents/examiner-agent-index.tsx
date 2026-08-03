@@ -175,10 +175,6 @@ export function ExaminerAgentIndex() {
                 : `将「${confirmTarget.agent.name}」发布为可用 ExamAgent，发布门禁会再次校验题目来源和评分策略。`
         : "确认执行该 ExamAgent 操作。";
 
-    if (loading) {
-        return <div className="rounded-2xl border border-slate-100 bg-white/80 p-8 text-slate-600">正在加载 ExamAgent 列表...</div>;
-    }
-
     if (error) {
         return (
             <GlassCard className="space-y-4 border border-amber-200 bg-amber-50/80 p-8">
@@ -213,7 +209,7 @@ export function ExaminerAgentIndex() {
                                 <option value="published">已发布</option>
                                 <option value="archived">已归档</option>
                             </select>
-                            <Button variant="outline" onClick={loadAgents}>刷新列表</Button>
+                            <Button variant="outline" onClick={loadAgents} disabled={loading}>刷新列表</Button>
                         </>
                     )}
                 />
@@ -267,6 +263,11 @@ export function ExaminerAgentIndex() {
                 </div>
             )}
 
+            {loading ? (
+                <div role="status" aria-live="polite" className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500">
+                    正在加载考试智能体列表…
+                </div>
+            ) : (
             <GlassCard className="space-y-4 p-6">
                 <div className="flex items-center justify-between">
                     <h2 className="text-xl font-black text-slate-900">ExamAgent 列表</h2>
@@ -301,7 +302,7 @@ export function ExaminerAgentIndex() {
                                 <div className="flex flex-wrap gap-2">
                                     {item.status === "draft" ? (
                                         <Button variant="outline" asChild>
-                                            <Link href={`${BASE_PATH}/${item.examiner_agent_id}/edit`}>编辑</Link>
+                                            <Link href={`${BASE_PATH}/${item.examiner_agent_id}/edit`} prefetch={false}>编辑</Link>
                                         </Button>
                                     ) : item.status === "published" ? (
                                         <Button
@@ -322,7 +323,7 @@ export function ExaminerAgentIndex() {
                                         </Button>
                                     ) : null}
                                     <Button variant="outline" asChild>
-                                        <Link href={`${BASE_PATH}/${item.examiner_agent_id}/simulate`}>模拟</Link>
+                                        <Link href={`${BASE_PATH}/${item.examiner_agent_id}/simulate`} prefetch={false}>模拟</Link>
                                     </Button>
                                     <Button
                                         onClick={() => setConfirmTarget({ type: "publish", agent: item })}
@@ -346,6 +347,7 @@ export function ExaminerAgentIndex() {
                     {items.length === 0 && <p className="text-sm text-slate-500">暂无 ExamAgent 记录。</p>}
                 </div>
             </GlassCard>
+            )}
         </AdminIndexShell>
     );
 }

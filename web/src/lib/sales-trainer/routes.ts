@@ -16,7 +16,6 @@ import {
     Settings,
     SlidersHorizontal,
     Target,
-    UploadCloud,
     Users,
     type LucideIcon,
 } from "lucide-react";
@@ -45,7 +44,7 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
         key: "workbench",
         label: "工作台",
         icon: LayoutDashboard,
-        href: "/admin/newcomer-training/path",
+        href: "/admin/newcomer-training",
     },
     audioManagement: {
         key: "audioManagement",
@@ -69,13 +68,13 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
         key: "audioSubmissionsInManagement",
         label: "学员录音",
         icon: Activity,
-        href: "/admin/sales-trainer/audio/submissions",
+        href: "/admin/newcomer-training/assessments",
     },
     audioScoreResults: {
         key: "audioScoreResults",
         label: "评分结果",
         icon: Headphones,
-        href: "/admin/sales-trainer/audio/results",
+        href: "/admin/newcomer-training/assessments",
     },
     learningTopics: {
         key: "learningTopics",
@@ -111,7 +110,13 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
         key: "paths",
         label: "训练内容与路径",
         icon: Milestone,
-        href: "/admin/newcomer-training/path",
+        href: "/admin/newcomer-training/paths",
+    },
+    resourceLibrary: {
+        key: "resourceLibrary",
+        label: "活动内容库",
+        icon: Library,
+        href: "/admin/newcomer-training/resources",
     },
     learnerProgress: {
         key: "learnerProgress",
@@ -130,6 +135,12 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
         label: "题库管理",
         icon: FileText,
         href: "/admin/sales-trainer/questions",
+    },
+    questionCategories: {
+        key: "questionCategories",
+        label: "题目分类",
+        icon: ListChecks,
+        href: "/admin/sales-trainer/questions/categories",
     },
     scoreStandards: {
         key: "scoreStandards",
@@ -159,31 +170,31 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
         key: "trainingRecords",
         label: "训练记录",
         icon: ListChecks,
-        href: "/admin/sales-trainer/training-records",
+        href: "/admin/newcomer-training/assessments",
     },
     readiness: {
         key: "readiness",
         label: "达标审核",
         icon: ClipboardCheck,
-        href: "/admin/sales-trainer/readiness",
+        href: "/admin/newcomer-training/reviews",
     },
     audioSubmissions: {
         key: "audioSubmissions",
         label: "学员录音",
         icon: Activity,
-        href: "/admin/sales-trainer/audio-submissions",
+        href: "/admin/newcomer-training/assessments",
     },
     scoreResults: {
         key: "scoreResults",
         label: "评分结果",
         icon: BarChart3,
-        href: "/admin/sales-trainer/score-results",
+        href: "/admin/newcomer-training/assessments",
     },
     analytics: {
         key: "analytics",
         label: "训练分析",
         icon: BarChart3,
-        href: "/admin/sales-trainer/analytics",
+        href: "/admin/newcomer-training",
     },
     settings: {
         key: "settings",
@@ -201,13 +212,13 @@ export const SALES_TRAINER_ADMIN_ROUTES = {
 
 export const SALES_TRAINER_ADMIN_CONTENT_NAV_ITEMS = [
     SALES_TRAINER_ADMIN_ROUTES.paths,
+    SALES_TRAINER_ADMIN_ROUTES.resourceLibrary,
 ] as const satisfies readonly SalesTrainerAdminRouteItem[];
 
 export const SALES_TRAINER_ADMIN_RECORD_NAV_ITEMS = [
     SALES_TRAINER_ADMIN_ROUTES.learnerProgress,
     SALES_TRAINER_ADMIN_ROUTES.readiness,
     SALES_TRAINER_ADMIN_ROUTES.trainingRecords,
-    SALES_TRAINER_ADMIN_ROUTES.analytics,
 ] as const satisfies readonly SalesTrainerAdminRouteItem[];
 
 const SALES_TRAINER_ADMIN_RECORD_CAPABILITY_NAV_ITEMS = [
@@ -231,12 +242,14 @@ export const SALES_TRAINER_ADMIN_CAPABILITY_NAV = [
         capability: "manage_content",
         items: [
             SALES_TRAINER_ADMIN_ROUTES.paths,
+            SALES_TRAINER_ADMIN_ROUTES.resourceLibrary,
         ],
     },
     {
         capability: "manage_modules",
         items: [
             SALES_TRAINER_ADMIN_ROUTES.paths,
+            SALES_TRAINER_ADMIN_ROUTES.resourceLibrary,
         ],
     },
     {
@@ -278,6 +291,7 @@ const SALES_TRAINER_ADMIN_CAPABILITY_ACCESS_ROOTS = [
             "/admin/sales-trainer/learning-topics",
             "/admin/sales-trainer/articles",
             "/admin/sales-trainer/papers",
+            "/admin/newcomer-training/resources",
         ],
     },
     {
@@ -286,7 +300,8 @@ const SALES_TRAINER_ADMIN_CAPABILITY_ACCESS_ROOTS = [
             "/admin/sales-trainer/audio",
             "/admin/sales-trainer/training-tasks",
             "/admin/sales-trainer/units",
-            "/admin/newcomer-training/path",
+            "/admin/newcomer-training/paths",
+            "/admin/newcomer-training/resources",
             "/admin/sales-trainer/ai-coach",
             "/admin/sales-trainer/learning-topics",
             "/admin/sales-trainer/articles",
@@ -312,11 +327,7 @@ const SALES_TRAINER_ADMIN_CAPABILITY_ACCESS_ROOTS = [
         capability: "view_records",
         roots: [
             "/admin/newcomer-training/learners",
-            "/admin/sales-trainer/audio/submissions",
-            "/admin/sales-trainer/audio/results",
-            "/admin/sales-trainer/audio-submissions",
-            "/admin/sales-trainer/score-results",
-            "/admin/sales-trainer/quiz-attempts",
+            "/admin/newcomer-training/assessments",
         ],
     },
 ] as const satisfies ReadonlyArray<{
@@ -407,8 +418,7 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
             "/admin/sales-trainer/materials",
             "/admin/sales-trainer/score-standards",
             "/admin/sales-trainer/score-prompts",
-            "/admin/sales-trainer/audio-submissions",
-            "/admin/sales-trainer/score-results",
+            "/admin/newcomer-training/assessments",
         ],
         items: [
             SALES_TRAINER_ADMIN_ROUTES.audioManagement,
@@ -422,46 +432,31 @@ export const SALES_TRAINER_ADMIN_CONTEXT_NAV_GROUPS: readonly SalesTrainerAdminC
         ],
     },
     {
-        root: "/admin/sales-trainer/learning-topics",
-        label: "学习专题",
-        roots: [
-            "/admin/sales-trainer/learning-topics",
-            "/admin/sales-trainer/articles",
-            "/admin/sales-trainer/papers",
-            "/admin/sales-trainer/questions",
-        ],
+        root: "/admin/sales-trainer/questions",
+        label: "考试测验",
         items: [
-            SALES_TRAINER_ADMIN_ROUTES.learningTopics,
             {
-                key: "learningTopicImport",
-                href: "/admin/sales-trainer/learning-topics/import",
-                label: "资料导入",
-                icon: UploadCloud,
+                ...SALES_TRAINER_ADMIN_ROUTES.questions,
+                label: "题目列表",
             },
-            {
-                key: "learningTopicCapabilities",
-                href: "/admin/sales-trainer/learning-topics/capabilities",
-                label: "能力点",
-                icon: Target,
-            },
-            SALES_TRAINER_ADMIN_ROUTES.learningTopicQuestions,
-            SALES_TRAINER_ADMIN_ROUTES.learningTopicPapers,
+            SALES_TRAINER_ADMIN_ROUTES.questionCategories,
         ],
     },
     {
-        root: "/admin/newcomer-training/path",
+        root: "/admin/newcomer-training/paths",
         label: "新人训练",
         roots: [
-            "/admin/newcomer-training/path",
+            "/admin/newcomer-training/paths",
+            "/admin/newcomer-training/resources",
             "/admin/newcomer-training/learners",
             "/admin/sales-trainer/units",
             "/admin/sales-trainer/ai-coach",
-            "/admin/sales-trainer/readiness",
-            "/admin/sales-trainer/training-records",
-            "/admin/sales-trainer/analytics",
+            "/admin/newcomer-training/reviews",
+            "/admin/newcomer-training/assessments",
         ],
         items: [
             SALES_TRAINER_ADMIN_ROUTES.paths,
+            SALES_TRAINER_ADMIN_ROUTES.resourceLibrary,
             SALES_TRAINER_ADMIN_ROUTES.learnerProgress,
             SALES_TRAINER_ADMIN_ROUTES.readiness,
             SALES_TRAINER_ADMIN_ROUTES.trainingRecords,

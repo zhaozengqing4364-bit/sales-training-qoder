@@ -9,7 +9,7 @@
 │  ┌──────────┐  ┌──────────────┐  ┌────────────────────────────────────┐  │
 │  │   Auth   │  │   Admin      │  │   User Facing                      │  │
 │  │  ─────── │  │  ─────────   │  │  ──────────                        │  │
-│  │ SharedPW │  │ Agents       │  │ Dashboard / Training               │  │
+│  │ManagedPW │  │ Agents       │  │ Dashboard / Training               │  │
 │  │ WeCom SSO│  │ Personas     │  │ Practice Session                   │  │
 │  │ JWT      │  │ Knowledge    │  │ Session Report                     │  │
 │  │          │  │ Prompts      │  │ Replay / Evidence                  │  │
@@ -111,6 +111,19 @@
 - **严格接地**：KB Lock 确保 AI 回答必须基于知识库，禁止臆测
 - **不可变报告**：TrainingReportSnapshot 在生成时冻结配置版本，历史报告永不重算
 - **规范评估**：Effectiveness 评估体系基于 Canonical 内核，所有消费者（报告/回放/分析/管理后台）使用统一投影
+- **结构单一权威**：Alembic 是唯一 schema writer；应用启动只读校验唯一 head
+- **组织单一权威**：人员归属与对象范围只由显式 Team 关系和集中式 policy 决定
+- **达标单一权威**：`competency_evidence` 只追加能力证据，`readiness` 冻结 Snapshot 并保存人工决定；Activity、AI 或旧报表不得直接写 `foundation_ready`
+
+### 1.1.1 新人基础训练达标链路
+
+`ActivityOutcome` 由应用根组合映射为不可变 `CompetencyEvidenceRecord`，再按冻结 PathRevision 和 ReadinessPolicyRevision 投影到每个 Enrollment 唯一的 `ReadinessDossier`。复核材料通过 `ReadinessDossierSnapshot` 冻结；重评、证据失效或新补练结果只追加历史并把旧快照标记 stale。受权人工 Reviewer 最终记录 `ReviewDecision`；例外批准额外绑定短期持久化影响预览、同一 Reviewer 和同一档案版本，不能用单个布尔字段绕过。AI 摘要只提供带 Evidence 引用的辅助信息。
+
+写权威与依赖方向固定为：
+
+`newcomer_training ActivityOutcome -> foundation_readiness_composition -> competency_evidence -> readiness`
+
+业务模块不跨域写 ORM；增量投影与全量 rebuild 使用同一策略。学员安全投影移除风险、私密备注、原始 AI 草稿和内部 lineage；管理投影仍受 organization、Team 和 capability 约束。详细决策见 [`adr/2026-07-17-competency-evidence-readiness-review.md`](adr/2026-07-17-competency-evidence-readiness-review.md)。
 
 ### 1.2 技术栈
 
@@ -140,7 +153,7 @@
 2. 注册中间件：ErrorHandler → Metrics → CORS → CSRF
 3. 注册 HTTP 路由（约 40 个子路由，见 2.5）
 4. 注册 WebSocket 路由（3 条通道）
-5. lifespan 启动：初始化数据库、ConfigManager、ASR 预加载、SessionManager 和归档调度
+5. lifespan 启动：只读校验 Alembic head，再初始化 ConfigManager、ASR 预加载、SessionManager 和归档调度
 
 ### 2.2 关键文件
 
@@ -159,12 +172,18 @@
 
 ### 2.4 认证
 
-支持三种认证方式：
-- **共享口令**：静态 `AUTH_SHARED_PASSWORD`，适用于受控环境（如内网 SSO 不可用）
-- **用户覆盖**：`AUTH_USER_PASSWORDS_JSON` 按账号设定独立口令
-- **企业微信 SSO**：WeCom OAuth 登录（生产推荐）
+支持两类认证方式：
+
+- **受管用户凭证**：密码登录只校验每个用户自己的 `User.hashed_password`，临时凭证强制首次修改并通过 `credential_version` 失效旧会话
+- **企业微信 SSO**：WeCom OAuth 登录；外部身份最终映射到同一 User，Team 关系仍是业务授权权威
+
+已有环境中的 `AUTH_SHARED_PASSWORD` / `AUTH_USER_PASSWORDS_JSON` 值不会被初始化工具修改或打印，但登录路径不再读取它们，也不能作为恢复入口。
 
 所有登录颁发 JWT，前后端通过 cookie 或 Authorization header 传递。CSRF 保护对所有非豁免路径强制验证。
+
+### 2.4.1 Schema 与首发初始化
+
+活动 Alembic 历史从 `20260715_0000_001` 开始。旧开发数据库不原地修补，统一通过受保护的 launch reset 重建；启动时 revision 缺失或不等于唯一 head 会明确失败。配置快照、数据面清理、system seed 和管理员 bootstrap 各自拥有独立职责，详见 [`docs/adr/2026-07-15-launch-baseline-and-scoped-data-reset.md`](adr/2026-07-15-launch-baseline-and-scoped-data-reset.md)。
 
 ### 2.5 API 路由总览
 
@@ -193,7 +212,7 @@
 | `/api/v1/admin/training-records` | 训练记录 |
 | `/api/v1/admin/curriculum-practice` | 课程考核管理 |
 | `/api/v1/admin/newcomer-training` | 新人训练活动编排、团队 Journey 与达标管理 |
-| `/api/v1/newcomer-training` | 学员固定 revision 的 Journey 与六类活动执行 |
+| `/api/v1/newcomer-training` | 当前 Legacy：最新 revision Journey 与六类活动；目标 v2 改为冻结 Enrollment + 五类活动，见权威合同索引 |
 | `/api/v1/admin/supervisor-training` | 主管复训/培训管理 |
 | `/api/v1/admin/learning-contents` | 学习内容管理 |
 | `/api/v1/admin/test-bank` | 题库管理 |
@@ -1138,6 +1157,8 @@ Next.js (端口 3445)
 | `AGENTS.md` | Agent 协作行为准则 |
 ## 新人训练活动编排
 
-新人训练是模块化单体中的独立领域模块。声明式路径聚合为 `TrainingPath → Phase → Module → Activity`，发布 revision 不可变；Enrollment 固定学员所见 revision，ActivityAttempt 冻结活动、资源和结果快照。
+> 状态说明（2026-07-18）：Foundation 首发替换与发布门禁已经完成。下述 Phase/Module 描述仅保留为 Legacy 迁移背景，不再描述当前运行时；当前权威合同见 [`docs/newcomer-foundation-contract-index.md`](newcomer-foundation-contract-index.md)。
 
-六类活动由后端封闭 Handler 注册表和前端封闭 Renderer 注册表执行。LearningContent、ExamPaper、材料版本、录音评分、AI Coach、StepAudio、审计与达标能力通过端口复用，业务配置不得引用代码、组件或 URL。新增产品和课程只增加配置；新增执行能力才修改代码并补契约测试。
+Legacy 起点曾使用 `TrainingPath → Phase → Module → Activity`、六类 Handler/Renderer，并在发布/读取时把 active Enrollment 指向最新修订；这些行为已退出 Foundation 写权威、首发路由、导航、seed 与 OpenAPI，只用于解释历史迁移背景。
+
+当前结构是 `PathRevision → Stage → ActivityDefinition`，首发只有 Lesson、Quiz、Audio、AI Coach 与三段异步客户场景录音 Assignment；Realtime 延期。Cohort/Enrollment 冻结已发布 PathRevision，只有显式、可预览、可审计的迁移命令可以移动。模块、状态、事件、权限、API、AI 和干净切换合同均从上述索引进入。

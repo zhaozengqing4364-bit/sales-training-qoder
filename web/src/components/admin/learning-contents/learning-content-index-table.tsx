@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { BookOpen, Trash2 } from "lucide-react";
 
-import type { LearningContent } from "@/lib/api/types";
+import type { LearningContentSummary } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 
@@ -20,8 +20,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 interface LearningContentIndexTableProps {
-    items: LearningContent[];
-    onDelete: (item: LearningContent) => void;
+    items: LearningContentSummary[];
+    onDelete: (item: LearningContentSummary) => void;
 }
 
 export function LearningContentIndexTable({ items, onDelete }: LearningContentIndexTableProps) {
@@ -54,6 +54,7 @@ export function LearningContentIndexTable({ items, onDelete }: LearningContentIn
                                 <td className="px-6 py-4">
                                     <Link
                                         href={`/admin/learning-contents/${item.learning_content_id}`}
+                                        prefetch={false}
                                         className="flex items-center gap-3 hover:opacity-80 transition-opacity"
                                     >
                                         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600">

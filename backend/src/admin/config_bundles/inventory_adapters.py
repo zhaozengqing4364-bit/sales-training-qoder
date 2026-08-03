@@ -9,62 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin.config_bundles.adapters import ConfigBundleSnapshot, ConfigVersionSnapshot
 from common.db.models import PromptTemplate as PromptTemplateRow
-from sales_trainer.models import SalesTrainerAssetRevision
-from sales_trainer.orchestration.contracts import TrainingPathPayload
-from sales_trainer.orchestration.revision_service import (
-    PATH_LOGICAL_ID,
-    PATH_RESOURCE_TYPE,
-)
-from sales_trainer.services.asset_revision_service import (
-    SalesTrainerAssetRevisionService,
-)
 
-NEWCOMER_PATH_CONFIG_BUNDLE_KEY = "sales_trainer.newcomer_path_config"
 PROMPT_TEMPLATES_BUNDLE_KEY = "prompt_templates"
-
-
-class SalesTrainerPathConfigBundleAdapter:
-    adapter_key = "sales_trainer_path_config"
-    bundle_key = NEWCOMER_PATH_CONFIG_BUNDLE_KEY
-    display_name = "新人训练路径配置"
-    domain = "business_rules"
-
-    async def bundle(self, db: AsyncSession) -> ConfigBundleSnapshot:
-        service = SalesTrainerAssetRevisionService(db)
-        active = await service.active_revision(
-            resource_type=PATH_RESOURCE_TYPE,
-            logical_id=PATH_LOGICAL_ID,
-        )
-        working = await service.latest_working_revision(
-            resource_type=PATH_RESOURCE_TYPE,
-            logical_id=PATH_LOGICAL_ID,
-        )
-        active_version = _path_version(active) if active is not None else None
-        return ConfigBundleSnapshot(
-            bundle_key=self.bundle_key,
-            display_name=self.display_name,
-            domain=self.domain,
-            legacy_domain="sales_trainer_asset_revision",
-            adapter_key=self.adapter_key,
-            read_path="/api/v1/admin/newcomer-training/path/",
-            admin_entry="/admin/newcomer-training/path",
-            status=(
-                str(active.status)
-                if active is not None
-                else str(working.status)
-                if working is not None
-                else "default"
-            ),
-            overview=_path_overview(active=active, working=working),
-            active_version=active_version,
-        )
-
-    async def versions(self, db: AsyncSession) -> list[ConfigVersionSnapshot]:
-        revisions = await SalesTrainerAssetRevisionService(db).list_revisions(
-            resource_type=PATH_RESOURCE_TYPE,
-            logical_id=PATH_LOGICAL_ID,
-        )
-        return [_path_version(revision) for revision in revisions]
 
 
 class PromptTemplatesConfigBundleAdapter:
@@ -97,48 +43,6 @@ class PromptTemplatesConfigBundleAdapter:
             )
         )
         return [_prompt_template_version(row) for row in result.scalars().all()]
-
-
-def _path_version(revision: SalesTrainerAssetRevision) -> ConfigVersionSnapshot:
-    payload = TrainingPathPayload.model_validate(revision.payload_json)
-    return ConfigVersionSnapshot(
-        source_config_id=str(revision.revision_id),
-        version=int(revision.revision_no),
-        version_label=f"v{revision.revision_no}",
-        status=str(revision.status),
-        snapshot=payload.model_dump(mode="json"),
-        created_at=_datetime_or_none(revision.created_at),
-        updated_at=_datetime_or_none(revision.published_at),
-    )
-
-
-def _path_overview(
-    *,
-    active: SalesTrainerAssetRevision | None,
-    working: SalesTrainerAssetRevision | None,
-) -> dict[str, Any]:
-    active_payload = (
-        TrainingPathPayload.model_validate(active.payload_json)
-        if active is not None
-        else None
-    )
-    return {
-        "logical_id": PATH_LOGICAL_ID,
-        "resource_type": PATH_RESOURCE_TYPE,
-        "backing_store": "SalesTrainerAssetRevision",
-        "active_revision_id": str(active.revision_id) if active is not None else None,
-        "active_revision_no": active.revision_no if active is not None else None,
-        "working_revision_id": str(working.revision_id)
-        if working is not None
-        else None,
-        "working_revision_no": working.revision_no if working is not None else None,
-        "phase_count": len(active_payload.phases) if active_payload is not None else 0,
-        "module_count": sum(len(phase.modules) for phase in active_payload.phases)
-        if active_payload is not None
-        else 0,
-        "permission": "sales_trainer.manage_modules",
-        "audit_carrier": "SalesTrainerOperationLog",
-    }
 
 
 def _prompt_template_version(row: PromptTemplateRow) -> ConfigVersionSnapshot:

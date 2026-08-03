@@ -28,6 +28,7 @@ from common.db.schemas import (
 )
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
+from common.teams import TeamSummary, active_primary_team_for_user
 
 logger = get_logger(__name__)
 
@@ -54,16 +55,17 @@ class UserMeResponse(BaseModel):
     display_name: str
     avatar_url: str | None = None
     role: str = "user"
-    department: str | None = None
     email: str | None = None
+    team: dict[str, str] | None = None
     settings: UserSettings = UserSettings()
 
 
 class UserMeUpdateRequest(BaseModel):
     """Partial update schema for /users/me PATCH."""
 
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = Field(default=None, max_length=100)
-    department: str | None = Field(default=None, max_length=100)
     email: EmailStr | None = None
 
 
@@ -137,7 +139,11 @@ def _serialize_training_preferences(
     )
 
 
-def _build_user_me_response(current_user: User) -> UserMeResponse:
+def _build_user_me_response(
+    current_user: User,
+    *,
+    team: TeamSummary | None,
+) -> UserMeResponse:
     """Build normalized current-user response payload."""
 
     user_role = getattr(current_user, "role", None) or "user"
@@ -153,8 +159,8 @@ def _build_user_me_response(current_user: User) -> UserMeResponse:
         display_name=current_user.name or "用户",
         avatar_url=None,
         role=user_role,
-        department=current_user.department,
         email=current_user.email,
+        team=team.to_dict() if team else None,
         settings=settings,
     )
 
@@ -175,14 +181,14 @@ async def get_current_user_info(
     - display_name: User's display name
     - avatar_url: User's avatar URL (if available)
     - role: User's role (user/support/admin)
-    - department: User's department
     - email: User email
     - settings: User settings (notifications, language, theme)
 
     Requirements: 1.1, 1.2
     """
     try:
-        user_data = _build_user_me_response(current_user)
+        team = await active_primary_team_for_user(db, current_user.user_id)
+        user_data = _build_user_me_response(current_user, team=team)
         return success_response(user_data.model_dump())
 
     except (SQLAlchemyError, ValueError) as e:
@@ -201,7 +207,6 @@ async def update_current_user_info(
 
     Supports partial updates for:
     - name
-    - department
     - email
     """
     try:
@@ -211,10 +216,6 @@ async def update_current_user_info(
             clean_name = request.name.strip()
             if clean_name:
                 updates["name"] = clean_name
-
-        if request.department is not None:
-            clean_department = request.department.strip()
-            updates["department"] = clean_department or None
 
         if request.email is not None:
             clean_email = str(request.email).strip().lower()
@@ -237,7 +238,8 @@ async def update_current_user_info(
             await db.commit()
             await db.refresh(current_user)
 
-        user_data = _build_user_me_response(current_user)
+        team = await active_primary_team_for_user(db, current_user.user_id)
+        user_data = _build_user_me_response(current_user, team=team)
         return success_response(user_data.model_dump())
 
     except (SQLAlchemyError, ValueError) as e:

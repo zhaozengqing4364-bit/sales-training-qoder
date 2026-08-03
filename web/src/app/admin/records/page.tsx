@@ -105,11 +105,21 @@ export default function RecordsPage() {
     }, [loadData]);
 
     if (isLoading) {
-        return <div className="p-8 text-center text-slate-500">加载中...</div>;
+        return (
+            <div className="space-y-6">
+                <div>
+                    <h1 className="text-3xl font-black tracking-tight text-slate-900">训练记录</h1>
+                    <p className="mt-1 text-slate-500">查看所有用户的训练历史</p>
+                </div>
+                <div role="status" aria-live="polite" className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500">
+                    正在加载训练记录…
+                </div>
+            </div>
+        );
     }
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-8 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[var(--duration-tooltip)]">
             <ConfirmDialog
                 open={!!deleteTarget}
                 onOpenChange={(open) => {

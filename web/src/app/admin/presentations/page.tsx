@@ -290,7 +290,7 @@ export default function PresentationsPage() {
                                 ]}
                                 actions={
                                     <div className="absolute right-4 top-4 flex gap-1">
-                                        <Link href={`/admin/presentations/${presentation.presentation_id}`}>
+                                        <Link href={`/admin/presentations/${presentation.presentation_id}`} prefetch={false}>
                                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-slate-400 hover:bg-blue-50 hover:text-blue-600">
                                                 <Edit2 className="h-4 w-4" />
                                             </Button>
@@ -355,7 +355,7 @@ export default function PresentationsPage() {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex justify-end gap-1">
-                                                <Link href={`/admin/presentations/${presentation.presentation_id}`}>
+                                                <Link href={`/admin/presentations/${presentation.presentation_id}`} prefetch={false}>
                                                     <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-slate-400 hover:bg-blue-50 hover:text-blue-600">
                                                         <Edit2 className="h-4 w-4" />
                                                     </Button>

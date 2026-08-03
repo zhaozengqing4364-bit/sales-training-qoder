@@ -54,8 +54,8 @@ describe("app and admin route shells", () => {
         render(<AdminLoading />);
 
         expect(screen.getByRole("status")).toBeTruthy();
-        expect(screen.getByText("正在加载管理后台").className).toContain("sr-only");
-        expect(screen.getByText("正在加载系统资源...")).toBeTruthy();
+        expect(screen.getByText("正在打开管理页面").className).toContain("sr-only");
+        expect(screen.queryByText("正在加载系统资源...")).toBeNull();
         expect(screen.queryByText("Loading System Resources...")).toBeNull();
     });
 

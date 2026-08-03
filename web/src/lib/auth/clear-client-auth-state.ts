@@ -1,3 +1,5 @@
+import { clearBrowserAudioDraftDatabase } from "@/components/newcomer-training/activity-runners/browser-audio-draft-store";
+
 /** Remembered login email on the auth page — cleared on logout. */
 export const REMEMBER_EMAIL_STORAGE_KEY = "qoder.login.rememberEmail.v1";
 
@@ -65,4 +67,5 @@ export function clearClientAuthState(): void {
         sessionStorage.removeItem(key);
     });
     removeStorageKeysMatchingPrefixes(sessionStorage, USER_SCOPED_STORAGE_PREFIXES);
+    clearBrowserAudioDraftDatabase();
 }

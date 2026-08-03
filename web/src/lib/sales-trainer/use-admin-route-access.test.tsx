@@ -43,14 +43,14 @@ describe("useSalesTrainerAdminRouteAccess", () => {
         );
 
         const first = renderHook(
-            () => useSalesTrainerAdminRouteAccess("/admin/newcomer-training/path"),
+            () => useSalesTrainerAdminRouteAccess("/admin/newcomer-training/paths"),
             { wrapper },
         );
         await waitFor(() => expect(first.result.current.canAccess).toBe(true));
         first.unmount();
 
         const second = renderHook(
-            () => useSalesTrainerAdminRouteAccess("/admin/sales-trainer/readiness"),
+            () => useSalesTrainerAdminRouteAccess("/admin/newcomer-training/reviews"),
             { wrapper },
         );
         await waitFor(() => expect(second.result.current.canAccess).toBe(true));

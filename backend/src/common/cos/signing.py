@@ -6,6 +6,7 @@ import os
 import posixpath
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -61,15 +62,20 @@ class CosSigningService:
         object_key: str,
         content_type: str = "audio/webm",
         expires: int = 900,
+        *,
+        sha256: str | None = None,
     ) -> PresignedPutResult:
         """Return a presigned PUT URL for *object_key*."""
         client = self._require_client()
+        headers = {"Content-Type": content_type}
+        if sha256:
+            headers["x-cos-meta-sha256"] = sha256
         url = client.get_presigned_url(
             Method="PUT",
             Bucket=self._bucket,
             Key=object_key,
             Expired=expires,
-            Headers={"Content-Type": content_type},
+            Headers=headers,
         )
         expires_at = datetime.now(UTC) + timedelta(seconds=expires)
         logger.info(
@@ -132,10 +138,140 @@ class CosSigningService:
             if _looks_like_not_found(exc):
                 raise FileNotFoundError(normalized_key) from exc
             raise
-        for key in ("Content-Length", "content-length", "ContentLength", "content_length"):
+        for key in (
+            "Content-Length",
+            "content-length",
+            "ContentLength",
+            "content_length",
+        ):
             if key in response:
                 return int(response[key])
         raise RuntimeError("COS head_object response did not include content length.")
+
+    def get_object_metadata(self, object_key: str) -> dict[str, Any]:
+        """Return verified size/hash metadata without exposing credentials."""
+
+        client = self._require_client()
+        normalized_key = _normalize_object_key(object_key)
+        try:
+            response = client.head_object(Bucket=self._bucket, Key=normalized_key)
+        except Exception as exc:
+            if _looks_like_not_found(exc):
+                raise FileNotFoundError(normalized_key) from exc
+            raise
+        size: int | None = None
+        for key in (
+            "Content-Length",
+            "content-length",
+            "ContentLength",
+            "content_length",
+        ):
+            if key in response:
+                size = int(response[key])
+                break
+        if size is None:
+            raise RuntimeError("COS head_object response did not include content length.")
+        headers = response.get("headers") if isinstance(response.get("headers"), dict) else {}
+        sha256 = (
+            response.get("x-cos-meta-sha256")
+            or response.get("X-Cos-Meta-Sha256")
+            or headers.get("x-cos-meta-sha256")
+            or headers.get("X-Cos-Meta-Sha256")
+        )
+        content_type = (
+            response.get("Content-Type")
+            or response.get("content-type")
+            or headers.get("Content-Type")
+            or headers.get("content-type")
+        )
+        return {
+            "size_bytes": size,
+            "sha256": str(sha256 or ""),
+            "content_type": content_type,
+        }
+
+    def download_to_file(self, object_key: str, destination: Path) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        self._require_client().download_file(
+            Bucket=self._bucket,
+            Key=_normalize_object_key(object_key),
+            DestFilePath=str(destination),
+        )
+
+    def upload_file(
+        self,
+        object_key: str,
+        source: Path,
+        *,
+        content_type: str,
+        sha256: str,
+    ) -> None:
+        self._require_client().upload_file(
+            Bucket=self._bucket,
+            Key=_normalize_object_key(object_key),
+            LocalFilePath=str(source),
+            PartSize=10,
+            MAXThread=4,
+            EnableMD5=True,
+            ContentType=content_type,
+            Metadata={"sha256": sha256},
+        )
+
+    def delete_object(self, object_key: str) -> None:
+        self._require_client().delete_object(
+            Bucket=self._bucket,
+            Key=_normalize_object_key(object_key),
+        )
+
+    def list_object_keys(self, prefix: str) -> list[str]:
+        """List every object under one non-empty project prefix."""
+        normalized_prefix = _normalize_project_prefix(prefix)
+        client = self._require_client()
+        marker = ""
+        keys: list[str] = []
+        while True:
+            response = client.list_objects(
+                Bucket=self._bucket,
+                Prefix=normalized_prefix,
+                Marker=marker,
+                MaxKeys=1000,
+            )
+            contents = response.get("Contents") or []
+            if isinstance(contents, dict):
+                contents = [contents]
+            keys.extend(
+                str(item["Key"])
+                for item in contents
+                if isinstance(item, dict)
+                and isinstance(item.get("Key"), str)
+                and str(item["Key"]).startswith(normalized_prefix)
+            )
+            truncated = str(response.get("IsTruncated", "false")).lower() == "true"
+            if not truncated:
+                break
+            marker = str(response.get("NextMarker") or "")
+            if not marker:
+                raise RuntimeError("COS listing was truncated without a next marker.")
+        return keys
+
+    def delete_object_keys(self, object_keys: list[str], *, prefix: str) -> None:
+        """Delete an already enumerated key set; bucket-wide deletion is impossible."""
+        if not object_keys:
+            return
+        normalized_prefix = _normalize_project_prefix(prefix)
+        normalized_keys = [_normalize_object_key(key) for key in object_keys]
+        if any(not key.startswith(normalized_prefix) for key in normalized_keys):
+            raise ValueError("COS delete key escaped the confirmed project prefix.")
+        client = self._require_client()
+        for offset in range(0, len(normalized_keys), 1000):
+            batch = normalized_keys[offset : offset + 1000]
+            client.delete_objects(
+                Bucket=self._bucket,
+                Delete={
+                    "Object": [{"Key": object_key} for object_key in batch],
+                    "Quiet": "true",
+                },
+            )
 
     def _require_client(self) -> Any:
         if self._client is not None:
@@ -176,6 +312,15 @@ def _normalize_object_key(object_key: str) -> str:
     if normalized_key == "." or normalized_key.startswith("../"):
         raise ValueError("Invalid COS object key.")
     return normalized_key
+
+
+def _normalize_project_prefix(prefix: str) -> str:
+    if not prefix or prefix.startswith("/") or not prefix.endswith("/"):
+        raise ValueError("COS project prefix must be non-empty and end with '/'.")
+    normalized = _normalize_object_key(prefix)
+    if not normalized.endswith("/"):
+        normalized = f"{normalized}/"
+    return normalized
 
 
 def _looks_like_not_found(exc: Exception) -> bool:

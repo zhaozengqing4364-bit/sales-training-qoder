@@ -18,6 +18,8 @@ class ActivityExecutionContext:
     phase_id: str
     module_id: str
     activity: ActivityConfig
+    latest_attempt: NewcomerTrainingActivityAttempt | None = None
+    latest_attempt_loaded: bool = False
 
 
 @dataclass(frozen=True, slots=True)

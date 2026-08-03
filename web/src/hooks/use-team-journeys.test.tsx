@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "@/lib/query/client";
 import { useTeamJourneys } from "./use-team-journeys";
 
-const listJourneysMock = vi.hoisted(() => vi.fn());
+const listLearnersMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api/client", async () => {
     const actual = await vi.importActual<typeof import("@/lib/api/client")>("@/lib/api/client");
@@ -17,7 +17,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 newcomerTraining: {
                     ...actual.api.admin.newcomerTraining,
-                    listJourneys: listJourneysMock,
+                    listLearners: listLearnersMock,
                 },
             },
         },
@@ -34,42 +34,45 @@ function wrapper(queryClient: QueryClient) {
 
 const response = {
     items: [{
-        learner_id: "learner-1",
-        learner_name: "张三",
-        team: { team_id: "team-sales", code: "sales", name: "销售组" },
-        summary: {
-            path_revision_id: "revision-1",
-            path_title: "新人训练",
-            current_phase: null,
-            progress: { completed: false, completed_count: 0, total_required: 1, percent: 0 },
-            primary_next_action: null,
-            risk_labels: [],
-        },
+        learner: { learner_id: "learner-1", name: "张三" },
+        cohort: { cohort_id: "cohort-1", name: "销售新人班" },
+        enrollment: { enrollment_id: "enrollment-1", status: "active", revision_id: "revision-1", version: 1 },
+        path: { path_id: "path-1", title: "新人训练", revision_label: "首发版" },
+        status: "active",
+        status_label: "训练进行中",
+        progress: { completed_required: 0, total_required: 1, percentage: 0 },
+        current_activity: null,
+        primary_action: null,
+        updated_at: "2026-07-18T00:00:00Z",
     }],
     total: 1,
+    limit: 50,
+    offset: 0,
+    applied_filters: { search: null },
+    generated_at: "2026-07-18T00:00:00Z",
 };
 
 describe("useTeamJourneys", () => {
-    beforeEach(() => listJourneysMock.mockReset());
+    beforeEach(() => listLearnersMock.mockReset());
 
     it("loads canonical journey projections", async () => {
-        listJourneysMock.mockResolvedValue(response);
+        listLearnersMock.mockResolvedValue(response);
         const { result } = renderHook(() => useTeamJourneys({ limit: 50, offset: 0 }), {
             wrapper: wrapper(createAppQueryClient()),
         });
         await waitFor(() => expect(result.current.isLoading).toBe(false));
         expect(result.current.isError).toBe(false);
-        expect(result.current.journeys.data?.items[0]?.learner_name).toBe("张三");
-        expect(listJourneysMock).toHaveBeenCalledWith({ limit: 50, offset: 0 });
+        expect(result.current.journeys.data?.items[0]?.learner.name).toBe("张三");
+        expect(listLearnersMock).toHaveBeenCalledWith({ limit: 50, offset: 0 });
     });
 
     it("exposes errors and supports refetch", async () => {
-        listJourneysMock.mockRejectedValueOnce(new Error("journeys unavailable"));
+        listLearnersMock.mockRejectedValueOnce(new Error("journeys unavailable"));
         const { result } = renderHook(() => useTeamJourneys(), {
             wrapper: wrapper(createAppQueryClient()),
         });
         await waitFor(() => expect(result.current.isError).toBe(true));
-        listJourneysMock.mockResolvedValue(response);
+        listLearnersMock.mockResolvedValue(response);
         await act(async () => { await result.current.refetch(); });
         await waitFor(() => expect(result.current.isError).toBe(false));
     });

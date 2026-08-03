@@ -76,7 +76,7 @@ const learnerUser = {
     display_name: "王小明",
     email: "learner@example.com",
     role: "user",
-    department: "销售部",
+    team: { team_id: "team-1", code: "sales-1", name: "销售一组" },
 };
 
 const trainingManagerUser = {
@@ -85,7 +85,7 @@ const trainingManagerUser = {
     display_name: "王经理",
     email: "manager@example.com",
     role: "training_manager",
-    department: "销售部",
+    team: { team_id: "team-1", code: "sales-1", name: "销售一组" },
 };
 
 describe("SidebarContent learner seams", () => {
@@ -96,18 +96,26 @@ describe("SidebarContent learner seams", () => {
         useParamsMock.mockReturnValue({});
     });
 
-    it("keeps the shared history entry available even when currentUser is missing", () => {
+    it("keeps the foundation training history entry available even when currentUser is missing", () => {
         render(<SidebarContent currentUser={null} />);
 
-        const historyLink = screen.getByRole("menuitem", { name: "历史记录" }) as HTMLAnchorElement;
-        expect(historyLink.getAttribute("href")).toBe("/history");
+        const historyLink = screen.getByRole("menuitem", { name: "训练历史" }) as HTMLAnchorElement;
+        expect(historyLink.getAttribute("href")).toBe("/history?source=newcomer-training");
     });
 
-    it("exposes the learner newcomer training path entry from the shared sidebar nav", () => {
+    it("gives learners one foundation entry without legacy training or leaderboard links", () => {
         render(<SidebarContent currentUser={learnerUser} />);
 
-        const salesTrainerLink = screen.getByRole("menuitem", { name: "新人训练路径" }) as HTMLAnchorElement;
+        const salesTrainerLink = screen.getByRole("menuitem", { name: "当前训练" }) as HTMLAnchorElement;
         expect(salesTrainerLink.getAttribute("href")).toBe("/newcomer-training");
+        expect(screen.getByRole("menuitem", { name: "通知与任务" }).getAttribute("href")).toBe(
+            "/newcomer-training/notifications",
+        );
+        expect(screen.getByRole("menuitem", { name: "个人资料" }).getAttribute("href")).toBe("/profile");
+        expect(screen.queryByRole("menuitem", { name: "训练模式" })).toBeNull();
+        expect(screen.queryByRole("menuitem", { name: "排行榜" })).toBeNull();
+        expect(screen.getByText("新人销售训练")).toBeTruthy();
+        expect(screen.queryByText("AI 销售教练")).toBeNull();
     });
 
     it("keeps the profile affordance reachable on the expanded learner user menu", async () => {

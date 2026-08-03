@@ -377,7 +377,6 @@ def _realtime_provider_registry_overview(snapshot: Mapping[str, Any]) -> dict[st
 def list_config_bundle_adapters() -> list[ConfigBundleAdapter]:
     from admin.config_bundles.inventory_adapters import (
         PromptTemplatesConfigBundleAdapter,
-        SalesTrainerPathConfigBundleAdapter,
     )
 
     return [
@@ -385,6 +384,5 @@ def list_config_bundle_adapters() -> list[ConfigBundleAdapter]:
         ScoringRulesetBundleAdapter(),
         RoleplaySituationPacksConfigBundleAdapter(),
         SalesTrainerRealtimeProviderRegistryBundleAdapter(),
-        SalesTrainerPathConfigBundleAdapter(),
         PromptTemplatesConfigBundleAdapter(),
     ]

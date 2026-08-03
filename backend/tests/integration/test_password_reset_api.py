@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
+from common.auth.service import pwd_context
 from common.db.models import User
 
 
@@ -24,8 +25,9 @@ async def _create_user(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"password_reset_{uuid.uuid4().hex[:8]}",
         name=email.split("@")[0],
-        department="QA",
         email=email,
+        hashed_password=pwd_context.hash("OriginalPass123!"),
+        credential_status="active",
         role="user",
         is_active=is_active,
     )

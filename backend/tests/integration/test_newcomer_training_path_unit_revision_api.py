@@ -50,7 +50,7 @@ def _question(question_id: str, *, category_id: str, title: str) -> QuestionItem
 
 
 @pytest.mark.asyncio
-async def test_should_list_and_rollback_unit_revisions_via_newcomer_api(
+async def test_should_list_and_rollback_unit_revisions_via_sales_trainer_api(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
@@ -94,7 +94,7 @@ async def test_should_list_and_rollback_unit_revisions_via_newcomer_api(
     initial_revision = await _latest_unit_revision(test_db, str(unit.unit_id))
 
     update_response = await async_client.put(
-        f"/api/v1/admin/newcomer-training/units/{unit.unit_id}",
+        f"/api/v1/admin/sales-trainer/units/{unit.unit_id}",
         headers=_auth_headers(admin),
         json={
             "name": "商务技巧第二版单元",
@@ -112,14 +112,14 @@ async def test_should_list_and_rollback_unit_revisions_via_newcomer_api(
     update_trace_id = update_response.json()["trace_id"]
 
     publish_response = await async_client.post(
-        f"/api/v1/admin/newcomer-training/units/{unit.unit_id}/publish",
+        f"/api/v1/admin/sales-trainer/units/{unit.unit_id}/publish",
         headers=_auth_headers(admin),
     )
     assert publish_response.status_code == 200
     publish_trace_id = publish_response.json()["trace_id"]
 
     history_response = await async_client.get(
-        f"/api/v1/admin/newcomer-training/units/{unit.unit_id}/revisions",
+        f"/api/v1/admin/sales-trainer/units/{unit.unit_id}/revisions",
         headers=_auth_headers(admin),
     )
     assert history_response.status_code == 200
@@ -133,7 +133,7 @@ async def test_should_list_and_rollback_unit_revisions_via_newcomer_api(
     assert history[0]["question_count"] == 1
 
     rollback_response = await async_client.post(
-        f"/api/v1/admin/newcomer-training/units/{unit.unit_id}/rollback",
+        f"/api/v1/admin/sales-trainer/units/{unit.unit_id}/rollback",
         headers=_auth_headers(admin),
         json={
             "target_revision_id": initial_revision.revision_id,
@@ -160,7 +160,7 @@ async def test_should_list_and_rollback_unit_revisions_via_newcomer_api(
 
 
 @pytest.mark.asyncio
-async def test_should_expose_unit_revision_history_via_compatible_sales_trainer_api(
+async def test_should_expose_unit_revision_history_via_sales_trainer_api(
     async_client: AsyncClient,
     test_db: AsyncSession,
 ) -> None:
@@ -204,7 +204,7 @@ async def test_should_expose_unit_revision_history_via_compatible_sales_trainer_
     initial_revision = await _latest_unit_revision(test_db, str(unit.unit_id))
 
     update_response = await async_client.put(
-        f"/api/v1/admin/newcomer-training/units/{unit.unit_id}",
+        f"/api/v1/admin/sales-trainer/units/{unit.unit_id}",
         headers=_auth_headers(admin),
         json={
             "name": "兼容商务技巧第二版",
@@ -220,7 +220,7 @@ async def test_should_expose_unit_revision_history_via_compatible_sales_trainer_
     )
     assert update_response.status_code == 200
     publish_response = await async_client.post(
-        f"/api/v1/admin/newcomer-training/units/{unit.unit_id}/publish",
+        f"/api/v1/admin/sales-trainer/units/{unit.unit_id}/publish",
         headers=_auth_headers(admin),
     )
     assert publish_response.status_code == 200

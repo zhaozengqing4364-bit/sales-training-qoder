@@ -11,6 +11,7 @@ Before writing backend code, read the guides relevant to your change:
 | Change type | Read first |
 |-------------|------------|
 | Any backend work | This index + `backend/AGENTS.md` |
+| API/state/permission/error changes visible to users | `DESING.md` + [Product Design and UI Engineering](../guides/product-design-engineering.md) |
 | Cross-cutting platform code | `.kiro/steering/backend-principles.md`, `backend/src/common/AGENTS.md` |
 | Sales realtime / WebSocket | `backend/src/sales_bot/AGENTS.md` |
 | New module or file placement | [Directory Structure](./directory-structure.md) |
@@ -34,9 +35,11 @@ Before writing backend code, read the guides relevant to your change:
 | Guide | Description | Status |
 |-------|-------------|--------|
 | [Directory Structure](./directory-structure.md) | Module layout, routes, services, WebSocket handlers | Ready |
-| [Database Guidelines](./database-guidelines.md) | SQLAlchemy 2.0 async, Alembic, query patterns | Ready |
+| [Database Guidelines](./database-guidelines.md) | SQLAlchemy 2.0 async, first-launch Alembic baseline, guarded scoped reset, query patterns | Ready |
 | [Business Rule Configs](./business-rule-configs.md) | Governed runtime policy config, validation, fallback, audit | Ready |
-| [Newcomer Training Activity Orchestration](./newcomer-training-activity-orchestration.md) | Version-pinned TrainingPath → Phase → Module → Activity contracts and extension rules | Ready |
+| [Newcomer Training Activity Orchestration](./newcomer-training-activity-orchestration.md) | PathRevision → Stage → ActivityDefinition, frozen Enrollment, five first-launch activities, Readiness and ReleasePlan publication/rollback | Slice 6 implemented |
+| [Structured AI Coach](./structured-ai-coach.md) | Three-checkpoint typed Coach, save-before-AI, governed durable evaluation, bounded remediation and human escalation | Ready |
+| [Competency Evidence and Readiness Review](./competency-evidence-readiness.md) | Seven canonical competencies, immutable Evidence, versioned Dossier/Snapshot, human decisions, durable exception preview, retraining and appeals | Ready |
 | [Sales Trainer Learning Topic Governance](./sales-trainer-learning-topic-governance.md) | Newcomer learning topics as future-only asset revisions, separate from required path gates | Ready |
 | [Prompt Template Governance](./prompt-template-governance.md) | Prompt defaults, scenario bindings, system-template lock, governance repair | Ready |
 | [Realtime Roleplay V1 Runtime Contract](./realtime-roleplay-v1.md) | Fixed IT-leader realtime roleplay contract, state card, knowledge guard, scoring projection | Ready |
@@ -50,6 +53,7 @@ Before writing backend code, read the guides relevant to your change:
 | [Platform Contract Truth](./platform-contract-truth.md) | Contributor registry isolation, effective route inventory, runtime-generated OpenAPI parity | Ready |
 | [Architecture Fitness](./architecture-fitness.md) | Executable cross-package dependency policy, temporary exceptions, and SCC guard | Ready |
 | [Logging Guidelines](./logging-guidelines.md) | structlog, trace_id, redaction | Ready |
+| [Product Design and UI Engineering](../guides/product-design-engineering.md) | Backend obligations for visible state, permissions, errors, in-flow writes, AI control, and recovery | Ready |
 
 ---
 

@@ -3,51 +3,56 @@ import { describe, expect, it } from "vitest";
 import { toTeamJourneyRow } from "./view-models";
 
 describe("toTeamJourneyRow", () => {
-    it("maps summary DTO fields without requiring full journey phases", () => {
+    it("maps the v2 admin learner projection without recomputing progress", () => {
         const row = toTeamJourneyRow({
-            learner_id: "learner-1",
-            learner_name: " 张三 ",
-            team: { team_id: "t1", code: "east", name: "华东" },
-            summary: {
-                path_revision_id: "rev-1",
-                path_title: "新人训练",
-                current_phase: { phase_id: "p1", title: "阶段一", status: "in_progress" },
-                progress: { completed: false, completed_count: 2, total_required: 5, percent: 40 },
-                primary_next_action: {
-                    activity_id: "a1",
-                    activity_type: "quiz",
-                    action_key: "start_quiz",
-                    label: "开始测验",
-                },
-                risk_labels: ["知识测验", "录音讲解"],
+            learner: { learner_id: "learner-1", name: " 张三 " },
+            cohort: { cohort_id: "cohort-1", name: "华东新人班" },
+            enrollment: { enrollment_id: "enrollment-1", status: "active", revision_id: "rev-1", version: 1 },
+            path: { path_id: "path-1", title: "新人训练", revision_label: "首发版" },
+            status: "active",
+            status_label: "训练进行中",
+            progress: { completed_required: 2, total_required: 5, percentage: 40 },
+            current_activity: {
+                activity_id: "a1",
+                type: "quiz",
+                title: "知识测验",
+                objective: "验证知识掌握",
+                status: "needs_remediation",
+                status_label: "需要补练",
+                estimated_minutes: 10,
+                required: true,
+                blocked_reason: null,
+                latest_attempt_id: "attempt-1",
+                latest_outcome_id: "outcome-1",
             },
+            primary_action: null,
+            updated_at: "2026-07-18T00:00:00Z",
         });
         expect(row).toEqual({
             learnerId: "learner-1",
             learnerName: "张三",
-            currentPhase: "阶段一",
+            currentPhase: "知识测验",
             progressPercent: 40,
             completedCount: 2,
             totalRequired: 5,
-            riskLabels: ["知识测验", "录音讲解"],
+            riskLabels: ["知识测验"],
         });
     });
 
     it("uses completed label when current phase is absent", () => {
         const row = toTeamJourneyRow({
-            learner_id: "learner-2",
-            learner_name: "",
-            team: null,
-            summary: {
-                path_revision_id: "rev-1",
-                path_title: "新人训练",
-                current_phase: null,
-                progress: { completed: true, completed_count: 3, total_required: 3, percent: 100 },
-                primary_next_action: null,
-                risk_labels: [],
-            },
+            learner: { learner_id: "learner-2", name: "" },
+            cohort: { cohort_id: "cohort-1", name: "新人班" },
+            enrollment: { enrollment_id: "enrollment-2", status: "active", revision_id: "rev-1", version: 1 },
+            path: { path_id: "path-1", title: "新人训练", revision_label: "首发版" },
+            status: "completed",
+            status_label: "训练已完成",
+            progress: { completed_required: 3, total_required: 3, percentage: 100 },
+            current_activity: null,
+            primary_action: null,
+            updated_at: "2026-07-18T00:00:00Z",
         });
         expect(row.learnerName).toBe("未命名学员");
-        expect(row.currentPhase).toBe("已完成");
+        expect(row.currentPhase).toBe("训练已完成");
     });
 });

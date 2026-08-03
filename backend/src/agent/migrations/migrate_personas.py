@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.db.session import AsyncSessionLocal, init_db
+from common.db.session import AsyncSessionLocal, verify_database_schema
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
@@ -332,7 +332,7 @@ async def main() -> None:
 
     # Initialize database
     logger.info("Initializing database connection...")
-    await init_db()
+    await verify_database_schema()
 
     # Run migration
     async with AsyncSessionLocal() as db:

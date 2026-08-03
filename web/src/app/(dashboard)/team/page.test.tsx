@@ -7,7 +7,7 @@ import TeamDashboardPage, { rangeDates } from "./page";
 const apiMock = vi.hoisted(() => ({
     getTeamScope: vi.fn(),
     getTeamWorkbench: vi.fn(),
-    listJourneys: vi.fn(),
+    listLearners: vi.fn(),
     replace: vi.fn(),
     searchParams: new URLSearchParams(),
 }));
@@ -21,7 +21,7 @@ vi.mock("@/lib/api/client", () => ({
     getApiErrorMessage: (error: unknown) => String(error),
     api: {
         supervisor: { getTeamScope: apiMock.getTeamScope, getTeamWorkbench: apiMock.getTeamWorkbench },
-        admin: { newcomerTraining: { listJourneys: apiMock.listJourneys } },
+        admin: { newcomerTraining: { listLearners: apiMock.listLearners } },
     },
 }));
 
@@ -32,7 +32,7 @@ describe("TeamDashboardPage", () => {
         apiMock.replace.mockReset();
         apiMock.getTeamScope.mockReset();
         apiMock.getTeamWorkbench.mockReset();
-        apiMock.listJourneys.mockReset();
+        apiMock.listLearners.mockReset();
         apiMock.getTeamScope.mockResolvedValue({
             teams: [{ team_id: "team-1", code: "east", name: "华东销售一组", leaders: [] }],
             members: [{ team_id: "team-1", learner_id: "learner-1", learner_name: "张三", email: "zhang@example.com" }],
@@ -48,21 +48,24 @@ describe("TeamDashboardPage", () => {
                 risk_labels: ["产品准确性"],
             }],
         });
-        apiMock.listJourneys.mockResolvedValue({
+        apiMock.listLearners.mockResolvedValue({
             items: [{
-                learner_id: "learner-1",
-                learner_name: "张三",
-                team: { team_id: "team-1", code: "east", name: "华东销售一组" },
-                summary: {
-                    path_revision_id: "rev-1",
-                    path_title: "新人训练",
-                    current_phase: { phase_id: "p1", title: "阶段一", status: "in_progress" },
-                    progress: { completed: false, completed_count: 1, total_required: 3, percent: 33 },
-                    primary_next_action: null,
-                    risk_labels: [],
-                },
+                learner: { learner_id: "learner-1", name: "张三" },
+                cohort: { cohort_id: "cohort-1", name: "华东新人班" },
+                enrollment: { enrollment_id: "enrollment-1", status: "active", revision_id: "rev-1", version: 1 },
+                path: { path_id: "path-1", title: "新人训练", revision_label: "首发版" },
+                status: "active",
+                status_label: "训练进行中",
+                progress: { completed_required: 1, total_required: 3, percentage: 33 },
+                current_activity: null,
+                primary_action: null,
+                updated_at: "2026-07-18T00:00:00Z",
             }],
             total: 1,
+            limit: 100,
+            offset: 0,
+            applied_filters: { search: null },
+            generated_at: "2026-07-18T00:00:00Z",
         });
     });
 
@@ -118,7 +121,7 @@ describe("TeamDashboardPage", () => {
     it("刷新时保留已有成员行且显示更新状态", async () => {
         render(<TeamDashboardPage />);
         await waitFor(() => expect(screen.getByText("张三")).toBeTruthy());
-        apiMock.listJourneys.mockImplementation(() => new Promise(() => undefined));
+        apiMock.listLearners.mockImplementation(() => new Promise(() => undefined));
         apiMock.getTeamWorkbench.mockImplementation(() => new Promise(() => undefined));
         await userEvent.click(screen.getByRole("button", { name: /刷新/ }));
         await waitFor(() => expect(screen.getByRole("status").textContent).toContain("正在更新团队数据"));
@@ -129,11 +132,11 @@ describe("TeamDashboardPage", () => {
     it("首次加载在业务数据返回前保持页面 Skeleton", async () => {
         let resolveJourneys: ((value: unknown) => void) | undefined;
         const workbenchResolvers: Array<(value: unknown) => void> = [];
-        apiMock.listJourneys.mockImplementation(() => new Promise((resolve) => { resolveJourneys = resolve; }));
+        apiMock.listLearners.mockImplementation(() => new Promise((resolve) => { resolveJourneys = resolve; }));
         apiMock.getTeamWorkbench.mockImplementation(() => new Promise((resolve) => { workbenchResolvers.push(resolve); }));
         render(<TeamDashboardPage />);
         await waitFor(() => expect(apiMock.getTeamScope).toHaveBeenCalled());
-        await waitFor(() => expect(apiMock.listJourneys).toHaveBeenCalled());
+        await waitFor(() => expect(apiMock.listLearners).toHaveBeenCalled());
         await waitFor(() => expect(workbenchResolvers.length).toBe(2));
         // Scope already resolved, but journeys/workbench still pending → must stay on Skeleton.
         expect(screen.queryByRole("heading", { name: "团队训练进展" })).toBeNull();
@@ -147,19 +150,22 @@ describe("TeamDashboardPage", () => {
         await act(async () => {
             resolveJourneys?.({
                 items: [{
-                    learner_id: "learner-1",
-                    learner_name: "张三",
-                    team: { team_id: "team-1", code: "east", name: "华东销售一组" },
-                    summary: {
-                        path_revision_id: "rev-1",
-                        path_title: "新人训练",
-                        current_phase: null,
-                        progress: { completed: false, completed_count: 0, total_required: 1, percent: 0 },
-                        primary_next_action: null,
-                        risk_labels: [],
-                    },
+                    learner: { learner_id: "learner-1", name: "张三" },
+                    cohort: { cohort_id: "cohort-1", name: "华东新人班" },
+                    enrollment: { enrollment_id: "enrollment-1", status: "active", revision_id: "rev-1", version: 1 },
+                    path: { path_id: "path-1", title: "新人训练", revision_label: "首发版" },
+                    status: "active",
+                    status_label: "训练进行中",
+                    progress: { completed_required: 0, total_required: 1, percentage: 0 },
+                    current_activity: null,
+                    primary_action: null,
+                    updated_at: "2026-07-18T00:00:00Z",
                 }],
                 total: 1,
+                limit: 100,
+                offset: 0,
+                applied_filters: { search: null },
+                generated_at: "2026-07-18T00:00:00Z",
             });
             workbenchResolvers.forEach((resolve) => resolve(emptyWorkbench));
         });

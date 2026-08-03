@@ -1,5 +1,7 @@
 # 新人训练路径活动编排架构设计
 
+> **状态：Superseded / Legacy 历史记录（2026-07-16）。** 本文保留当时设计背景，不再作为目标实现或验收权威；Foundation target 见 [`../../newcomer-foundation-contract-index.md`](../../newcomer-foundation-contract-index.md)。文内 Phase/Module、六类活动、Realtime 首发与自动 Enrollment 语义均不得用于新实现。
+
 > 状态：设计已确认，待实施计划
 >
 > 日期：2026-07-12

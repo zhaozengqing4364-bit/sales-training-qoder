@@ -122,6 +122,11 @@ from common.db.model_registry import (
 from common.db.model_registry import (
     PromptTemplate as PromptTemplate,
 )
+from common.db.model_registry import ProvisioningBatch as ProvisioningBatch
+from common.db.model_registry import ProvisioningRow as ProvisioningRow
+from common.db.model_registry import (
+    ProvisioningTeamExecution as ProvisioningTeamExecution,
+)
 from common.db.model_registry import (
     ReleaseVerificationRecord as ReleaseVerificationRecord,
 )
@@ -170,6 +175,9 @@ from common.db.model_registry import (
 from common.db.model_registry import (
     SystemLogStatus as SystemLogStatus,
 )
+from common.db.model_registry import Team as Team
+from common.db.model_registry import TeamLeaderAssignment as TeamLeaderAssignment
+from common.db.model_registry import TeamMembership as TeamMembership
 from common.db.model_registry import (
     TrainingReportSnapshot as TrainingReportSnapshot,
 )
@@ -224,6 +232,12 @@ __all__ = [
     "UserTrainingPreference",
     "UserPresentationProgress",
     "PasswordResetToken",
+    "Team",
+    "TeamMembership",
+    "TeamLeaderAssignment",
+    "ProvisioningBatch",
+    "ProvisioningTeamExecution",
+    "ProvisioningRow",
     "BusinessRuleConfig",
     "BusinessRuleConfigAuditLog",
     "ConfigBundle",

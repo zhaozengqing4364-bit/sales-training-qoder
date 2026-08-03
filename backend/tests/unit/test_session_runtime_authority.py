@@ -279,18 +279,8 @@ async def test_lifespan_exposes_session_state_health_when_snapshots_disabled(
     monkeypatch.setattr(settings, "ENVIRONMENT", "development")
     monkeypatch.setattr(settings, "PRELOAD_SERVICES", False)
     monkeypatch.setattr(app_lifespan_module, "initialize_otel", lambda _app: None)
-    monkeypatch.setattr(app_lifespan_module, "init_db", noop)
+    monkeypatch.setattr(app_lifespan_module, "verify_database_schema", noop)
     monkeypatch.setattr(config_manager, "initialize_config_manager", noop)
-    monkeypatch.setattr(
-        app_lifespan_module,
-        "get_auth_config_diagnostics",
-        lambda: {
-            "credentials_ready": False,
-            "user_overrides_valid": True,
-            "shared_password_configured": False,
-            "user_override_count": 0,
-        },
-    )
     monkeypatch.setattr(
         app_lifespan_module,
         "get_wecom_provider_diagnostics",

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "@/lib/query/client";
 import { useTeamJourneyDetail } from "./use-team-journey-detail";
 
-const getLearnerJourneyMock = vi.hoisted(() => vi.fn());
+const getLearnerMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api/client", async () => {
     const actual = await vi.importActual<typeof import("@/lib/api/client")>("@/lib/api/client");
@@ -17,7 +17,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 newcomerTraining: {
                     ...actual.api.admin.newcomerTraining,
-                    getLearnerJourney: getLearnerJourneyMock,
+                    getLearner: getLearnerMock,
                 },
             },
         },
@@ -33,34 +33,48 @@ function wrapper(queryClient: QueryClient) {
 }
 
 const journey = {
-    enrollment_id: "enrollment-1",
-    path_revision_id: "revision-1",
-    path_title: "新人训练",
-    phases: [],
-    progress: { completed_activities: 0, total_activities: 1, percentage: 0 },
-    primary_next_action: null,
+    learner: { learner_id: "learner-1", name: "张三" },
+    cohort: { cohort_id: "cohort-1", name: "新人班" },
+    journey: {
+        contract_version: "journey_projection_v1",
+        generated_at: "2026-07-18T00:00:00Z",
+        data_freshness: "fresh",
+        capabilities: ["view_journey"],
+        status: "active",
+        status_label: "训练进行中",
+        status_reason: null,
+        enrollment: { enrollment_id: "enrollment-1", status: "active", revision_id: "revision-1", version: 1 },
+        path: { path_id: "path-1", title: "新人训练", revision_label: "首发版" },
+        stages: [],
+        progress: { completed_required: 0, total_required: 1, percentage: 0 },
+        current_activity: null,
+        background_tasks: [],
+        recent_outcomes: [],
+        primary_action: null,
+        projection_version: 1,
+    },
 };
 
 describe("useTeamJourneyDetail", () => {
-    beforeEach(() => getLearnerJourneyMock.mockReset());
+    beforeEach(() => getLearnerMock.mockReset());
 
     it("loads the learner's canonical journey", async () => {
-        getLearnerJourneyMock.mockResolvedValue(journey);
+        getLearnerMock.mockResolvedValue(journey);
         const { result } = renderHook(() => useTeamJourneyDetail({ learnerId: "learner-1" }), {
             wrapper: wrapper(createAppQueryClient()),
         });
         await waitFor(() => expect(result.current.isLoading).toBe(false));
-        expect(result.current.journey?.enrollment_id).toBe("enrollment-1");
-        expect(getLearnerJourneyMock).toHaveBeenCalledWith("learner-1");
+        expect(result.current.journey?.enrollment?.enrollment_id).toBe("enrollment-1");
+        expect(getLearnerMock).toHaveBeenCalledWith("learner-1");
     });
 
     it("exposes errors and supports refetch", async () => {
-        getLearnerJourneyMock.mockRejectedValueOnce(new Error("not found"));
+        getLearnerMock.mockRejectedValueOnce(new Error("not found"));
         const { result } = renderHook(() => useTeamJourneyDetail({ learnerId: "learner-x" }), {
             wrapper: wrapper(createAppQueryClient()),
         });
         await waitFor(() => expect(result.current.isError).toBe(true));
-        getLearnerJourneyMock.mockResolvedValue(journey);
+        getLearnerMock.mockResolvedValue(journey);
         await act(async () => { await result.current.refetch(); });
         await waitFor(() => expect(result.current.isError).toBe(false));
     });

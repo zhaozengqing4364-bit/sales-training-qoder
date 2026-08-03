@@ -1,6 +1,6 @@
-"use client";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { ActivityRunnerProps } from "./types";
-export function AssignmentRunner({ detail, onRefresh }: ActivityRunnerProps) { const [text, setText] = useState(""); const [file, setFile] = useState<File | null>(null); const [pending, setPending] = useState(false); const [error, setError] = useState<string | null>(null); return <form className="space-y-4" onSubmit={async (event) => { event.preventDefault(); if (!text.trim() && !file) { setError("请填写作业内容或选择文件。"); return; } setPending(true); setError(null); try { onRefresh?.(await api.newcomerTraining.submitAssignment(detail.activity.activity_id, { client_token: crypto.randomUUID(), text: text.trim() || null, file })); } catch (cause) { setError(getApiErrorMessage(cause)); } finally { setPending(false); } }}><label className="block text-sm font-medium text-slate-700">作业内容<textarea rows={6} value={text} onChange={(event) => setText(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><label className="block text-sm font-medium text-slate-700">附件（可选）<input type="file" className="mt-2 block w-full text-sm" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<Button type="submit" isLoading={pending}>提交作业</Button></form>; }
+import { AudioAssessmentRunner } from "./audio-assessment-runner";
+
+export function AssignmentRunner(props: ActivityRunnerProps) {
+    return <AudioAssessmentRunner {...props} />;
+}

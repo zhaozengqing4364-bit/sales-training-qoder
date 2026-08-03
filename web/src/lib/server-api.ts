@@ -18,6 +18,13 @@ function unwrapApiPayload<T>(payload: unknown): T {
     return payload as T;
 }
 
+export class ServerApiError extends Error {
+    constructor(readonly status: number) {
+        super(`Server API request failed: HTTP ${status}`);
+        this.name = "ServerApiError";
+    }
+}
+
 export async function serverApiGet<T>(path: string): Promise<T> {
     const requestHeaders = await headers();
     const cookie = requestHeaders.get("cookie");
@@ -35,7 +42,7 @@ export async function serverApiGet<T>(path: string): Promise<T> {
         },
     });
     if (!response.ok) {
-        throw new Error(`Server API request failed: HTTP ${response.status}`);
+        throw new ServerApiError(response.status);
     }
     return unwrapApiPayload<T>(await response.json());
 }

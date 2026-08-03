@@ -3,6 +3,19 @@
 > Executable Gate 4 contract for neutral Roleplay, Configuration Governance,
 > Evaluation Evidence/Scenario ports, and shared realtime helper ownership.
 
+> **Scope status (updated 2026-07-17):** the Gate 4 text below remains current runtime truth for existing Roleplay/Realtime/Presentation code. For newcomer foundation training, Slices 2–5 implement the accepted `newcomer_training`, `learning`, `audio_assessment`, `ai_coach`, `competency_evidence`, and `readiness` ownership split. Existing Roleplay/Realtime code is not a newcomer launch dependency.
+
+## Newcomer Foundation Target Addendum
+
+- `newcomer_training` owns Path/Revision/Stage/ActivityDefinition, Cohort/Enrollment, generic Attempt and Journey only.
+- `learning`, `audio_assessment`, and `ai_coach` own their detailed records and normalized Outcome implementations.
+- `competency_evidence` is the only writer of immutable competency facts; `readiness` is the only writer of Dossier, ReviewDecision, Appeal, and RetrainingAssignment.
+- Evaluation/Readiness consume ports and versioned events; they never import activity ORM or recompute historical activity snapshots.
+- `CompetencyEvidenceWriter.append()` is the write seam; Evidence query is a separate read seam. Both return immutable DTOs, never ORM rows.
+- Current `sales_trainer` multi-ownership is a Legacy exception with owner/deadline in `docs/architecture/newcomer-foundation-guard-policy.yaml`, not permission to add new cross-domain writes.
+
+Implemented newcomer seams: `newcomer_training` invokes activity behavior only through published-resource/runtime ports; activity domains record normalized completion through `ActivityOutcomeWriterPort`. The production Outcome writer calls the root `FoundationReadinessProjection`, which maps immutable Outcome DTOs to `competency_evidence` and then projects `readiness` in the same transaction. Runtime composition lives in `newcomer_foundation_composition.py`, `foundation_readiness_composition.py`, and the application delivery modules. No activity domain imports Evidence/Readiness ORM or writes those tables directly. Future activity domains must follow the same port direction rather than copying either model.
+
 ## 1. Scope / Trigger
 
 Apply this contract when a change touches:

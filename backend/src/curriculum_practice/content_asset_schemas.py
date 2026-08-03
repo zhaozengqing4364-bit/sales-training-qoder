@@ -23,18 +23,15 @@ class CaseItemBase(BaseModel):
     allowed_disclosure_policy: dict[str, object]
     content_hash: str = Field(..., min_length=1, max_length=80)
 
+class CaseItemCreate(CaseItemBase):
     @model_validator(mode="after")
-    def validate_allowed_disclosure_policy(self) -> CaseItemBase:
+    def validate_allowed_disclosure_policy(self) -> CaseItemCreate:
         phases = self.allowed_disclosure_policy.get("phases")
         if not isinstance(phases, list) or not phases:
             raise ValueError(
                 "allowed_disclosure_policy.phases must contain at least one phase"
             )
         return self
-
-
-class CaseItemCreate(CaseItemBase):
-    pass
 
 
 class CaseItemResponse(CaseItemBase):

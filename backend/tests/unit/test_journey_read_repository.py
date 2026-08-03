@@ -15,7 +15,6 @@ from sales_trainer.services.journey_sqlalchemy_adapter import (
 def _learner(
     learner_id: str,
     *,
-    department: str = "销售一部",
     role: str = "user",
     is_active: bool = True,
 ) -> User:
@@ -23,7 +22,6 @@ def _learner(
         user_id=learner_id,
         wechat_user_id=f"journey-repository-{learner_id}",
         name=f"Learner {learner_id}",
-        department=department,
         role=role,
         is_active=is_active,
     )
@@ -48,7 +46,7 @@ async def test_journey_repository_returns_frozen_learner_or_none(
 
 
 @pytest.mark.asyncio
-async def test_journey_repository_applies_department_active_and_role_scope(
+async def test_journey_repository_applies_authorized_ids_active_and_role_scope(
     test_db: AsyncSession,
 ) -> None:
     test_db.add_all(
@@ -56,7 +54,7 @@ async def test_journey_repository_applies_department_active_and_role_scope(
             _learner("active-a"),
             _learner("active-b"),
             _learner("inactive", is_active=False),
-            _learner("other-department", department="销售二部"),
+            _learner("outside-authorized-scope"),
             _learner("foreign-role", role="admin"),
         ]
     )
@@ -64,14 +62,12 @@ async def test_journey_repository_applies_department_active_and_role_scope(
     repository = SqlAlchemyJourneyReadRepository(test_db)
 
     page = await repository.learners(
-        team_department="销售一部",
-        department=None,
+        learner_ids=frozenset({"active-a", "active-b", "inactive", "foreign-role"}),
         limit=None,
         include_development_admin=False,
     )
     blocked = await repository.learners(
-        team_department="销售一部",
-        department="销售二部",
+        learner_ids=frozenset(),
         limit=None,
         include_development_admin=False,
     )

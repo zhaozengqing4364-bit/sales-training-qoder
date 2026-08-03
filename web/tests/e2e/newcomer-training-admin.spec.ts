@@ -3,58 +3,90 @@ import { expect, test } from "@playwright/test";
 import {
   adminEmail,
   auditRoute,
+  backendBaseUrl,
   blockingAuditFailures,
   ensureAuditDirectories,
+  learnerEmail,
   loginFromUi,
   writeAuditReport,
 } from "./newcomer-training-audit-helpers";
-import { adminRoutes } from "./newcomer-training-route-manifest";
+import {
+  adminRoutes,
+  type NewcomerTrainingAuditRoute,
+} from "./newcomer-training-route-manifest";
 
 test.describe("新人训练管理端", () => {
   test.setTimeout(180_000);
 
-  test("只暴露聚焦式路径编排入口且页面不泄露工程字段", async ({ page }, testInfo) => {
+  test("统一工作台、路径编辑、题库审核和复核档案通过实际渲染审计", async ({ page }, testInfo) => {
     ensureAuditDirectories();
+    await loginFromUi(page, learnerEmail);
+    const dossierSetup = await page.request.get(`${backendBaseUrl}/newcomer-training/dossier`);
+    expect(dossierSetup.ok(), `训练档案准备失败：${await dossierSetup.text()}`).toBeTruthy();
+    await page.context().clearCookies();
     await loginFromUi(page, adminEmail);
     const results = [];
     for (const route of adminRoutes) {
       results.push(await auditRoute(page, route, "desktop", testInfo));
     }
-    const outputPath = writeAuditReport("newcomer-training-admin-report.json", { routes: adminRoutes, results });
-    expect(blockingAuditFailures(results), `管理端审计失败：${outputPath}`).toEqual([]);
 
-    await page.goto("/admin/newcomer-training/path");
-    await expect(page.getByLabel("训练路径大纲")).toBeVisible();
-    await expect(page.getByRole("button", { name: "检查" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "预览学员页面" })).toBeVisible();
-    await expect(page.getByText("当前编辑")).toBeVisible();
-    await expect(page.getByRole("searchbox", { name: "搜索路径大纲" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /折叠阶段|新增阶段/ }).first()).toBeVisible();
+    for (const route of [adminRoutes[0], adminRoutes[2], adminRoutes[3], adminRoutes[4]]) {
+      results.push(await auditRoute(page, route, "mobile", testInfo));
+    }
 
-    await page.route("**/api/v1/admin/newcomer-training/papers*", (route) => route.abort());
-    await page.reload();
-    await expect(page.getByText("试卷目录暂不可用")).toBeVisible();
-    await expect(page.getByRole("tree", { name: "训练路径大纲" })).toBeVisible();
-    await page.unroute("**/api/v1/admin/newcomer-training/papers*");
-    await page.getByRole("button", { name: "重新加载试卷目录" }).click();
-    await expect(page.getByText("试卷目录暂不可用")).toHaveCount(0);
-
-    await page.getByRole("button", { name: "预览学员页面" }).click();
-    await expect(page.getByRole("region", { name: "学员预览" })).toBeVisible();
-    await expect(page.getByText("新学员初始视角")).toBeVisible();
-    await page.getByRole("button", { name: "关闭" }).click();
-
-    await page.getByLabel("发布说明").fill("验证发布影响提示");
-    await page.getByRole("button", { name: "发布", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "确认发布训练路径" })).toBeVisible();
-    await expect(page.getByText("发布后只影响新进入训练的学员")).toBeVisible();
-    await page.getByRole("button", { name: "取消" }).click();
+    await page.goto("/admin/newcomer-training/paths");
+    const editorLink = page.getByRole("link", { name: "打开编辑器" }).first();
+    await expect(editorLink).toBeVisible();
+    const editorHref = await editorLink.getAttribute("href");
+    expect(editorHref).toMatch(/^\/admin\/newcomer-training\/paths\/[^/]+\/edit$/);
+    const pathEditorRoute: NewcomerTrainingAuditRoute = {
+      id: "A-05",
+      label: "路径编辑器",
+      path: String(editorHref),
+      critical: true,
+      expectText: ["阶段与活动", "学员路径预览", "校验与引用影响"],
+      forbiddenText: adminRoutes[0].forbiddenText,
+    };
+    results.push(await auditRoute(page, pathEditorRoute, "desktop", testInfo));
+    results.push(await auditRoute(page, pathEditorRoute, "mobile", testInfo));
 
     await page.goto("/admin/newcomer-training/learners");
-    await expect(page.getByRole("heading", { name: "学员进度" })).toBeVisible();
-    await expect(page.getByLabel("部门筛选")).toBeVisible();
-    await page.getByRole("link", { name: /查看训练详情/ }).first().click();
-    await expect(page.getByText("学员训练详情")).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "相关训练记录" })).toBeVisible();
+    const learnerLink = page.getByRole("link", { name: /查看训练详情/ }).first();
+    await expect(learnerLink).toBeVisible();
+    const learnerHref = await learnerLink.getAttribute("href");
+    const learnerId = String(learnerHref).split("/").filter(Boolean).at(-1);
+    expect(learnerId).toBeTruthy();
+    const learnerDetailRoute: NewcomerTrainingAuditRoute = {
+      id: "A-06",
+      label: "学员训练详情",
+      path: String(learnerHref),
+      critical: true,
+      expectText: ["返回学员进度", "查看所属班级", "进入达标复核"],
+      forbiddenText: adminRoutes[0].forbiddenText,
+    };
+    results.push(await auditRoute(page, learnerDetailRoute, "desktop", testInfo));
+    results.push(await auditRoute(page, learnerDetailRoute, "mobile", testInfo));
+
+    await page.goto("/admin/newcomer-training/reviews");
+    const dossierLink = page.getByRole("link", { name: "复核训练档案" }).first();
+    await expect(dossierLink).toBeVisible();
+    const dossierHref = await dossierLink.getAttribute("href");
+    expect(dossierHref).toMatch(/^\/admin\/newcomer-training\/reviews\/[^/]+$/);
+    const dossierRoute: NewcomerTrainingAuditRoute = {
+      id: "A-07",
+      label: "复核档案",
+      path: String(dossierHref),
+      critical: true,
+      expectText: ["能力证据", "证据明细", "当前结论"],
+      forbiddenText: adminRoutes[0].forbiddenText,
+    };
+    results.push(await auditRoute(page, dossierRoute, "desktop", testInfo));
+    results.push(await auditRoute(page, dossierRoute, "mobile", testInfo));
+
+    const outputPath = writeAuditReport("newcomer-training-admin-report.json", {
+      routes: [...adminRoutes, pathEditorRoute, learnerDetailRoute, dossierRoute],
+      results,
+    });
+    expect(blockingAuditFailures(results), `管理端审计失败：${outputPath}`).toEqual([]);
   });
 });

@@ -277,3 +277,144 @@ Bug 修复优先新增复现测试。核心流程至少覆盖一条关键路径�
 - 改动范围可解释，与现有风格一致。
 - 验证证据充分，风险和回滚路径明确。
 - 无必要新依赖，无无关重构，未完成事项已记录。
+## Product Design and UI Engineering
+
+### Source of truth
+
+For any task that changes what users see, understand, choose, enter, approve, or execute, read and follow the repository-root `design.md` before implementation.
+
+This includes:
+
+- new pages, page redesigns, navigation, information architecture, and flows;
+- forms, tables, filters, search, settings, approvals, permissions, and dashboards;
+- components, interactions, loading, empty, error, conflict, and recovery states;
+- user-facing copy, terminology, responsive behavior, accessibility, and performance;
+- AI features, agents, RAG, recommendations, generation, automation, and generative UI;
+- backend changes that alter user-visible behavior, state, permissions, or results.
+
+Pure internal refactors with no user-visible behavioral change do not require a full design review, but they must not break the contracts defined in `design.md`.
+
+### Required discovery before coding
+
+Before changing a user-facing surface:
+
+1. Inspect the existing implementation, routes, domain objects, API contracts, permissions, tokens, components, and nearby page patterns.
+2. Identify:
+   - target user and operating context;
+   - primary task and required outcome;
+   - core business objects and lifecycle states;
+   - page model and navigation relationship;
+   - primary action, secondary actions, and destructive actions;
+   - required data, permissions, risk, and failure cost;
+   - existing components and patterns that can be reused.
+3. Do not begin from a generic dashboard, card grid, modal, or chat interface unless the task genuinely requires that model.
+4. Do not invent product requirements, metrics, workflow states, permissions, data, or AI conclusions. Use repository evidence or explicitly mark unresolved assumptions.
+
+### Design behavior
+
+- Prioritize the work object over navigation, chrome, decoration, and product branding.
+- Maintain useful enterprise information density; remove noise rather than removing necessary information.
+- Use hierarchy, alignment, spacing, typography, and stable patterns before adding borders, shadows, cards, colors, or animation.
+- Keep common, high-frequency interactions familiar, fast, and predictable.
+- Concentrate novelty in rare, meaningful moments; do not make every component expressive.
+- Reuse the existing project visual foundation. Do not introduce a new color system, font, radius scale, icon library, or component style without an explicit requirement and project-level decision.
+- A page should have one dominant task and one clearly dominant action area. Multiple actions may exist, but they must not have equal visual weight without a real workflow reason.
+- Prefer reversible actions and inline recovery over excessive confirmation dialogs.
+- Use Dialog, Drawer, Popover, Inspector, Tabs, Tables, Cards, and Dashboards only for the roles defined in `design.md`.
+
+### Required states and resilience
+
+For every meaningful asynchronous or data-driven surface, implement and verify the relevant states:
+
+- idle/default;
+- loading or executing;
+- empty and first-use;
+- no result after filtering/search;
+- success;
+- partial success;
+- failure with a recovery path;
+- cancelled or interrupted;
+- no permission;
+- stale data or concurrent conflict;
+- offline or degraded mode when applicable;
+- waiting for user input or approval for long-running workflows.
+
+Never:
+
+- lose user input after a recoverable failure;
+- display partial failure as complete success;
+- hide authorization only in the frontend;
+- leave a long-running task without progress, cancellation, backgrounding, or a result location;
+- use a toast as the only record of an important outcome.
+
+### Content and terminology
+
+- Use the repository's established business terms consistently.
+- Prefer precise verb + object labels such as “发布课程”“保存规则”“重新同步”, not vague labels such as “确定”“处理”“操作”.
+- Error messages must state what failed, the relevant cause when known, what was preserved, and what the user can do next.
+- Empty states must explain why the area is empty and provide the next valid action when one exists.
+- Do not use “AI 智能” or sparkle/robot language as generic decoration. Name the concrete user outcome.
+
+### AI-specific gate
+
+AI is only one implementation option. Before adding AI, test whether the task can be solved more reliably with:
+
+1. business rules or validation;
+2. SQL, calculations, or reports;
+3. search, filters, ranking, or deterministic algorithms;
+4. workflow automation or system integration.
+
+Use AI only when the task materially requires language understanding, ambiguous judgment, generation, multi-source synthesis, or open-ended reasoning.
+
+When AI is used:
+
+- use the smallest appropriate surface: inline assist, object action, inspector, structured workspace, agent run, or conversation only when conversation is genuinely required;
+- expose the context scope and relevant inputs;
+- distinguish facts, calculations, inferences, and recommendations;
+- provide sources/evidence where decisions depend on external or retrieved information;
+- show meaningful run states, partial success, failures, and recovery;
+- preserve human review, edit, reject, undo, takeover, and approval according to risk;
+- never directly execute arbitrary model-generated HTML, JavaScript, CSS, commands, or tool calls without schema, policy, permission, and runtime validation;
+- do not trap formal business results only inside chat messages—persist them into the appropriate object, record, document, task, approval, or version.
+
+### Implementation workflow
+
+Use this sequence for user-facing work:
+
+1. **Discover** — inspect existing code and product context.
+2. **Shape** — state the task, objects, page model, hierarchy, actions, states, and risks.
+3. **Reuse** — locate existing components, patterns, tokens, and terminology.
+4. **Implement** — build the smallest coherent end-to-end experience; do not broaden scope without evidence.
+5. **Harden** — add edge states, permission handling, keyboard/focus behavior, responsive behavior, long-content handling, and performance safeguards.
+6. **Verify** — run tests and inspect the rendered UI rather than reviewing code only.
+7. **Report** — summarize what changed, what was verified, known gaps, and any intentional deviation from `design.md`.
+
+### Completion gate
+
+Do not claim completion until the relevant checks pass:
+
+- the page's primary task and primary action are clear;
+- the information architecture matches business objects rather than implementation modules;
+- existing design system assets were reused where appropriate;
+- loading, empty, no-result, error, permission, and recovery states are covered;
+- keyboard navigation and visible focus work for the core task;
+- narrow viewport, zoom, long text, large values, and realistic data were tested;
+- destructive and high-risk actions have appropriate confirmation, approval, undo, compensation, and audit behavior;
+- no invented metrics, fake insights, meaningless charts, decorative AI, card walls, or modal abuse were introduced;
+- automated tests pass and the actual rendered interface has been inspected.
+
+If a requirement conflicts with `DESIGN.md`, do not silently ignore the conflict. State the conflict, follow the repository's higher-authority business/security decision, and document the deviation in the task report or the project's decision record.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for `zhaozengqing4364-bit/sales-training-qoder`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The repository uses the five default canonical triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+The repository uses a single-context domain documentation layout. See `docs/agents/domain.md`.

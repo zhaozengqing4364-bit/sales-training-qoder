@@ -1,116 +1,108 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import type { JourneyPhaseProgress, JourneyResponse } from "@/lib/api/types/newcomer-training";
+import type { FoundationJourneyProjection, FoundationJourneyStage } from "@/lib/api/types/newcomer-training";
+import { toJourneyPageViewModel } from "@/lib/newcomer-training/view-models";
 import { JourneyHome } from "./journey-home";
 
-function phase(id: string, title: string, status: string, completed: boolean): JourneyPhaseProgress {
+vi.mock("./foundation-ux-signal", () => ({ FoundationUxSignal: () => null }));
+
+function stage(id: string, title: string, status: FoundationJourneyStage["status"]): FoundationJourneyStage {
     return {
-        phase_id: id, title, description: null, outcome: `${title}完成目标`, required: true, status, completed,
-        completed_count: completed ? 1 : 0, total_required: 1, percent: completed ? 100 : 0,
-        locked: status === "locked", lock_reason: status === "locked" ? "完成当前阶段后解锁" : null,
-        modules: [{
-            module_id: `${id}-module`, title: `${title}模块`, description: null, outcome: `能完成${title}任务`, required: true,
-            estimated_minutes: 35,
-            status, completed, completed_count: completed ? 1 : 0, total_required: 1,
-            percent: completed ? 100 : 0, locked: status === "locked", lock_reason: null,
-            activities: [{
-                activity_id: `${id}-activity`, activity_type: "lesson", title: `${title}学习`,
-                description: null,
-                objective: status === "in_progress" ? "能向客户讲清核心产品价值" : null,
-                why_it_matters: status === "in_progress" ? "这是完成客户演示的基础" : null,
-                steps: status === "in_progress" ? ["阅读资料", "整理要点", "完成讲解"] : [],
-                success_criteria: status === "in_progress" ? ["覆盖三个核心价值"] : [],
-                primary_action_label: null,
-                required: true, estimated_minutes: 15, status, completed, passed: null, score: null,
-                max_score: null, locked: status === "locked", lock_reason: null,
-                action_key: completed ? null : "continue_lesson",
-                is_primary_next_action: status === "in_progress",
-            }],
+        stage_id: id,
+        sequence: id === "past" ? 1 : id === "current" ? 2 : 3,
+        title,
+        objective: `${title}完成目标`,
+        status,
+        activities: [{
+            activity_id: `${id}-activity`,
+            type: "lesson",
+            title: `${title}学习`,
+            objective: status === "current" ? "能向客户讲清核心产品价值" : `${title}学习目标`,
+            status: status === "completed" ? "completed" : status === "locked" ? "locked" : "available",
+            status_label: status === "completed" ? "已完成" : status === "locked" ? "未解锁" : "可开始",
+            estimated_minutes: 15,
+            required: true,
+            blocked_reason: status === "locked" ? "完成当前阶段后解锁" : null,
+            latest_attempt_id: null,
+            latest_outcome_id: null,
         }],
     };
 }
 
-function journey(): JourneyResponse {
-    return { enrollment_id: "enrollment-1", path_revision_id: "revision-1", path_title: "新人训练", phases: [phase("past", "入门认知", "completed", true), phase("current", "产品能力", "in_progress", false), phase("future", "实战演练", "locked", false)], progress: { completed: false, completed_count: 1, total_required: 3, percent: 33 }, primary_next_action: { activity_id: "current-activity", activity_type: "lesson", action_key: "continue_lesson", label: "继续学习" } };
+function journey(): FoundationJourneyProjection {
+    const stages = [stage("past", "入门认知", "completed"), stage("current", "产品能力", "current"), stage("future", "实战演练", "locked")];
+    return {
+        contract_version: "journey_projection_v1",
+        generated_at: "2026-07-16T00:00:00Z",
+        data_freshness: "fresh",
+        capabilities: ["view_journey"],
+        status: "active",
+        status_label: "训练进行中",
+        status_reason: null,
+        enrollment: { enrollment_id: "enrollment-1", status: "active", revision_id: "revision-1", version: 1 },
+        path: { path_id: "path-1", title: "新人训练", revision_label: "v1" },
+        progress: { completed_required: 1, total_required: 3, percentage: 33 },
+        stages,
+        current_activity: stages[1].activities[0],
+        background_tasks: [],
+        recent_outcomes: [],
+        primary_action: { command_type: "start", activity_id: "current-activity", label: "继续学习", href: "/newcomer-training/activities/current-activity" },
+        projection_version: 1,
+    };
 }
 
 describe("JourneyHome", () => {
-    it("shows exactly one primary continue action", () => {
-        render(<JourneyHome journey={journey()} />);
-        expect(screen.getAllByRole("link", { name: "开始内容学习" })).toHaveLength(1);
+    it("shows exactly one backend-projected primary action", () => {
+        render(<JourneyHome journey={toJourneyPageViewModel(journey())} />);
+
+        expect(screen.getAllByRole("link", { name: "继续学习" })).toHaveLength(1);
         expect(screen.getByRole("heading", { name: "产品能力学习" })).toBeTruthy();
         expect(screen.getByText("能向客户讲清核心产品价值")).toBeTruthy();
-        expect(screen.getByText("这是完成客户演示的基础")).toBeTruthy();
-        expect(screen.getByText("覆盖三个核心价值")).toBeTruthy();
-        expect(screen.queryByText("当前阶段：产品能力")).toBeNull();
         expect(screen.queryByText("我的全部录音")).toBeNull();
-        const missionCard = screen.getByRole("heading", { name: "产品能力学习" }).closest("article");
-        expect(missionCard).not.toBeNull();
-        expect(missionCard?.className ?? "").not.toContain("motion-completion-reveal");
     });
 
-    it("announces and reveals the all-training-complete milestone once", () => {
-        const completedJourney = journey();
-        completedJourney.phases = completedJourney.phases.map((phaseItem) => ({
-            ...phaseItem,
+    it("announces the all-training-complete milestone", () => {
+        const completed = journey();
+        completed.status = "completed";
+        completed.status_label = "训练已完成";
+        completed.stages = completed.stages.map((item) => ({
+            ...item,
             status: "completed",
-            completed: true,
-            completed_count: 1,
-            percent: 100,
-            locked: false,
-            lock_reason: null,
-            modules: phaseItem.modules.map((moduleItem) => ({
-                ...moduleItem,
-                status: "completed",
-                completed: true,
-                completed_count: 1,
-                percent: 100,
-                locked: false,
-                activities: moduleItem.activities.map((activity) => ({
-                    ...activity,
-                    status: "completed",
-                    completed: true,
-                    locked: false,
-                    action_key: null,
-                    is_primary_next_action: false,
-                })),
-            })),
+            activities: item.activities.map((activity) => ({ ...activity, status: "completed", status_label: "已完成" })),
         }));
-        completedJourney.progress = { completed: true, completed_count: 3, total_required: 3, percent: 100 };
-        completedJourney.primary_next_action = null;
+        completed.progress = { completed_required: 3, total_required: 3, percentage: 100 };
+        completed.current_activity = null;
+        completed.primary_action = null;
 
-        render(<JourneyHome journey={completedJourney} />);
+        render(<JourneyHome journey={toJourneyPageViewModel(completed)} />);
 
         const card = screen.getByText("当前训练已全部完成").closest("section");
         expect(card?.className).toContain("motion-completion-reveal");
-        expect(card?.getAttribute("data-motion-kind")).toBe("spatial");
         expect(card?.getAttribute("aria-live")).toBe("polite");
-        expect(screen.getByRole("link", { name: "查看训练记录" })).toBeTruthy();
     });
 
-    it("collapses completed and future phases", () => {
-        render(<JourneyHome journey={journey()} />);
+    it("does not pretend an unassigned learner has completed training", () => {
+        const unassigned = journey();
+        unassigned.status = "not_enrolled";
+        unassigned.status_label = "尚未分配训练";
+        unassigned.status_reason = "请联系培训负责人分配训练路径。";
+        unassigned.enrollment = null;
+        unassigned.path = null;
+        unassigned.stages = [];
+        unassigned.current_activity = null;
+        unassigned.primary_action = null;
+
+        render(<JourneyHome journey={toJourneyPageViewModel(unassigned)} />);
+
+        expect(screen.getByText("尚未分配训练")).toBeTruthy();
+        expect(screen.queryByText("当前训练已全部完成")).toBeNull();
+    });
+
+    it("keeps only the current stage expanded", () => {
+        render(<JourneyHome journey={toJourneyPageViewModel(journey())} />);
         expect(screen.getByRole("button", { name: /入门认知.*已完成/ }).getAttribute("aria-expanded")).toBe("false");
         expect(screen.getByRole("button", { name: /产品能力.*当前/ }).getAttribute("aria-expanded")).toBe("true");
         expect(screen.getByRole("button", { name: /实战演练.*未解锁/ }).getAttribute("aria-expanded")).toBe("false");
-    });
-
-    it("uses the activity-specific action and shows estimated time", () => {
-        const audioJourney = journey();
-        const activity = audioJourney.phases[1].modules[0].activities[0];
-        activity.activity_type = "audio_assessment";
-        audioJourney.primary_next_action = {
-            activity_id: activity.activity_id,
-            activity_type: "audio_assessment",
-            action_key: "submit_audio",
-            label: activity.title,
-        };
-
-        render(<JourneyHome journey={audioJourney} />);
-
-        expect(screen.getByRole("link", { name: "开始录音讲解" })).toBeTruthy();
-        expect(screen.getByText("预计 15 分钟")).toBeTruthy();
-        expect(screen.getAllByText("当前")).toHaveLength(1);
     });
 });

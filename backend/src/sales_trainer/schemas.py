@@ -1090,7 +1090,6 @@ class QuizAttemptResponse(BaseModel):
     user_id: str
     user_name: str | None = None
     user_email: str | None = None
-    user_department: str | None = None
     total_score: float | None = None
     max_score: float | None = None
     passed: bool | None = None
@@ -1689,6 +1688,9 @@ class SalesTrainerTrainingRecordResponse(BaseModel):
     record_type: Literal["newcomer_activity_attempt"]
     evidence_id: str
     user_id: str
+    user_name: str | None = None
+    user_email: str | None = None
+    team: dict[str, str] | None = None
     enrollment_id: str
     path_revision_id: str
     activity_id: str
@@ -1761,7 +1763,6 @@ class SalesTrainerManagerDashboardRiskLearner(BaseModel):
 
     user_id: str
     user_name: str | None = None
-    user_department: str | None = None
     risk_reasons: list[str] = Field(default_factory=list)
     latest_submitted_at: object | None = None
     lowest_score: float | None = None
@@ -2111,7 +2112,6 @@ class AudioSubmissionResponse(BaseModel):
     user_id: str
     user_name: str | None = None
     user_email: str | None = None
-    user_department: str | None = None
     purpose: str
     original_filename: str
     content_type: str

@@ -3,6 +3,8 @@
 > Executable Gate 3 contract for the neutral Provider Port, StepFun codec/adapter, one selected
 > Grounding decision/cache authority, rollout rollback, diagnostics and lifecycle cleanup.
 
+> **Foundation boundary (2026-07-18):** this contract governs the independent Sales and Presentation realtime products only. Realtime customer voice roleplay is absent from the newcomer Foundation Path union, standard seed, navigation, OpenAPI and release gate. Its Provider smoke must not be used as evidence for Foundation AI Coach, audio-file ASR/scoring or `foundation_ready`.
+
 ## 1. Scope / Trigger
 
 Apply this contract when a change touches:

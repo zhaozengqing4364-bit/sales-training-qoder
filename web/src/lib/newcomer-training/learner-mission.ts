@@ -1,15 +1,11 @@
 import type {
-    ActivityConfig,
-    ActivityType,
-    JourneyActivityProgress,
-    JourneyResponse,
-    TrainingPathPayload,
+    FoundationActivityType,
+    FoundationJourneyProjection,
 } from "@/lib/api/types/newcomer-training";
-import { activityActionLabel } from "./presentation";
 
 export interface LearnerMissionViewModel {
     activityId: string;
-    activityType: ActivityType;
+    activityType: FoundationActivityType;
     pathTitle: string;
     phaseLabel: string;
     phaseOutcome: string | null;
@@ -25,9 +21,12 @@ export interface LearnerMissionViewModel {
     progressPercent: number;
 }
 
-export type ActivityGuidance = Pick<LearnerMissionViewModel, "objective" | "whyItMatters" | "steps" | "successCriteria">;
+export type ActivityGuidance = Pick<
+    LearnerMissionViewModel,
+    "objective" | "whyItMatters" | "steps" | "successCriteria"
+>;
 
-const DEFAULT_GUIDANCE: Record<ActivityType, ActivityGuidance> = {
+const DEFAULT_GUIDANCE: Record<FoundationActivityType, ActivityGuidance> = {
     lesson: {
         objective: "理解本次学习内容，并能说出关键要点",
         whyItMatters: "先建立准确理解，后续讲解和实战才有可靠基础",
@@ -41,16 +40,10 @@ const DEFAULT_GUIDANCE: Record<ActivityType, ActivityGuidance> = {
         successCriteria: ["达到本次测验设定的通过分数"],
     },
     audio_assessment: {
-        objective: "完成一次清晰、完整的 PPT 讲解",
+        objective: "完成一次清晰、完整的方案讲解",
         whyItMatters: "把材料转化为自己的表达，提前发现讲解中的遗漏",
-        steps: ["先阅读并熟悉本次讲解材料", "按真实客户沟通方式完成讲解", "检查录音后提交评测"],
+        steps: ["熟悉讲解材料", "按真实客户沟通方式完成讲解", "检查录音后提交评测"],
         successCriteria: ["讲解内容完整且表达清晰", "达到本次任务设定的通过分数"],
-    },
-    realtime_roleplay: {
-        objective: "在模拟客户场景中完成一次完整沟通",
-        whyItMatters: "在安全环境中练习临场判断和真实对话节奏",
-        steps: ["了解本次客户情境", "完成实时语音对练", "根据反馈复盘改进"],
-        successCriteria: ["完成整场对练", "覆盖本次场景的核心沟通目标"],
     },
     ai_coach: {
         objective: "围绕当前薄弱点完成一次针对性辅导",
@@ -59,118 +52,40 @@ const DEFAULT_GUIDANCE: Record<ActivityType, ActivityGuidance> = {
         successCriteria: ["完成辅导目标并获得明确的下一步建议"],
     },
     assignment: {
-        objective: "完成并提交本次训练作业",
+        objective: "完成客户场景录音任务",
         whyItMatters: "通过实际产出把学习内容转化为可复用能力",
-        steps: ["阅读作业要求", "完成并检查内容", "提交作业等待结果"],
-        successCriteria: ["提交内容符合本次作业要求"],
+        steps: ["阅读场景要求", "完成并检查三段录音", "提交并等待评测"],
+        successCriteria: ["三段录音均已提交并符合任务要求"],
     },
 };
 
-export function missionFromJourney(journey: JourneyResponse): LearnerMissionViewModel | null {
-    const action = journey.primary_next_action;
-    if (!action) return null;
-    for (const phase of journey.phases) {
-        for (const moduleConfig of phase.modules) {
-            const activity = moduleConfig.activities.find((item) => item.activity_id === action.activity_id);
-            if (!activity) continue;
-            return buildMission({
-                activity,
-                pathTitle: journey.path_title,
-                phaseLabel: phase.title,
-                phaseOutcome: phase.outcome,
-                moduleLabel: moduleConfig.title,
-                moduleOutcome: moduleConfig.outcome,
-                progressPercent: journey.progress.percent,
-                actionLabel: activity.primary_action_label || activityActionLabel(activity.activity_type),
-            });
-        }
+export function missionFromFoundationJourney(
+    journey: FoundationJourneyProjection,
+): LearnerMissionViewModel | null {
+    const activity = journey.current_activity;
+    const action = journey.primary_action;
+    if (!activity || !action || action.activity_id !== activity.activity_id) {
+        return null;
     }
-    return null;
-}
-
-export function missionFromCandidate(path: TrainingPathPayload): LearnerMissionViewModel | null {
-    const phase = [...path.phases].sort(byOrder).find((item) => item.modules.length > 0);
-    const moduleConfig = phase && [...phase.modules].sort(byOrder).find((item) => item.activities.length > 0);
-    const activity = moduleConfig && [...moduleConfig.activities].sort(byOrder)[0];
-    if (!phase || !moduleConfig || !activity) return null;
-    return buildMission({
-        activity: toJourneyActivity(activity),
-        pathTitle: path.title,
-        phaseLabel: phase.title,
-        phaseOutcome: phase.outcome,
-        moduleLabel: moduleConfig.title,
-        moduleOutcome: moduleConfig.outcome,
-        progressPercent: 0,
-        actionLabel: activity.primary_action_label || activityActionLabel(activity.type),
-    });
-}
-
-function buildMission(input: {
-    activity: JourneyActivityProgress;
-    pathTitle: string;
-    phaseLabel: string;
-    phaseOutcome: string | null;
-    moduleLabel: string;
-    moduleOutcome: string | null;
-    progressPercent: number;
-    actionLabel: string;
-}): LearnerMissionViewModel {
-    const guidance = activityGuidance(input.activity);
+    const stage = journey.stages.find((item) =>
+        item.activities.some((candidate) => candidate.activity_id === activity.activity_id),
+    );
+    const fallback = DEFAULT_GUIDANCE[activity.type];
     return {
-        activityId: input.activity.activity_id,
-        activityType: input.activity.activity_type,
-        pathTitle: input.pathTitle,
-        phaseLabel: input.phaseLabel,
-        phaseOutcome: input.phaseOutcome,
-        moduleLabel: input.moduleLabel,
-        moduleOutcome: input.moduleOutcome,
-        title: input.activity.title,
-        ...guidance,
-        estimatedMinutes: input.activity.estimated_minutes,
-        actionLabel: input.actionLabel,
-        progressPercent: input.progressPercent,
-    };
-}
-
-export function activityGuidance(activity: Pick<JourneyActivityProgress,
-    "activity_type" | "description" | "objective" | "why_it_matters" | "steps" | "success_criteria"
->): ActivityGuidance {
-    const fallback = DEFAULT_GUIDANCE[activity.activity_type];
-    return {
-        objective: activity.objective || activity.description || fallback.objective,
-        whyItMatters: activity.why_it_matters || fallback.whyItMatters,
-        steps: activity.steps.length > 0 ? activity.steps : fallback.steps,
-        successCriteria: activity.success_criteria.length > 0
-            ? activity.success_criteria
-            : fallback.successCriteria,
-    };
-}
-
-function toJourneyActivity(activity: ActivityConfig): JourneyActivityProgress {
-    return {
-        activity_id: activity.activity_id,
-        activity_type: activity.type,
+        activityId: activity.activity_id,
+        activityType: activity.type,
+        pathTitle: journey.path?.title ?? "新人销售基础训练",
+        phaseLabel: stage?.title ?? "当前阶段",
+        phaseOutcome: stage?.objective ?? null,
+        moduleLabel: "",
+        moduleOutcome: null,
         title: activity.title,
-        description: activity.description,
-        objective: activity.objective,
-        why_it_matters: activity.why_it_matters,
-        steps: activity.steps,
-        success_criteria: activity.success_criteria,
-        primary_action_label: activity.primary_action_label,
-        required: activity.required,
-        estimated_minutes: activity.estimated_minutes,
-        status: "pending",
-        completed: false,
-        passed: null,
-        score: null,
-        max_score: null,
-        locked: false,
-        lock_reason: null,
-        action_key: null,
-        is_primary_next_action: true,
+        objective: activity.objective || fallback.objective,
+        whyItMatters: fallback.whyItMatters,
+        steps: fallback.steps,
+        successCriteria: fallback.successCriteria,
+        estimatedMinutes: activity.estimated_minutes,
+        actionLabel: action.label,
+        progressPercent: journey.progress.percentage,
     };
-}
-
-function byOrder<T extends { order_index: number }>(left: T, right: T): number {
-    return left.order_index - right.order_index;
 }

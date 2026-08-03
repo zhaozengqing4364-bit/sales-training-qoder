@@ -82,5 +82,6 @@ describe("AdminDashboardPage", () => {
         expect(screen.queryByText("证书过期")).toBeNull();
         expect(screen.queryByText("系统备份完成")).toBeNull();
         expect(screen.queryByText("动态项 #1 描述...")).toBeNull();
+        expect(screen.queryByText(/api\.internal|projection-backed|runtime surfaces|manager-lite|intervention|operator|cohort|operating pack/i)).toBeNull();
     });
 });

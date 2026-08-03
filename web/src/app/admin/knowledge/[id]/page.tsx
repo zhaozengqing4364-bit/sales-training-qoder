@@ -30,11 +30,11 @@ export default function KnowledgeHubPage() {
                         </div>
                         {kb.description ? <p className="text-slate-600">{kb.description}</p> : null}
                         <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-                            <Link href={`${base}/documents`} className="font-medium text-blue-700 hover:underline">文档 {docs.length}</Link>
-                            <Link href={`${base}/dictionary`} className="font-medium text-blue-700 hover:underline">词典 {dictionaryEntries.length}</Link>
-                            <Link href={`${base}/diagnostics`} className="font-medium text-blue-700 hover:underline">搜索诊断</Link>
-                            <Link href={`${base}/settings`} className="font-medium text-blue-700 hover:underline">RAG 设置</Link>
-                            <Link href="/admin/retrieval-strategies" className="font-medium text-amber-700 hover:underline">全局检索策略</Link>
+                            <Link href={`${base}/documents`} prefetch={false} className="font-medium text-blue-700 hover:underline">文档 {docs.length}</Link>
+                            <Link href={`${base}/dictionary`} prefetch={false} className="font-medium text-blue-700 hover:underline">词典 {dictionaryEntries.length}</Link>
+                            <Link href={`${base}/diagnostics`} prefetch={false} className="font-medium text-blue-700 hover:underline">搜索诊断</Link>
+                            <Link href={`${base}/settings`} prefetch={false} className="font-medium text-blue-700 hover:underline">RAG 设置</Link>
+                            <Link href="/admin/retrieval-strategies" prefetch={false} className="font-medium text-amber-700 hover:underline">全局检索策略</Link>
                         </div>
                     </div>
                 </div>
@@ -43,7 +43,7 @@ export default function KnowledgeHubPage() {
             <GlassCard className="space-y-4 p-6">
                 <div className="rounded-2xl border border-blue-200 bg-blue-50/90 px-4 py-3 text-sm text-blue-900">
                     <p className="font-semibold">全局检索策略预览（只读）</p>
-                    <p className="mt-1 text-blue-800">修改检索管线请前往 <Link href="/admin/retrieval-strategies" className="font-semibold underline">检索策略</Link>；本库 RAG Profile 在设置页管理。</p>
+                    <p className="mt-1 text-blue-800">修改检索管线请前往 <Link href="/admin/retrieval-strategies" prefetch={false} className="font-semibold underline">检索策略</Link>；本库 RAG Profile 在设置页管理。</p>
                 </div>
                 <KnowledgeAnswerConsole readOnly />
             </GlassCard>

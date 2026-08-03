@@ -107,8 +107,9 @@ describe("SalesTrainerOperationLogsPage", () => {
         });
 
         expect(screen.getByText("考卷已更新")).toBeTruthy();
-        expect(screen.getByText("管理员 · admin-1")).toBeTruthy();
-        expect(screen.getByText("考卷")).toBeTruthy();
+        expect(screen.getByText("管理员")).toBeTruthy();
+        expect(screen.queryByText(/admin-1/)).toBeNull();
+        expect(screen.getByText("考卷：商务技巧考卷（草稿验证）")).toBeTruthy();
         expect(screen.queryByText(/MVP/)).toBeNull();
         expect(screen.getByText("标题：商务技巧考卷 (副本) → 商务技巧考卷（草稿验证）")).toBeTruthy();
         expect(screen.getByText("变更字段：标题、所属训练关卡、模块单元")).toBeTruthy();
@@ -116,8 +117,16 @@ describe("SalesTrainerOperationLogsPage", () => {
         expect(screen.queryByText(/module_key/)).toBeNull();
         expect(screen.queryByText(/unit_id/)).toBeNull();
 
-        fireEvent.click(screen.getByRole("button", { name: "查看原始数据" }));
+        expect(screen.queryByRole("button", { name: "查看技术详情" })).toBeNull();
+    });
 
+    it("lets only full administrators expand technical details", async () => {
+        getCapabilitiesMock.mockResolvedValue(capabilities({ admin_full_access: true }));
+
+        render(<SalesTrainerOperationLogsPage />);
+
+        const detailsButton = await screen.findByRole("button", { name: "查看技术详情" });
+        fireEvent.click(detailsButton);
         expect(screen.getByText(/sales_trainer_exam_paper/)).toBeTruthy();
         expect(screen.getByText(/module_key/)).toBeTruthy();
     });

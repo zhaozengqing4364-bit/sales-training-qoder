@@ -2,8 +2,11 @@
 
 ## Status
 
-Accepted. 本 ADR 先冻结持久任务表与状态机契约，并用
-`backend/src/common/jobs/persistent_task_contract.py` 提供可测试的最小代码切片。当前切片不接管运行时调度，不修改 WebSocket、Redis、RBAC、practice API、critical-quality-gate 或 Adapter 扫描。
+Superseded by
+[`2026-07-16-governed-ai-and-durable-tasks.md`](2026-07-16-governed-ai-and-durable-tasks.md)。
+本文只保留为历史方案记录；其中 `persistent_tasks`、6 状态、内嵌 Lease 与 SQLite 兼容目标均不再
+是实现合同。当前唯一权威是 `task_runtime` 的 `durable_tasks`、7 状态和独立 Lease/Attempt。
+`backend/src/common/jobs/persistent_task_contract.py` 仅保留兼容 import，不维护第二套真源。
 
 ## 背景
 

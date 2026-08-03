@@ -1,5 +1,7 @@
 # 新人训练体验闭环设计
 
+> **状态：Superseded / Legacy 历史记录（2026-07-16）。** 本文保留历史闭环方案，不再授权 Phase/Module、六类活动或 Realtime 首发；Foundation target 见 [`../../newcomer-foundation-contract-index.md`](../../newcomer-foundation-contract-index.md)。
+
 ## 目标
 
 保留 `TrainingPath → Phase → Module → Activity` 活动编排模型，通过完善学员执行面、管理控制面和运营工作台，使新人训练达到“内容可配置、活动可扩展、操作不离开当前流程、发布可追踪且不会静默覆盖”的状态。
@@ -101,4 +103,3 @@ Path editor candidate
 - 不新增第七种活动类型。
 - 不把异步录音评分改造成实时对练；实时对练继续由既有 runtime 管理。
 - 不重写全站设计系统，也不迁移全站状态管理框架。
-

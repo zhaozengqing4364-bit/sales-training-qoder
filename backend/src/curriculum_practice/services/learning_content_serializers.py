@@ -9,6 +9,7 @@ from curriculum_practice.models import LearningChapter, LearningContent
 from curriculum_practice.schemas import (
     LearningChapterResponse,
     LearningContentResponse,
+    LearningContentSummaryResponse,
 )
 from curriculum_practice.services.learning_content_revision_state import (
     learning_content_revision_state,
@@ -60,6 +61,12 @@ async def serialize_learning_content(
         }
     )
     return Result.ok(response)
+
+
+def serialize_learning_content_summary(
+    content: LearningContent,
+) -> LearningContentSummaryResponse:
+    return LearningContentSummaryResponse.model_validate(content)
 
 
 def serialize_chapter(chapter: LearningChapter) -> LearningChapterResponse:

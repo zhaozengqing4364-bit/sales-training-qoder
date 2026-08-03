@@ -11,7 +11,6 @@ from typing import Any, Protocol
 class JourneyViewer(Protocol):
     user_id: Any
     role: Any
-    department: Any
     is_active: Any
 
 
@@ -19,7 +18,6 @@ class JourneyViewer(Protocol):
 class JourneyLearnerProjection:
     learner_id: str
     name: str | None
-    department: str | None
     role: str
     email: str | None
     wechat_user_id: str
@@ -49,8 +47,7 @@ class JourneyReadRepository(Protocol):
     async def learners(
         self,
         *,
-        team_department: str | None,
-        department: str | None,
+        learner_ids: frozenset[str] | None,
         limit: int | None,
         offset: int = 0,
         include_development_admin: bool = True,

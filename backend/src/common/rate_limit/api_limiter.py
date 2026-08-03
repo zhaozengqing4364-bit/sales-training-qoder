@@ -177,6 +177,10 @@ class APIRateLimiter:
                 # Get identifier based on scope
                 if scope == "user":
                     identifier = _get_user_id(request)
+                elif scope == "login":
+                    credentials = kwargs.get("credentials")
+                    email = str(getattr(credentials, "email", "")).strip().lower()
+                    identifier = f"{_get_client_ip(request)}:{email}"
                 else:
                     identifier = _get_client_ip(request)
 

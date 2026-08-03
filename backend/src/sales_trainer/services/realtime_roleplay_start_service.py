@@ -28,6 +28,10 @@ from sales_trainer.orchestration.contracts import RealtimeRoleplayConfig
 from sales_trainer.orchestration.repository import AttemptRepository
 from sales_trainer.services.curriculum_practice_adapter import get_practice_template
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.realtime_binding_snapshot_service import (
+    realtime_binding_audit_snapshot,
+    realtime_binding_matches_snapshot,
+)
 from sales_trainer.services.voice_runtime_adapter import get_voice_runtime_profile
 
 
@@ -103,6 +107,15 @@ class RealtimeRoleplayStartService:
                 "对练模板与语音运行配置不匹配。",
                 409,
             )
+        if (
+            config.runner_snapshot is not None
+            and not await realtime_binding_matches_snapshot(self._db, config)
+        ):
+            raise RealtimeRoleplayStartError(
+                "[NEWCOMER_REALTIME_PINNED_BINDING_STALE]",
+                "实时对练配置已更新，请联系培训管理员重新发布训练路径。",
+                409,
+            )
         registry = await self._validated_runtime_registry(config.runtime_profile_id)
         attempt = await self._attempts.create(
             enrollment_id=execution_context.enrollment_id,
@@ -122,6 +135,7 @@ class RealtimeRoleplayStartService:
             "attempt_id": str(attempt.attempt_id),
             "practice_template_id": config.practice_template_id,
             "runtime_profile_id": config.runtime_profile_id,
+            "published_binding": realtime_binding_audit_snapshot(config),
             "runtime_registry": deepcopy(registry),
             "started_by_user_id": str(actor.user_id),
             "started_at": datetime.now(UTC).isoformat(),

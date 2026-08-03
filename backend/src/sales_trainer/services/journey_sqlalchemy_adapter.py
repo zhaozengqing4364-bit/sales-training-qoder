@@ -67,23 +67,19 @@ class SqlAlchemyJourneyReadRepository:
     async def learners(
         self,
         *,
-        team_department: str | None,
-        department: str | None,
+        learner_ids: frozenset[str] | None,
         limit: int | None,
         offset: int = 0,
         include_development_admin: bool = True,
     ) -> JourneyLearnerPage:
-        if team_department is not None and department and department != team_department:
-            return JourneyLearnerPage(items=(), total=0)
-        effective_department = team_department or department
         filters = [
             _team_visible_learner_role_filter(
                 include_development_admin=include_development_admin
             ),
             User.is_active.is_(True),
         ]
-        if effective_department:
-            filters.append(User.department == effective_department)
+        if learner_ids is not None:
+            filters.append(User.user_id.in_(learner_ids))
         total = int(
             await self._db.scalar(
                 select(func.count()).select_from(User).where(*filters)
@@ -134,7 +130,6 @@ class SqlAlchemyJourneyReadRepository:
         return JourneyLearnerProjection(
             learner_id=str(row.user_id),
             name=str(row.name) if row.name is not None else None,
-            department=str(row.department) if row.department is not None else None,
             role=str(row.role or ""),
             email=str(row.email) if row.email is not None else None,
             wechat_user_id=str(row.wechat_user_id or ""),

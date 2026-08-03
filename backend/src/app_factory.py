@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.gzip import GZipMiddleware
 
 from app_lifespan import lifespan
 from common.analytics.release_readiness import validate_production_config
@@ -141,6 +142,7 @@ def _validate_cors_origins(origins: list[str]) -> None:
 def _configure_middleware(app: FastAPI) -> None:
     app.add_middleware(ErrorHandlerMiddleware)
     app.add_middleware(MetricsMiddleware)
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_resolve_cors_origins(),

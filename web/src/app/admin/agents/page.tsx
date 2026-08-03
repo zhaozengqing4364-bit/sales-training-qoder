@@ -173,7 +173,7 @@ export default function AgentsPage() {
     };
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-8 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[var(--duration-tooltip)]">
             {/* Delete Confirm Dialog */}
             <ConfirmDialog
                 open={!!deleteTarget}
@@ -383,7 +383,7 @@ export default function AgentsPage() {
                                 ]}
                                 actions={
                                     <div className="absolute top-4 right-4 flex gap-1">
-                                        <Link href={`/admin/agents/${agent.id}`}>
+                                        <Link href={`/admin/agents/${agent.id}`} prefetch={false}>
                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full">
                                                 <Edit2 className="w-4 h-4" />
                                             </Button>
@@ -469,7 +469,7 @@ export default function AgentsPage() {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex justify-end gap-1">
-                                                <Link href={`/admin/agents/${agent.id}`}>
+                                                <Link href={`/admin/agents/${agent.id}`} prefetch={false}>
                                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full">
                                                         <Edit2 className="w-4 h-4" />
                                                     </Button>

@@ -348,12 +348,12 @@ export default function KnowledgePage() {
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    <Link href={`/admin/knowledge/${kb.id}`}>
+                                                    <Link href={`/admin/knowledge/${kb.id}`} prefetch={false}>
                                                         <Button variant="ghost" size="sm" className="h-8 rounded-full px-3 text-slate-500 hover:bg-blue-50 hover:text-blue-600">
                                                             <FolderOpen className="mr-2 h-4 w-4" /> 管理文档
                                                         </Button>
                                                     </Link>
-                                                    <Link href={`/admin/knowledge/${kb.id}`}>
+                                                    <Link href={`/admin/knowledge/${kb.id}`} prefetch={false}>
                                                         <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-slate-400 hover:bg-blue-50 hover:text-blue-600">
                                                             <Edit2 className="h-4 w-4" />
                                                         </Button>

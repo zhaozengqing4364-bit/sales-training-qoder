@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 import oss2
 
@@ -74,6 +76,8 @@ class OssSigningService:
         object_key: str,
         content_type: str = "audio/webm",
         expires: int = 900,
+        *,
+        sha256: str | None = None,
     ) -> PresignedPutResult:
         """Return a presigned PUT URL for *object_key*.
 
@@ -90,11 +94,14 @@ class OssSigningService:
         -------
         PresignedPutResult with url, object_key, and expires_at.
         """
+        headers = {"Content-Type": content_type}
+        if sha256:
+            headers["x-oss-meta-sha256"] = sha256
         url: str = self._bucket.sign_url(
             "PUT",
             object_key,
             expires=expires,
-            headers={"Content-Type": content_type},
+            headers=headers,
         )
         expires_at = datetime.now(UTC) + timedelta(seconds=expires)
 
@@ -145,6 +152,63 @@ class OssSigningService:
             if value is not None:
                 return int(value)
         headers = getattr(result, "headers", {}) or {}
+        for key in ("Content-Length", "content-length"):
+            if key in headers:
+                return int(headers[key])
+        raise RuntimeError("OSS head_object response did not include content length.")
+
+    def get_object_metadata(self, object_key: str) -> dict[str, Any]:
+        """Return verified size/hash metadata without exposing credentials."""
+
+        try:
+            result = self._bucket.head_object(object_key)
+        except Exception as exc:
+            if _looks_like_not_found(exc):
+                raise FileNotFoundError(object_key) from exc
+            raise
+        headers = getattr(result, "headers", {}) or {}
+        size = self._content_length(result, headers)
+        sha256 = (
+            headers.get("x-oss-meta-sha256")
+            or headers.get("X-Oss-Meta-Sha256")
+            or headers.get("x-oss-meta-Sha256")
+        )
+        return {
+            "size_bytes": size,
+            "sha256": str(sha256 or ""),
+            "content_type": headers.get("Content-Type") or headers.get("content-type"),
+        }
+
+    def download_to_file(self, object_key: str, destination: Path) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        self._bucket.get_object_to_file(object_key, str(destination))
+
+    def upload_file(
+        self,
+        object_key: str,
+        source: Path,
+        *,
+        content_type: str,
+        sha256: str,
+    ) -> None:
+        self._bucket.put_object_from_file(
+            object_key,
+            str(source),
+            headers={
+                "Content-Type": content_type,
+                "x-oss-meta-sha256": sha256,
+            },
+        )
+
+    def delete_object(self, object_key: str) -> None:
+        self._bucket.delete_object(object_key)
+
+    @staticmethod
+    def _content_length(result: Any, headers: dict[str, Any]) -> int:
+        for attr in ("content_length", "content_len", "Content-Length"):
+            value = getattr(result, attr, None)
+            if value is not None:
+                return int(value)
         for key in ("Content-Length", "content-length"):
             if key in headers:
                 return int(headers[key])

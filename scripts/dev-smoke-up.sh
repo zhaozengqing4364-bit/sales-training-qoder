@@ -24,6 +24,8 @@ EFFECTIVE_DATABASE_URL=""
 SMOKE_ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL:-admin@qoder.ai}"
 SMOKE_ADMIN_NAME="${SMOKE_ADMIN_NAME:-管理员}"
 SMOKE_ADMIN_PASSWORD="${SMOKE_ADMIN_PASSWORD:-${AUTH_SHARED_PASSWORD:-change-me}}"
+SMOKE_LEARNER_EMAIL="${NEWCOMER_E2E_LEARNER_EMAIL:-newcomer.training.learner@example.com}"
+SMOKE_LEARNER_NAME="${NEWCOMER_E2E_LEARNER_NAME:-新人训练学员}"
 
 _timestamp() {
   date '+%Y-%m-%d %H:%M:%S'
@@ -176,6 +178,16 @@ bootstrap_smoke_admin() {
     --role admin
 }
 
+bootstrap_smoke_learner() {
+  local python_bin
+  python_bin="$(resolve_python_bin)" || die "未找到 Python 解释器，无法引导 smoke 学员账号"
+
+  "${python_bin}" "${ROOT_DIR}/backend/scripts/bootstrap_auth_admin.py" \
+    --email "${SMOKE_LEARNER_EMAIL}" \
+    --name "${SMOKE_LEARNER_NAME}" \
+    --role user
+}
+
 bootstrap_smoke_practice_evidence() {
   local python_bin
   python_bin="$(resolve_python_bin)" || die "未找到 Python 解释器，无法引导 smoke 报告/回放证据"
@@ -201,7 +213,12 @@ bootstrap_newcomer_training_seed() {
   (
     cd "${ROOT_DIR}/backend"
     DATABASE_URL="${EFFECTIVE_DATABASE_URL}" "${python_bin}" \
-      "${ROOT_DIR}/backend/scripts/seed_newcomer_training_path.py"
+      "${ROOT_DIR}/backend/scripts/seed_newcomer_foundation_pack.py"
+    DATABASE_URL="${EFFECTIVE_DATABASE_URL}" "${python_bin}" \
+      "${ROOT_DIR}/backend/scripts/seed_newcomer_foundation_pack.py" --verify-only
+    DATABASE_URL="${EFFECTIVE_DATABASE_URL}" "${python_bin}" \
+      "${ROOT_DIR}/backend/scripts/bootstrap_newcomer_foundation_smoke.py" \
+      --learner-email "${SMOKE_LEARNER_EMAIL}"
   )
 }
 
@@ -217,12 +234,13 @@ run_alembic_upgrade_head() {
 }
 
 reset_smoke_frontend_dev_state() {
-  rm -rf "${ROOT_DIR}/web/.next/dev"
+  rm -rf "${ROOT_DIR}/web/.next-smoke"
 }
 
 start_local_stack() {
   reset_smoke_frontend_dev_state
-  NEXT_PUBLIC_API_URL="${SMOKE_FRONTEND_API_URL}" \
+  NEXT_DIST_DIR=".next-smoke" \
+    NEXT_PUBLIC_API_URL="${SMOKE_FRONTEND_API_URL}" \
     NEXT_PUBLIC_WS_URL="${SMOKE_FRONTEND_WS_URL}" \
     bash "${ROOT_DIR}/scripts/dev-up.sh"
 }
@@ -251,6 +269,7 @@ main() {
   wait_for_url "http://localhost:${FRONTEND_PORT}/login" 60 || die "Frontend login 页面未就绪"
 
   bootstrap_smoke_admin
+  bootstrap_smoke_learner
   bootstrap_smoke_practice_evidence
   bootstrap_newcomer_training_seed
 
